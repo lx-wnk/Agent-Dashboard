@@ -25,6 +25,16 @@ export interface DetectedQuestion {
 const TYPE_SOMETHING_LABEL = 'type something'
 const CHAT_ABOUT_LABEL = 'chat about this'
 
+const TRAILING_PUNCT_RE = /[\s.]+$/
+
+// The meta-row copy drifts between Claude Code releases (e.g. v2.1.205 renders
+// "Type something." with a trailing period, v2.1.197 rendered "type something").
+// Match on a normalized prefix — lower-cased, trailing punctuation stripped — so
+// a cosmetic copy tweak does not silently disable question detection.
+function metaLabelMatches(label: string, meta: string): boolean {
+  return label.toLowerCase().replace(TRAILING_PUNCT_RE, '').startsWith(meta)
+}
+
 // The box-drawing block (U+2500-U+257F) covers rounded corners, straight edges, and dashes.
 // eslint-disable-next-line regexp/no-obscure-range -- intentional Unicode block range, see comment above
 const BORDER_ONLY_RE = /^[\s─-╿=+-]*$/
@@ -98,12 +108,11 @@ function decideMultiSelect(optionEntries: NumberedEntry[], contentLines: ParsedR
 /**
  * Detects an AskUserQuestion modal from the visible rows of a terminal buffer.
  *
- * Keys off structural signals present in the real TUI render (see memory:
- * lesson_askuserquestion_tui_keys) rather than exact spacing/border glyphs:
- * a contiguous numbered option block followed by BOTH UI-injected meta-rows.
- * Requiring both meta-rows — adjacent and index-continuous — is what separates a
- * real modal from an ordinary numbered list in terminal output. End-to-end
- * validation against a real pty render happens in Task 15.
+ * Keys off structural signals in the real TUI render rather than exact
+ * spacing/border glyphs: a contiguous numbered option block followed by BOTH
+ * UI-injected meta-rows. Requiring both meta-rows — adjacent and
+ * index-continuous — is what separates a real modal from an ordinary numbered
+ * list in terminal output.
  */
 export function detectQuestion(rows: string[]): DetectedQuestion | null {
   const contentLines = rows
@@ -115,11 +124,12 @@ export function detectQuestion(rows: string[]): DetectedQuestion | null {
     .map((row, idx) => ({ row, idx }))
     .filter((e): e is NumberedEntry => e.row.num !== undefined && e.row.label !== undefined)
 
-  // The detector is coupled to the exact TUI copy (v2.1.197): a wording change
-  // ("Type something…", "Chat about this (Tab)") would silently disable detection.
-  // This coupling is the contract validated end-to-end in Task 15.
-  const typeRow = numbered.find(e => e.row.label.toLowerCase() === TYPE_SOMETHING_LABEL)
-  const chatRow = numbered.find(e => e.row.label.toLowerCase() === CHAT_ABOUT_LABEL)
+  // The detector keys off the meta-row copy, which drifts between Claude Code
+  // releases; metaLabelMatches normalizes for trailing punctuation and suffixes
+  // so a cosmetic tweak (e.g. "Type something." in v2.1.205) does not silently
+  // disable detection. A wholesale rename would still require an update here.
+  const typeRow = numbered.find(e => metaLabelMatches(e.row.label, TYPE_SOMETHING_LABEL))
+  const chatRow = numbered.find(e => metaLabelMatches(e.row.label, CHAT_ABOUT_LABEL))
   if (!typeRow || !chatRow)
     return null
 

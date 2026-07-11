@@ -246,6 +246,29 @@ type HookEvent struct {
 	Summary string `json:"summary"` // truncated, secret-safe payload preview
 }
 
+// DetectedOption is a single numbered option row of a parsed AskUserQuestion
+// modal.
+type DetectedOption struct {
+	Index       int    `json:"index"`
+	Label       string `json:"label"`
+	Description string `json:"description,omitempty"`
+}
+
+// DetectedQuestion is a parsed AskUserQuestion modal, detected from a live
+// terminal's rendered rows by askq.DetectQuestion.
+//
+// Invariant (ENFORCED, not merely typical): the real option rows are numbered
+// contiguously 1..n, and the two UI-injected meta-rows follow immediately, so
+// TypeSomethingIndex == len(Options)+1 and ChatAboutIndex == TypeSomethingIndex+1.
+type DetectedQuestion struct {
+	Header             string           `json:"header"`
+	Question           string           `json:"question"`
+	MultiSelect        bool             `json:"multiSelect"`
+	Options            []DetectedOption `json:"options"`
+	TypeSomethingIndex int              `json:"typeSomethingIndex"`
+	ChatAboutIndex     int              `json:"chatAboutIndex"`
+}
+
 // Agent is the unified view of a running Claude Code process.
 type Agent struct {
 	PID         int      `json:"pid"`
@@ -287,7 +310,12 @@ type Agent struct {
 	// running interactive session as real keyboard input — either via the pty
 	// broker (`agent-dashboard ptyhost`) or `tmux send-keys`. When false, sending
 	// resumes the session as a new one (MCP log delivery does not drive it).
-	LiveInjectable      bool                `json:"liveInjectable,omitempty"`
+	LiveInjectable bool `json:"liveInjectable,omitempty"`
+	// PendingQuestion is the AskUserQuestion modal currently detected on this
+	// session's live terminal (render-sourced, via the pty broker's /question
+	// endpoint or a tmux capture-pane snapshot), or nil when no modal is open.
+	// Only ever set on injectable sessions.
+	PendingQuestion     *DetectedQuestion   `json:"pendingQuestion,omitempty"`
 	LastOutput          *string             `json:"lastOutput"`
 	ConvergenceAlert    bool                `json:"convergenceAlert"`
 	ConvergenceToolName *string             `json:"convergenceToolName"`

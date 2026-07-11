@@ -19,6 +19,34 @@ describe('detectQuestion', () => {
     expect(q.question).toBe('What is your favourite colour?')
   })
 
+  it('detects the v2.1.205 render whose meta-row reads "Type something." with a trailing period', () => {
+    // Captured from a real Claude Code v2.1.205 pty (the meta-row copy gained a
+    // trailing period vs v2.1.197), plus per-option descriptions and a border
+    // line between the last two meta-rows.
+    const raw = [
+      ' ☐ Colour ',
+      '',
+      'Which colour do you prefer?',
+      '❯ 1. Red',
+      '     Warm, high-energy hue.',
+      '  2. Green',
+      'Calm, natural hue.',
+      ' 3. Blue',
+      'Cool, steady hue.',
+      '  4. Type something.',
+      '────────────────────────────────────',
+      '  5. Chat about this',
+      'Enter to select · ↑/↓ to navigate · Esc to cancel',
+    ]
+    const q = detectQuestion(raw)!
+    expect(q).not.toBeNull()
+    expect(q.multiSelect).toBe(false)
+    expect(q.options.map(o => o.label)).toEqual(['Red', 'Green', 'Blue'])
+    expect(q.typeSomethingIndex).toBe(4)
+    expect(q.chatAboutIndex).toBe(5)
+    expect(q.options.find(o => o.label === 'Red')?.description).toBe('Warm, high-energy hue.')
+  })
+
   it('parses multi-select checkboxes', () => {
     const q = detectQuestion(multi.split('\n'))!
     expect(q).not.toBeNull()

@@ -246,6 +246,26 @@ export interface PendingToolUse {
   pattern: string
 }
 /**
+ * DetectedOption is one numbered choice row of a DetectedQuestion.
+ */
+export interface DetectedOption {
+  index: number
+  label: string
+  description?: string
+}
+/**
+ * DetectedQuestion is a parsed AskUserQuestion modal detected from a session's
+ * terminal buffer. Mirrors src/utils/askQuestionScreen.ts DetectedQuestion.
+ */
+export interface DetectedQuestion {
+  header: string
+  question: string
+  multiSelect: boolean
+  options: DetectedOption[]
+  typeSomethingIndex: number
+  chatAboutIndex: number
+}
+/**
  * HookEvent is one lifecycle-hook event recorded for a session when the opt-in
  * hook receiver is installed (POST /api/hooks/event). It adds per-event
  * granularity on top of the process/JSONL scan. Tool and Summary are truncated,
@@ -316,6 +336,13 @@ export interface Agent {
   pipelineTaskTitle?: string
   pendingPermissions?: PendingPermission[]
   pendingToolUse?: PendingToolUse
+  /**
+   * PendingQuestion is set when the session's terminal buffer currently shows
+   * a detected AskUserQuestion modal, so the dashboard can answer it directly
+   * (POST /api/agents/{pid}/answer-question) instead of only via the terminal
+   * overlay.
+   */
+  pendingQuestion?: DetectedQuestion
   machine?: string
   lastBtw?: BtwMessage
   /**

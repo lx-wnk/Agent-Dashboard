@@ -1196,6 +1196,109 @@ func TestSendMessageToChannel_FallsBackToBridgeHTTPWhenNoPty(t *testing.T) {
 	assert.Equal(t, "bridge msg", gotMessage)
 }
 
+// TestSendAnswerKeys_PtyFileDeliversConcatenatedRawBytes verifies that with
+// only a pty discovery file present, SendAnswerKeys POSTs the tokens
+// concatenated with no separator to /keys — no JSON envelope, no CR appended
+// beyond what the tokens themselves already carry.
+func TestSendAnswerKeys_PtyFileDeliversConcatenatedRawBytes(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	dir := filepath.Join(home, channelconfig.DiscoveryDir)
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+
+	var gotToken string
+	var gotBody string
+	ptySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/keys" {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		gotToken = strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		buf := new(bytes.Buffer)
+		_, _ = buf.ReadFrom(r.Body)
+		gotBody = buf.String()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"ok":true}`)
+	}))
+	defer ptySrv.Close()
+	ptyPort := ptySrv.Listener.Addr().(*net.TCPAddr).Port
+
+	pid := 22101
+	writeDiscoveryFile(t, dir, fmt.Sprintf("%d.pty.json", pid), map[string]any{
+		"port":      ptyPort,
+		"token":     "pty-secret",
+		"ptyInject": true,
+	})
+
+	m := NewSpawnManager(5, 60000, 30, 60000, nil, nil)
+	transport, err := m.SendAnswerKeys(context.Background(), pid, []string{"1", "3", "\t", "\r"})
+	require.NoError(t, err)
+	assert.Equal(t, "pty", transport)
+	assert.Equal(t, "pty-secret", gotToken)
+	assert.Equal(t, "13\t\r", gotBody)
+}
+
+// TestSendAnswerKeys_TmuxTakesPrecedenceOverPty verifies a bridge file with a
+// tmuxPane routes through tmux send-keys, one invocation per token, even when
+// a pty file is also present.
+func TestSendAnswerKeys_TmuxTakesPrecedenceOverPty(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	dir := filepath.Join(home, channelconfig.DiscoveryDir)
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+
+	ptyHit := false
+	ptySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		ptyHit = true
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"ok":true}`)
+	}))
+	defer ptySrv.Close()
+	ptyPort := ptySrv.Listener.Addr().(*net.TCPAddr).Port
+
+	pid := 22102
+	writeDiscoveryFile(t, dir, fmt.Sprintf("%d.json", pid), map[string]any{
+		"port":       9999,
+		"token":      "bridge-secret",
+		"tmuxPane":   "%3",
+		"tmuxSocket": "",
+	})
+	writeDiscoveryFile(t, dir, fmt.Sprintf("%d.pty.json", pid), map[string]any{
+		"port":      ptyPort,
+		"token":     "pty-secret",
+		"ptyInject": true,
+	})
+
+	var calls [][]string
+	origRunner := tmuxRunner
+	origLook := tmuxLookPath
+	t.Cleanup(func() { tmuxRunner = origRunner; tmuxLookPath = origLook })
+	tmuxLookPath = func() (string, error) { return "/usr/bin/tmux", nil }
+	tmuxRunner = func(_ context.Context, args ...string) error {
+		calls = append(calls, args)
+		return nil
+	}
+
+	m := NewSpawnManager(5, 60000, 30, 60000, nil, nil)
+	transport, err := m.SendAnswerKeys(context.Background(), pid, []string{"1"})
+	require.NoError(t, err)
+	assert.Equal(t, "tmux", transport)
+	assert.False(t, ptyHit, "pty broker must NOT be called when tmux path is taken")
+	require.Len(t, calls, 1)
+}
+
+// TestSendAnswerKeys_NoChannel_ReturnsErrNoAnswerChannel verifies that
+// SendAnswerKeys reports ErrNoAnswerChannel when neither discovery file exists.
+func TestSendAnswerKeys_NoChannel_ReturnsErrNoAnswerChannel(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	m := NewSpawnManager(5, 60000, 30, 60000, nil, nil)
+	_, err := m.SendAnswerKeys(context.Background(), 99999, []string{"1"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrNoAnswerChannel)
+}
+
 // TestSpawn_TmuxTransportBuildsInteractiveSession verifies that when tmux is on
 // PATH, Spawn launches the agent via a detached tmux session (new-session -d -P
 // -F '#{pane_pid}') carrying the positional prompt, and never uses one-shot -p.

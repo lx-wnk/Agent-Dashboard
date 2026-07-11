@@ -627,6 +627,55 @@ func (m *SpawnManager) SendMessageToChannel(ctx context.Context, pid int, messag
 	return "", fmt.Errorf("channel not available for PID %d", pid)
 }
 
+// SendAnswerKeys delivers a sequence of raw answer-keystroke tokens (the
+// output of EncodeAnswer) to the running interactive Claude session
+// identified by pid, driving its AskUserQuestion TUI selector directly.
+// Unlike SendMessageToChannel, tokens are written byte-for-byte with no
+// sanitization and no appended CR — the caller has already encoded the exact
+// submit sequence (e.g. a single-select answer is a bare digit, no Enter).
+//
+// Delivery precedence mirrors SendMessageToChannel's discovery-file lookup,
+// minus the legacy bridge-HTTP fallback: answer delivery drives a real
+// terminal selector, which requires an actual pty or tmux pane, not the MCP
+// log channel.
+//
+//  1. Bridge file ({pid}.json) with a non-empty tmuxPane → tmux send-keys,
+//     one invocation per token.
+//  2. Pty file ({pid}.pty.json) with a non-zero port → POST the concatenated
+//     token bytes to the pty broker's /keys endpoint (raw, no CR appended).
+//
+// Returns the chosen transport ("tmux" or "pty") and any error. Returns
+// ErrNoAnswerChannel (wrapped) when neither discovery file yields a channel.
+func (m *SpawnManager) SendAnswerKeys(ctx context.Context, pid int, tokens []string) (transport string, err error) {
+	home, herr := os.UserHomeDir()
+	if herr != nil {
+		return "", fmt.Errorf("UserHomeDir: %w", herr)
+	}
+
+	if data, rerr := os.ReadFile(channelconfig.DiscoveryFile(home, pid)); rerr == nil {
+		var disc struct {
+			TmuxPane   string `json:"tmuxPane"`
+			TmuxSocket string `json:"tmuxSocket"`
+		}
+		if json.Unmarshal(data, &disc) == nil && disc.TmuxPane != "" {
+			return "tmux", sendAnswerKeysToTmux(ctx, disc.TmuxSocket, disc.TmuxPane, tokens)
+		}
+	}
+
+	if data, rerr := os.ReadFile(channelconfig.DiscoveryPtyFile(home, pid)); rerr == nil {
+		var disc struct {
+			Port  int    `json:"port"`
+			Token string `json:"token"`
+		}
+		if json.Unmarshal(data, &disc) == nil && disc.Port != 0 {
+			raw := strings.Join(tokens, "")
+			return "pty", sendHTTPKeys(ctx, disc.Port, disc.Token, raw)
+		}
+	}
+
+	return "", fmt.Errorf("%w (pid %d)", ErrNoAnswerChannel, pid)
+}
+
 // ErrNoTerminal indicates the session identified by pid has no pty-broker
 // discovery file, meaning there is no live terminal to attach to.
 var ErrNoTerminal = errors.New("session has no pty terminal")
@@ -700,6 +749,36 @@ func sendHTTPMessage(ctx context.Context, port int, token, message string) error
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	client := &http.Client{Timeout: channelMsgTimeout}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("channel unreachable: %w", err)
+	}
+	defer resp.Body.Close()
+	if !httputil.Is2xx(resp.StatusCode) {
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return fmt.Errorf("channel error %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
+	}
+	return nil
+}
+
+// sendHTTPKeys POSTs raw bytes to http://127.0.0.1:{port}/keys, authenticated
+// with token as a Bearer credential. Unlike sendHTTPMessage, the body is
+// written to the pty verbatim by the broker — no JSON envelope, no appended
+// CR — so the caller controls the exact byte sequence (digits, Tab, Enter).
+func sendHTTPKeys(ctx context.Context, port int, token, raw string) error {
+	req, err := http.NewRequestWithContext(
+		ctx,
+		"POST",
+		fmt.Sprintf("http://127.0.0.1:%d/keys", port),
+		strings.NewReader(raw),
+	)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/octet-stream")
 	req.Header.Set("Authorization", "Bearer "+token)
 
 	client := &http.Client{Timeout: channelMsgTimeout}

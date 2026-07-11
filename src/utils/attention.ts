@@ -2,7 +2,7 @@ import type { Agent } from '../types'
 import { isStalled } from './format'
 
 export interface Attention {
-  kind: 'permission' | 'error' | 'stalled'
+  kind: 'question' | 'permission' | 'error' | 'stalled'
   label: string
   tone: 'warning' | 'danger'
   weight: number
@@ -13,6 +13,9 @@ export function attentionFor(agent: Agent, secondsSinceActivity: number | null):
   // are historical and not actionable from the triage band (dismiss lives on the card).
   if (agent.status === 'finished')
     return null
+  // A real, answerable AskUserQuestion outranks a generic permission prompt.
+  if (agent.pendingQuestion)
+    return { kind: 'question', label: 'Question', tone: 'warning', weight: -1 }
   if (agent.pendingPermissions && agent.pendingPermissions.length > 0)
     return { kind: 'permission', label: 'Needs permission', tone: 'warning', weight: 0 }
   if (agent.pendingToolUse)

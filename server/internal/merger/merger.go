@@ -229,10 +229,16 @@ type GetAgentsOpts struct {
 // Merger should exist per process; the composition root builds it and shares it
 // with every read path (broadcast loop, HTTP accessors, search).
 type Merger struct {
-	scan     func(ctx context.Context) ([]scanner.ProcessInfo, error)
-	tracker  *staleTracker
-	registry *provider.Registry
+	scan          func(ctx context.Context) ([]scanner.ProcessInfo, error)
+	tracker       *staleTracker
+	registry      *provider.Registry
+	questionProbe QuestionProbeFn
 }
+
+// QuestionProbeFn resolves the AskUserQuestion modal currently open on an
+// injectable session's live terminal, or nil when none is open. Implementations
+// must be fail-soft: any lookup error yields nil rather than propagating.
+type QuestionProbeFn func(pid int) *sdk.DetectedQuestion
 
 // Option configures a Merger.
 type Option func(*Merger)
@@ -246,6 +252,13 @@ func WithScanFn(fn func(ctx context.Context) ([]scanner.ProcessInfo, error)) Opt
 // non-Claude sessions. When nil, only Claude sessions are handled (legacy path).
 func WithRegistry(r *provider.Registry) Option {
 	return func(m *Merger) { m.registry = r }
+}
+
+// WithQuestionProbe injects the probe used to attach a live-detected
+// AskUserQuestion modal to injectable agents. When nil (the default), no agent
+// ever carries PendingQuestion.
+func WithQuestionProbe(fn QuestionProbeFn) Option {
+	return func(m *Merger) { m.questionProbe = fn }
 }
 
 // New builds a Merger. Defaults: the real scanner.ScanProcesses and a fresh
@@ -409,6 +422,10 @@ func (m *Merger) buildAgent(proc scanner.ProcessInfo, session *parser.SessionDat
 		costLocal = rc.Local
 	}
 	chanAvail, chanInject := channelDiscovery(proc.PID)
+	var pendingQuestion *sdk.DetectedQuestion
+	if chanInject && m.questionProbe != nil {
+		pendingQuestion = m.questionProbe(proc.PID)
+	}
 	health := ComputeHealthScore(session, c.Total, c.Unknown, baselineCost)
 
 	return sdk.Agent{
@@ -424,6 +441,7 @@ func (m *Merger) buildAgent(proc scanner.ProcessInfo, session *parser.SessionDat
 		Working:                   session.TurnOpen || recentChannelOutput(proc.PID),
 		ChannelAvailable:          chanAvail,
 		LiveInjectable:            chanInject,
+		PendingQuestion:           pendingQuestion,
 		Uptime:                    proc.Uptime,
 		LastActivity:              session.LastActivity.Format(time.RFC3339),
 		CurrentAction:             strPtr(session.CurrentAction),
