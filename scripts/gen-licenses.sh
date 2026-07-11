@@ -6,6 +6,20 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 OUTPUT="${REPO_ROOT}/THIRD_PARTY_LICENSES.md"
 GO_LICENSES="$(go env GOPATH)/bin/go-licenses"
 
+# go-licenses v1.6.0 errors on every stdlib package under Go 1.26 ("Package
+# ... does not have module info. Non go modules projects are no longer
+# supported"), which collect_go() tolerates via `|| true`. Left unchecked,
+# that silently empties the Go section instead of failing the run. Investigated
+# 2026-07-12: go-licenses v2.0.1 (`go install
+# github.com/google/go-licenses/v2@v2.0.1`) runs cleanly under Go 1.26 with no
+# module-info errors, but regenerating with it changes ~14 lines of the
+# committed Go table (two newly-detected deps, a few version/URL drifts) —
+# more than trivial reordering, so the version bump was not carried into this
+# fix. Re-run that investigation and bump GO_LICENSES_VERSION below once ready
+# to review that diff on its own.
+GO_LICENSES_VERSION="v1.6.0"
+MIN_GO_DEP_ROWS=20
+
 # ── Tool check ─────────────────────────────────────────────────────────────────
 
 if [[ ! -x "${GO_LICENSES}" ]]; then
@@ -30,7 +44,8 @@ declare -A LICENSE_OVERRIDES=(
 TMP_GO_RAW="$(mktemp)"
 TMP_GO_FIXED="$(mktemp)"
 TMP_FRONTEND_JSON="$(mktemp)"
-trap 'rm -f "${TMP_GO_RAW}" "${TMP_GO_FIXED}" "${TMP_FRONTEND_JSON}"' EXIT
+TMP_OUTPUT="$(mktemp)"
+trap 'rm -f "${TMP_GO_RAW}" "${TMP_GO_FIXED}" "${TMP_FRONTEND_JSON}" "${TMP_OUTPUT}"' EXIT
 
 # ── Collect Go deps ────────────────────────────────────────────────────────────
 
@@ -136,6 +151,26 @@ PYEOF
 GO_COUNT="$(echo "${GO_SORTED}" | grep -c ',' || true)"
 FE_COUNT="$(echo "${FRONTEND_TABLE}" | grep -c '^|' || true)"
 
+# ── Guard: refuse to wipe a good file with a broken run ───────────────────────
+# collect_go() tolerates go-licenses failures (see comment above it), so a
+# fully broken toolchain — e.g. go-licenses v1.6.0 under Go 1.26, which errors
+# on every stdlib package with "does not have module info. Non go modules
+# projects are no longer supported" — silently produces an empty GO_SORTED
+# instead of a script failure. Catch that here instead of writing the result.
+if (( GO_COUNT < MIN_GO_DEP_ROWS )); then
+  echo "" >&2
+  echo "ERROR: only ${GO_COUNT} Go dependency rows collected (expected >= ${MIN_GO_DEP_ROWS})." >&2
+  echo "This almost always means go-licenses ${GO_LICENSES_VERSION} is failing under the" >&2
+  echo "current Go toolchain (known incompatible with Go 1.26: 'Package ... does not" >&2
+  echo "have module info. Non go modules projects are no longer supported')." >&2
+  echo "Refusing to overwrite ${OUTPUT} with a wiped Go section." >&2
+  echo "" >&2
+  echo "Workaround: manually splice the existing Go Dependencies table from the" >&2
+  echo "current ${OUTPUT} into a freshly regenerated file (see git history for prior" >&2
+  echo "splices), or investigate a go-licenses version compatible with this Go version." >&2
+  exit 1
+fi
+
 echo "Writing ${OUTPUT} (${GO_COUNT} Go deps, ${FE_COUNT} frontend deps)..."
 
 # ── Emit output file ───────────────────────────────────────────────────────────
@@ -162,6 +197,8 @@ echo "Writing ${OUTPUT} (${GO_COUNT} Go deps, ${FE_COUNT} frontend deps)..."
   printf '| Package | Version | License |\n'
   printf '|---------|---------|----------|\n'
   echo "${FRONTEND_TABLE}"
-} > "${OUTPUT}"
+} > "${TMP_OUTPUT}"
+
+mv "${TMP_OUTPUT}" "${OUTPUT}"
 
 echo "Done: ${OUTPUT}"
