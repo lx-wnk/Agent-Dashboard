@@ -3,7 +3,7 @@
 //
 //lint:file-ignore SA1019 Boot-migration tests intentionally exercise deprecated config shapes.
 
-package main
+package serverapp
 
 import (
 	"context"
