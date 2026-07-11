@@ -77,7 +77,13 @@ tasks:
     desc: Package the macOS desktop shell into an unsigned bin/Agent Dashboard.app bundle (requires the wails CLI + Xcode CLT)
     platforms: [darwin]
     cmds:
+      - defer: git checkout -- desktop/wails.json
       - task: build:frontend
+      # wails has no CLI flag for productVersion — it only reads desktop/wails.json —
+      # so stamp the real git version in before the build and restore it via defer:
+      # above (runs even on failure), keeping the working tree clean.
+      - |
+        VERSION="$(git describe --tags --always --dirty)"; sed -i '' "s/\"productVersion\": \"[^\"]*\"/\"productVersion\": \"${VERSION}\"/" desktop/wails.json
       # Same production tag + UniformTypeIdentifiers ldflag as desktop:build, driven
       # through `wails build` so it also renders desktop/wails.json + Info.plist into
       # a real .app bundle instead of a bare Mach-O binary.
