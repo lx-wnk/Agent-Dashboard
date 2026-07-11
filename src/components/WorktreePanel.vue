@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useClipboardCopy } from '../composables/useCopyId'
 import { toast } from '../composables/useToast'
 import { useWorktreeStatus } from '../composables/useWorktreeStatus'
 import { EDITOR_SCHEMES, editorHref, loadEditorScheme, saveEditorScheme } from '../utils/worktree'
@@ -35,17 +36,13 @@ watch(editorScheme, v => saveEditorScheme(v))
 
 const editorHrefComputed = computed(() => editorHref(props.worktreePath, editorScheme.value))
 
-const copySuccess = ref(false)
+const { copy: copyToClipboard, copied: copySuccess } = useClipboardCopy()
 const confirmingRemove = ref(false)
 
 async function copyPath(): Promise<void> {
   if (!props.worktreePath)
     return
-  await navigator.clipboard.writeText(props.worktreePath)
-  copySuccess.value = true
-  setTimeout(() => {
-    copySuccess.value = false
-  }, 2000)
+  await copyToClipboard(props.worktreePath)
 }
 
 async function handleRemove(): Promise<void> {

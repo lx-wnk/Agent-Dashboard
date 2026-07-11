@@ -33,7 +33,18 @@ function setStatus(dto: WorktreeStatusDTO | null) {
   statusRef.value = dto
 }
 
-const clipboardWriteText = vi.fn().mockResolvedValue(undefined)
+const clipboardCopy = vi.fn().mockResolvedValue(undefined)
+
+vi.mock('@vueuse/core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@vueuse/core')>()
+  return {
+    ...actual,
+    useClipboard: () => ({
+      copy: clipboardCopy,
+      copied: ref(false),
+    }),
+  }
+})
 
 beforeEach(() => {
   setStatus(null)
@@ -41,7 +52,7 @@ beforeEach(() => {
   errorRef.value = null
   removeMock.mockResolvedValue(204)
   createMock.mockResolvedValue(undefined)
-  vi.stubGlobal('navigator', { clipboard: { writeText: clipboardWriteText } })
+  clipboardCopy.mockClear()
 })
 
 afterEach(() => {
@@ -50,14 +61,14 @@ afterEach(() => {
 
 describe('worktreePanel', () => {
   describe('copy-path', () => {
-    it('clicking Copy path calls navigator.clipboard.writeText with the path', async () => {
+    it('clicking Copy path copies the path via the clipboard composable', async () => {
       setStatus({ branch: 'feat/foo', dirty: false, fileCount: 2, ahead: 0, behind: 0 })
       const wrapper = mount(WorktreePanel, {
         props: { taskId: 't1', worktreePath: '/home/user/worktrees/task1', active: true },
       })
       await flushPromises()
       await wrapper.find('[data-testid="worktree-copy-btn"]').trigger('click')
-      expect(clipboardWriteText).toHaveBeenCalledWith('/home/user/worktrees/task1')
+      expect(clipboardCopy).toHaveBeenCalledWith('/home/user/worktrees/task1')
     })
   })
 
