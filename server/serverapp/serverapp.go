@@ -94,3 +94,16 @@ func Run(ctx context.Context, cfg config.Config, cfgFile string, restartCtl *res
 	}
 	return err
 }
+
+// Serve loads configuration from cfgFile (empty for defaults), builds the
+// restart controller, and runs the server until ctx is cancelled. It is the
+// entrypoint for callers outside the server module (e.g. the desktop shell),
+// which cannot construct the internal config/restart types themselves.
+func Serve(ctx context.Context, cfgFile string) error {
+	cfg, err := config.Load(cfgFile)
+	if err != nil {
+		return err
+	}
+	restartCtl := restart.NewController(cfg.RestartMode)
+	return Run(ctx, cfg, cfgFile, restartCtl)
+}

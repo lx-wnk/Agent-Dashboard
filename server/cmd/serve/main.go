@@ -10,8 +10,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/channel"
-	"github.com/lx-wnk/agent-dashboard/server/internal/config"
-	"github.com/lx-wnk/agent-dashboard/server/internal/restart"
 	"github.com/lx-wnk/agent-dashboard/server/serverapp"
 )
 
@@ -36,16 +34,9 @@ func main() {
 		Use:   "serve",
 		Short: "Start the HTTP server",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load(cfgFile)
-			if err != nil {
-				return err
-			}
-
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
-
-			restartCtl := restart.NewController(cfg.RestartMode)
-			return serverapp.Run(ctx, cfg, cfgFile, restartCtl)
+			return serverapp.Serve(ctx, cfgFile)
 		},
 	}
 	serve.Flags().StringVar(&cfgFile, "config", "", "path to JSON config file")

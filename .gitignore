@@ -63,3 +63,7 @@ test-results/
 # Per-session task plan, kept locally to avoid merge conflicts across branches.
 /.agent-context/memory/todo.md
 ###< agent-context ###
+
+# desktop shell build output
+/desktop/desktop
+/desktop/build/bin/
