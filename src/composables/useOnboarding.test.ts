@@ -113,4 +113,14 @@ describe('useOnboarding', () => {
 
     expect(status.value?.completed).toBe(true)
   })
+
+  it('show/hide toggle local visibility independently of persisted completion', () => {
+    const { visible, show, hide } = useOnboardingMod.useOnboarding()
+
+    expect(visible.value).toBe(false)
+    show()
+    expect(visible.value).toBe(true)
+    hide()
+    expect(visible.value).toBe(false)
+  })
 })

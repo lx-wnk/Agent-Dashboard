@@ -15,6 +15,7 @@ export interface RegisterMcpResult {
 const status = ref<OnboardingStatus | null>(null)
 const loading = ref(false)
 const error = ref<string | null>(null)
+const visible = ref(false)
 
 async function fetchStatus(): Promise<void> {
   loading.value = true
@@ -75,13 +76,26 @@ async function complete(): Promise<boolean> {
   }
 }
 
+// Local session-only visibility, independent of the persisted `completed` flag —
+// lets the user re-run the flow from Settings without server state implying it's incomplete.
+function show(): void {
+  visible.value = true
+}
+
+function hide(): void {
+  visible.value = false
+}
+
 export function useOnboarding() {
   return {
     status: readonly(status),
     loading: readonly(loading),
     error: readonly(error),
+    visible: readonly(visible),
     fetchStatus,
     registerMcp,
     complete,
+    show,
+    hide,
   }
 }

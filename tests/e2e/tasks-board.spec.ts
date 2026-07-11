@@ -1,5 +1,5 @@
-import { expect, test } from '@playwright/test'
 import type { PipelineTask } from '../../src/types'
+import { expect, test } from '@playwright/test'
 import { stubAuthDisabled, stubEmptyStream, stubJson } from './helpers'
 
 const TASK: PipelineTask = {
