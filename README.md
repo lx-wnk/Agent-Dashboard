@@ -95,14 +95,16 @@ A native macOS shell (`desktop/`, [wails](https://wails.io) v2) wraps the same d
 Build and run it for a smoke test (requires macOS + Xcode command-line tools; no `wails` CLI needed for this):
 
 ```bash
-cd desktop && CGO_ENABLED=1 go build -o agent-dashboard-desktop . && ./agent-dashboard-desktop
+task desktop:run
 ```
+
+That builds the SPA, embeds it, and links the shell with the wails production tag and the `UniformTypeIdentifiers` framework (a plain `go build` omits both — see [CONTRIBUTING.md](./CONTRIBUTING.md#desktop-shell-macos)), then launches the window.
 
 Signed `.app`/`.dmg` distribution via the `wails` CLI is a later step — see [CONTRIBUTING.md](./CONTRIBUTING.md#desktop-shell-macos).
 
-**Manual smoke checklist** (real Mac required — these can't be automated headlessly):
+**Manual smoke checklist** (real Mac):
 
-1. The webview redirect lands on `http://127.0.0.1:13120` and stays there — open the webview's devtools and check `document.location.origin`.
+1. The webview loads the dashboard (not a blank page) — it fetches the SPA and `/api/*` from `http://127.0.0.1:13120`, so the redirect landed on the loopback origin.
 2. A mutating action (spawn an agent, create a task, answer a question) succeeds with no `403`.
 3. No App Transport Security block appears in Console.app.
 

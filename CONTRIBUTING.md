@@ -96,8 +96,14 @@ IDE-embedded tools (Cursor, Copilot-in-VSCode, Windsurf) don't write file-per-se
 `desktop/` is its own Go module (wails v2) that wraps the dashboard server in a native WKWebView window. It is `//go:build darwin`-gated — the module does not build on other platforms; a `main_other.go` stub keeps `go build ./...` and CI green off macOS. Build and run it for a dev smoke (requires Go 1.26 + Xcode command-line tools, no `wails` CLI needed):
 
 ```bash
-cd desktop && CGO_ENABLED=1 go build -o agent-dashboard-desktop . && ./agent-dashboard-desktop
+task desktop:run        # or: task desktop:build  (writes bin/agent-dashboard-desktop)
 ```
+
+Three non-obvious build requirements the `desktop:*` tasks encapsulate — a bare `cd desktop && go build .` runs but produces a broken app:
+
+- **`-tags production`** — without a `production` or `dev` build tag, wails compiles a fallback that errors at runtime (`Wails applications will not build without the correct build tags`).
+- **`-ldflags "-extldflags '-framework UniformTypeIdentifiers'"`** — wails v2 references `UTType` on the macOS 15 SDK; a plain `go build` fails to link it (`Undefined symbols: _OBJC_CLASS_$_UTType`).
+- **the SPA must be embedded first** (`task build:frontend`) — the shell serves `server/frontend/dist` via `go:embed`; an empty dist makes the webview hit a `/` → `./` redirect loop instead of the app.
 
 The `wails` CLI (`go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0`) is only needed later, for producing a signed `.app`/`.dmg` bundle — not for this dev build.
 
