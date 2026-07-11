@@ -77,7 +77,7 @@ See [docs/guides/install.md](docs/guides/install.md) for Docker, manual binary d
 
 ### First-run setup
 
-On first launch, a guided setup flow opens automatically and walks you through the fastest path from install to a controllable session: (1) detects the Claude Code CLI and shows its version, or the install command if it's missing; (2) connects the dashboard to Claude with one click by registering it as an MCP server in your Claude config (`claude mcp add --scope user …`), with a copy-the-command fallback if that fails; (3) discovers your existing Claude sessions and lets you make one controllable with one click, so it becomes answerable from the dashboard. Skip it and it won't show again on its own.
+On first launch, a guided setup flow opens automatically and walks you through the fastest path from install to a controllable session: (1) detects the Claude Code CLI and shows its version, or the install command if it's missing; (2) connects the dashboard to Claude with one click by registering it as an MCP server in your Claude config (`claude mcp add --scope user …`), with a copy-the-command fallback if that fails; (3) discovers your existing Claude sessions and lets you make one controllable with one click, so it becomes answerable from the dashboard. Skip it and it won't show again on its own. You can re-open the same guided flow at any time from Settings → API Keys via the "Re-run first-run setup" button.
 
 ### Develop / build from source
 
