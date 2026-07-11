@@ -40,7 +40,7 @@ func main() {
 
 	// The bootstrap page redirects to the server, so the window must not open
 	// until the server accepts requests.
-	if err := waitForServer(ctx, healthURL, 30*time.Second); err != nil {
+	if err := waitForServer(ctx, serverErr, healthURL, 30*time.Second); err != nil {
 		cancel()
 		log.Fatalf("dashboard server did not become ready: %v", err)
 	}
@@ -70,16 +70,21 @@ func main() {
 	}
 }
 
-// waitForServer polls url until it returns 200 or the timeout/ctx elapses.
-func waitForServer(ctx context.Context, url string, timeout time.Duration) error {
+var healthPollClient = &http.Client{Timeout: 2 * time.Second}
+
+// waitForServer polls url until it returns 200, the timeout/ctx elapses, or
+// serverErr delivers a startup failure.
+func waitForServer(ctx context.Context, serverErr <-chan error, url string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case err := <-serverErr:
+			return fmt.Errorf("server failed to start: %w", err)
 		default:
 		}
-		resp, err := http.Get(url)
+		resp, err := healthPollClient.Get(url)
 		if err == nil {
 			resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
