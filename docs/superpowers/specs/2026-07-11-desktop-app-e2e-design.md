@@ -1,6 +1,6 @@
 # Desktop App + E2E Coverage — Design Spec
 
-> Date: 2026-07-11 · Status: Draft (awaiting user review) · Branch: `feat/desktop-app` (off `upcoming`)
+> Date: 2026-07-11 · Status: Approved (2026-07-11) · Branch: `feat/desktop-app` (off `upcoming`)
 > Initiative: neutralize the one axis a closed-source competitor (Sightdeck) wins on — install friction — by shipping a native macOS desktop app with one-click first-run onboarding, while raising Playwright E2E coverage of the Vue app. Lead with the capability we already have that the competitor lacks: answering/steering a live agent from the dashboard.
 
 ## Why
@@ -15,15 +15,16 @@ Two workstreams close this, and they reinforce each other:
 
 The backend is already Go (`agent-dashboard serve` binds `127.0.0.1:13120`, serves the embedded Vue SPA + REST/SSE/MCP). **wails is a Go desktop framework**, so the desktop app can start the server **in-process (a goroutine calling the existing serve bootstrap)** and open a webview at `http://127.0.0.1:13120` — one Go binary that is *both* the server and the shell. No sidecar process, no IPC bridge, no lifecycle juggling. Tauri (Rust) or Electron (Node) would each run the Go server as a separate child process. That single-process property is the decisive reason to pick wails here.
 
-## Decisions (proposed — for review)
+## Decisions (user-approved 2026-07-11)
 
 | # | Decision | Rationale |
 |---|---|---|
-| D1 | **wails** for the macOS shell | Go-native → server runs in-process, single signed binary; matches the existing Go architecture. (Tauri/Electron = Go-as-sidecar.) |
-| D2 | The desktop binary **reuses the `serve` bootstrap in-process** (goroutine on `127.0.0.1:13120`), webview loads that URL; graceful server shutdown on window close | No duplicate server logic; the web app IS the desktop app. |
-| D3 | **E2E harness fix first** — `webServer` boots the built Go binary on `13120` (not `pnpm dev`, which serves vite on `5173` and never satisfies the `:13120` wait) | Unblocks the whole suite; the current config times out every run (the #258 quirk). |
-| D4 | **First-run onboarding is in-scope for round 1**, not deferred | The onboarding — not the window — is the actual Sightdeck counter; a bare shell doesn't move the needle. |
+| D1 | **wails** for the macOS shell (not Tauri/Electron) | Go-native → server runs **in-process** (no sidecar), single ~10–20 MB binary, one language. Tauri/Electron both run Go as a sidecar child. Electron's only edge — bundled Chromium = exact rendering parity with our Playwright(Chromium) tests — costs ~10× size + heaviness that undercuts the "leaner than Sightdeck" positioning. wails/Tauri use the OS webview (WKWebView on macOS) which differs from Chromium; that risk is accepted and mitigated by the Slice 2 webview smoke + the Slice 4 webview-safety audit. |
+| D2 | The desktop binary **reuses the `serve` bootstrap in-process** (goroutine on `127.0.0.1:13120`), webview loads that URL; graceful server shutdown on window close | No duplicate server logic; the web app IS the desktop app. Loading over `http://127.0.0.1:13120` also keeps `Origin` a loopback host so the same-origin mutation guard passes (see Slice 2 risk). |
+| D3 | **E2E harness = build-if-stale then serve the Go binary on `13120`** (option A). Not `pnpm dev` (vite:5173, never satisfies the `:13120` wait — the #258 quirk); not vite-only-all-stubbed (loses the 2 real-backend integration specs + the embedded-serving path) | Hermetic: tests the real served app (embedded frontend + real `/api` for integration specs); browser-level stubs still work for stubbed specs. Crucially, this is the *same* "Go server on 13120 + frontend" shape the wails app runs at runtime — one harness design covers test AND runtime, no throwaway setup. (MSW may later replace `page.route` stubs; component testing is complementary — both deferred.) |
+| D4 | **First-run onboarding is in-scope, full** (CLI detect/install + skill/MCP register + session discovery + one-click `live`-connect), **SSOT via server API** | The onboarding — not the window — is the actual Sightdeck counter; a partial onboarding doesn't beat them. SSOT: the flow/logic/copy lives once in the **SPA**, shown identically in browser and desktop webview; OS-level actions (detect CLI, register skill, discover sessions) run through **server API endpoints** (the server does FS/exec, the SPA calls them). Desktop and browser drive the same endpoints — no separate desktop-native onboarding, no divergence, and it stays E2E-testable (stub the endpoints). |
 | D5 | macOS **signing/notarization + DMG** is an operator/paid step (Apple Developer ID) — wire the wails build into release tooling, but cutting/notarizing a signed release stays user-triggered | Same posture as the release tag (#253): outward-facing, credential-bound. |
+| D6 | **Slice 1 (E2E) ships first as its own PR**; Slices 2–4 (desktop) stack after | Slice 1 is independent + low-risk + de-risks the desktop shell (same SPA in the webview). |
 
 ## Slices
 
@@ -59,9 +60,6 @@ The backend is already Go (`agent-dashboard serve` binds `127.0.0.1:13120`, serv
 - Slice 3: onboarding-flow web spec (first-run detection → setup → connect), stubbed.
 - Slice 4: feature-detection unit tests for the webview fallbacks; a build-only check that the wails artifact assembles.
 
-## Open questions (for review)
+## Resolved (see Decisions D1–D6)
 
-1. **wails vs Tauri** — recommend wails (D1, in-process server). Confirm, or prefer Tauri (Go-as-sidecar) for its more mature updater/notarization ecosystem?
-2. **Onboarding depth round 1** — full counter (CLI check + skill/MCP register + session discovery + one-click connect), or a leaner first cut (just the connect one-liner surfaced prominently) with discovery later?
-3. **E2E harness** — build the binary inside `webServer` each run (slower, hermetic) vs. expect a pre-built binary / `reuseExistingServer` (faster, needs a step)? Recommend a `webServer` command that builds-if-stale then serves.
-4. **Slice order / independence** — Slice 1 (E2E) is independent and low-risk; Slices 2–4 (desktop) stack. Ship Slice 1 first as its own PR, then the desktop slices? Or bundle?
+All four review forks are resolved: wails (D1), full onboarding with SSOT-via-API (D4), harness build-if-stale-then-serve (D3), Slice 1 first (D6). Next: the Slice 1 plan (E2E harness fix + prioritized web specs), then per-slice OFD.
