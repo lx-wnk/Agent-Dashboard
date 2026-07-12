@@ -49,8 +49,8 @@ func ensureTaskWorktree(task *ent.Task, worktreeRoot string) (path, branch strin
 		// Branch already exists — check it out in the worktree without -b.
 		out2, err2 := gitRunner.Combined(ctx, task.Cwd, "worktree", "add", worktreePath, branch)
 		if err2 != nil {
-			return "", "", fmt.Errorf("ensureTaskWorktree: git worktree add failed: %s / %s",
-				strings.TrimSpace(out), strings.TrimSpace(out2))
+			return "", "", fmt.Errorf("ensureTaskWorktree: git worktree add failed (%s / %s): %w",
+				strings.TrimSpace(out), strings.TrimSpace(out2), err2)
 		}
 	}
 	return worktreePath, branch, nil

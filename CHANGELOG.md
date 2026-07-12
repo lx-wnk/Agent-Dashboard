@@ -178,6 +178,11 @@ Preparing the first public release.
 - A task run that hit its iteration limit no longer writes `done` and then immediately overwrites it with `failed` — the final stage run now reflects the actual outcome on the first write.
 - The refinement chat now surfaces file-read errors instead of hanging indefinitely when a referenced file cannot be read.
 - Removed dead computed properties and an unused watcher left over from earlier refactors in `App.vue` and `ProjectSettings`.
+- The GitHub OAuth plugin now returns a clear "authentication denied" response when a user declines consent, instead of a misleading "missing code" error.
+- The status line no longer mislabels cumulative session cost as an hourly rate (shows `$x.xx` instead of `$x.xx/h`).
+- The Anthropic spawner plugin now fails a stream on accumulation errors instead of continuing with incomplete state that could defeat its refusal / max-token detection.
+- History import now shares one implementation across the API-key settings and cost-analytics views, so the API-key view gains the "already running" (409) and malformed-frame handling it previously lacked.
+- The parser session-cache TTL now tracks a configured non-default SSE interval, so idle-agent caching is not silently defeated when the scan loop is slowed down.
 
 ### Accessibility
 
@@ -193,6 +198,9 @@ Preparing the first public release.
 ### Security
 
 - `PATCH /api/settings/*` now requires admin authorization — previously any authenticated user could change security-sensitive settings such as `auth.mode`, `git.allowPush`, or `worktree.force`.
+- The agent bash allow-list filter now also rejects output redirection (`>`/`>>`/`<`), single-`&` backgrounding, and newline command separators, closing allow-list-widening patterns that could append to shell startup files or chain an extra command past the first-token check.
+- Provider session discovery now skips symbolic links, so a crafted symlink placed under a provider directory can no longer be read as a session file (arbitrary-file-read guard).
+- The dashboard-channel plugin now validates the `dashboard_reply` message argument and caps inbound `POST /message` bodies (64 KiB).
 
 ### Changed
 

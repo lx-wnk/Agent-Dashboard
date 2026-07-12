@@ -396,9 +396,16 @@ func findSessions(root, glob string) []string {
 		if err != nil {
 			return nil
 		}
-		if re.MatchString(filepath.ToSlash(rel)) {
-			out = append(out, path)
+		if !re.MatchString(filepath.ToSlash(rel)) {
+			return nil
 		}
+		// Reject symlinks: a symlink under root whose name matches the glob
+		// could otherwise be used to read an arbitrary file outside root.
+		info, err := os.Lstat(path)
+		if err != nil || info.Mode()&os.ModeSymlink != 0 {
+			return nil
+		}
+		out = append(out, path)
 		return nil
 	})
 	return out

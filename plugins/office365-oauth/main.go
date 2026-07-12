@@ -359,7 +359,7 @@ func (h *handler) isMember(ctx context.Context, accessToken, groupID string) (bo
 			return false, fmt.Errorf("isMember: read body: %w", readErr)
 		}
 		if resp.StatusCode != http.StatusOK {
-			return false, fmt.Errorf("isMember: HTTP %d: %s", resp.StatusCode, body)
+			return false, fmt.Errorf("isMember: HTTP %d: %s", resp.StatusCode, truncateBody(body))
 		}
 
 		var page struct {

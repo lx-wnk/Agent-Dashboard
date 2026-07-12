@@ -139,11 +139,12 @@ func main() {
 	mux.HandleFunc("GET /capabilities/auth/user", h.user)
 
 	srv := &http.Server{
-		Addr:         listenAddr,
-		Handler:      mux,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		Addr:              listenAddr,
+		Handler:           mux,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      15 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		ReadHeaderTimeout: 5 * time.Second,
 	}
 
 	slog.Info("github-oauth plugin listening", "addr", listenAddr)
@@ -249,6 +250,11 @@ func (h *handler) callback(w http.ResponseWriter, r *http.Request) {
 		Path:   "/",
 	})
 
+	if errParam := r.URL.Query().Get("error"); errParam != "" {
+		slog.Warn("callback: oauth error from provider", "error", errParam, "description", r.URL.Query().Get("error_description"))
+		writeError(w, http.StatusForbidden, "authentication denied by provider")
+		return
+	}
 	code := r.URL.Query().Get("code")
 	if code == "" {
 		writeError(w, http.StatusBadRequest, "missing code")

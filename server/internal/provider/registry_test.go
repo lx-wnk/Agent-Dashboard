@@ -123,6 +123,33 @@ func TestResolveSession_CodexNestedGlobAndJunieParentID(t *testing.T) {
 	}
 }
 
+// TestFindSessions_SkipsSymlinks verifies that a symlink whose name matches
+// the glob is not returned, preventing an arbitrary-file read via a symlink
+// planted under the provider root (SEC-P3-004).
+func TestFindSessions_SkipsSymlinks(t *testing.T) {
+	root := t.TempDir()
+	sessionsDir := filepath.Join(root, "sessions")
+	if err := os.MkdirAll(sessionsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	secret := filepath.Join(t.TempDir(), "secret.jsonl")
+	if err := os.WriteFile(secret, []byte(`{"secret":true}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(secret, filepath.Join(sessionsDir, "rollout-evil.jsonl")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sessionsDir, "rollout-real.jsonl"), []byte(`{"ok":true}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := findSessions(root, "sessions/rollout-*.jsonl")
+	if len(got) != 1 || filepath.Base(got[0]) != "rollout-real.jsonl" {
+		t.Fatalf("findSessions should skip the symlink and return only the real file, got %v", got)
+	}
+}
+
 func TestResolveSession_EndToEndCodex(t *testing.T) {
 	root := t.TempDir()
 	nested := filepath.Join(root, "sessions", "2026", "04", "19")

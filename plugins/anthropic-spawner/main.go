@@ -170,6 +170,7 @@ func runStream(args spawnArgs, stdout io.Writer) error {
 		event := stream.Current()
 		if err := acc.Accumulate(event); err != nil {
 			fmt.Fprintln(os.Stderr, "anthropic-spawner: accumulate:", err)
+			return fmt.Errorf("accumulate stream event: %w", err)
 		}
 		switch ev := event.AsAny().(type) {
 		case anthropic.ContentBlockDeltaEvent:

@@ -68,15 +68,28 @@ const visibleAgentCards = computed(() =>
   }),
 )
 
+// Total permission requests across all task-driven permission items
+const totalRequestCount = computed(() => props.permissionItems.reduce((s, i) => s + i.requests.length, 0))
+
+// Per-agent attention/secs, computed once per agent per tick (reused by breakdown, blockedDetail, template)
+const agentAttentionMap = computed(() => {
+  const map = new Map<string, { att: ReturnType<typeof attentionFor>, secs: number | null }>()
+  for (const agent of props.agents) {
+    const secs = secondsSince(agent.lastActivity, nowMs.value)
+    map.set(agent.sessionId, { att: attentionFor(agent, secs), secs })
+  }
+  return map
+})
+
 // Breakdown string: "2 permissions · 1 failed run · 1 stalled"
 const breakdown = computed(() => {
   const counts: Record<string, number> = {}
   // Count task-level permission requests
-  const permTotal = props.permissionItems.reduce((s, i) => s + i.requests.length, 0)
+  const permTotal = totalRequestCount.value
   if (permTotal > 0)
     counts.permission = permTotal
   for (const agent of visibleAgentCards.value) {
-    const att = attentionFor(agent, secondsSince(agent.lastActivity, nowMs.value))
+    const att = agentAttentionMap.value.get(agent.sessionId)?.att
     if (att && att.kind !== 'permission')
       counts[att.kind] = (counts[att.kind] ?? 0) + 1
   }
@@ -97,8 +110,8 @@ const totalCount = computed(() => props.permissionItems.length + visibleAgentCar
 function blockedDetail(agent: Agent): string {
   if (agent.pendingToolUse)
     return agent.pendingToolUse.pattern ? `${agent.pendingToolUse.tool}(${agent.pendingToolUse.pattern})` : agent.pendingToolUse.tool
-  const secs = secondsSince(agent.lastActivity, nowMs.value)
-  const att = attentionFor(agent, secs)
+  const entry = agentAttentionMap.value.get(agent.sessionId)
+  const att = entry?.att
   if (!att)
     return ''
   if (att.kind === 'permission')
@@ -106,7 +119,7 @@ function blockedDetail(agent: Agent): string {
   if (att.kind === 'error')
     return agent.errorState ? formatErrorState(agent.errorState) : (agent.currentAction || 'Run failed')
   // stalled
-  return `Running but silent — last output ${formatRelativeActivity(secs)}`
+  return `Running but silent — last output ${formatRelativeActivity(entry.secs)}`
 }
 
 function permissionLabel(p: PendingPermission | PermissionRequest): string {
@@ -190,7 +203,7 @@ function handleDenyTask(taskId: string, ids: string[]) {
 }
 
 // hasBulk drives collapse default and bar visibility
-const hasBulk = computed(() => props.permissionItems.reduce((s, i) => s + i.requests.length, 0) >= 2)
+const hasBulk = computed(() => totalRequestCount.value >= 2)
 const showCards = ref(!hasBulk.value)
 
 watch(hasBulk, (bulk) => {
@@ -317,7 +330,7 @@ watch(() => props.focusedSessionId, (id) => {
       >
         <div class="flex items-center gap-3 px-3 py-2">
           <span class="text-[12px] font-semibold text-warning-text">
-            {{ permissionItems.reduce((s, i) => s + i.requests.length, 0) }} requests across {{ permissionItems.length }} {{ permissionItems.length === 1 ? 'task' : 'tasks' }} waiting on permission
+            {{ totalRequestCount }} requests across {{ permissionItems.length }} {{ permissionItems.length === 1 ? 'task' : 'tasks' }} waiting on permission
           </span>
           <label class="ml-auto flex items-center gap-1.5 cursor-pointer select-none text-[11px] text-fg-faint">
             <input
@@ -342,7 +355,7 @@ watch(() => props.focusedSessionId, (id) => {
             :disabled="approveAllInFlight || selectedTotal === 0"
             @click="handleApproveAll"
           >
-            ✓ Approve all{{ selectedTotal < permissionItems.reduce((s, i) => s + i.requests.length, 0) ? ` (${selectedTotal})` : '' }}
+            ✓ Approve all{{ selectedTotal < totalRequestCount ? ` (${selectedTotal})` : '' }}
           </AppButton>
         </div>
 
@@ -464,8 +477,8 @@ watch(() => props.focusedSessionId, (id) => {
           :ref="(el) => setCardRef(agent.sessionId, el as HTMLElement | null)"
           class="min-w-[280px] flex-1 basis-[280px] max-w-[420px] rounded-lg bg-card border border-l-[3px] p-3 flex flex-col gap-2 transition-shadow"
           :class="[
-            toneBorderClass[attentionFor(agent, secondsSince(agent.lastActivity, nowMs))?.tone ?? 'warning'],
-            toneLeftClass[attentionFor(agent, secondsSince(agent.lastActivity, nowMs))?.tone ?? 'warning'],
+            toneBorderClass[agentAttentionMap.get(agent.sessionId)?.att?.tone ?? 'warning'],
+            toneLeftClass[agentAttentionMap.get(agent.sessionId)?.att?.tone ?? 'warning'],
             agent.sessionId === focusedSessionId ? 'ring-2 ring-accent shadow-md' : '',
           ]"
         >
@@ -475,8 +488,8 @@ watch(() => props.focusedSessionId, (id) => {
             <span class="font-mono text-[11px] text-fg-faint shrink-0">{{ shortModel(agent.model ?? null) }}</span>
             <span
               class="ml-auto text-[10px] font-bold uppercase tracking-wide shrink-0"
-              :class="toneLabelClass[attentionFor(agent, secondsSince(agent.lastActivity, nowMs))?.tone ?? 'warning']"
-            >{{ attentionFor(agent, secondsSince(agent.lastActivity, nowMs))?.label }}</span>
+              :class="toneLabelClass[agentAttentionMap.get(agent.sessionId)?.att?.tone ?? 'warning']"
+            >{{ agentAttentionMap.get(agent.sessionId)?.att?.label }}</span>
           </div>
 
           <!-- Answerable question, detected directly in the session's terminal buffer -->

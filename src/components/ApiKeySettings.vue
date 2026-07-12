@@ -2,6 +2,7 @@
 import type { ApiKey, McpScope } from '../types'
 import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useClipboardCopy } from '../composables/useCopyId'
+import { useHistoryImport } from '../composables/useHistoryImport'
 import { useOnboarding } from '../composables/useOnboarding'
 import { usePermissionPresets } from '../composables/usePermissionPresets'
 import { useServerConfig } from '../composables/useServerConfig'
@@ -342,44 +343,7 @@ function formatDate(iso: string | null) {
 }
 
 // --- Historical data import ---
-const importStatus = ref('')
-const isImporting = ref(false)
-let importEs: EventSource | null = null
-
-onUnmounted(() => {
-  importEs?.close()
-})
-
-async function startImport() {
-  if (isImporting.value)
-    return
-  isImporting.value = true
-  importStatus.value = 'Starting…'
-  const res = await fetch('/api/history/import', { method: 'POST' })
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}))
-    importStatus.value = `Error: ${(body as { error?: string }).error ?? res.statusText}`
-    isImporting.value = false
-    return
-  }
-  importEs = new EventSource('/api/history/import/status')
-  importEs.onmessage = (ev) => {
-    const p = JSON.parse(ev.data) as { total: number, processed: number, done: boolean }
-    importStatus.value = `${p.processed}/${p.total} processed`
-    if (p.done) {
-      importStatus.value = `Import complete — ${p.processed} sessions processed`
-      importEs?.close()
-      importEs = null
-      isImporting.value = false
-    }
-  }
-  importEs.onerror = () => {
-    importStatus.value = 'Connection lost — import may still be running'
-    importEs?.close()
-    importEs = null
-    isImporting.value = false
-  }
-}
+const { isImporting, importStatus, start: startImport } = useHistoryImport()
 </script>
 
 <template>

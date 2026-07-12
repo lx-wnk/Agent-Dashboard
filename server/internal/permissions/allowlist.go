@@ -128,7 +128,10 @@ var shellInjectionRE = regexp.MustCompile(
 		`|\\u[0-9a-fA-F]{4}` + // unicode escape sequences
 		`|\|\s*\w` + // pipe to another command
 		`|&&\s*\w` + // AND-chained command
-		`|;\s*\w`, // semicolon-chained command
+		`|;\s*\w` + // semicolon-chained command
+		`|[><]` + // output/input redirection
+		`|(^|[^&])&([^&]|$)` + // lone "&" used as a command separator (not part of "&&")
+		`|[\r\n]`, // newline used as a command separator
 )
 
 // IsSafeBashPattern reports whether pattern is acceptable as a Bash allow-list

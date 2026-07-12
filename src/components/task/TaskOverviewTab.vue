@@ -2,6 +2,7 @@
 import type { PipelineStage, PipelineTask } from '../../types'
 import { computed, ref, watch } from 'vue'
 import { useInjectedTask, useInjectedTaskDetails } from '../../composables/taskModalContext'
+import { completedPhasesFromTurns, fetchRefineTurns, lastAssistantContent } from '../../composables/useRefinementChat'
 import { runAction } from '../../composables/useRunAction'
 import { useTaskAssignment } from '../../composables/useTaskAssignment'
 import { refreshTask } from '../../composables/useTasks'
@@ -114,13 +115,9 @@ const completedRefinePhases = ref<string[]>([])
 
 async function loadLastRefineOutput(taskId: string): Promise<void> {
   try {
-    const res = await fetch(`/api/refine/${taskId}/turns`)
-    if (!res.ok)
-      return
-    const turns = await res.json() as Array<{ role: string, content: string, phase?: string | null }>
-    const lastAssistant = [...turns].reverse().find(t => t.role === 'assistant')
-    lastRefineOutput.value = lastAssistant?.content ?? ''
-    completedRefinePhases.value = turns.flatMap(t => (t.phase ? [t.phase] : []))
+    const turns = await fetchRefineTurns(taskId)
+    lastRefineOutput.value = lastAssistantContent(turns)
+    completedRefinePhases.value = completedPhasesFromTurns(turns)
   }
   catch { /* leave empty */ }
 }

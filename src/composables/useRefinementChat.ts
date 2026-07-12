@@ -26,6 +26,31 @@ export const PHASE_LABELS: Record<string, string> = {
 
 export type RefineRunStatus = 'none' | 'refining' | 'draft_ready' | 'failed' | null
 
+// GET /api/refine/{taskId}/turns returns a bare array of turns. Refinement
+// streams inline over the POST /turn SSE response (see sendMessage), so there
+// is no async job to poll for — history is a one-shot fetch.
+export interface RefineTurn {
+  role: string
+  content: string
+  phase: string | null
+}
+
+/** Single-source fetch for the refinement conversation history. Throws on non-2xx. */
+export async function fetchRefineTurns(taskId: string): Promise<RefineTurn[]> {
+  const res = await fetch(`/api/refine/${taskId}/turns`)
+  if (!res.ok)
+    throw new Error(`Failed to load refinement turns: HTTP ${res.status}`)
+  return await res.json() as RefineTurn[]
+}
+
+export function lastAssistantContent(turns: RefineTurn[]): string {
+  return [...turns].reverse().find(t => t.role === 'assistant')?.content ?? ''
+}
+
+export function completedPhasesFromTurns(turns: RefineTurn[]): string[] {
+  return turns.flatMap(t => (t.phase ? [t.phase] : []))
+}
+
 export function useRefinementChat(taskId: () => string | null) {
   const messages = ref<ChatMessage[]>([])
   const completedPhases = ref<Set<string>>(new Set())
@@ -42,16 +67,7 @@ export function useRefinementChat(taskId: () => string | null) {
 
   const POLL_INTERVAL_MS = 1500
 
-  // GET /api/refine/{taskId}/turns returns a bare array of turns. Refinement
-  // streams inline over the POST /turn SSE response (see sendMessage), so there
-  // is no async job to poll for — history is a one-shot fetch.
-  interface TurnResponse {
-    role: string
-    content: string
-    phase: string | null
-  }
-
-  function applyTurnsToMessages(turns: TurnResponse[]) {
+  function applyTurnsToMessages(turns: RefineTurn[]) {
     // Reset phase state so switching tasks (or reloading) never carries stale
     // progress from a previous conversation.
     completedPhases.value = new Set()
@@ -75,12 +91,7 @@ export function useRefinementChat(taskId: () => string | null) {
       return
     error.value = null
     try {
-      const res = await fetch(`/api/refine/${id}/turns`)
-      if (!res.ok) {
-        error.value = 'Failed to load history'
-        return
-      }
-      const data = await res.json() as TurnResponse[]
+      const data = await fetchRefineTurns(id)
       applyTurnsToMessages(data)
     }
     catch {
