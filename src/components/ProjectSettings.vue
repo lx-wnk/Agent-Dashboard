@@ -280,9 +280,6 @@ function setDefault(targetRow: FolderRow) {
   for (const r of folderRows.value)
     r.isDefault = r._key === targetRow._key
 }
-
-// Sync isDefault when changed
-watch(folderRows, () => {}, { deep: true })
 </script>
 
 <template>
@@ -482,10 +479,10 @@ watch(folderRows, () => {}, { deep: true })
         <div class="border-t border-line pt-4 mt-1">
           <div class="mb-3">
             <h5 class="text-xs font-semibold uppercase tracking-wider text-fg-mute mb-0.5">
-              Pipeline pro Stage
+              Pipeline per stage
             </h5>
             <p class="text-[11px] text-fg-mute">
-              Spawner und Modell pro Stage überschreiben. Leer lassen = globale Einstellung übernehmen. Das Modell gilt nur für Claude-native Spawner.
+              Override spawner and model per stage. Leave empty to inherit the global setting. The model applies only to Claude-native spawners.
             </p>
           </div>
 
@@ -508,7 +505,7 @@ watch(folderRows, () => {}, { deep: true })
                   class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
                 >
                   <option value="">
-                    Global übernehmen
+                    Inherit global
                   </option>
                   <option v-for="s in spawners" :key="s.id" :value="s.id">
                     {{ s.name }}{{ s.builtIn ? ' (built-in)' : '' }}
@@ -528,7 +525,7 @@ watch(folderRows, () => {}, { deep: true })
                   class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
                 >
                   <option value="">
-                    Global übernehmen
+                    Inherit global
                   </option>
                   <option v-for="model in AVAILABLE_MODELS" :key="model" :value="model">
                     {{ model }}
@@ -540,9 +537,9 @@ watch(folderRows, () => {}, { deep: true })
 
           <div class="flex items-center gap-3 mt-3">
             <AppButton variant="secondary" size="sm" :disabled="pipelineLoading || !pipelineDraft" @click="handlePipelineSave(editingProject.id)">
-              {{ pipelineLoading ? 'Saving…' : 'Pipeline-Config speichern' }}
+              {{ pipelineLoading ? 'Saving…' : 'Save pipeline config' }}
             </AppButton>
-            <span v-if="pipelineSaved" class="text-xs text-emerald-600 dark:text-emerald-400">Gespeichert.</span>
+            <span v-if="pipelineSaved" class="text-xs text-emerald-600 dark:text-emerald-400">Saved.</span>
           </div>
         </div>
       </template>

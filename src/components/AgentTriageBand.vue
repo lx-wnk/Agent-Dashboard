@@ -179,13 +179,13 @@ async function handleApproveAll() {
 // Per-task "don't ask again" toggle
 const rememberPerTask = ref<Record<string, boolean>>({})
 
-async function handleApproveTask(taskId: string, ids: string[]) {
+function handleApproveTask(taskId: string, ids: string[]) {
   emit('approve', taskId, ids, rememberPerTask.value[taskId] ?? false)
   if (rememberPerTask.value[taskId])
     emit('remembered')
 }
 
-async function handleDenyTask(taskId: string, ids: string[]) {
+function handleDenyTask(taskId: string, ids: string[]) {
   emit('deny', taskId, ids)
 }
 

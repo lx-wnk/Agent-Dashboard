@@ -61,7 +61,7 @@ async function remove(id: string) {
           </span>
         </div>
         <button
-          class="text-xs text-red-400 hover:text-red-300 transition-colors"
+          class="text-xs text-danger-text hover:text-red-300 transition-colors"
           @click="remove(r.id)"
         >
           Remove

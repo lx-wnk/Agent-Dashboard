@@ -18,9 +18,15 @@ type Handler struct{ svc *settingssvc.Service }
 // NewHandler builds the settings Handler.
 func NewHandler(svc *settingssvc.Service) *Handler { return &Handler{svc: svc} }
 
-// Mount registers the settings routes on r.
-func (h *Handler) Mount(r chi.Router) {
+// MountRead registers the read-only settings route on r.
+func (h *Handler) MountRead(r chi.Router) {
 	r.Get("/api/settings", apierr.ErrorMiddleware(h.list))
+}
+
+// MountWrite registers the mutating settings route on r. Callers must gate
+// this behind admin authorization: settings include auth.mode, git.allowPush,
+// and worktree.force, which are RCE/lockout-equivalent.
+func (h *Handler) MountWrite(r chi.Router) {
 	r.Patch("/api/settings/{key}", apierr.ErrorMiddleware(h.patch))
 }
 

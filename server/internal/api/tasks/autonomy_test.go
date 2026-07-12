@@ -66,9 +66,9 @@ func TestCreatePermissionRequest_AllowAll_AutoApproved(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &result); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	// outcome must be "approved" immediately for an allow-all task.
-	if result["outcome"] != "approved" {
-		t.Errorf("expected outcome=approved for allow-all task, got %v", result["outcome"])
+	// outcome must be the canonical "granted" immediately for an allow-all task.
+	if result["outcome"] != "granted" {
+		t.Errorf("expected outcome=granted for allow-all task, got %v", result["outcome"])
 	}
 }
 

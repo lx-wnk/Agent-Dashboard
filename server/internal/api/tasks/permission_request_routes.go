@@ -115,7 +115,7 @@ func (h *Handler) createPermissionRequest(w http.ResponseWriter, r *http.Request
 		task, taskErr := h.taskRepo.GetByID(r.Context(), sr.TaskID)
 		if taskErr == nil && taskcontrol.IsAllowAll(task.Autonomy) {
 			// Auto-approve: task operates in allow-all mode — no human gating needed.
-			if resolveErr := h.permRepo.ResolvePermissionRequest(r.Context(), req.ID, "approved"); resolveErr != nil {
+			if resolveErr := h.permRepo.ResolvePermissionRequest(r.Context(), req.ID, "granted"); resolveErr != nil {
 				slog.Warn("createPermissionRequest: auto-approve failed", "reqID", req.ID, "err", resolveErr)
 			} else {
 				_ = h.auditRepo.RecordTaskAudit(r.Context(), sr.TaskID, nil, "permission_auto_approved", "task:"+sr.TaskID, map[string]any{
@@ -364,7 +364,7 @@ func (h *Handler) bulkCreatePermissionRequests(w http.ResponseWriter, r *http.Re
 		}
 		if taskIsAllowAll {
 			// Auto-approve: task operates in allow-all mode.
-			if resolveErr := h.permRepo.ResolvePermissionRequest(r.Context(), req.ID, "approved"); resolveErr != nil {
+			if resolveErr := h.permRepo.ResolvePermissionRequest(r.Context(), req.ID, "granted"); resolveErr != nil {
 				slog.Warn("bulkCreatePermissionRequests: auto-approve failed", "reqID", req.ID, "err", resolveErr)
 			} else {
 				_ = h.auditRepo.RecordTaskAudit(r.Context(), sr.TaskID, nil, "permission_auto_approved", "task:"+sr.TaskID, map[string]any{

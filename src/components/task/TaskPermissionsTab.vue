@@ -57,7 +57,7 @@ async function submitGrant(): Promise<void> {
           Grant
         </AppButton>
       </div>
-      <p v-if="permError" class="text-[11px] text-red-400 mt-1.5">
+      <p v-if="permError" class="text-[11px] text-danger-text mt-1.5">
         {{ permError }}
       </p>
     </div>

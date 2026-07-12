@@ -1,4 +1,4 @@
-# ADR-0006: Passive Drift Detection over `stage_run` (eval leaf)
+# ADR-0008: Passive Drift Detection over `stage_run` (eval leaf)
 
 **Status:** Accepted
 **Date:** 2026-06-15

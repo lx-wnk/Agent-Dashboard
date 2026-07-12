@@ -138,9 +138,10 @@ const chatTitle = computed(() => {
 
 // ── Image handling ────────────────────────────
 function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = ev => resolve(ev.target?.result as string)
+    reader.onerror = () => reject(reader.error)
     reader.readAsDataURL(file)
   })
 }
@@ -156,8 +157,13 @@ async function handlePaste(e: ClipboardEvent) {
     const file = item.getAsFile()
     if (!file)
       continue
-    const dataUrl = await readFileAsDataUrl(file)
-    pendingImages.value.push({ dataUrl, mimeType: item.type })
+    try {
+      const dataUrl = await readFileAsDataUrl(file)
+      pendingImages.value.push({ dataUrl, mimeType: item.type })
+    }
+    catch {
+      toast.error('Failed to read pasted image.')
+    }
   }
 }
 
@@ -168,8 +174,13 @@ async function handleFileSelect(e: Event) {
   for (const file of Array.from(files)) {
     if (!file.type.startsWith('image/'))
       continue
-    const dataUrl = await readFileAsDataUrl(file)
-    pendingImages.value.push({ dataUrl, mimeType: file.type })
+    try {
+      const dataUrl = await readFileAsDataUrl(file)
+      pendingImages.value.push({ dataUrl, mimeType: file.type })
+    }
+    catch {
+      toast.error('Failed to read selected image.')
+    }
   }
   if (fileInputEl.value)
     fileInputEl.value.value = ''
@@ -386,9 +397,9 @@ function isPhaseMarker(idx: number): string | null {
         <button
           v-if="messages.length > 0 && !approvalReady"
           class="w-10 h-10 rounded-xl shrink-0 bg-green-500 text-black border-none cursor-pointer text-base font-bold flex items-center justify-center transition-all hover:enabled:opacity-85 hover:enabled:-translate-y-px disabled:opacity-35 disabled:cursor-default"
-          title="Ja, passt so — weiter"
+          title="Looks good — continue"
           :disabled="isStreaming || slotBusy"
-          @click="sendMessage('Ja, passt so. Mach weiter.')"
+          @click="sendMessage('Looks good. Continue.')"
         >
           ✓
         </button>

@@ -148,11 +148,6 @@ func (o *PipelineOrchestrator) applyTransitionWrites(
 		updatedRunID = sr.ID
 
 	case IterateTransition:
-		if _, err := srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
-			Status: strPtr("done"), EndedAt: &now, Output: tr.Output,
-		}); err != nil {
-			return nil, nil, fmt.Errorf("applyTransition.iterate.updateRun: %w", err)
-		}
 		task2, _ := taskRepo.GetByID(ctx, task.ID)
 		maxIter := 20
 		if task2 != nil {
@@ -165,7 +160,7 @@ func (o *PipelineOrchestrator) applyTransitionWrites(
 			}
 			failOutput["error"] = fmt.Sprintf("iteration limit reached (%d)", maxIter)
 			if _, err := srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
-				Status: strPtr("failed"), Output: failOutput,
+				Status: strPtr("failed"), EndedAt: &now, Output: failOutput,
 			}); err != nil {
 				return nil, nil, fmt.Errorf("applyTransition.iterate.limitFail: %w", err)
 			}
@@ -177,6 +172,11 @@ func (o *PipelineOrchestrator) applyTransitionWrites(
 				postCommit = append(postCommit, func() { o.opts.OnStageFailed(task.ID, info) })
 			}
 		} else {
+			if _, err := srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
+				Status: strPtr("done"), EndedAt: &now, Output: tr.Output,
+			}); err != nil {
+				return nil, nil, fmt.Errorf("applyTransition.iterate.updateRun: %w", err)
+			}
 			newSR, err := srRepo.Create(ctx, repo.CreateStageRunInput{
 				TaskID:      task.ID,
 				Stage:       sr.Stage,

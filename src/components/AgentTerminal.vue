@@ -80,6 +80,7 @@ onMounted(() => {
     convertEol: false,
     cursorBlink: true,
     fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+    screenReaderMode: true,
   })
   const fit = new FitAddon()
   term.loadAddon(fit)

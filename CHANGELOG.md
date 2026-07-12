@@ -174,9 +174,30 @@ Preparing the first public release.
   (`/api/plugins/{id}/proxy/ui-manifest.json`, `/api/plugins/{id}/proxy/{module}`).
   The loader was still pointing at the pre-SP2 settings path after the route migration,
   causing all `ui_extension` addons to silently fail to load.
+- Auto-approved permission requests now store the canonical `granted` outcome instead of `approved`, which broke the client's outcome-based rendering for auto-approved requests.
+- A task run that hit its iteration limit no longer writes `done` and then immediately overwrites it with `failed` — the final stage run now reflects the actual outcome on the first write.
+- The refinement chat now surfaces file-read errors instead of hanging indefinitely when a referenced file cannot be read.
+- Removed dead computed properties and an unused watcher left over from earlier refactors in `App.vue` and `ProjectSettings`.
+
+### Accessibility
+
+- The xterm terminal view now enables screen-reader mode.
+- The Task modal's close button now has an accessible label.
+- Toast auto-dismiss now pauses while a toast has keyboard focus.
+
+### Docs
+
+- `PRIVACY.md` now discloses the issue-tracker import feature (GitHub / Jira) as an opt-in outbound data transfer.
+- Fixed a duplicate `ADR-0006` filename collision in `docs/architecture/adr/` — the eval-drift-detection ADR is renumbered to `ADR-0008`.
+
+### Security
+
+- `PATCH /api/settings/*` now requires admin authorization — previously any authenticated user could change security-sensitive settings such as `auth.mode`, `git.allowPush`, or `worktree.force`.
 
 ### Changed
 
+- Remaining German UI strings in `ProjectSettings` and `RefinementChat` translated to English.
+- `AgentModal` is now lazy-loaded, reducing the initial JS bundle size.
 - `ProjectRepo.Create` and `Update` accept `setup_command` (nullable).
 - `worktree.force` setting now defaults to `true` — pipeline tasks automatically create a git worktree per task without requiring explicit `SourceBranch`. Set to `false` to restore the previous opt-in behaviour.
 - Plugin route extensions now serve under `/api/plugins/{id}/proxy/*` and enable/disable
