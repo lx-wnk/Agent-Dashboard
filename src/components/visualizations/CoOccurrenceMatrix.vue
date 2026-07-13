@@ -7,6 +7,7 @@ import { computed, onUnmounted, ref, watch } from 'vue'
 import { useTheme } from '../../composables/useTheme'
 import { toast } from '../../composables/useToast'
 import { chartColors } from '../../utils/chartColors'
+import ChartDataTable from '../ui/ChartDataTable.vue'
 
 const props = defineProps<{
   data: CoOccurrenceData | null
@@ -26,6 +27,35 @@ watch(() => props.error, (msg) => {
 const isEmpty = computed(() => !props.data || props.data.tools.length === 0)
 const truncated = computed(() => props.data?.meta.truncated ?? false)
 const sessionCount = computed(() => props.data?.meta.sessionCount ?? 0)
+
+const tableColumns = [
+  { key: 'toolA', label: 'Tool A' },
+  { key: 'toolB', label: 'Tool B' },
+  { key: 'count', label: 'Sessions together' },
+  { key: 'lift', label: 'Lift' },
+]
+
+// One row per distinct off-diagonal pair (i < j) with a non-zero count —
+// the matrix is symmetric, so i > j would just duplicate the same pair.
+const tableRows = computed(() => {
+  if (!props.data)
+    return []
+  const { tools, matrix, lift } = props.data
+  const rows: Record<string, string | number>[] = []
+  for (let i = 0; i < tools.length; i++) {
+    for (let j = i + 1; j < tools.length; j++) {
+      if (matrix[i][j] === 0)
+        continue
+      rows.push({
+        toolA: tools[i],
+        toolB: tools[j],
+        count: matrix[i][j],
+        lift: Math.round((lift?.[i][j] ?? 0) * 100) / 100,
+      })
+    }
+  }
+  return rows
+})
 
 function render() {
   if (!svgRef.value || !props.data)
@@ -183,6 +213,11 @@ onUnmounted(() => {
         Showing the 50 most-active tools; rare tools omitted.
       </p>
       <svg ref="svgRef" style="max-width:100%; height:auto;" aria-label="Tool co-occurrence matrix" role="img" />
+      <ChartDataTable
+        caption="Tool co-occurrence — tool pair, session count together, and lift"
+        :columns="tableColumns"
+        :rows="tableRows"
+      />
     </div>
   </div>
 </template>
