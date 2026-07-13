@@ -1,6 +1,5 @@
 import { Buffer } from 'node:buffer'
 import { execFileSync } from 'node:child_process'
-import { Buffer } from 'node:buffer'
 import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'

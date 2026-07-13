@@ -31,4 +31,17 @@ describe('navItem', () => {
     })
     expect(w.text()).toContain('12')
   })
+
+  it('renders a focus-visible tooltip with the label when collapsed', () => {
+    const w = mount(NavItem, { props: { icon: '▦', label: 'Dashboard', active: false, expanded: false } })
+    const tooltip = w.find('.nav-tooltip')
+    expect(tooltip.exists()).toBe(true)
+    expect(tooltip.attributes('aria-hidden')).toBe('true')
+    expect(tooltip.text()).toBe('Dashboard')
+  })
+
+  it('omits the tooltip element when expanded (label already visible)', () => {
+    const w = mount(NavItem, { props: { icon: '▦', label: 'Dashboard', active: false, expanded: true } })
+    expect(w.find('.nav-tooltip').exists()).toBe(false)
+  })
 })
