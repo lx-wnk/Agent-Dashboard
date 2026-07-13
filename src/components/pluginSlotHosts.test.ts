@@ -3,9 +3,9 @@
 import { shallowMount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import AgentModal from '@/features/agents/components/AgentModal.vue'
+import TaskCard from '@/features/pipeline/components/TaskCard.vue'
+import TaskModal from '@/features/pipeline/components/TaskModal.vue'
 import PluginSettings from './PluginSettings.vue'
-import TaskCard from './TaskCard.vue'
-import TaskModal from './TaskModal.vue'
 
 beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => [], body: null }))

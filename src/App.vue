@@ -6,9 +6,10 @@ import AgentTable from '@/features/agents/components/AgentTable.vue'
 import AgentTriageBand from '@/features/agents/components/AgentTriageBand.vue'
 import EmptyAgentState from '@/features/agents/components/EmptyAgentState.vue'
 import { useAgents } from '@/features/agents/composables/useAgents'
+import BacklogForm from '@/features/pipeline/components/BacklogForm.vue'
+import { useTasks } from '@/features/pipeline/composables/useTasks'
 import ApiKeySettings from './components/ApiKeySettings.vue'
 import AutoApprovingStrip from './components/AutoApprovingStrip.vue'
-import BacklogForm from './components/BacklogForm.vue'
 import LoginPage from './components/LoginPage.vue'
 import OnboardingFlow from './components/onboarding/OnboardingFlow.vue'
 import ServerReconnectOverlay from './components/ServerReconnectOverlay.vue'
@@ -34,7 +35,6 @@ import { usePWA } from './composables/usePWA'
 import { useServerConfig } from './composables/useServerConfig'
 import { useSidebar } from './composables/useSidebar'
 import { useSpawners } from './composables/useSpawners'
-import { useTasks } from './composables/useTasks'
 import { useTheme } from './composables/useTheme'
 import { toast } from './composables/useToast'
 import { useTodayCost } from './composables/useTodayCost'
@@ -50,11 +50,11 @@ const AgentModal = defineAsyncComponent(() => import('@/features/agents/componen
 // F-PERF-019: top-level heavy views loaded on demand — each becomes its own chunk
 const CostAnalyticsView = defineAsyncComponent(() => import('./components/CostAnalyticsView.vue'))
 const EvalView = defineAsyncComponent(() => import('./components/EvalView.vue'))
-const PipelineBoard = defineAsyncComponent(() => import('./components/PipelineBoard.vue'))
+const PipelineBoard = defineAsyncComponent(() => import('@/features/pipeline/components/PipelineBoard.vue'))
 const WorkflowsView = defineAsyncComponent(() => import('./components/WorkflowsView.vue'))
 const SchedulesView = defineAsyncComponent(() => import('./components/SchedulesView.vue'))
 // Heavy modal loaded on demand — split into its own chunk (includes DependencyGraph + StageCostWaterfall).
-const TaskModal = defineAsyncComponent(() => import('./components/TaskModal.vue'))
+const TaskModal = defineAsyncComponent(() => import('@/features/pipeline/components/TaskModal.vue'))
 // Modal/panel components that drag in marked + dompurify (RefinementChat) and diff (EditGateModal) —
 // load on demand so those libs stay out of the first-load entry chunk.
 const RefinementChat = defineAsyncComponent(() => import('./components/RefinementChat.vue'))

@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import type { Project, ProjectFolder } from '../types'
 import { ref, watch } from 'vue'
+import { useProjectPipelineConfig } from '@/features/pipeline/composables/useProjectPipelineConfig'
 import {
   createFolder,
   deleteFolder,
   fetchProjectFolders,
   updateFolder,
 } from '../composables/useProjectFolders'
-import { useProjectPipelineConfig } from '../composables/useProjectPipelineConfig'
 import {
   createProject,
   deleteProject,

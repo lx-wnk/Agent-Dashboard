@@ -8,7 +8,7 @@ import RefinementChat from '../RefinementChat.vue'
 
 const sendMessageMock = vi.fn().mockResolvedValue(undefined)
 
-vi.mock('../../composables/useTasks', () => ({
+vi.mock('@/features/pipeline/composables/useTasks', () => ({
   createTask: vi.fn(),
 }))
 
@@ -16,7 +16,7 @@ vi.mock('../../utils/markdown', () => ({
   renderMarkdown: (text: string) => text,
 }))
 
-vi.mock('../../composables/useRefinementChat', () => ({
+vi.mock('@/features/pipeline/composables/useRefinementChat', () => ({
   useRefinementChat: () => ({
     messages: ref([
       { role: 'user', content: 'build X' },

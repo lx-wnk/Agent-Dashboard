@@ -1,8 +1,8 @@
 import type { Ref } from 'vue'
 import type { PermissionRequest, PipelineTask } from '../types'
 import { computed, ref, watch } from 'vue'
+import { bulkResolvePermissionRequests, fetchPendingPermissionRequests } from '@/features/pipeline/composables/useTasks'
 import { friendlyProjectName } from '../utils/friendlyProjectName'
-import { bulkResolvePermissionRequests, fetchPendingPermissionRequests } from './useTasks'
 
 export interface PermissionItem {
   taskId: string

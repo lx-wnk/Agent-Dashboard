@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { PHASE_LABELS, PHASE_ORDER } from '../composables/useRefinementChat'
+import { PHASE_LABELS, PHASE_ORDER } from '@/features/pipeline/composables/useRefinementChat'
 
 const props = defineProps<{
   status: 'none' | 'refining' | 'draft_ready' | 'failed' | null

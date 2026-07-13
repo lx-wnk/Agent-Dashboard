@@ -1,6 +1,6 @@
 import type { Agent } from '../types'
 import { ref } from 'vue'
-import { bulkResolvePermissionRequests } from './useTasks'
+import { bulkResolvePermissionRequests } from '@/features/pipeline/composables/useTasks'
 
 export function usePermissionResolve() {
   // Keyed by sessionId; true while an in-flight resolve is pending for that agent
