@@ -489,16 +489,22 @@ func TestSpawn_EnvMerge_DashboardWins(t *testing.T) {
 }
 
 func TestMergeEnv_NilSpawner_StripsSecrets(t *testing.T) {
+	t.Setenv("DASHBOARD_SECRET_KEY", "w")
 	t.Setenv("DASHBOARD_JWT_SECRET", "x")
+	t.Setenv("DASHBOARD_AUTH_PLUGIN_SECRET", "v")
 	t.Setenv("DASHBOARD_HOOKS_SECRET", "y")
 	t.Setenv("DASHBOARD_KEEP_ME", "z")
 
 	env := resolveSpawnEnv(nil)
-	if envValue(env, "DASHBOARD_JWT_SECRET") != "" {
-		t.Fatalf("JWT secret must be stripped on nil-spawner path")
-	}
-	if envValue(env, "DASHBOARD_HOOKS_SECRET") != "" {
-		t.Fatalf("hooks secret must be stripped on nil-spawner path")
+	for _, denied := range []string{
+		"DASHBOARD_SECRET_KEY",
+		"DASHBOARD_JWT_SECRET",
+		"DASHBOARD_AUTH_PLUGIN_SECRET",
+		"DASHBOARD_HOOKS_SECRET",
+	} {
+		if envValue(env, denied) != "" {
+			t.Fatalf("%s must be stripped on nil-spawner path", denied)
+		}
 	}
 	if envValue(env, "DASHBOARD_KEEP_ME") != "z" {
 		t.Fatalf("non-secret DASHBOARD vars must survive, got %q", envValue(env, "DASHBOARD_KEEP_ME"))
@@ -1021,7 +1027,9 @@ func TestSpawn_PermissionMode_SpawnerDangerouslySkip_NotDoubled(t *testing.T) {
 func TestSpawn_EnvMerge_SecretsStripped(t *testing.T) {
 	tmp, _ := filepath.EvalSymlinks(os.TempDir())
 	t.Setenv("HOME", tmp)
+	t.Setenv("DASHBOARD_SECRET_KEY", "w")
 	t.Setenv("DASHBOARD_JWT_SECRET", "x")
+	t.Setenv("DASHBOARD_AUTH_PLUGIN_SECRET", "v")
 	t.Setenv("DASHBOARD_HOOKS_SECRET", "y")
 	setAllowedCommands(t, "claude")
 	prevLook := lookTmuxPath
@@ -1045,8 +1053,12 @@ func TestSpawn_EnvMerge_SecretsStripped(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	require.NotNil(t, *captured)
+	assert.Equal(t, "", envValue((*captured).Env, "DASHBOARD_SECRET_KEY"),
+		"DASHBOARD_SECRET_KEY must be stripped from child env")
 	assert.Equal(t, "", envValue((*captured).Env, "DASHBOARD_JWT_SECRET"),
 		"DASHBOARD_JWT_SECRET must be stripped from child env")
+	assert.Equal(t, "", envValue((*captured).Env, "DASHBOARD_AUTH_PLUGIN_SECRET"),
+		"DASHBOARD_AUTH_PLUGIN_SECRET must be stripped from child env")
 	assert.Equal(t, "", envValue((*captured).Env, "DASHBOARD_HOOKS_SECRET"),
 		"DASHBOARD_HOOKS_SECRET must be stripped from child env")
 }

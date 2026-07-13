@@ -202,7 +202,9 @@ func TestBuildSpawnEnv_ExpandsTildeInSpawnerEnv(t *testing.T) {
 }
 
 func TestBuildSpawnEnv_DenyListExcludesSecrets(t *testing.T) {
+	t.Setenv("DASHBOARD_SECRET_KEY", "master-key-value")
 	t.Setenv("DASHBOARD_JWT_SECRET", "super-secret-value")
+	t.Setenv("DASHBOARD_AUTH_PLUGIN_SECRET", "auth-plugin-secret-value")
 	t.Setenv("DASHBOARD_HOOKS_SECRET", "hook-secret-value")
 
 	opts := pipeline.SpawnAgentOptions{
@@ -212,11 +214,53 @@ func TestBuildSpawnEnv_DenyListExcludesSecrets(t *testing.T) {
 	env := pipeline.BuildSpawnEnv(opts)
 
 	for _, e := range env {
+		require.False(t, strings.HasPrefix(e, "DASHBOARD_SECRET_KEY="),
+			"DASHBOARD_SECRET_KEY must not appear in spawn env, got: %s", e)
 		require.False(t, strings.HasPrefix(e, "DASHBOARD_JWT_SECRET="),
 			"DASHBOARD_JWT_SECRET must not appear in spawn env, got: %s", e)
+		require.False(t, strings.HasPrefix(e, "DASHBOARD_AUTH_PLUGIN_SECRET="),
+			"DASHBOARD_AUTH_PLUGIN_SECRET must not appear in spawn env, got: %s", e)
 		require.False(t, strings.HasPrefix(e, "DASHBOARD_HOOKS_SECRET="),
 			"DASHBOARD_HOOKS_SECRET must not appear in spawn env, got: %s", e)
 	}
+}
+
+// TestBuildSpawnEnv_MCPTokenSurvivesSecretStrip is the CQ-02 required
+// assertion: the 4-key canonical deny-set (envsec.DeniedSecretEnvKeys) must
+// be stripped from a pipeline agent's env while the per-task
+// DASHBOARD_MCP_TOKEN injected at Stage 3 survives the final defense-in-depth
+// delete loop — i.e. a live agent can still reach /api/mcp after the strip.
+func TestBuildSpawnEnv_MCPTokenSurvivesSecretStrip(t *testing.T) {
+	t.Setenv("DASHBOARD_SECRET_KEY", "master-key-value")
+	t.Setenv("DASHBOARD_JWT_SECRET", "super-secret-value")
+	t.Setenv("DASHBOARD_AUTH_PLUGIN_SECRET", "auth-plugin-secret-value")
+	t.Setenv("DASHBOARD_HOOKS_SECRET", "hook-secret-value")
+	t.Setenv("DASHBOARD_MCP_TOKEN", "leaked-ambient-token")
+
+	opts := pipeline.SpawnAgentOptions{
+		Task:     &ent.Task{ID: "t1"},
+		StageRun: &ent.StageRun{ID: "r1"},
+		MCPToken: "per-task-mcp-token",
+		MCPUrl:   "http://127.0.0.1:13120/api/mcp",
+	}
+	env := pipeline.BuildSpawnEnv(opts)
+
+	for _, denied := range []string{
+		"DASHBOARD_SECRET_KEY",
+		"DASHBOARD_JWT_SECRET",
+		"DASHBOARD_AUTH_PLUGIN_SECRET",
+		"DASHBOARD_HOOKS_SECRET",
+	} {
+		for _, e := range env {
+			require.False(t, strings.HasPrefix(e, denied+"="),
+				"%s must not appear in spawn env, got: %s", denied, e)
+		}
+	}
+
+	// The Stage-3 per-task token must win over — and survive stripping
+	// alongside — any ambient DASHBOARD_MCP_TOKEN inherited from os.Environ().
+	require.Contains(t, env, "DASHBOARD_MCP_TOKEN=per-task-mcp-token")
+	require.Contains(t, env, "DASHBOARD_MCP_URL=http://127.0.0.1:13120/api/mcp")
 }
 
 func TestBuildSpawnEnv_ForwardsPath(t *testing.T) {

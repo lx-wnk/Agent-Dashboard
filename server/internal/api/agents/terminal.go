@@ -29,6 +29,10 @@ type TerminalHandler struct {
 }
 
 // NewTerminalHandler creates a TerminalHandler.
+// maxTerminalFrameBytes bounds a single WebSocket frame on the pty passthrough.
+// Generous vs the 256 KiB scrollback replay, finite vs an unbounded memory sink.
+const maxTerminalFrameBytes = 1 << 20 // 1 MiB
+
 func NewTerminalHandler(getAgents GetAgentsFn, target TerminalTargetFn) *TerminalHandler {
 	return &TerminalHandler{getAgents: getAgents, target: target}
 }
@@ -97,9 +101,9 @@ func (h *TerminalHandler) Terminal(w http.ResponseWriter, r *http.Request) {
 	defer browserConn.Close(websocket.StatusInternalError, "")
 	// coder/websocket defaults to a 32 KiB read limit; the pty broker replays up
 	// to a 256 KiB scrollback snapshot in one frame and large client pastes can
-	// exceed 32 KiB too. This is a trusted loopback pty passthrough, so lift the
-	// limit rather than tear the connection down on the first oversized frame.
-	browserConn.SetReadLimit(-1)
+	// exceed 32 KiB too. Raise to a finite bound rather than the unbounded -1 so a
+	// hostile local frame cannot exhaust memory.
+	browserConn.SetReadLimit(maxTerminalFrameBytes)
 
 	pipeCtx, cancel := context.WithCancel(r.Context())
 	defer cancel()
@@ -112,7 +116,7 @@ func (h *TerminalHandler) Terminal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer brokerConn.Close(websocket.StatusInternalError, "")
-	brokerConn.SetReadLimit(-1)
+	brokerConn.SetReadLimit(maxTerminalFrameBytes)
 
 	go func() {
 		defer cancel()

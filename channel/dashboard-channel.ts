@@ -1,6 +1,7 @@
 import { Buffer } from 'node:buffer'
 import { execFileSync } from 'node:child_process'
-import { randomBytes } from 'node:crypto'
+import { Buffer } from 'node:buffer'
+import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { homedir } from 'node:os'
@@ -399,6 +400,16 @@ function getAllowedOrigin(req: import('node:http').IncomingMessage): string {
   return ALLOWED_ORIGINS[0]
 }
 
+// Constant-time Bearer check against the per-process discovery token.
+// The dashboard is the only caller and always sends this header.
+function isAuthorized(req: import('node:http').IncomingMessage): boolean {
+  const header = req.headers.authorization || ''
+  const expected = `Bearer ${TOKEN}`
+  const a = Buffer.from(header)
+  const b = Buffer.from(expected)
+  return a.length === b.length && timingSafeEqual(a, b)
+}
+
 const httpServer = createServer(async (req, res) => {
   // CORS preflight
   if (req.method === 'OPTIONS') {
@@ -422,6 +433,11 @@ const httpServer = createServer(async (req, res) => {
 
   // Receive message from dashboard → forward to Claude
   if (req.method === 'POST' && url.pathname === '/message') {
+    if (!isAuthorized(req)) {
+      res.writeHead(401, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'Unauthorized' }))
+      return
+    }
     try {
       const body = JSON.parse(await readBody(req))
       const message = body.message as string
