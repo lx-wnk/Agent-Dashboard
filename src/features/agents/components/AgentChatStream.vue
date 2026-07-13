@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import type { Agent, OutputMessage } from '../types'
+import type { Agent, OutputMessage } from '@/types'
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
-import { toast } from '../composables/useToast'
-import { renderMarkdown } from '../utils/markdown'
-import { CHAT_REFRESH_MS } from '../utils/sse'
+import { toast } from '@/composables/useToast'
+import { renderMarkdown } from '@/utils/markdown'
+import { CHAT_REFRESH_MS } from '@/utils/sse'
 
 // Multi-root template (transcript + sr-only live region) disables attr
 // fallthrough; bind $attrs explicitly to the transcript so layout classes apply.

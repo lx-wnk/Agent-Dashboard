@@ -1,4 +1,4 @@
-import type { UseTerminalSocket, UseTerminalSocketOptions } from '../composables/useTerminalSocket'
+import type { UseTerminalSocket, UseTerminalSocketOptions } from '@/composables/useTerminalSocket'
 import { mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import AgentTerminal from './AgentTerminal.vue'
@@ -53,7 +53,7 @@ vi.mock('@xterm/addon-fit', () => {
   return { FitAddon: FakeFitAddon }
 })
 
-vi.mock('../composables/useTerminalSocket', () => ({
+vi.mock('@/composables/useTerminalSocket', () => ({
   useTerminalSocket: (pid: number, opts: UseTerminalSocketOptions): UseTerminalSocket => {
     mocks.useTerminalSocketMock(pid, opts)
     mocks.socketOnData.current = opts.onData

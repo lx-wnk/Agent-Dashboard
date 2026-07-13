@@ -1,10 +1,10 @@
-import type { Agent, OutputMessage } from '../types'
+import type { Agent, OutputMessage } from '@/types'
 import { onUnmounted, ref } from 'vue'
-import { errorMessage } from '../utils/errorMessage'
-import { addPending } from '../utils/pendingMessages'
-import { BACKGROUND_SYNC_TAG } from '../utils/swConstants'
-import { SEND_STATUS_RESET_MS } from '../utils/timing'
-import { dispatchSlashCommand, parseSlashCommand, SLASH_COMMAND_DEFS } from './useSlashCommands'
+import { dispatchSlashCommand, parseSlashCommand, SLASH_COMMAND_DEFS } from '@/composables/useSlashCommands'
+import { errorMessage } from '@/utils/errorMessage'
+import { addPending } from '@/utils/pendingMessages'
+import { BACKGROUND_SYNC_TAG } from '@/utils/swConstants'
+import { SEND_STATUS_RESET_MS } from '@/utils/timing'
 
 export type OnMessageSent = (msg: OutputMessage) => void
 

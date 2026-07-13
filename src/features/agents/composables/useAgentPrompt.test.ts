@@ -1,6 +1,6 @@
-import type { Agent } from '../../types'
+import type { Agent } from '@/types'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { useAgentPrompt } from '../useAgentPrompt'
+import { useAgentPrompt } from './useAgentPrompt'
 
 function makeAgent(over: Partial<Agent> = {}): Agent {
   return {

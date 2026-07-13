@@ -27,12 +27,16 @@ function load(): Record<string, AgentIdentity> {
 
 function persist(store: Record<string, AgentIdentity>): void {
   const data = JSON.stringify(store)
-  if (typeof requestIdleCallback !== 'undefined') {
-    requestIdleCallback(() => localStorage.setItem(STORAGE_KEY, data))
+  // The write is deferred, so it can fire after the JS context is torn down
+  // (e.g. a test's jsdom environment) — guard against a missing localStorage.
+  const write = (): void => {
+    if (typeof localStorage !== 'undefined')
+      localStorage.setItem(STORAGE_KEY, data)
   }
-  else {
-    setTimeout(() => localStorage.setItem(STORAGE_KEY, data), 0)
-  }
+  if (typeof requestIdleCallback !== 'undefined')
+    requestIdleCallback(write)
+  else
+    setTimeout(write, 0)
 }
 
 function deterministicIndex(str: string, len: number): number {

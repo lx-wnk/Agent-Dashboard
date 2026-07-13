@@ -1,15 +1,15 @@
 <script setup lang="ts">
-import type { Agent } from '../types'
+import type { Agent } from '@/types'
 import { computed, ref } from 'vue'
-import { useAgentIdentity } from '../composables/useAgentIdentity'
-import { useNow } from '../composables/useNow'
-import { usePermissionResolve } from '../composables/usePermissionResolve'
-import { toast } from '../composables/useToast'
-import { attentionFor } from '../utils/attention'
-import { formatBurnRate, formatCost, formatRelativeActivity, isStalled, secondsSince, shortModel, totalTokenCount } from '../utils/format'
-import { friendlyProjectName } from '../utils/friendlyProjectName'
-import AppBadge from './ui/AppBadge.vue'
-import AppButton from './ui/AppButton.vue'
+import AppBadge from '@/components/ui/AppBadge.vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import { useNow } from '@/composables/useNow'
+import { usePermissionResolve } from '@/composables/usePermissionResolve'
+import { toast } from '@/composables/useToast'
+import { useAgentIdentity } from '@/features/agents/composables/useAgentIdentity'
+import { attentionFor } from '@/utils/attention'
+import { formatBurnRate, formatCost, formatRelativeActivity, isStalled, secondsSince, shortModel, totalTokenCount } from '@/utils/format'
+import { friendlyProjectName } from '@/utils/friendlyProjectName'
 
 const props = defineProps<{ agent: Agent }>()
 const emit = defineEmits<{

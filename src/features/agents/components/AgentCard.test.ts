@@ -1,10 +1,10 @@
-import type { Agent, SubAgent } from '../types'
+import type { Agent, SubAgent } from '@/types'
 import { mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import AgentCard from './AgentCard.vue'
 
-vi.mock('../composables/useAgentIdentity', () => ({
+vi.mock('@/features/agents/composables/useAgentIdentity', () => ({
   useAgentIdentity: () => ({
     getIdentity: () => ({ emoji: '🤖' }),
   }),

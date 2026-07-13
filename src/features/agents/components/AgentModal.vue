@@ -1,30 +1,30 @@
 <script setup lang="ts">
-import type { Agent, OutputMessage } from '../types'
+import type { Agent, OutputMessage } from '@/types'
 import { computed, defineAsyncComponent, nextTick, ref, watch } from 'vue'
-import { useAgentIdentity } from '../composables/useAgentIdentity'
-import { useNow } from '../composables/useNow'
-import { usePermissionResolve } from '../composables/usePermissionResolve'
-import { useRovingTabList } from '../composables/useRovingTabList'
-import { toast } from '../composables/useToast'
-import { formatBurnRate, formatCost, formatRelativeActivity, formatTokens, formatUptime, secondsSince, shortModel, totalTokenCount } from '../utils/format'
+import CrossLinkBanner from '@/components/CrossLinkBanner.vue'
+import HookEventList from '@/components/HookEventList.vue'
+import MachineBadge from '@/components/MachineBadge.vue'
+import PluginSlot from '@/components/PluginSlot.vue'
+import PromptInput from '@/components/PromptInput.vue'
+import TaskList from '@/components/TaskList.vue'
+import ToolTimeline from '@/components/ToolTimeline.vue'
+import AppBadge from '@/components/ui/AppBadge.vue'
+import AppModal from '@/components/ui/AppModal.vue'
+import { useNow } from '@/composables/useNow'
+import { usePermissionResolve } from '@/composables/usePermissionResolve'
+import { useRovingTabList } from '@/composables/useRovingTabList'
+import { toast } from '@/composables/useToast'
+import { useAgentIdentity } from '@/features/agents/composables/useAgentIdentity'
+import { formatBurnRate, formatCost, formatRelativeActivity, formatTokens, formatUptime, secondsSince, shortModel, totalTokenCount } from '@/utils/format'
 import AgentChatStream from './AgentChatStream.vue'
-import CrossLinkBanner from './CrossLinkBanner.vue'
-import HookEventList from './HookEventList.vue'
-import MachineBadge from './MachineBadge.vue'
-import PluginSlot from './PluginSlot.vue'
-import PromptInput from './PromptInput.vue'
 import SubAgentList from './SubAgentList.vue'
-import TaskList from './TaskList.vue'
-import ToolTimeline from './ToolTimeline.vue'
-import AppBadge from './ui/AppBadge.vue'
-import AppModal from './ui/AppModal.vue'
 
 const props = defineProps<{ agent: Agent | null }>()
 
 const emit = defineEmits<{ close: [], navigate: [taskId: string] }>()
 
 // Waterfall chart is heavy (d3) — split into its own chunk, loaded when the tab is first opened.
-const ExecutionWaterfall = defineAsyncComponent(() => import('./ExecutionWaterfall.vue'))
+const ExecutionWaterfall = defineAsyncComponent(() => import('@/components/ExecutionWaterfall.vue'))
 // Terminal pulls in xterm.js (~490KB) — split into its own chunk, loaded when the tab is first opened.
 const AgentTerminal = defineAsyncComponent(() => import('./AgentTerminal.vue'))
 
