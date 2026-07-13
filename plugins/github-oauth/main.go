@@ -54,10 +54,7 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -69,6 +66,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	oauthkit "github.com/lx-wnk/agent-dashboard-plugin-oauthkit"
 )
 
 const (
@@ -80,8 +79,6 @@ const (
 
 	// stateCookieName is the CSRF state cookie set during login and validated on callback.
 	stateCookieName = "github_oauth_state"
-	// stateCookieMaxAge is the lifetime of the CSRF state cookie in seconds (5 minutes).
-	stateCookieMaxAge = 300
 )
 
 func main() {
@@ -126,7 +123,7 @@ func main() {
 	mux := http.NewServeMux()
 
 	// Health check — required by plugin registry.
-	mux.HandleFunc("GET /health", h.health)
+	mux.HandleFunc("GET /health", oauthkit.Health)
 
 	// Primary flow: standalone OAuth dance.
 	mux.HandleFunc("GET /login", h.login)
@@ -166,43 +163,16 @@ type handler struct {
 	userURL  string
 }
 
-// health responds with {"ok":true}. Required by the registry health-check.
-func (h *handler) health(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
-}
-
 // login kicks off the GitHub OAuth flow.
 // It reads the nonce supplied by core, generates a random CSRF state, embeds the nonce
 // in the state cookie as "<csrfState>.<nonce>", and redirects to GitHub.
 // The nonce is recovered in /callback and forwarded to createCoreSession.
 // GET /login?nonce=<jwt>
 func (h *handler) login(w http.ResponseWriter, r *http.Request) {
-	nonce := r.URL.Query().Get("nonce")
-	if nonce == "" {
-		writeError(w, http.StatusBadRequest, "missing nonce")
+	stateValue, ok := oauthkit.StartLogin(w, r, stateCookieName)
+	if !ok {
 		return
 	}
-
-	csrfState, err := randomState()
-	if err != nil {
-		slog.Error("login: generate state", "err", err)
-		writeError(w, http.StatusInternalServerError, "failed to generate state")
-		return
-	}
-
-	// Encode as "<csrfState>.<nonce>" so both values survive the OAuth round-trip
-	// via the state cookie without needing server-side storage.
-	stateValue := csrfState + "." + nonce
-
-	http.SetCookie(w, &http.Cookie{ //nolint:gosec
-		Name:     stateCookieName,
-		Value:    stateValue,
-		MaxAge:   stateCookieMaxAge,
-		HttpOnly: true,
-		Secure:   false, // plugin is always loopback
-		SameSite: http.SameSiteLaxMode,
-		Path:     "/",
-	})
 
 	v := url.Values{}
 	v.Set("client_id", h.clientID)
@@ -219,66 +189,38 @@ func (h *handler) login(w http.ResponseWriter, r *http.Request) {
 // POST /api/auth/session (with the nonce) to create a session cookie.
 // GET /callback?code=XXX&state=YYY
 func (h *handler) callback(w http.ResponseWriter, r *http.Request) {
-	stateCookie, err := r.Cookie(stateCookieName)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "missing state cookie")
+	nonce, ok := oauthkit.ValidateState(w, r, stateCookieName)
+	if !ok {
 		return
 	}
-	if r.URL.Query().Get("state") != stateCookie.Value {
-		writeError(w, http.StatusUnauthorized, "state mismatch")
-		return
-	}
-
-	// The state value is "<csrfState>.<nonce>"; split on the first dot to recover both.
-	// The nonce itself is a JWT which may contain dots, so we split only on the first one.
-	stateValue := stateCookie.Value
-	dotIdx := strings.Index(stateValue, ".")
-	if dotIdx < 0 {
-		writeError(w, http.StatusBadRequest, "malformed state: missing nonce")
-		return
-	}
-	nonce := stateValue[dotIdx+1:]
-	if nonce == "" {
-		writeError(w, http.StatusBadRequest, "malformed state: empty nonce")
-		return
-	}
-
-	// Clear the state cookie immediately.
-	http.SetCookie(w, &http.Cookie{ //nolint:gosec
-		Name:   stateCookieName,
-		MaxAge: -1,
-		Path:   "/",
-	})
-
-	if errParam := r.URL.Query().Get("error"); errParam != "" {
-		slog.Warn("callback: oauth error from provider", "error", errParam, "description", r.URL.Query().Get("error_description"))
-		writeError(w, http.StatusForbidden, "authentication denied by provider")
-		return
-	}
-	code := r.URL.Query().Get("code")
-	if code == "" {
-		writeError(w, http.StatusBadRequest, "missing code")
+	code, ok := oauthkit.ExtractCode(w, r)
+	if !ok {
 		return
 	}
 
 	accessToken, err := h.exchangeCode(r.Context(), code, h.callbackURL)
 	if err != nil {
 		slog.Error("callback: exchange code", "err", err)
-		writeError(w, http.StatusBadGateway, "code exchange failed")
+		oauthkit.WriteError(w, http.StatusBadGateway, "code exchange failed")
 		return
 	}
 
 	profile, err := h.getUser(r.Context(), accessToken)
 	if err != nil {
 		slog.Error("callback: get user", "err", err)
-		writeError(w, http.StatusBadGateway, "failed to fetch user profile")
+		oauthkit.WriteError(w, http.StatusBadGateway, "failed to fetch user profile")
 		return
 	}
 
-	sessionCookie, err := h.createCoreSession(r.Context(), profile, nonce)
+	sessionCookie, err := oauthkit.CreateSession(r.Context(), h.httpClient, h.dashboardURL, h.pluginSecret, oauthkit.SessionRequest{
+		ProviderID:  profile.ID,
+		Login:       profile.Login,
+		DisplayName: profile.DisplayName,
+		AvatarURL:   profile.AvatarURL,
+	}, nonce)
 	if err != nil {
 		slog.Error("callback: create core session", "err", err)
-		writeError(w, http.StatusBadGateway, "failed to create session")
+		oauthkit.WriteError(w, http.StatusBadGateway, "failed to create session")
 		return
 	}
 
@@ -287,48 +229,6 @@ func (h *handler) callback(w http.ResponseWriter, r *http.Request) {
 
 	// Redirect to the dashboard root.
 	http.Redirect(w, r, h.dashboardURL+"/", http.StatusFound)
-}
-
-// createCoreSession calls core's POST /api/auth/session and returns the session cookie.
-// nonce is the flow-binding JWT issued by core on the initial redirect; core validates it.
-func (h *handler) createCoreSession(ctx context.Context, profile *oauthUserProfile, nonce string) (*http.Cookie, error) {
-	body, err := json.Marshal(map[string]string{
-		"provider_id":  profile.ID,
-		"login":        profile.Login,
-		"display_name": profile.DisplayName,
-		"avatar_url":   profile.AvatarURL,
-		"nonce":        nonce,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("createCoreSession: marshal: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		h.dashboardURL+"/api/auth/session", bytes.NewReader(body))
-	if err != nil {
-		return nil, fmt.Errorf("createCoreSession: build request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+h.pluginSecret)
-
-	resp, err := h.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("createCoreSession: request: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("createCoreSession: HTTP %d: %s", resp.StatusCode, b)
-	}
-
-	// Find the auth_token cookie in core's response.
-	for _, c := range resp.Cookies() {
-		if c.Name == "auth_token" {
-			return c, nil
-		}
-	}
-	return nil, fmt.Errorf("createCoreSession: auth_token cookie missing from core response")
 }
 
 // --- Legacy capability routes (in-core OAuthProvider proxy flow) ---
@@ -346,7 +246,7 @@ func (h *handler) authorizeURL(w http.ResponseWriter, r *http.Request) {
 	v.Set("redirect_uri", redirectURI)
 	v.Set("scope", "read:user")
 
-	writeJSON(w, http.StatusOK, map[string]string{"url": githubAuthURL + "?" + v.Encode()})
+	oauthkit.WriteJSON(w, http.StatusOK, map[string]string{"url": githubAuthURL + "?" + v.Encode()})
 }
 
 // exchange accepts {"code":"...","redirect_uri":"..."} and returns {"token":"..."}.
@@ -357,17 +257,17 @@ func (h *handler) exchange(w http.ResponseWriter, r *http.Request) {
 		RedirectURI string `json:"redirect_uri"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body")
+		oauthkit.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
 	token, err := h.exchangeCode(r.Context(), req.Code, req.RedirectURI)
 	if err != nil {
 		slog.Error("exchange: failed", "err", err)
-		writeError(w, http.StatusBadGateway, "code exchange failed")
+		oauthkit.WriteError(w, http.StatusBadGateway, "code exchange failed")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"token": token})
+	oauthkit.WriteJSON(w, http.StatusOK, map[string]string{"token": token})
 }
 
 // user fetches the GitHub user profile for the token in the Authorization header.
@@ -375,7 +275,7 @@ func (h *handler) exchange(w http.ResponseWriter, r *http.Request) {
 func (h *handler) user(w http.ResponseWriter, r *http.Request) {
 	authHeader := r.Header.Get("Authorization")
 	if !strings.HasPrefix(authHeader, "Bearer ") {
-		writeError(w, http.StatusUnauthorized, "missing Bearer token")
+		oauthkit.WriteError(w, http.StatusUnauthorized, "missing Bearer token")
 		return
 	}
 	token := strings.TrimPrefix(authHeader, "Bearer ")
@@ -383,10 +283,10 @@ func (h *handler) user(w http.ResponseWriter, r *http.Request) {
 	profile, err := h.getUser(r.Context(), token)
 	if err != nil {
 		slog.Error("user: failed", "err", err)
-		writeError(w, http.StatusBadGateway, "failed to fetch user profile")
+		oauthkit.WriteError(w, http.StatusBadGateway, "failed to fetch user profile")
 		return
 	}
-	writeJSON(w, http.StatusOK, profile)
+	oauthkit.WriteJSON(w, http.StatusOK, profile)
 }
 
 // --- GitHub API helpers ---
@@ -479,25 +379,4 @@ func (h *handler) getUser(ctx context.Context, accessToken string) (*oauthUserPr
 		DisplayName: raw.Name,
 		AvatarURL:   raw.AvatarURL,
 	}, nil
-}
-
-// --- helpers ---
-
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
-}
-
-func writeError(w http.ResponseWriter, status int, msg string) {
-	writeJSON(w, status, map[string]string{"error": msg})
-}
-
-// randomState generates a cryptographically random 32-byte URL-safe string for OAuth CSRF protection.
-func randomState() (string, error) {
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("randomState: %w", err)
-	}
-	return base64.RawURLEncoding.EncodeToString(b), nil
 }

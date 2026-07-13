@@ -24,10 +24,7 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -38,14 +35,15 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	oauthkit "github.com/lx-wnk/agent-dashboard-plugin-oauthkit"
 )
 
 const (
-	listenAddr        = "127.0.0.1:19002"
-	graphMeURL        = "https://graph.microsoft.com/v1.0/me"
-	graphMemberOfURL  = "https://graph.microsoft.com/v1.0/me/memberOf?$select=id&$top=999"
-	stateCookieName   = "ms_oauth_state"
-	stateCookieMaxAge = 300
+	listenAddr       = "127.0.0.1:19002"
+	graphMeURL       = "https://graph.microsoft.com/v1.0/me"
+	graphMemberOfURL = "https://graph.microsoft.com/v1.0/me/memberOf?$select=id&$top=999"
+	stateCookieName  = "ms_oauth_state"
 )
 
 func main() {
@@ -96,7 +94,7 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /health", h.health)
+	mux.HandleFunc("GET /health", oauthkit.Health)
 	mux.HandleFunc("GET /login", h.login)
 	mux.HandleFunc("GET /callback", h.callback)
 
@@ -131,36 +129,12 @@ type handler struct {
 	msGraphMemberURL string
 }
 
-func (h *handler) health(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
-}
-
 // login redirects to Microsoft OAuth2. Embeds core's nonce in state cookie as "<csrf>.<nonce>".
 func (h *handler) login(w http.ResponseWriter, r *http.Request) {
-	nonce := r.URL.Query().Get("nonce")
-	if nonce == "" {
-		writeError(w, http.StatusBadRequest, "missing nonce")
+	stateValue, ok := oauthkit.StartLogin(w, r, stateCookieName)
+	if !ok {
 		return
 	}
-
-	csrfState, err := randomState()
-	if err != nil {
-		slog.Error("login: generate state", "err", err)
-		writeError(w, http.StatusInternalServerError, "failed to generate state")
-		return
-	}
-
-	stateValue := csrfState + "." + nonce
-
-	http.SetCookie(w, &http.Cookie{ //nolint:gosec
-		Name:     stateCookieName,
-		Value:    stateValue,
-		MaxAge:   stateCookieMaxAge,
-		HttpOnly: true,
-		Secure:   false,
-		SameSite: http.SameSiteLaxMode,
-		Path:     "/",
-	})
 
 	scopes := "openid profile email User.Read"
 	if h.allowedGroup != "" {
@@ -184,56 +158,26 @@ func (h *handler) login(w http.ResponseWriter, r *http.Request) {
 
 // callback handles the Microsoft OAuth2 callback.
 func (h *handler) callback(w http.ResponseWriter, r *http.Request) {
-	stateCookie, err := r.Cookie(stateCookieName)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "missing state cookie")
+	nonce, ok := oauthkit.ValidateState(w, r, stateCookieName)
+	if !ok {
 		return
 	}
-	if r.URL.Query().Get("state") != stateCookie.Value {
-		writeError(w, http.StatusUnauthorized, "state mismatch")
-		return
-	}
-
-	stateValue := stateCookie.Value
-	dotIdx := strings.Index(stateValue, ".")
-	if dotIdx < 0 {
-		writeError(w, http.StatusBadRequest, "malformed state")
-		return
-	}
-	nonce := stateValue[dotIdx+1:]
-	if nonce == "" {
-		writeError(w, http.StatusBadRequest, "empty nonce in state")
-		return
-	}
-
-	http.SetCookie(w, &http.Cookie{ //nolint:gosec
-		Name:   stateCookieName,
-		MaxAge: -1,
-		Path:   "/",
-	})
-
-	if errParam := r.URL.Query().Get("error"); errParam != "" {
-		slog.Warn("callback: oauth error from provider", "error", errParam, "description", r.URL.Query().Get("error_description"))
-		writeError(w, http.StatusForbidden, "authentication denied by provider")
-		return
-	}
-	code := r.URL.Query().Get("code")
-	if code == "" {
-		writeError(w, http.StatusBadRequest, "missing code")
+	code, ok := oauthkit.ExtractCode(w, r)
+	if !ok {
 		return
 	}
 
 	accessToken, err := h.exchangeCode(r.Context(), code)
 	if err != nil {
 		slog.Error("callback: exchange code", "err", err)
-		writeError(w, http.StatusBadGateway, "code exchange failed")
+		oauthkit.WriteError(w, http.StatusBadGateway, "code exchange failed")
 		return
 	}
 
 	profile, err := h.getUser(r.Context(), accessToken)
 	if err != nil {
 		slog.Error("callback: get user", "err", err)
-		writeError(w, http.StatusBadGateway, "failed to fetch user profile")
+		oauthkit.WriteError(w, http.StatusBadGateway, "failed to fetch user profile")
 		return
 	}
 
@@ -241,19 +185,24 @@ func (h *handler) callback(w http.ResponseWriter, r *http.Request) {
 		member, err := h.isMember(r.Context(), accessToken, h.allowedGroup)
 		if err != nil {
 			slog.Error("callback: group check", "err", err)
-			writeError(w, http.StatusBadGateway, "group membership check failed")
+			oauthkit.WriteError(w, http.StatusBadGateway, "group membership check failed")
 			return
 		}
 		if !member {
-			writeError(w, http.StatusForbidden, "access denied: not a member of the required group")
+			oauthkit.WriteError(w, http.StatusForbidden, "access denied: not a member of the required group")
 			return
 		}
 	}
 
-	sessionCookie, err := h.createCoreSession(r.Context(), profile, nonce)
+	sessionCookie, err := oauthkit.CreateSession(r.Context(), h.httpClient, h.dashboardURL, h.pluginSecret, oauthkit.SessionRequest{
+		ProviderID:  profile.ID,
+		Login:       profile.UserPrincipalName,
+		DisplayName: profile.DisplayName,
+		AvatarURL:   "",
+	}, nonce)
 	if err != nil {
 		slog.Error("callback: create core session", "err", err)
-		writeError(w, http.StatusBadGateway, "failed to create session")
+		oauthkit.WriteError(w, http.StatusBadGateway, "failed to create session")
 		return
 	}
 
@@ -386,67 +335,10 @@ func (h *handler) isMember(ctx context.Context, accessToken, groupID string) (bo
 	return false, nil
 }
 
-func (h *handler) createCoreSession(ctx context.Context, profile *msUserProfile, nonce string) (*http.Cookie, error) {
-	body, err := json.Marshal(map[string]string{
-		"provider_id":  profile.ID,
-		"login":        profile.UserPrincipalName,
-		"display_name": profile.DisplayName,
-		"avatar_url":   "",
-		"nonce":        nonce,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("createCoreSession: marshal: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		h.dashboardURL+"/api/auth/session", bytes.NewReader(body))
-	if err != nil {
-		return nil, fmt.Errorf("createCoreSession: build request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+h.pluginSecret)
-
-	resp, err := h.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("createCoreSession: request: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("createCoreSession: HTTP %d: %s", resp.StatusCode, b)
-	}
-
-	for _, c := range resp.Cookies() {
-		if c.Name == "auth_token" {
-			return c, nil
-		}
-	}
-	return nil, fmt.Errorf("createCoreSession: auth_token cookie missing from core response")
-}
-
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
-}
-
-func writeError(w http.ResponseWriter, status int, msg string) {
-	writeJSON(w, status, map[string]string{"error": msg})
-}
-
 func truncateBody(b []byte) string {
 	const max = 200
 	if len(b) <= max {
 		return string(b)
 	}
 	return string(b[:max]) + "…"
-}
-
-func randomState() (string, error) {
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("randomState: %w", err)
-	}
-	return base64.RawURLEncoding.EncodeToString(b), nil
 }

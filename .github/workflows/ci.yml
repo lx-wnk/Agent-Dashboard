@@ -58,7 +58,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        plugin: [github-oauth, office365-oauth, voice-whisper, voice-webspeech, anthropic-spawner]
+        plugin: [oauthkit, github-oauth, office365-oauth, voice-whisper, voice-webspeech, anthropic-spawner]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
@@ -105,7 +105,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        plugin: [github-oauth, office365-oauth, voice-whisper, voice-webspeech, anthropic-spawner]
+        plugin: [oauthkit, github-oauth, office365-oauth, voice-whisper, voice-webspeech, anthropic-spawner]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
