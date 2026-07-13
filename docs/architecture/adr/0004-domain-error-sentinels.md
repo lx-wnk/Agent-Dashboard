@@ -1,6 +1,6 @@
 # ADR-0004: Stdlib-Only Domain Error Sentinels
 
-**Status:** Accepted
+**Status:** Accepted (scope amended 2026-07-13 — see Amendment below)
 **Date:** 2026-06-09
 
 ## Context
@@ -28,7 +28,9 @@ separate concern that legitimately belongs in `apierr`.
 ## Decision
 
 Extract the sentinels into a new stdlib-only leaf package
-`server/internal/domainerr` that imports **only** `errors`:
+`server/internal/domainerr` that imports **only** `errors`. *(Scope narrowed by
+the 2026-07-13 amendment below: `domainerr` is for cross-boundary sentinels
+only, not a general replacement for intra-package errors.)*
 
 ```go
 package domainerr
@@ -86,3 +88,13 @@ response bodies are byte-for-byte unchanged.
 2. **Move `ErrorMiddleware` out of `apierr` instead.** Larger blast radius (all
    28 `apierr.*` consumers) for no additional benefit; the sentinel/mapping split
    is the minimal cut.
+
+## Amendment (2026-07-13) — Scope
+
+`domainerr` is intentionally scoped to *cross-boundary* error sentinels:
+values that must satisfy `errors.Is` across a layer edge (typically db/repo or
+a service returning up to `apierr.ErrorMiddleware`). Intra-package errors
+should stay local (`fmt.Errorf`/local sentinels); they need not adopt
+`domainerr`. The low importer count (~5, not the ~40 originally implied) is
+therefore expected, not drift. Revisit only if a concrete error-mapping pain
+point surfaces at a boundary that lacks a sentinel.
