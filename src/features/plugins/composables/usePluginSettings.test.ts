@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { usePluginSettings } from './usePluginSettings'
+import { usePluginSettings } from '@/features/plugins/composables/usePluginSettings'
 
 afterEach(() => {
   vi.unstubAllGlobals()

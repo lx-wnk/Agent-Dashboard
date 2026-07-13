@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import type { SettingField } from '../composables/usePluginSettings'
+import type { SettingField } from '@/features/plugins/composables/usePluginSettings'
 import { onMounted, reactive, ref } from 'vue'
-import { toast } from '../composables/useToast'
-import { errorMessage } from '../utils/errorMessage'
+import { toast } from '@/composables/useToast'
+import { errorMessage } from '@/utils/errorMessage'
 
 const props = defineProps<{
   pluginId: string

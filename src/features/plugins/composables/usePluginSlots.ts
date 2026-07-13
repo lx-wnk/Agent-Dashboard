@@ -1,7 +1,7 @@
-import type { PluginInfo } from '../utils/plugins'
-import type { LoadedAddon, SlotAddonModule, SlotName } from '../utils/pluginSlot'
-import { fetchPluginList } from '../utils/plugins'
-import { PLUGIN_UI_CAPABILITY } from '../utils/pluginSlot'
+import type { PluginInfo } from '@/utils/plugins'
+import type { LoadedAddon, SlotAddonModule, SlotName } from '@/utils/pluginSlot'
+import { fetchPluginList } from '@/utils/plugins'
+import { PLUGIN_UI_CAPABILITY } from '@/utils/pluginSlot'
 
 const SCHEME_RE = /^[a-z][a-z0-9+.-]*:/i
 

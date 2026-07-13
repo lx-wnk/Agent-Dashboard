@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import AgentModal from '@/features/agents/components/AgentModal.vue'
 import TaskCard from '@/features/pipeline/components/TaskCard.vue'
 import TaskModal from '@/features/pipeline/components/TaskModal.vue'
-import PluginSettings from './PluginSettings.vue'
+import PluginSettings from '@/features/plugins/components/PluginSettings.vue'
 
 beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => [], body: null }))

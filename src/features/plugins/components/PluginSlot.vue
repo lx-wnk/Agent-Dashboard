@@ -1,8 +1,8 @@
 <!-- src/components/PluginSlot.vue -->
 <script setup lang="ts" generic="S extends SlotName = SlotName">
-import type { LoadedAddon, SlotContracts, SlotName, SlotParent, UnmountFn } from '../utils/pluginSlot'
+import type { LoadedAddon, SlotContracts, SlotName, SlotParent, UnmountFn } from '@/utils/pluginSlot'
 import { onBeforeUnmount, onMounted, ref, toRaw } from 'vue'
-import { loadSlotAddons } from '../composables/usePluginSlots'
+import { loadSlotAddons } from '@/features/plugins/composables/usePluginSlots'
 
 const props = withDefaults(defineProps<{
   name: S

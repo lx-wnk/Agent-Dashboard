@@ -1,7 +1,7 @@
-import type { PluginInfo } from '../utils/plugins'
+import type { PluginInfo } from '@/utils/plugins'
 import { onMounted, ref } from 'vue'
-import { errorMessage } from '../utils/errorMessage'
-import { fetchPluginList } from '../utils/plugins'
+import { errorMessage } from '@/utils/errorMessage'
+import { fetchPluginList } from '@/utils/plugins'
 
 export type { PluginInfo }
 

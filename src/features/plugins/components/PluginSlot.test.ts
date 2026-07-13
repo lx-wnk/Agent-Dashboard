@@ -1,8 +1,8 @@
 // src/components/PluginSlot.test.ts
-import type { LoadedAddon, SlotContext, UnmountFn } from '../utils/pluginSlot'
+import type { LoadedAddon, SlotContext, UnmountFn } from '@/utils/pluginSlot'
 import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
-import PluginSlot from './PluginSlot.vue'
+import PluginSlot from '@/features/plugins/components/PluginSlot.vue'
 
 function fakeCtx(): SlotContext {
   return { insertText: vi.fn(), setBusy: vi.fn() }

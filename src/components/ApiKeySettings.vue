@@ -24,7 +24,7 @@ import AppModal from './ui/AppModal.vue'
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: [] }>()
 const NotificationSettings = defineAsyncComponent(() => import('./NotificationSettings.vue'))
-const PluginSettings = defineAsyncComponent(() => import('./PluginSettings.vue'))
+const PluginSettings = defineAsyncComponent(() => import('@/features/plugins/components/PluginSettings.vue'))
 const ProviderSettings = defineAsyncComponent(() => import('./ProviderSettings.vue'))
 const TrackerSettingsPanel = defineAsyncComponent(() => import('./TrackerSettingsPanel.vue'))
 const AppSettings = defineAsyncComponent(() => import('./AppSettings.vue'))
