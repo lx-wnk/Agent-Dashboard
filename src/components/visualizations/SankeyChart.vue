@@ -10,6 +10,7 @@ import { useTheme } from '../../composables/useTheme'
 import { toast } from '../../composables/useToast'
 import { chartColors, chartPalette } from '../../utils/chartColors'
 import { errorMessage } from '../../utils/errorMessage'
+import ChartDataTable from '../ui/ChartDataTable.vue'
 
 // User-defined node/link properties carried through the layout, on top of the
 // d3-sankey-computed geometry (x0/y0/width/…).
@@ -39,6 +40,20 @@ watch(() => props.error, (msg) => {
 }, { immediate: true })
 
 const isEmpty = computed(() => !props.data || props.data.nodes.length === 0)
+
+const tableColumns = [
+  { key: 'source', label: 'Source' },
+  { key: 'target', label: 'Target' },
+  { key: 'value', label: 'Value' },
+]
+
+const tableRows = computed(() =>
+  (props.data?.links ?? []).map(link => ({
+    source: link.source,
+    target: link.target,
+    value: link.value,
+  })),
+)
 
 function render() {
   if (!svgRef.value || !props.data)
@@ -143,6 +158,11 @@ onUnmounted(() => {
     </div>
     <template v-else>
       <svg ref="svgRef" class="w-full" style="min-height: 480px;" aria-label="Tool-call sankey diagram" role="img" />
+      <ChartDataTable
+        caption="Tool-call flow — source, target, and count per link"
+        :columns="tableColumns"
+        :rows="tableRows"
+      />
     </template>
   </div>
 </template>
