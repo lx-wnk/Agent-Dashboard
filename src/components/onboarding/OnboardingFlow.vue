@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { SessionInfo } from '../../composables/useSessions'
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useClipboardCopy } from '../../composables/useCopyId'
 import { useOnboarding } from '../../composables/useOnboarding'
 import { useServerConfig } from '../../composables/useServerConfig'
@@ -9,6 +9,7 @@ import { errorMessage } from '../../utils/errorMessage'
 import { buildMcpAddCommand } from '../../utils/mcpCommand'
 import ChannelScriptCallout from '../shell/ChannelScriptCallout.vue'
 import AppButton from '../ui/AppButton.vue'
+import AppModal from '../ui/AppModal.vue'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: [], spawned: [pid: number] }>()
@@ -129,26 +130,11 @@ async function finish() {
   await complete()
   emit('close')
 }
-
-function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape' && props.open)
-    skip()
-}
-onMounted(() => window.addEventListener('keydown', onKeydown))
-onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 </script>
 
 <template>
-  <div
-    v-if="open"
-    data-testid="onboarding-flow"
-    role="dialog"
-    aria-modal="true"
-    aria-labelledby="onboarding-title"
-    class="fixed inset-0 bg-black/60 flex items-center justify-center z-[100] backdrop-blur-sm p-4"
-    @click.self="skip"
-  >
-    <div class="bg-card border border-line rounded-2xl flex flex-col overflow-hidden shadow-2xl w-full" style="max-width: 640px; max-height: 88vh;">
+  <AppModal :open="open" size="auto" labelled-by="onboarding-title" @close="skip">
+    <div data-testid="onboarding-flow" class="bg-card border border-line rounded-2xl flex flex-col overflow-hidden shadow-2xl w-full" style="max-width: 640px; max-height: 88vh;">
       <header class="flex items-center justify-between px-5 py-4 border-b border-line shrink-0">
         <h2 id="onboarding-title" class="text-lg font-semibold text-fg">
           Let's get you set up
@@ -276,5 +262,5 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
         </AppButton>
       </footer>
     </div>
-  </div>
+  </AppModal>
 </template>
