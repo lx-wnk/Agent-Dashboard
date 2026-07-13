@@ -3,6 +3,7 @@ package pipeline_test
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 

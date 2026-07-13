@@ -78,3 +78,21 @@ var PlanReviewBuilderForTest = planReviewBuilder
 func (o *PipelineOrchestrator) HandleDependentTasksForTest(ctx context.Context, taskID, newStage string) {
 	o.handleDependentTasks(ctx, taskID, newStage)
 }
+
+// ApplyTransitionForTest exposes applyTransition for tx-correctness tests.
+func (o *PipelineOrchestrator) ApplyTransitionForTest(ctx context.Context, task *ent.Task, sr *ent.StageRun, t StageTransition) (*ent.StageRun, error) {
+	return o.applyTransition(ctx, task, sr, t)
+}
+
+// SeedTaskLockForTest pre-populates the per-task mutex, mirroring what
+// runProgressTaskLocked does before a real transition. Used to assert the
+// lock is (or is not) released by a transition's postCommit closures.
+func (o *PipelineOrchestrator) SeedTaskLockForTest(taskID string) {
+	o.getTaskMutex(taskID)
+}
+
+// TaskLockHeldForTest reports whether a per-task mutex is still registered for taskID.
+func (o *PipelineOrchestrator) TaskLockHeldForTest(taskID string) bool {
+	_, ok := o.taskLocks.Load(taskID)
+	return ok
+}
