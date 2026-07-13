@@ -501,6 +501,10 @@ func SpawnStageAgent(opts SpawnAgentOptions) (SpawnResult, error) {
 	allowGitPush := IsGitPushAllowed(opts.Task, opts.AllowGitPush)
 	settingsPath, wrote, isLocal, err := writeSettingsFile(opts.Task.Autonomy, cwd, opts.Permissions, opts.EnableChannel, allowGitPush)
 	if err != nil {
+		if !taskcontrol.IsAllowAll(opts.Task.Autonomy) {
+			return SpawnResult{}, fmt.Errorf("writeSettingsFile: %w", err)
+		}
+		// Allow-all autonomy needs no allow-list file — a write failure here is harmless.
 		slog.Warn("writeSettingsFile failed — continuing without pre-approved allow-list", "err", err)
 	}
 

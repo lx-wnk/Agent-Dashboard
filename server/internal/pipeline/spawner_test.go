@@ -3,6 +3,7 @@ package pipeline_test
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -398,4 +399,50 @@ func TestBuildSpawnEnv_ForwardsDashboardPrefix(t *testing.T) {
 
 	// DASHBOARD_MCP_URL from the environment must be forwarded via prefix rule
 	require.Contains(t, env, "DASHBOARD_MCP_URL=http://example.com")
+}
+
+// ---------------------------------------------------------------------------
+// CQ-06 — writeSettingsFile failure must fail loud under restrictive autonomy
+// ---------------------------------------------------------------------------
+
+// brokenSpawnCwd returns a path to a regular file (not a directory), which
+// makes writeSettingsFile's os.MkdirAll(".claude") fail deterministically —
+// independent of filesystem permissions or CI user privileges.
+func brokenSpawnCwd(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "not-a-directory")
+	require.NoError(t, os.WriteFile(path, []byte("x"), 0o600))
+	return path
+}
+
+func TestSpawnStageAgent_CQ06_FailsLoudUnderRestrictiveAutonomy(t *testing.T) {
+	opts := pipeline.SpawnAgentOptions{
+		Task:          &ent.Task{ID: "t-restrictive", Cwd: brokenSpawnCwd(t), Autonomy: "manual"},
+		StageRun:      &ent.StageRun{ID: "r-restrictive"},
+		EnableChannel: true, // forces a non-empty allow list so writeSettingsFile attempts the write
+		Spawner:       &ent.Spawner{Command: "/nonexistent/does-not-exist-xyz"},
+	}
+	_, err := pipeline.SpawnStageAgent(opts)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "writeSettingsFile:",
+		"restrictive autonomy must fail loud on a writeSettingsFile error instead of spawning with no allow-list")
+}
+
+func TestSpawnStageAgent_CQ06_WarnsAndContinuesUnderAllowAllAutonomy(t *testing.T) {
+	for _, autonomy := range []string{"spec_gated", "full"} {
+		t.Run(autonomy, func(t *testing.T) {
+			opts := pipeline.SpawnAgentOptions{
+				Task:     &ent.Task{ID: "t-allow-all", Cwd: brokenSpawnCwd(t), Autonomy: autonomy},
+				StageRun: &ent.StageRun{ID: "r-allow-all"},
+				Spawner:  &ent.Spawner{Command: "/nonexistent/does-not-exist-xyz"},
+			}
+			_, err := pipeline.SpawnStageAgent(opts)
+			// The spawn still fails overall (the spawner binary does not exist), but
+			// it must fail at the process-start stage, not at writeSettingsFile — proving
+			// the writeSettingsFile error was logged and swallowed, not returned.
+			require.Error(t, err)
+			require.NotContains(t, err.Error(), "writeSettingsFile:",
+				"allow-all autonomy must warn and continue past a writeSettingsFile error")
+		})
+	}
 }
