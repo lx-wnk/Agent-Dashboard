@@ -218,9 +218,12 @@ cmd/serve/main.go + di.go   ← composition root only
         ├── refine/        may import: db/repo, db/ent, llmadapter, sdk (types only)
         ├── services/      may import: db/repo, db/ent, auth, config, paths, platform, sdk (types only); never imports pipeline/, api/, mcp/, or plugin/ at runtime
         ├── llmadapter/    may import: db/ent only (leaf — no state-machine reference; see ADR-0005)
+        ├── proc/          may import: stdlib + platform only (leaf — process-liveness probe; importable by any layer; see ADR-0009)
         ├── db/repo        may import: db/ent only
         └── plugin/        may import: auth only
 ```
+
+`proc/` holds `IsPidAlive` (process-liveness probe), extracted from `pipeline/session_manager.go` (ADR-0009) because `db/rawrepo` and `api/tasks/{enrich,analyze_routes}.go` imported the entire orchestration core solely to reach it. It depends only on the standard library and `platform/`. `db/rawrepo/stage_run_bulk_repo.go` no longer imports `pipeline/` at all; a `depguard` rule in `.golangci.yml` enforces this at CI time.
 
 `llmadapter/` is a leaf package holding the pluggable-spawner transport
 (`LLMSpawner` / `StreamingLLMSpawner` / `LLMSpawnArgs`,
@@ -247,7 +250,6 @@ The following `pipeline/` symbols may be imported at runtime from `api/*` and `m
 | Symbol | File in pipeline/ | Consumers |
 |---|---|---|
 | `ProgressOpts` | `types.go` | `api/tasks/handler.go`, `mcp/tools/control.go` |
-| `IsPidAlive` | `session_manager.go` | `api/tasks/enrich.go`, `api/tasks/analyze_routes.go` |
 | `ResolvedProjectDir` | `session_reader.go` | `api/tasks/analyze_routes.go` |
 | `FindNewestSessionID` | `session_reader.go` | `api/tasks/cost_stage_routes.go` |
 | `ReadLastStageJsonOutput` | `session_reader.go` | `api/tasks/cost_stage_routes.go` |

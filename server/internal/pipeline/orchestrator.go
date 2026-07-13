@@ -23,6 +23,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pricing"
+	"github.com/lx-wnk/agent-dashboard/server/internal/proc"
 )
 
 const (
@@ -362,7 +363,7 @@ func (o *PipelineOrchestrator) ensureStageRun(ctx context.Context, task *ent.Tas
 			return existing, nil
 		}
 		// awaiting_user with live PID — don't create a new iteration
-		if existing.Status == "awaiting_user" && existing.Pid != nil && IsPidAlive(*existing.Pid) {
+		if existing.Status == "awaiting_user" && existing.Pid != nil && proc.IsPidAlive(*existing.Pid) {
 			return existing, nil
 		}
 	}
@@ -477,7 +478,7 @@ func (o *PipelineOrchestrator) finalizeCompletedAsyncRuns(ctx context.Context, a
 			continue
 		}
 		if IsTerminalStage(task.CurrentStage) {
-			if run.Pid != nil && IsPidAlive(*run.Pid) {
+			if run.Pid != nil && proc.IsPidAlive(*run.Pid) {
 				_ = syscallKill(*run.Pid)
 			}
 			if _, err := o.applyTransition(ctx, task, run, FailTransition{Reason: "task cancelled externally"}); err != nil {
@@ -884,7 +885,7 @@ func (o *PipelineOrchestrator) ClearStalePendingPermissions(ctx context.Context,
 		pid = *run.Pid
 	}
 	terminalOrZombie := run.Status == "failed" || run.Status == "done" ||
-		(run.Status == "awaiting_user" && !IsPidAlive(pid))
+		(run.Status == "awaiting_user" && !proc.IsPidAlive(pid))
 	if !terminalOrZombie {
 		return
 	}
@@ -962,7 +963,7 @@ func (o *PipelineOrchestrator) reapAwaitingUserAgent(ctx context.Context, taskID
 	if err != nil || run == nil || run.Status != "awaiting_user" {
 		return
 	}
-	if run.Pid != nil && IsPidAlive(*run.Pid) {
+	if run.Pid != nil && proc.IsPidAlive(*run.Pid) {
 		_ = syscallKill(*run.Pid)
 	}
 	if _, err := o.applyTransition(ctx, task, run, FailTransition{
@@ -992,7 +993,7 @@ func (o *PipelineOrchestrator) KillRunningStage(ctx context.Context, taskID stri
 	if run.Status != "running" && run.Status != "awaiting_user" {
 		return nil
 	}
-	if run.Pid == nil || !IsPidAlive(*run.Pid) {
+	if run.Pid == nil || !proc.IsPidAlive(*run.Pid) {
 		return nil
 	}
 	if err := syscallKill(*run.Pid); err != nil {
