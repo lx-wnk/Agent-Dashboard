@@ -330,7 +330,7 @@ func (o *PipelineOrchestrator) decideCompletedTransition(ctx context.Context, ta
 				}
 			}
 			cycles := prevCycles + 1
-			maxCycles := o.getCachedConfigNumber(ctx, maxReviewCyclesKey, defaultMaxReviewCycles)
+			maxCycles := o.configCache.Number(ctx, maxReviewCyclesKey, defaultMaxReviewCycles)
 			if task.Metadata != nil {
 				if v, ok := task.Metadata["maxReviewCycles"].(float64); ok && int(v) > 0 {
 					maxCycles = int(v)

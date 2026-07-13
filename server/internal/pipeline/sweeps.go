@@ -15,7 +15,7 @@ import (
 // died or whose wallclock time has exceeded the configured limit.
 // allRunning is the prefetched slice of non-terminal runs from tick().
 func (o *PipelineOrchestrator) sweepAwaitingUserRuns(ctx context.Context, allRunning []*ent.StageRun) error {
-	timeoutSec := o.getCachedConfigNumber(ctx, awaitingUserTimeoutKey, defaultAwaitingUserTimeout)
+	timeoutSec := o.configCache.Number(ctx, awaitingUserTimeoutKey, defaultAwaitingUserTimeout)
 	for _, run := range allRunning {
 		if run.Status != "awaiting_user" {
 			continue
