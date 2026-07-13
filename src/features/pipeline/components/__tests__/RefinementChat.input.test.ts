@@ -1,7 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
-import RefinementChat from '../RefinementChat.vue'
+import RefinementChat from '@/features/pipeline/components/RefinementChat.vue'
 
 // The message input must stay usable even when the run is approval-ready (the
 // "Create Task" bar is showing) so the user can keep adjusting open decisions.
@@ -12,7 +12,7 @@ vi.mock('@/features/pipeline/composables/useTasks', () => ({
   createTask: vi.fn(),
 }))
 
-vi.mock('../../utils/markdown', () => ({
+vi.mock('@/utils/markdown', () => ({
   renderMarkdown: (text: string) => text,
 }))
 

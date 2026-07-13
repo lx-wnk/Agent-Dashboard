@@ -1,6 +1,6 @@
 import { mount } from '@vue/test-utils'
 import { expect, it } from 'vitest'
-import RefineStatusPanel from '../RefineStatusPanel.vue'
+import RefineStatusPanel from '@/features/pipeline/components/RefineStatusPanel.vue'
 
 it('shows a refining badge when status is refining', () => {
   const w = mount(RefineStatusPanel, { props: { status: 'refining', error: null, lastOutput: '' } })

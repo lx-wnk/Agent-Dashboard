@@ -90,7 +90,7 @@ vi.mock('@/components/AgentChatStream.vue', () => ({ default: { template: '<div 
 vi.mock('@/components/AuditLogTab.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('@/components/DependencyGraph.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('@/components/GitStatusPanel.vue', () => ({ default: { template: '<div />' } }))
-vi.mock('@/components/RefineStatusPanel.vue', () => ({ default: { template: '<div />' } }))
+vi.mock('@/features/pipeline/components/RefineStatusPanel.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('@/features/pipeline/components/StageCostWaterfall.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('@/features/pipeline/components/StageOutputView.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('@/features/pipeline/components/TaskSlashCommandMenu.vue', () => ({ default: { template: '<div />', methods: { onKeydown: () => {} } } }))

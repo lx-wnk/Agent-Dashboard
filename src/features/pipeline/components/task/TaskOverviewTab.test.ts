@@ -25,7 +25,7 @@ vi.mock('@/features/pipeline/composables/useTasks', () => ({
 
 vi.mock('@/components/AgentChatStream.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('@/components/GitStatusPanel.vue', () => ({ default: { template: '<div />' } }))
-vi.mock('@/components/RefineStatusPanel.vue', () => ({ default: { template: '<div />' } }))
+vi.mock('@/features/pipeline/components/RefineStatusPanel.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('@/features/pipeline/components/StageOutputView.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('@/components/WorktreeCommandRunner.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('@/components/WorktreePanel.vue', () => ({ default: { template: '<div />' } }))

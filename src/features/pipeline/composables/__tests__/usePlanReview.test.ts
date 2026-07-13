@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { usePlanReview } from '../usePlanReview'
+import { usePlanReview } from '@/features/pipeline/composables/usePlanReview'
 
 function mockFetch(impl: (url: string, init?: RequestInit) => Promise<unknown>) {
   vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) =>

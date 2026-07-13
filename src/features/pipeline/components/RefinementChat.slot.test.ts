@@ -1,8 +1,8 @@
 // src/components/RefinementChat.slot.test.ts
-import type { SlotAddon } from '../utils/pluginSlot'
+import type { SlotAddon } from '@/utils/pluginSlot'
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import RefinementChat from './RefinementChat.vue'
+import RefinementChat from '@/features/pipeline/components/RefinementChat.vue'
 
 // A fake addon that immediately drives the slot context, simulating a finished
 // transcription writing into the refinement textarea.
