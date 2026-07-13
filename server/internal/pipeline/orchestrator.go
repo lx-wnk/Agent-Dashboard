@@ -65,6 +65,7 @@ type PipelineOrchestrator struct {
 	detectCompletion func(*ent.StageRun, string, CompletionDeps) (CompletionResult, error)
 	configCache      *configCache
 	modelResolver    *modelResolver
+	stageRuns        *stageRunService
 
 	httpResultCh chan httpSpawnResult // buffered channel for goroutine pool results
 	httpPoolSem  chan struct{}        // semaphore: limits concurrent HTTP spawns
@@ -117,6 +118,7 @@ func NewOrchestrator(opts OrchestratorOptions) (*PipelineOrchestrator, error) {
 		detectCompletion: DetectCompletion,
 		configCache:      cc,
 		modelResolver:    newModelResolver(cc, opts.ConfigRepo),
+		stageRuns:        newStageRunService(opts.StageRunRepo),
 		httpPoolSem:      make(chan struct{}, poolSize),
 		httpResultCh:     make(chan httpSpawnResult, poolSize*2),
 	}
@@ -192,7 +194,7 @@ func (o *PipelineOrchestrator) drainHTTPResults(ctx context.Context) {
 		case res := <-o.httpResultCh:
 			if res.err != nil {
 				slog.Error("orchestrator: HTTP spawn goroutine failed", "stageRunID", res.stageRunID, "err", res.err)
-				run, getErr := o.opts.StageRunRepo.GetByID(ctx, res.stageRunID)
+				run, getErr := o.stageRuns.GetByID(ctx, res.stageRunID)
 				if getErr != nil || run == nil || run.Status != "running" {
 					continue
 				}
@@ -208,7 +210,7 @@ func (o *PipelineOrchestrator) drainHTTPResults(ctx context.Context) {
 			} else {
 				// Write the synthetic session file path into stage_run.output so
 				// finalizeCompletedAsyncRuns detects it on the next tick.
-				run, getErr := o.opts.StageRunRepo.GetByID(ctx, res.stageRunID)
+				run, getErr := o.stageRuns.GetByID(ctx, res.stageRunID)
 				if getErr != nil || run == nil {
 					continue
 				}
@@ -222,7 +224,7 @@ func (o *PipelineOrchestrator) drainHTTPResults(ctx context.Context) {
 					merged["synthetic_session_file"] = res.sessionFile
 					output = merged
 				}
-				if _, err := o.opts.StageRunRepo.Update(ctx, res.stageRunID, repo.UpdateStageRunInput{
+				if _, err := o.stageRuns.Update(ctx, res.stageRunID, repo.UpdateStageRunInput{
 					Output: output,
 				}); err != nil {
 					slog.Error("drainHTTPResults.writeSessionFile", "stageRunID", res.stageRunID, "err", err)
@@ -242,7 +244,7 @@ func (o *PipelineOrchestrator) drainHTTPResults(ctx context.Context) {
 
 func (o *PipelineOrchestrator) tick(ctx context.Context) error {
 	o.drainHTTPResults(ctx)
-	allRunning, err := o.opts.StageRunRepo.ListByStatus(ctx, "running", "awaiting_user", "on_hold")
+	allRunning, err := o.stageRuns.ListByStatus(ctx, "running", "awaiting_user", "on_hold")
 	if err != nil {
 		return fmt.Errorf("orchestrator.tick.listRunning: %w", err)
 	}
@@ -280,7 +282,7 @@ func (o *PipelineOrchestrator) ProgressTask(ctx context.Context, taskID string, 
 // function entirely for the normal picker flow.
 func (o *PipelineOrchestrator) hasFreeRunnerSlot(ctx context.Context, exceptTaskID string) bool {
 	max := o.configCache.Number(ctx, maxParallelKey, defaultMaxParallel)
-	running, _ := o.opts.StageRunRepo.ListByStatus(ctx, "running")
+	running, _ := o.stageRuns.ListByStatus(ctx, "running")
 	busyTaskIDs := make(map[string]bool)
 	for _, r := range running {
 		if r.TaskID != exceptTaskID {
@@ -293,7 +295,7 @@ func (o *PipelineOrchestrator) hasFreeRunnerSlot(ctx context.Context, exceptTask
 func (o *PipelineOrchestrator) ensureStageRun(ctx context.Context, task *ent.Task, prefetched *ent.StageRun) (*ent.StageRun, error) {
 	existing := prefetched
 	if existing == nil {
-		existing, _ = o.opts.StageRunRepo.GetLatestByTaskAndStage(ctx, task.ID, task.CurrentStage)
+		existing, _ = o.stageRuns.GetLatestByTaskAndStage(ctx, task.ID, task.CurrentStage)
 	}
 	if existing != nil {
 		if existing.Status == "pending" || existing.Status == "running" {
@@ -315,7 +317,7 @@ func (o *PipelineOrchestrator) ensureStageRun(ctx context.Context, task *ent.Tas
 // userPrompt is persisted as pending_user_prompt when non-empty, so the picker-driven
 // spawn can read it without opts being passed explicitly.
 func (o *PipelineOrchestrator) createNextPendingRun(ctx context.Context, task *ent.Task, iteration int, userPrompt string) (*ent.StageRun, error) {
-	return o.opts.StageRunRepo.Create(ctx, repo.CreateStageRunInput{
+	return o.stageRuns.Create(ctx, repo.CreateStageRunInput{
 		TaskID:            task.ID,
 		Stage:             task.CurrentStage,
 		Iteration:         iteration,
@@ -331,7 +333,7 @@ func (o *PipelineOrchestrator) resolveResumeSessionID(ctx context.Context, task 
 	if task.WorktreePath != nil && *task.WorktreePath != "" {
 		cwd = *task.WorktreePath
 	}
-	runs, err := o.opts.StageRunRepo.ListForTask(ctx, task.ID)
+	runs, err := o.stageRuns.ListForTask(ctx, task.ID)
 	if err != nil {
 		return ""
 	}
@@ -351,7 +353,7 @@ func (o *PipelineOrchestrator) getPreviousStageOutput(ctx context.Context, task 
 	for i := len(StageOrder) - 1; i >= 0; i-- {
 		if StageOrder[i] == task.CurrentStage {
 			for j := i - 1; j >= 0; j-- {
-				prev, _ := o.opts.StageRunRepo.GetLatestByTaskAndStage(ctx, task.ID, StageOrder[j])
+				prev, _ := o.stageRuns.GetLatestByTaskAndStage(ctx, task.ID, StageOrder[j])
 				if prev != nil && prev.Output != nil {
 					return prev.Output
 				}
@@ -366,7 +368,7 @@ func (o *PipelineOrchestrator) getPriorIterationOutput(ctx context.Context, task
 	if sr.Iteration == 0 {
 		return nil
 	}
-	prev, _ := o.opts.StageRunRepo.GetByTaskStageIteration(ctx, task.ID, sr.Stage, sr.Iteration-1)
+	prev, _ := o.stageRuns.GetByTaskStageIteration(ctx, task.ID, sr.Stage, sr.Iteration-1)
 	if prev != nil {
 		return prev.Output
 	}
@@ -413,7 +415,7 @@ func (o *PipelineOrchestrator) enforceBudget(
 	slog.Warn(fmt.Sprintf("orchestrator: task exceeded %s budget — killing agent", kind),
 		"taskID", task.ID, "spent", spent, "budget", *limit)
 	_ = syscallKill(*run.Pid)
-	fresh, _ := o.opts.StageRunRepo.GetByID(ctx, run.ID)
+	fresh, _ := o.stageRuns.GetByID(ctx, run.ID)
 	if fresh != nil && fresh.Status == "running" {
 		if _, err := o.applyTransition(ctx, task, fresh, FailTransition{
 			Reason: fmt.Sprintf("%s budget exceeded: %d %s, limit %d %s", kind, spent, spentPhrase, *limit, unit),
@@ -443,11 +445,11 @@ func (o *PipelineOrchestrator) enforceBudgetsAndTimeout(ctx context.Context, tas
 		}
 	}
 	// Cost budget enforcement (subprocess runs only — HTTP runs finalize atomically)
-	if o.enforceBudget(ctx, task, run, task.CostBudgetCents, o.opts.StageRunRepo.SumCompletedCostCents, "cost", "cents spent", "cents") {
+	if o.enforceBudget(ctx, task, run, task.CostBudgetCents, o.stageRuns.SumCompletedCostCents, "cost", "cents spent", "cents") {
 		return
 	}
 	// Token budget enforcement (subprocess runs only — HTTP runs finalize atomically)
-	if o.enforceBudget(ctx, task, run, task.TokenBudget, o.opts.StageRunRepo.SumCompletedTokens, "token", "tokens used", "tokens") {
+	if o.enforceBudget(ctx, task, run, task.TokenBudget, o.stageRuns.SumCompletedTokens, "token", "tokens used", "tokens") {
 		return
 	}
 	// Stage timeout enforcement (subprocess runs only).
@@ -461,7 +463,7 @@ func (o *PipelineOrchestrator) enforceBudgetsAndTimeout(ctx context.Context, tas
 			slog.Warn("orchestrator: stage timed out — killing agent",
 				"runID", run.ID, "stage", run.Stage, "elapsedSec", elapsed)
 			_ = syscallKill(*run.Pid)
-			fresh, _ := o.opts.StageRunRepo.GetByID(ctx, run.ID)
+			fresh, _ := o.stageRuns.GetByID(ctx, run.ID)
 			if fresh != nil && fresh.Status == "running" {
 				if _, err := o.applyTransition(ctx, task, fresh, FailTransition{
 					Reason: fmt.Sprintf("stage timeout: ran %.0fs (limit %ds)", elapsed, timeoutSec),
@@ -631,7 +633,7 @@ func (o *PipelineOrchestrator) finalizeCompletedAsyncRuns(ctx context.Context, a
 			go o.updateTokenUsage(ctx, run.ID, cwd, *run.SessionID)
 		}
 
-		fresh, _ := o.opts.StageRunRepo.GetByID(ctx, run.ID)
+		fresh, _ := o.stageRuns.GetByID(ctx, run.ID)
 		if fresh == nil || fresh.Status != "running" {
 			continue
 		}
@@ -650,7 +652,7 @@ func (o *PipelineOrchestrator) finalizeCompletedAsyncRuns(ctx context.Context, a
 }
 
 func (o *PipelineOrchestrator) recoverRunningStageRuns(ctx context.Context) {
-	running, _ := o.opts.StageRunRepo.ListByStatus(ctx, "running")
+	running, _ := o.stageRuns.ListByStatus(ctx, "running")
 	for _, run := range running {
 		decision := DecideRecovery(run)
 		_ = o.opts.AuditRepo.RecordTaskAudit(ctx, run.TaskID, nil, "recovery_decision", "task:"+run.TaskID,
@@ -659,14 +661,9 @@ func (o *PipelineOrchestrator) recoverRunningStageRuns(ctx context.Context) {
 			continue
 		}
 		if decision.Kind == "resume" {
-			_, _ = o.opts.StageRunRepo.Update(ctx, run.ID, repo.UpdateStageRunInput{Status: strPtr("pending"), PIDClear: true})
+			_, _ = o.stageRuns.MarkPending(ctx, run.ID)
 		} else {
-			now := time.Now()
-			_, _ = o.opts.StageRunRepo.Update(ctx, run.ID, repo.UpdateStageRunInput{
-				Status:  strPtr("failed"),
-				EndedAt: &now,
-				Output:  map[string]any{"error": "orchestrator crashed before completion; no session to resume"},
-			})
+			_, _ = o.stageRuns.MarkFailed(ctx, run.ID, map[string]any{"error": "orchestrator crashed before completion; no session to resume"})
 		}
 	}
 }
@@ -779,7 +776,7 @@ func (o *PipelineOrchestrator) updateTokenUsage(ctx context.Context, stageRunID,
 		CacheReadTokens:     summary.CacheReadTokens,
 	}, summary.Model)
 	costCents := int(costUsd * 100)
-	_, _ = o.opts.StageRunRepo.Update(ctx, stageRunID, repo.UpdateStageRunInput{
+	_, _ = o.stageRuns.Update(ctx, stageRunID, repo.UpdateStageRunInput{
 		TokensUsed: &total,
 		CostCents:  &costCents,
 	})
@@ -839,7 +836,7 @@ func (o *PipelineOrchestrator) ClearStalePendingPermissions(ctx context.Context,
 	if err != nil || task == nil {
 		return
 	}
-	run, err := o.opts.StageRunRepo.GetLatestByTaskAndStage(ctx, taskID, task.CurrentStage)
+	run, err := o.stageRuns.GetLatestByTaskAndStage(ctx, taskID, task.CurrentStage)
 	if err != nil || run == nil {
 		return
 	}
@@ -892,7 +889,7 @@ func (o *PipelineOrchestrator) RequeueForUser(ctx context.Context, taskID, userP
 		return nil, nil
 	}
 
-	latest, _ := o.opts.StageRunRepo.GetLatestByTaskAndStage(ctx, taskID, task.CurrentStage)
+	latest, _ := o.stageRuns.GetLatestByTaskAndStage(ctx, taskID, task.CurrentStage)
 	// After reap, a formerly awaiting_user run is now failed. Accept failed or requeued.
 	if latest == nil || (latest.Status != "failed" && latest.Status != "requeued") {
 		return nil, nil
@@ -904,7 +901,7 @@ func (o *PipelineOrchestrator) RequeueForUser(ctx context.Context, taskID, userP
 	// in place to pending — leaving two pending runs on the same task+stage, the
 	// older of which never spawns and is never reaped (StartedAt stays nil).
 	if latest.Status == "requeued" {
-		if _, err := o.opts.StageRunRepo.Update(ctx, latest.ID, repo.UpdateStageRunInput{Status: strPtr("failed")}); err != nil {
+		if _, err := o.stageRuns.Update(ctx, latest.ID, repo.UpdateStageRunInput{Status: strPtr("failed")}); err != nil {
 			return nil, err
 		}
 	}
@@ -922,7 +919,7 @@ func (o *PipelineOrchestrator) reapAwaitingUserAgent(ctx context.Context, taskID
 	if err != nil || task == nil {
 		return
 	}
-	run, err := o.opts.StageRunRepo.GetLatestByTaskAndStage(ctx, taskID, task.CurrentStage)
+	run, err := o.stageRuns.GetLatestByTaskAndStage(ctx, taskID, task.CurrentStage)
 	if err != nil || run == nil || run.Status != "awaiting_user" {
 		return
 	}
@@ -949,7 +946,7 @@ func (o *PipelineOrchestrator) KillRunningStage(ctx context.Context, taskID stri
 	if err != nil {
 		return fmt.Errorf("KillRunningStage: task lookup: %w", err)
 	}
-	run, err := o.opts.StageRunRepo.GetLatestByTaskAndStage(ctx, taskID, task.CurrentStage)
+	run, err := o.stageRuns.GetLatestByTaskAndStage(ctx, taskID, task.CurrentStage)
 	if err != nil || run == nil {
 		return nil
 	}
