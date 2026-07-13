@@ -392,6 +392,11 @@ func tokenUsageForFile(path string) (fullScanUsage, error) {
 	inode := inodeOf(info)
 	size := info.Size()
 
+	// The read-offset/modify-scan/write-running sequence below releases the lock
+	// during the scan, so it is only safe against double-counting because callers
+	// guarantee one goroutine per inode per tick (the merger partitions scans by
+	// directory group and claims each session file exactly once). The map itself
+	// is fully mutex-guarded; only concurrent scans of the same inode would race.
 	tokenOffsetCacheMu.Lock()
 	entry, ok := tokenOffsetCache[inode]
 	tokenOffsetCacheMu.Unlock()
