@@ -32,7 +32,6 @@ func provideTaskHandler(client *ent.Client, db *sql.DB, orch *pipeline.PipelineO
 		PermRepo:          repo.NewPermissionRepo(client),
 		PresetRepo:        repo.NewPermissionPresetRepo(client),
 		AuditRepo:         repo.NewAuditEventRepo(client),
-		AuditEventRepo:    repo.NewAuditEventRepo(client),
 		CfgRepo:           repo.NewPipelineConfigRepo(client),
 		DepRepo:           repo.NewDependencyRepo(client),
 		ProjectRepo:       repo.NewProjectRepo(client),

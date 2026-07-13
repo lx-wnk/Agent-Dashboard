@@ -255,7 +255,7 @@ func (h *Handler) bulkGrantPermissions(w http.ResponseWriter, r *http.Request) e
 		if granted == nil {
 			granted = []*ent.TaskPermission{}
 		}
-		if h.auditEventRepo != nil {
+		if h.auditRepo != nil {
 			var userID *string
 			if payload, ok := auth.PayloadFromContext(r.Context()); ok && payload.Sub != "" {
 				s := payload.Sub
@@ -265,7 +265,7 @@ func (h *Handler) bulkGrantPermissions(w http.ResponseWriter, r *http.Request) e
 			for _, p := range granted {
 				tools = append(tools, p.Tool)
 			}
-			if err = h.auditEventRepo.RecordAudit(r.Context(), userID,
+			if err = h.auditRepo.RecordAudit(r.Context(), userID,
 				repo.AuditActionPermissionGrant,
 				taskID,
 				map[string]any{"tools": tools},

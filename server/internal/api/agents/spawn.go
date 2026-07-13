@@ -972,9 +972,16 @@ func sha256hex(s string) string {
 //     exclusion nuance applies here — unlike the pipeline spawner.
 func resolveSpawnEnv(s *ent.Spawner) []string {
 	merged := map[string]string{}
+	dashboard := map[string]string{}
 	for _, kv := range os.Environ() {
-		if i := strings.IndexByte(kv, '='); i > 0 {
-			merged[kv[:i]] = kv[i+1:]
+		i := strings.IndexByte(kv, '=')
+		if i <= 0 {
+			continue
+		}
+		k, v := kv[:i], kv[i+1:]
+		merged[k] = v
+		if strings.HasPrefix(k, "DASHBOARD_") || strings.HasPrefix(k, "CLAUDE_") {
+			dashboard[k] = v
 		}
 	}
 	if s != nil {
@@ -982,15 +989,9 @@ func resolveSpawnEnv(s *ent.Spawner) []string {
 			merged[k] = v
 		}
 	}
-	for _, kv := range os.Environ() {
-		i := strings.IndexByte(kv, '=')
-		if i <= 0 {
-			continue
-		}
-		k := kv[:i]
-		if strings.HasPrefix(k, "DASHBOARD_") || strings.HasPrefix(k, "CLAUDE_") {
-			merged[k] = kv[i+1:]
-		}
+	// Dashboard-controlled vars always win over spawner.Env overrides.
+	for k, v := range dashboard {
+		merged[k] = v
 	}
 	for denied := range envsec.DeniedSecretEnvKeys {
 		delete(merged, denied)
