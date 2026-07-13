@@ -27,9 +27,9 @@ func (o *PipelineOrchestrator) runProgressTaskLocked(ctx context.Context, taskID
 	}
 
 	// Global runner-slot cap — agent-driven stages only.
-	// hasFreeRunnerSlot issues its own DB query because it is also called
+	// scheduler.HasFreeSlot issues its own DB query because it is also called
 	// from route handlers, not just from the tick loop.
-	if handler.RequiresAgent() && !o.hasFreeRunnerSlot(ctx, task.ID) {
+	if handler.RequiresAgent() && !o.scheduler.HasFreeSlot(ctx, task.ID) {
 		return nil, nil
 	}
 

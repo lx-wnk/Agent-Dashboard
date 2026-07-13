@@ -3,7 +3,7 @@
 // File layout (all in package pipeline):
 //
 //	orchestrator.go     — PipelineOrchestrator struct, Run/tick entry, helpers
-//	runner_picker.go    — pickNextTasksForFreeSlots, sort helpers (F-PERF-007, F-PERF-010)
+//	scheduler.go        — capacity + candidate selection, sort helpers (F-PERF-007, F-PERF-010)
 //	sweeps.go           — sweepAwaitingUserRuns, sweepOrphanRuns
 //	progress_guards.go  — runProgressTaskLocked (Re-entry Guard + Lingering-Pending Gate)
 //	transitions.go      — applyTransition, applyTransitionWrites, decideCompletedTransition
@@ -28,8 +28,6 @@ import (
 
 const (
 	defaultPollInterval        = 2 * time.Second
-	maxParallelKey             = "maxParallelOrchestrators"
-	defaultMaxParallel         = 3
 	stageTimeoutKey            = "stageTimeoutSeconds"
 	defaultStageTimeoutSeconds = db.DefaultStageTimeoutSeconds
 	awaitingUserTimeoutKey     = "awaitingUserTimeoutSeconds"
@@ -66,6 +64,7 @@ type PipelineOrchestrator struct {
 	configCache      *configCache
 	modelResolver    *modelResolver
 	stageRuns        *stageRunService
+	scheduler        *scheduler
 
 	httpResultCh chan httpSpawnResult // buffered channel for goroutine pool results
 	httpPoolSem  chan struct{}        // semaphore: limits concurrent HTTP spawns
@@ -119,6 +118,7 @@ func NewOrchestrator(opts OrchestratorOptions) (*PipelineOrchestrator, error) {
 		configCache:      cc,
 		modelResolver:    newModelResolver(cc, opts.ConfigRepo),
 		stageRuns:        newStageRunService(opts.StageRunRepo),
+		scheduler:        newScheduler(cc, opts.TaskRepo, opts.StageRunRepo, opts.DepRepo),
 		httpPoolSem:      make(chan struct{}, poolSize),
 		httpResultCh:     make(chan httpSpawnResult, poolSize*2),
 	}
@@ -274,22 +274,14 @@ func (o *PipelineOrchestrator) ProgressTask(ctx context.Context, taskID string, 
 	return o.runProgressTaskLocked(ctx, taskID, opts)
 }
 
-// hasFreeRunnerSlot checks whether a runner slot is available for the given
-// task. Called from the route/MCP-triggered ProgressTask path where no
-// prefetched running set is available — issues one ListByStatus("running") query.
-// F-PERF-007: the tick()-driven path uses pickNextTasksForFreeSlots which
-// derives busyTaskIDs from the already-loaded allRunning slice, bypassing this
-// function entirely for the normal picker flow.
-func (o *PipelineOrchestrator) hasFreeRunnerSlot(ctx context.Context, exceptTaskID string) bool {
-	max := o.configCache.Number(ctx, maxParallelKey, defaultMaxParallel)
-	running, _ := o.stageRuns.ListByStatus(ctx, "running")
-	busyTaskIDs := make(map[string]bool)
-	for _, r := range running {
-		if r.TaskID != exceptTaskID {
-			busyTaskIDs[r.TaskID] = true
+// pickNextTasksForFreeSlots selects tasks for available runner slots via the
+// scheduler and calls ProgressTask for each.
+func (o *PipelineOrchestrator) pickNextTasksForFreeSlots(ctx context.Context, allRunning []*ent.StageRun) {
+	for _, task := range o.scheduler.Pick(ctx, allRunning) {
+		if _, err := o.ProgressTask(ctx, task.ID, nil); err != nil {
+			slog.Error("orchestrator: pickup failed", "taskID", task.ID, "err", err)
 		}
 	}
-	return len(busyTaskIDs) < max
 }
 
 func (o *PipelineOrchestrator) ensureStageRun(ctx context.Context, task *ent.Task, prefetched *ent.StageRun) (*ent.StageRun, error) {
