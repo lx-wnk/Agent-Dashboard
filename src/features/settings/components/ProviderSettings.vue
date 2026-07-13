@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useProviderSettings } from '../composables/useProviderSettings'
-import { toast } from '../composables/useToast'
-import { errorMessage } from '../utils/errorMessage'
+import { toast } from '@/composables/useToast'
+import { useProviderSettings } from '@/features/settings/composables/useProviderSettings'
+import { errorMessage } from '@/utils/errorMessage'
 
 const { providers, loading, toggle } = useProviderSettings()
 const saving = ref<string | null>(null)

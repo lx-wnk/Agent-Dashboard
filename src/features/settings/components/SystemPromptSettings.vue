@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { toast } from '../composables/useToast'
-import { errorMessage } from '../utils/errorMessage'
-import { STAGE_LABELS } from '../utils/stageLabels'
-import AppButton from './ui/AppButton.vue'
-import AppModal from './ui/AppModal.vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppModal from '@/components/ui/AppModal.vue'
+import { toast } from '@/composables/useToast'
+import { errorMessage } from '@/utils/errorMessage'
+import { STAGE_LABELS } from '@/utils/stageLabels'
 
 interface SystemPrompt {
   id: string

@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import type { SettingView } from '../composables/useSettings'
+import type { SettingView } from '@/features/settings/composables/useSettings'
 import { computed, onMounted, ref } from 'vue'
-import { useSettings } from '../composables/useSettings'
-import { toast } from '../composables/useToast'
-import { errorMessage } from '../utils/errorMessage'
+import { toast } from '@/composables/useToast'
+import { useSettings } from '@/features/settings/composables/useSettings'
+import { errorMessage } from '@/utils/errorMessage'
 
 const { items, loading, refetch, update } = useSettings()
 const saving = ref<string | null>(null)

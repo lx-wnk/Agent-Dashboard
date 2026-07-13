@@ -2,7 +2,7 @@ import { mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
 
-let useNotificationConfig: typeof import('../useNotificationConfig').useNotificationConfig
+let useNotificationConfig: typeof import('@/features/settings/composables/useNotificationConfig').useNotificationConfig
 
 function withSetup<T>(composable: () => T) {
   let result!: T
@@ -33,7 +33,7 @@ beforeEach(async () => {
     return Promise.resolve({ ok: true, json: () => Promise.resolve({}), status: 200 })
   }))
   vi.resetModules()
-  const mod = await import('../useNotificationConfig')
+  const mod = await import('@/features/settings/composables/useNotificationConfig')
   useNotificationConfig = mod.useNotificationConfig
 })
 
@@ -75,7 +75,7 @@ describe('useNotificationConfig', () => {
       json: () => Promise.resolve({}),
     } as Response)
     vi.resetModules()
-    const mod = await import('../useNotificationConfig')
+    const mod = await import('@/features/settings/composables/useNotificationConfig')
     useNotificationConfig = mod.useNotificationConfig
 
     const { result } = withSetup(() => useNotificationConfig())

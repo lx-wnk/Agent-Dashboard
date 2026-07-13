@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import type { PipelineConfig } from '@/features/pipeline/composables/usePipelineConfig'
 import { computed, onMounted, ref, watch } from 'vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import { useSpawners } from '@/composables/useSpawners'
+import { toast } from '@/composables/useToast'
 import { usePipelineConfig } from '@/features/pipeline/composables/usePipelineConfig'
-import { useSpawners } from '../composables/useSpawners'
-import { toast } from '../composables/useToast'
-import { AVAILABLE_MODELS } from '../utils/models'
-import { STAGE_LABELS } from '../utils/stageLabels'
-import AppButton from './ui/AppButton.vue'
+import { AVAILABLE_MODELS } from '@/utils/models'
+import { STAGE_LABELS } from '@/utils/stageLabels'
 
 const { config, loading, error, fetchConfig, saveConfig } = usePipelineConfig()
 const { spawners } = useSpawners()

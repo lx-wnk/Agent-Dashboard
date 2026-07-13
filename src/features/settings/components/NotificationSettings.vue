@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import type { NotifPref } from '../composables/useNotificationConfig'
+import type { NotifPref } from '@/features/settings/composables/useNotificationConfig'
 import { onBeforeUnmount, ref } from 'vue'
-import { useNotificationConfig } from '../composables/useNotificationConfig'
-import { toast } from '../composables/useToast'
-import { errorMessage } from '../utils/errorMessage'
-import AppButton from './ui/AppButton.vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import { toast } from '@/composables/useToast'
+import { useNotificationConfig } from '@/features/settings/composables/useNotificationConfig'
+import { errorMessage } from '@/utils/errorMessage'
 
 const KNOWN_EVENTS: { type: string, label: string, description: string }[] = [
   { type: 'on_hold', label: 'On Hold', description: 'Task paused — requires user input' },
