@@ -21,13 +21,19 @@ const props = withDefaults(defineProps<{
   spawner?: Spawner | null
   workingAgent?: Agent | null
   sortable?: boolean
+  isFirst?: boolean
+  isLast?: boolean
 }>(), {
   sortable: true,
+  isFirst: false,
+  isLast: false,
 })
 const emit = defineEmits<{
   select: [task: PipelineTask]
   openChat: [task: PipelineTask]
   navigateAgent: [sessionId: string]
+  moveUp: [task: PipelineTask]
+  moveDown: [task: PipelineTask]
 }>()
 
 const { getIdentity } = useAgentIdentity()
@@ -95,6 +101,24 @@ const activeChildOutputExpanded = ref(false)
           aria-hidden="true"
           @click.stop
         >⠿</span>
+        <span v-if="props.sortable" class="relative z-10 flex items-center gap-0.5 -ml-1">
+          <button
+            type="button"
+            class="p-0.5 text-[9px] leading-none text-fg-mute hover:text-fg-soft disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-fg-mute focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-accent rounded"
+            :aria-label="`Move task ${task.title} up`"
+            :disabled="isFirst"
+            data-testid="task-move-up"
+            @click.stop="emit('moveUp', task)"
+          >▲</button>
+          <button
+            type="button"
+            class="p-0.5 text-[9px] leading-none text-fg-mute hover:text-fg-soft disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-fg-mute focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-accent rounded"
+            :aria-label="`Move task ${task.title} down`"
+            :disabled="isLast"
+            data-testid="task-move-down"
+            @click.stop="emit('moveDown', task)"
+          >▼</button>
+        </span>
         <span class="font-mono text-[11px] text-info-text font-semibold overflow-hidden text-ellipsis whitespace-nowrap">{{ task.slug }}</span>
         <button
           type="button"

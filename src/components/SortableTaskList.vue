@@ -38,6 +38,13 @@ function projectFor(task: PipelineTask): Project | null {
   return task.projectId ? props.projectById.get(task.projectId) ?? null : null
 }
 
+function resolveAdjacentIds(rows: PipelineTask[], index: number): { beforeId: string | null, afterId: string | null } {
+  return {
+    beforeId: index > 0 ? rows[index - 1].id : null,
+    afterId: index < rows.length - 1 ? rows[index + 1].id : null,
+  }
+}
+
 useSortable(listEl, list, {
   handle: '.task-drag-handle',
   animation: 150,
@@ -54,25 +61,43 @@ useSortable(listEl, list, {
     const moved = list.value[newIndex]
     if (!moved)
       return
-    const beforeId = newIndex > 0 ? list.value[newIndex - 1].id : null
-    const afterId = newIndex < list.value.length - 1 ? list.value[newIndex + 1].id : null
+    const { beforeId, afterId } = resolveAdjacentIds(list.value, newIndex)
     void reorderTask(moved.id, beforeId, afterId)
   },
 })
+
+function moveTask(taskId: string, direction: 'up' | 'down'): void {
+  const oldIndex = list.value.findIndex(t => t.id === taskId)
+  if (oldIndex === -1)
+    return
+  const newIndex = direction === 'up' ? oldIndex - 1 : oldIndex + 1
+  if (newIndex < 0 || newIndex >= list.value.length)
+    return
+  const reordered = [...list.value]
+  const [moved] = reordered.splice(oldIndex, 1)
+  reordered.splice(newIndex, 0, moved)
+  list.value = reordered
+  const { beforeId, afterId } = resolveAdjacentIds(reordered, newIndex)
+  void reorderTask(taskId, beforeId, afterId)
+}
 </script>
 
 <template>
   <div ref="listEl" class="flex flex-col gap-2">
     <TaskCard
-      v-for="task in list"
+      v-for="(task, index) in list"
       :key="task.id"
       :task="task"
       :project="projectFor(task)"
       :working-agent="workingAgentByTask?.get(task.id) ?? null"
       :sortable="props.sortable"
+      :is-first="index === 0"
+      :is-last="index === list.length - 1"
       @select="(t) => emit('select', t)"
       @open-chat="(t) => emit('openChat', t)"
       @navigate-agent="(sid) => emit('navigateAgent', sid)"
+      @move-up="(t) => moveTask(t.id, 'up')"
+      @move-down="(t) => moveTask(t.id, 'down')"
     />
   </div>
 </template>
