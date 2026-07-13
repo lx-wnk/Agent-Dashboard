@@ -1,7 +1,8 @@
 import type { PipelineTask, Project } from '../types'
-import { shallowMount } from '@vue/test-utils'
+import { mount, shallowMount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
+import { reorderTask } from '../composables/useTasks'
 import SortableTaskList from './SortableTaskList.vue'
 import TaskCard from './TaskCard.vue'
 
@@ -160,6 +161,62 @@ describe('sortableTaskList — sortable prop', () => {
     })
     const card = wrapper.findAllComponents(TaskCard)[0]
     expect(card.props('sortable')).toBe(false)
+    wrapper.unmount()
+  })
+})
+
+describe('sortableTaskList — keyboard reorder (A11Y-2)', () => {
+  it('marks only the first and last TaskCard as boundary rows', () => {
+    const wrapper = shallowMount(SortableTaskList, {
+      props: { tasks: [makeTask('a'), makeTask('b'), makeTask('c')], projectById: emptyProjectById },
+    })
+    const cards = wrapper.findAllComponents(TaskCard)
+    expect(cards[0].props('isFirst')).toBe(true)
+    expect(cards[0].props('isLast')).toBe(false)
+    expect(cards[1].props('isFirst')).toBe(false)
+    expect(cards[1].props('isLast')).toBe(false)
+    expect(cards[2].props('isFirst')).toBe(false)
+    expect(cards[2].props('isLast')).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('clicking "Move down" on the middle TaskCard reorders it after its next neighbor', async () => {
+    const wrapper = mount(SortableTaskList, {
+      props: { tasks: [makeTask('a'), makeTask('b'), makeTask('c')], projectById: emptyProjectById },
+    })
+
+    await wrapper.findAll('[data-testid="task-move-down"]')[1].trigger('click')
+
+    expect(reorderTask).toHaveBeenCalledWith('b', 'c', null)
+    const cards = wrapper.findAllComponents(TaskCard)
+    expect(cards.map(c => c.props('task').id)).toEqual(['a', 'c', 'b'])
+    wrapper.unmount()
+  })
+
+  it('clicking "Move up" on the last TaskCard reorders it before its previous neighbor', async () => {
+    const wrapper = mount(SortableTaskList, {
+      props: { tasks: [makeTask('a'), makeTask('b'), makeTask('c')], projectById: emptyProjectById },
+    })
+
+    await wrapper.findAll('[data-testid="task-move-up"]')[2].trigger('click')
+
+    expect(reorderTask).toHaveBeenCalledWith('c', 'a', 'b')
+    const cards = wrapper.findAllComponents(TaskCard)
+    expect(cards.map(c => c.props('task').id)).toEqual(['a', 'c', 'b'])
+    wrapper.unmount()
+  })
+
+  it('the first row\'s "Move up" button is disabled and the last row\'s "Move down" is disabled', () => {
+    const wrapper = mount(SortableTaskList, {
+      props: { tasks: [makeTask('a'), makeTask('b')], projectById: emptyProjectById },
+    })
+
+    const moveUpButtons = wrapper.findAll('[data-testid="task-move-up"]')
+    const moveDownButtons = wrapper.findAll('[data-testid="task-move-down"]')
+    expect(moveUpButtons[0].attributes('disabled')).toBeDefined()
+    expect(moveDownButtons[1].attributes('disabled')).toBeDefined()
+    expect(moveUpButtons[1].attributes('disabled')).toBeUndefined()
+    expect(moveDownButtons[0].attributes('disabled')).toBeUndefined()
     wrapper.unmount()
   })
 })
