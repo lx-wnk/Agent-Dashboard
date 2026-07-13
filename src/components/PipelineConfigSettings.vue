@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import type { PipelineConfig } from '../composables/usePipelineConfig'
+import type { PipelineConfig } from '@/features/pipeline/composables/usePipelineConfig'
 import { computed, onMounted, ref, watch } from 'vue'
-import { usePipelineConfig } from '../composables/usePipelineConfig'
+import { usePipelineConfig } from '@/features/pipeline/composables/usePipelineConfig'
 import { useSpawners } from '../composables/useSpawners'
 import { toast } from '../composables/useToast'
 import { AVAILABLE_MODELS } from '../utils/models'

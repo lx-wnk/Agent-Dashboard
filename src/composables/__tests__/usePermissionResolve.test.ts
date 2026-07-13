@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockBulkResolve = vi.fn()
 
-vi.mock('../useTasks', () => ({
+vi.mock('@/features/pipeline/composables/useTasks', () => ({
   bulkResolvePermissionRequests: mockBulkResolve,
 }))
 
