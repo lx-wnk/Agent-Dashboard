@@ -15,6 +15,13 @@ linters:
           deny:
             - pkg: github.com/lx-wnk/agent-dashboard/server/internal/pipeline
               desc: db/rawrepo is a low-level persistence package and must not import the pipeline orchestration core (layer-direction inversion); use internal/proc for process-liveness checks (ADR-0009)
+        no-pluginmgmt-from-plugin:
+          list-mode: lax
+          files:
+            - '**/internal/plugin/**'
+          deny:
+            - pkg: github.com/lx-wnk/agent-dashboard/server/internal/pluginmgmt
+              desc: plugin is the runtime (registry, lifecycle, settings); it must not import the pluginmgmt control plane (one-way edge, ARCH-P2-2)
     revive:
       rules:
         - name: exported
