@@ -13,7 +13,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 )
 
-// fakeStageRuns embeds repo.StageRunRepo so only GetBySessionID needs an
+// fakeStageRuns embeds repo.StageRunRepo so only ListBySessionIDs needs an
 // implementation; any other method call would panic (none are reached here).
 type fakeStageRuns struct {
 	repo.StageRunRepo
@@ -21,15 +21,17 @@ type fakeStageRuns struct {
 	err       error
 }
 
-func (f fakeStageRuns) GetBySessionID(_ context.Context, sessionID string) (*ent.StageRun, error) {
+func (f fakeStageRuns) ListBySessionIDs(_ context.Context, sessionIDs []string) ([]*ent.StageRun, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
-	sr, ok := f.bySession[sessionID]
-	if !ok {
-		return nil, errors.New("stagerun.GetBySessionID: not found")
+	runs := make([]*ent.StageRun, 0, len(sessionIDs))
+	for _, sid := range sessionIDs {
+		if sr, ok := f.bySession[sid]; ok {
+			runs = append(runs, sr)
+		}
 	}
-	return sr, nil
+	return runs, nil
 }
 
 type fakeTasks struct {
@@ -38,18 +40,20 @@ type fakeTasks struct {
 	err  error
 }
 
-func (f fakeTasks) GetByID(_ context.Context, id string) (*ent.Task, error) {
+func (f fakeTasks) ListByIDs(_ context.Context, ids []string) ([]*ent.Task, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
-	t, ok := f.byID[id]
-	if !ok {
-		return nil, errors.New("task.GetByID: not found")
+	tasks := make([]*ent.Task, 0, len(ids))
+	for _, id := range ids {
+		if t, ok := f.byID[id]; ok {
+			tasks = append(tasks, t)
+		}
 	}
-	return t, nil
+	return tasks, nil
 }
 
-// fakePermissions embeds repo.PermissionRepo so only ListPendingForStageRun
+// fakePermissions embeds repo.PermissionRepo so only ListPendingForStageRuns
 // needs an implementation.
 type fakePermissions struct {
 	repo.PermissionRepo
@@ -57,19 +61,25 @@ type fakePermissions struct {
 	err        error
 }
 
-func (f fakePermissions) ListPendingForStageRun(_ context.Context, stageRunID string) ([]*ent.PermissionRequest, error) {
+func (f fakePermissions) ListPendingForStageRuns(_ context.Context, stageRunIDs []string) ([]*ent.PermissionRequest, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
-	return f.byStageRun[stageRunID], nil
+	reqs := make([]*ent.PermissionRequest, 0, len(stageRunIDs))
+	for _, id := range stageRunIDs {
+		reqs = append(reqs, f.byStageRun[id]...)
+	}
+	return reqs, nil
 }
+
+func sessionPtr(s string) *string { return &s }
 
 func TestPipelineTaskEnricher_SetsBothFieldsOnMatch(t *testing.T) {
 	stageRuns := fakeStageRuns{bySession: map[string]*ent.StageRun{
-		"sess-1": {TaskID: "task-1"},
+		"sess-1": {TaskID: "task-1", SessionID: sessionPtr("sess-1")},
 	}}
 	tasks := fakeTasks{byID: map[string]*ent.Task{
-		"task-1": {Title: "Implement enricher"},
+		"task-1": {ID: "task-1", Title: "Implement enricher"},
 	}}
 
 	enrich := NewPipelineTaskEnricher(stageRuns, tasks, nil)
@@ -108,7 +118,7 @@ func TestPipelineTaskEnricher_StageRunErrorLeavesEmptyNoPanic(t *testing.T) {
 
 func TestPipelineTaskEnricher_TaskErrorKeepsIDDropsTitle(t *testing.T) {
 	stageRuns := fakeStageRuns{bySession: map[string]*ent.StageRun{
-		"sess-1": {TaskID: "task-1"},
+		"sess-1": {TaskID: "task-1", SessionID: sessionPtr("sess-1")},
 	}}
 	tasks := fakeTasks{err: errors.New("db down")}
 
@@ -132,15 +142,15 @@ func TestPipelineTaskEnricher_PendingPermissions_TwoRequests(t *testing.T) {
 	reason := "need read"
 	ts := time.Date(2025, 1, 15, 10, 0, 0, 0, time.UTC)
 	stageRuns := fakeStageRuns{bySession: map[string]*ent.StageRun{
-		"sess-1": {ID: "sr-1", TaskID: "task-1"},
+		"sess-1": {ID: "sr-1", TaskID: "task-1", SessionID: sessionPtr("sess-1")},
 	}}
 	tasks := fakeTasks{byID: map[string]*ent.Task{
-		"task-1": {Title: "Perm task"},
+		"task-1": {ID: "task-1", Title: "Perm task"},
 	}}
 	perms := fakePermissions{byStageRun: map[string][]*ent.PermissionRequest{
 		"sr-1": {
-			{ID: "req-1", Tool: "Bash", RequestedAt: ts},
-			{ID: "req-2", Tool: "Read", Pattern: &pattern, Reason: &reason, RequestedAt: ts},
+			{ID: "req-1", StageRunID: "sr-1", Tool: "Bash", RequestedAt: ts},
+			{ID: "req-2", StageRunID: "sr-1", Tool: "Read", Pattern: &pattern, Reason: &reason, RequestedAt: ts},
 		},
 	}}
 
@@ -170,20 +180,20 @@ func TestPipelineTaskEnricher_PendingPermissions_NoStageRun(t *testing.T) {
 }
 
 func TestPipelineTaskEnricher_PendingPermissions_ResolvedNotIncluded(t *testing.T) {
-	// ListPendingForStageRun only returns pending (outcome IS NULL) — resolved
+	// ListPendingForStageRuns only returns pending (outcome IS NULL) — resolved
 	// ones are excluded by the repo. Verify the enricher passes through exactly
 	// what the repo returns: no resolved request in the result.
 	ts := time.Now().UTC()
 	stageRuns := fakeStageRuns{bySession: map[string]*ent.StageRun{
-		"sess-1": {ID: "sr-1", TaskID: "task-1"},
+		"sess-1": {ID: "sr-1", TaskID: "task-1", SessionID: sessionPtr("sess-1")},
 	}}
 	tasks := fakeTasks{byID: map[string]*ent.Task{
-		"task-1": {Title: "T"},
+		"task-1": {ID: "task-1", Title: "T"},
 	}}
 	// Fake repo returns only the one still-pending request (resolved ones are
 	// filtered at the repo layer, not here).
 	perms := fakePermissions{byStageRun: map[string][]*ent.PermissionRequest{
-		"sr-1": {{ID: "req-pending", Tool: "Write", RequestedAt: ts}},
+		"sr-1": {{ID: "req-pending", StageRunID: "sr-1", Tool: "Write", RequestedAt: ts}},
 	}}
 
 	enrich := NewPipelineTaskEnricher(stageRuns, tasks, perms)
@@ -196,10 +206,10 @@ func TestPipelineTaskEnricher_PendingPermissions_ResolvedNotIncluded(t *testing.
 
 func TestPipelineTaskEnricher_PendingPermissions_QueryErrorLeavesEmpty(t *testing.T) {
 	stageRuns := fakeStageRuns{bySession: map[string]*ent.StageRun{
-		"sess-1": {ID: "sr-1", TaskID: "task-1"},
+		"sess-1": {ID: "sr-1", TaskID: "task-1", SessionID: sessionPtr("sess-1")},
 	}}
 	tasks := fakeTasks{byID: map[string]*ent.Task{
-		"task-1": {Title: "T"},
+		"task-1": {ID: "task-1", Title: "T"},
 	}}
 	perms := fakePermissions{err: errors.New("db down")}
 
@@ -210,4 +220,45 @@ func TestPipelineTaskEnricher_PendingPermissions_QueryErrorLeavesEmpty(t *testin
 	// Task fields still populated; permissions silently empty.
 	require.Equal(t, "task-1", agents[0].PipelineTaskID)
 	require.Empty(t, agents[0].PendingPermissions)
+}
+
+// TestPipelineTaskEnricher_MultiAgentBatchMatchesPerAgentResult verifies the
+// batched lookup produces the same per-agent annotations that three
+// independent per-agent lookups would have produced pre-PERF-DB2, across a
+// mix of a fully-resolved agent, a stage-run-only agent, and an ad-hoc agent
+// with no stage_run at all.
+func TestPipelineTaskEnricher_MultiAgentBatchMatchesPerAgentResult(t *testing.T) {
+	ts := time.Date(2025, 6, 1, 12, 0, 0, 0, time.UTC)
+	stageRuns := fakeStageRuns{bySession: map[string]*ent.StageRun{
+		"sess-full": {ID: "sr-full", TaskID: "task-full", SessionID: sessionPtr("sess-full")},
+		"sess-bare": {ID: "sr-bare", TaskID: "task-bare", SessionID: sessionPtr("sess-bare")},
+	}}
+	tasks := fakeTasks{byID: map[string]*ent.Task{
+		"task-full": {ID: "task-full", Title: "Full Task"},
+		"task-bare": {ID: "task-bare", Title: "Bare Task"},
+	}}
+	perms := fakePermissions{byStageRun: map[string][]*ent.PermissionRequest{
+		"sr-full": {{ID: "req-1", StageRunID: "sr-full", Tool: "Bash", RequestedAt: ts}},
+	}}
+
+	enrich := NewPipelineTaskEnricher(stageRuns, tasks, perms)
+	agents := []sdk.Agent{
+		{SessionID: "sess-full"},
+		{SessionID: "sess-bare"},
+		{SessionID: "sess-adhoc"},
+	}
+	enrich(context.Background(), agents)
+
+	require.Equal(t, "task-full", agents[0].PipelineTaskID)
+	require.Equal(t, "Full Task", agents[0].PipelineTaskTitle)
+	require.Len(t, agents[0].PendingPermissions, 1)
+	require.Equal(t, "req-1", agents[0].PendingPermissions[0].ID)
+
+	require.Equal(t, "task-bare", agents[1].PipelineTaskID)
+	require.Equal(t, "Bare Task", agents[1].PipelineTaskTitle)
+	require.Empty(t, agents[1].PendingPermissions)
+
+	require.Empty(t, agents[2].PipelineTaskID)
+	require.Empty(t, agents[2].PipelineTaskTitle)
+	require.Empty(t, agents[2].PendingPermissions)
 }

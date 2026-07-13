@@ -15,6 +15,11 @@ type StageRunRepo interface {
 	Create(ctx context.Context, input CreateStageRunInput) (*ent.StageRun, error)
 	GetByID(ctx context.Context, id string) (*ent.StageRun, error)
 	GetBySessionID(ctx context.Context, sessionID string) (*ent.StageRun, error)
+	// ListBySessionIDs returns all stage_runs whose session_id matches one of
+	// the given IDs in a single query. Used by the broadcast enricher to
+	// resolve stage runs for a whole tick's worth of agents instead of one
+	// GetBySessionID call per agent per tick.
+	ListBySessionIDs(ctx context.Context, sessionIDs []string) ([]*ent.StageRun, error)
 	GetLatestForTask(ctx context.Context, taskID string) (*ent.StageRun, error)
 	GetLatestByTaskAndStage(ctx context.Context, taskID, stage string) (*ent.StageRun, error)
 	GetByTaskStageIteration(ctx context.Context, taskID, stage string, iteration int) (*ent.StageRun, error)
@@ -109,6 +114,19 @@ func (r *entStageRunRepo) GetBySessionID(ctx context.Context, sessionID string) 
 		return nil, fmt.Errorf("stagerun.GetBySessionID: %w", err)
 	}
 	return sr, nil
+}
+
+func (r *entStageRunRepo) ListBySessionIDs(ctx context.Context, sessionIDs []string) ([]*ent.StageRun, error) {
+	if len(sessionIDs) == 0 {
+		return nil, nil
+	}
+	runs, err := r.client.StageRun.Query().
+		Where(stagerun.SessionIDIn(sessionIDs...)).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("stagerun.ListBySessionIDs: %w", err)
+	}
+	return runs, nil
 }
 
 func (r *entStageRunRepo) GetLatestForTask(ctx context.Context, taskID string) (*ent.StageRun, error) {

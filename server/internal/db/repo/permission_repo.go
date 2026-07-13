@@ -21,6 +21,11 @@ type PermissionRepo interface {
 	CreatePermissionRequest(ctx context.Context, input CreatePermissionRequestInput) (*ent.PermissionRequest, error)
 	GetPermissionRequest(ctx context.Context, id string) (*ent.PermissionRequest, error)
 	ListPendingForStageRun(ctx context.Context, stageRunID string) ([]*ent.PermissionRequest, error)
+	// ListPendingForStageRuns returns pending (outcome IS NULL) permission
+	// requests for all given stage run IDs in a single query. Used by the
+	// broadcast enricher to batch-resolve pending permissions for a whole
+	// tick's worth of agents instead of one query per agent per tick.
+	ListPendingForStageRuns(ctx context.Context, stageRunIDs []string) ([]*ent.PermissionRequest, error)
 	ListPendingForTask(ctx context.Context, taskID string, stageRunIDs []string) ([]*ent.PermissionRequest, error)
 	ResolvePermissionRequest(ctx context.Context, id, outcome string) error
 	CountForStageRun(ctx context.Context, stageRunID string) (int, error)
@@ -209,6 +214,10 @@ func (r *entPermissionRepo) ResolvePermissionRequest(ctx context.Context, id, ou
 }
 
 func (r *entPermissionRepo) ListPendingForTask(ctx context.Context, _ string, stageRunIDs []string) ([]*ent.PermissionRequest, error) {
+	return r.ListPendingForStageRuns(ctx, stageRunIDs)
+}
+
+func (r *entPermissionRepo) ListPendingForStageRuns(ctx context.Context, stageRunIDs []string) ([]*ent.PermissionRequest, error) {
 	if len(stageRunIDs) == 0 {
 		return nil, nil
 	}
@@ -216,7 +225,7 @@ func (r *entPermissionRepo) ListPendingForTask(ctx context.Context, _ string, st
 		Where(permissionrequest.StageRunIDIn(stageRunIDs...), permissionrequest.OutcomeIsNil()).
 		All(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("permission.ListPendingForTask: %w", err)
+		return nil, fmt.Errorf("permission.ListPendingForStageRuns: %w", err)
 	}
 	return reqs, nil
 }
