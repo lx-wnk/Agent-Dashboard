@@ -244,6 +244,53 @@ func TestStageRunRepo_Update_RetryFields(t *testing.T) {
 	require.Nil(t, reloaded2.NextRetryAt)
 }
 
+func TestStageRunRepo_ListBySessionIDs(t *testing.T) {
+	client := openDB(t)
+	ctx := context.Background()
+	tr := repo.NewTaskRepo(client)
+	sr := repo.NewStageRunRepo(client)
+
+	taskID := createTask(t, tr, "sr-batch-session")
+
+	run1, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "concept", Iteration: 1})
+	require.NoError(t, err)
+	run2, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "implement", Iteration: 1})
+	require.NoError(t, err)
+	// run3 is left without a session_id — it must never surface in a session lookup.
+	_, err = sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "review", Iteration: 1})
+	require.NoError(t, err)
+
+	sess1 := "sess-batch-1"
+	sess2 := "sess-batch-2"
+	_, err = sr.Update(ctx, run1.ID, repo.UpdateStageRunInput{SessionID: &sess1})
+	require.NoError(t, err)
+	_, err = sr.Update(ctx, run2.ID, repo.UpdateStageRunInput{SessionID: &sess2})
+	require.NoError(t, err)
+
+	tests := []struct {
+		name       string
+		sessionIDs []string
+		wantIDs    []string
+	}{
+		{name: "empty input returns nil", sessionIDs: nil, wantIDs: nil},
+		{name: "no match returns empty", sessionIDs: []string{"sess-unknown"}, wantIDs: nil},
+		{name: "single match", sessionIDs: []string{sess1}, wantIDs: []string{run1.ID}},
+		{name: "multi match ignores unknown", sessionIDs: []string{sess1, sess2, "sess-unknown"}, wantIDs: []string{run1.ID, run2.ID}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := sr.ListBySessionIDs(ctx, tt.sessionIDs)
+			require.NoError(t, err)
+			gotIDs := make([]string, 0, len(got))
+			for _, r := range got {
+				gotIDs = append(gotIDs, r.ID)
+			}
+			require.ElementsMatch(t, tt.wantIDs, gotIDs)
+		})
+	}
+}
+
 func TestStageRunRepo_SumCompletedTokens(t *testing.T) {
 	client := openDB(t)
 	ctx := context.Background()
