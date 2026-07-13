@@ -210,8 +210,9 @@ func ptyMux(ptmx io.Writer, hub *ptyHub, token *rotatingToken) *http.ServeMux {
 		}
 		defer c.Close(websocket.StatusInternalError, "")
 		// Forwarded client input (e.g. a large paste) can exceed the 32 KiB
-		// default read limit; this listener is loopback + token-gated.
-		c.SetReadLimit(-1)
+		// default read limit; this listener is loopback + token-gated. Cap at a
+		// finite bound so an oversized frame cannot exhaust memory.
+		c.SetReadLimit(1 << 20) // 1 MiB
 		ctx := r.Context()
 
 		replay, frames, cancel := hub.Subscribe()

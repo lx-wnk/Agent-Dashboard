@@ -14,6 +14,7 @@ import (
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/envsec"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pathutil"
 	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
 	"github.com/lx-wnk/agent-dashboard/server/internal/taskcontrol"
@@ -268,11 +269,8 @@ func buildSpawnArgsWithChannelConfig(opts SpawnAgentOptions, channelCfgPath stri
 var allowedEnvPrefixes = []string{"CLAUDE_", "DASHBOARD_"}
 
 // deniedEnvKeys are secrets that must never reach spawned agents even if they
-// match an allowedEnvPrefixes entry.
-var deniedEnvKeys = map[string]struct{}{
-	"DASHBOARD_JWT_SECRET":   {},
-	"DASHBOARD_HOOKS_SECRET": {},
-}
+// match an allowedEnvPrefixes entry. Canonical set — see envsec.DeniedSecretEnvKeys.
+var deniedEnvKeys = envsec.DeniedSecretEnvKeys
 
 // allowedEnvKeys are exact env var names always forwarded to spawned agents.
 var allowedEnvKeys = map[string]struct{}{
@@ -351,6 +349,9 @@ func BuildSpawnEnv(opts SpawnAgentOptions) []string {
 	// Final defense-in-depth pass: secrets must never leak even if a future
 	// code path puts them into `merged` above. The Stage-1 and Stage-2 loops
 	// already filter them, but this guarantees the invariant at the exit.
+	// DASHBOARD_MCP_TOKEN is deliberately NOT in deniedEnvKeys — it is a
+	// per-task credential injected at Stage 3 above, and this loop must not
+	// delete it or the spawned agent's channel bridge loses /api/mcp access.
 	for denied := range deniedEnvKeys {
 		delete(merged, denied)
 	}

@@ -14,6 +14,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	"github.com/lx-wnk/agent-dashboard/server/internal/envsec"
 	"github.com/lx-wnk/agent-dashboard/server/internal/httputil"
 	"github.com/lx-wnk/agent-dashboard/server/internal/services"
 	"io"
@@ -966,7 +967,9 @@ func sha256hex(s string) string {
 //  1. start with os.Environ()
 //  2. overlay spawner.Env
 //  3. dashboard-controlled vars (DASHBOARD_*, CLAUDE_*) always win
-//  4. strip DASHBOARD_JWT_SECRET and DASHBOARD_HOOKS_SECRET
+//  4. strip the canonical secret deny-set (envsec.DeniedSecretEnvKeys).
+//     Interactive spawns get no per-task DASHBOARD_MCP_TOKEN, so no
+//     exclusion nuance applies here — unlike the pipeline spawner.
 func resolveSpawnEnv(s *ent.Spawner) []string {
 	merged := map[string]string{}
 	for _, kv := range os.Environ() {
@@ -989,8 +992,9 @@ func resolveSpawnEnv(s *ent.Spawner) []string {
 			merged[k] = kv[i+1:]
 		}
 	}
-	delete(merged, "DASHBOARD_JWT_SECRET")
-	delete(merged, "DASHBOARD_HOOKS_SECRET")
+	for denied := range envsec.DeniedSecretEnvKeys {
+		delete(merged, denied)
+	}
 	out := make([]string, 0, len(merged))
 	for k, v := range merged {
 		out = append(out, k+"="+v)

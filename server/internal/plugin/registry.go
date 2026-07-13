@@ -16,6 +16,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/lx-wnk/agent-dashboard/server/internal/envsec"
 )
 
 // pluginIDRe restricts plugin IDs to lowercase alphanumeric and hyphens, starting
@@ -687,12 +689,18 @@ func (r *Registry) removeByID(id string) {
 
 // dashboardSecretEnv names env vars that carry dashboard secrets.
 // These are never forwarded to plugins even if listed in desc.Env.
-var dashboardSecretEnv = map[string]bool{
-	"DASHBOARD_SECRET_KEY":         true,
-	"DASHBOARD_JWT_SECRET":         true,
-	"DASHBOARD_AUTH_PLUGIN_SECRET": true,
-	"DASHBOARD_MCP_TOKEN":          true,
-	"DASHBOARD_HOOKS_SECRET":       true,
+// Built from the canonical envsec.DeniedSecretEnvKeys base plus
+// DASHBOARD_MCP_TOKEN: plugins have no legitimate use for it, unlike
+// spawned Claude agents, which need it to reach the channel bridge.
+var dashboardSecretEnv = buildDashboardSecretEnv()
+
+func buildDashboardSecretEnv() map[string]bool {
+	m := make(map[string]bool, len(envsec.DeniedSecretEnvKeys)+1)
+	for k := range envsec.DeniedSecretEnvKeys {
+		m[k] = true
+	}
+	m["DASHBOARD_MCP_TOKEN"] = true
+	return m
 }
 
 // sanitizeSettingKey uppercases key and replaces every character that is not
