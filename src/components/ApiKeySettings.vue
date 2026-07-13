@@ -43,6 +43,25 @@ function reopenOnboarding() {
 type Section = 'appearance' | 'apiKeys' | 'remotes' | 'permissionPresets' | 'analytics' | 'systemPrompts' | 'plugins' | 'notifications' | 'providers' | 'tracker' | 'projects' | 'spawners' | 'pipelineConfig' | 'server'
 const activeSection = ref<Section>('appearance')
 
+// Nav model — drives the sidebar list. requiresAuth items only show when auth is on.
+const SECTIONS: readonly { id: Section, icon: string, label: string, requiresAuth?: boolean }[] = [
+  { id: 'appearance', icon: '◑', label: 'Appearance' },
+  { id: 'apiKeys', icon: '⬡', label: 'API Keys' },
+  { id: 'remotes', icon: '⌂', label: 'My Remotes', requiresAuth: true },
+  { id: 'permissionPresets', icon: '⚿', label: 'Permissions' },
+  { id: 'analytics', icon: '📊', label: 'Analytics' },
+  { id: 'systemPrompts', icon: '✦', label: 'System Prompts' },
+  { id: 'plugins', icon: '🔌', label: 'Plugins' },
+  { id: 'notifications', icon: '🔔', label: 'Notifications' },
+  { id: 'providers', icon: '🧩', label: 'Providers' },
+  { id: 'tracker', icon: '🔗', label: 'Tracker' },
+  { id: 'projects', icon: '◫', label: 'Projects' },
+  { id: 'spawners', icon: '⚙', label: 'Spawners' },
+  { id: 'pipelineConfig', icon: '⛓', label: 'Pipeline' },
+  { id: 'server', icon: '🖳', label: 'Server' },
+]
+const visibleSections = computed(() => SECTIONS.filter(s => !s.requiresAuth || authEnabled.value))
+
 // --- State ---
 const keys = ref<ApiKey[]>([])
 const isLoading = ref(true)
@@ -360,186 +379,17 @@ const { isImporting, importStatus, start: startImport } = useHistoryImport()
           </button>
         </div>
         <ul class="list-none p-0 m-0 flex flex-col gap-0.5">
-          <li>
+          <li v-for="s in visibleSections" :key="s.id">
             <button
               type="button"
               class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
-              :class="activeSection === 'appearance'
+              :class="activeSection === s.id
                 ? 'bg-raised text-fg font-semibold'
                 : 'bg-transparent text-fg-mute hover:bg-raised/50 hover:text-fg'"
-              :aria-current="activeSection === 'appearance' ? 'page' : undefined"
-              @click="activeSection = 'appearance'"
+              :aria-current="activeSection === s.id ? 'page' : undefined"
+              @click="activeSection = s.id"
             >
-              <span class="text-sm flex-shrink-0">◑</span> Appearance
-            </button>
-          </li>
-          <li>
-            <button
-              type="button"
-              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
-              :class="activeSection === 'apiKeys'
-                ? 'bg-raised text-fg font-semibold'
-                : 'bg-transparent text-fg-mute hover:bg-raised/50 hover:text-fg'"
-              :aria-current="activeSection === 'apiKeys' ? 'page' : undefined"
-              @click="activeSection = 'apiKeys'"
-            >
-              <span class="text-sm flex-shrink-0">⬡</span> API Keys
-            </button>
-          </li>
-          <li v-if="authEnabled">
-            <button
-              type="button"
-              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
-              :class="activeSection === 'remotes'
-                ? 'bg-raised text-fg font-semibold'
-                : 'bg-transparent text-fg-mute hover:bg-raised/50 hover:text-fg'"
-              :aria-current="activeSection === 'remotes' ? 'page' : undefined"
-              @click="activeSection = 'remotes'"
-            >
-              <span class="text-sm flex-shrink-0">⌂</span> My Remotes
-            </button>
-          </li>
-          <li>
-            <button
-              type="button"
-              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
-              :class="activeSection === 'permissionPresets'
-                ? 'bg-raised text-fg font-semibold'
-                : 'bg-transparent text-fg-mute hover:bg-raised/50 hover:text-fg'"
-              :aria-current="activeSection === 'permissionPresets' ? 'page' : undefined"
-              @click="activeSection = 'permissionPresets'"
-            >
-              <span class="text-sm flex-shrink-0">⚿</span> Permissions
-            </button>
-          </li>
-          <li>
-            <button
-              type="button"
-              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
-              :class="activeSection === 'analytics'
-                ? 'bg-raised text-fg font-semibold'
-                : 'bg-transparent text-fg-mute hover:bg-raised/50 hover:text-fg'"
-              :aria-current="activeSection === 'analytics' ? 'page' : undefined"
-              @click="activeSection = 'analytics'"
-            >
-              <span class="text-sm flex-shrink-0">📊</span> Analytics
-            </button>
-          </li>
-          <li>
-            <button
-              type="button"
-              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
-              :class="activeSection === 'systemPrompts'
-                ? 'bg-raised text-fg font-semibold'
-                : 'bg-transparent text-fg-mute hover:bg-raised/50 hover:text-fg'"
-              :aria-current="activeSection === 'systemPrompts' ? 'page' : undefined"
-              @click="activeSection = 'systemPrompts'"
-            >
-              <span class="text-sm flex-shrink-0">✦</span> System Prompts
-            </button>
-          </li>
-          <li>
-            <button
-              type="button"
-              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
-              :class="activeSection === 'plugins'
-                ? 'bg-raised text-fg font-semibold'
-                : 'bg-transparent text-fg-mute hover:bg-raised/50 hover:text-fg'"
-              :aria-current="activeSection === 'plugins' ? 'page' : undefined"
-              @click="activeSection = 'plugins'"
-            >
-              <span class="text-sm flex-shrink-0">🔌</span> Plugins
-            </button>
-          </li>
-          <li>
-            <button
-              type="button"
-              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
-              :class="activeSection === 'notifications'
-                ? 'bg-raised text-fg font-semibold'
-                : 'bg-transparent text-fg-mute hover:bg-raised/50 hover:text-fg'"
-              :aria-current="activeSection === 'notifications' ? 'page' : undefined"
-              @click="activeSection = 'notifications'"
-            >
-              <span class="text-sm flex-shrink-0">🔔</span> Notifications
-            </button>
-          </li>
-          <li>
-            <button
-              type="button"
-              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
-              :class="activeSection === 'providers'
-                ? 'bg-raised text-fg font-semibold'
-                : 'bg-transparent text-fg-mute hover:bg-raised/50 hover:text-fg'"
-              :aria-current="activeSection === 'providers' ? 'page' : undefined"
-              @click="activeSection = 'providers'"
-            >
-              <span class="text-sm flex-shrink-0">🧩</span> Providers
-            </button>
-          </li>
-          <li>
-            <button
-              type="button"
-              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
-              :class="activeSection === 'tracker'
-                ? 'bg-raised text-fg font-semibold'
-                : 'bg-transparent text-fg-mute hover:bg-raised/50 hover:text-fg'"
-              :aria-current="activeSection === 'tracker' ? 'page' : undefined"
-              @click="activeSection = 'tracker'"
-            >
-              <span class="text-sm flex-shrink-0">🔗</span> Tracker
-            </button>
-          </li>
-          <li>
-            <button
-              type="button"
-              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
-              :class="activeSection === 'projects'
-                ? 'bg-raised text-fg font-semibold'
-                : 'bg-transparent text-fg-mute hover:bg-raised/50 hover:text-fg'"
-              :aria-current="activeSection === 'projects' ? 'page' : undefined"
-              @click="activeSection = 'projects'"
-            >
-              <span class="text-sm flex-shrink-0">◫</span> Projects
-            </button>
-          </li>
-          <li>
-            <button
-              type="button"
-              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
-              :class="activeSection === 'spawners'
-                ? 'bg-raised text-fg font-semibold'
-                : 'bg-transparent text-fg-mute hover:bg-raised/50 hover:text-fg'"
-              :aria-current="activeSection === 'spawners' ? 'page' : undefined"
-              @click="activeSection = 'spawners'"
-            >
-              <span class="text-sm flex-shrink-0">⚙</span> Spawners
-            </button>
-          </li>
-          <li>
-            <button
-              type="button"
-              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
-              :class="activeSection === 'pipelineConfig'
-                ? 'bg-raised text-fg font-semibold'
-                : 'bg-transparent text-fg-mute hover:bg-raised/50 hover:text-fg'"
-              :aria-current="activeSection === 'pipelineConfig' ? 'page' : undefined"
-              @click="activeSection = 'pipelineConfig'"
-            >
-              <span class="text-sm flex-shrink-0">⛓</span> Pipeline
-            </button>
-          </li>
-          <li>
-            <button
-              type="button"
-              class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border-none font-sans text-[13px] cursor-pointer text-left transition-colors"
-              :class="activeSection === 'server'
-                ? 'bg-raised text-fg font-semibold'
-                : 'bg-transparent text-fg-mute hover:bg-raised/50 hover:text-fg'"
-              :aria-current="activeSection === 'server' ? 'page' : undefined"
-              @click="activeSection = 'server'"
-            >
-              <span class="text-sm flex-shrink-0">🖳</span> Server
+              <span class="text-sm flex-shrink-0">{{ s.icon }}</span> {{ s.label }}
             </button>
           </li>
         </ul>
