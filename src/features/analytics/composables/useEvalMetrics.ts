@@ -1,6 +1,6 @@
-import type { DriftAlert, EvalMetricSnapshot, MetricKey } from '../types'
+import type { DriftAlert, EvalMetricSnapshot, MetricKey } from '@/types'
 import { onUnmounted, ref, shallowRef } from 'vue'
-import { METRIC_KEYS } from '../utils/evalMetrics'
+import { METRIC_KEYS } from '@/utils/evalMetrics'
 
 const POLL_INTERVAL_MS = 60_000
 

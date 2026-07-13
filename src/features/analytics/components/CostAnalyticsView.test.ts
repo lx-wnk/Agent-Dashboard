@@ -1,7 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { toast } from '../composables/useToast'
-import CostAnalyticsView from './CostAnalyticsView.vue'
+import { toast } from '@/composables/useToast'
+import CostAnalyticsView from '@/features/analytics/components/CostAnalyticsView.vue'
 
 // Minimal EventSource stub — jsdom has no native EventSource.
 class MockEventSource {

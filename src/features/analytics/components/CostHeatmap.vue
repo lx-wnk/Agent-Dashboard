@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue'
-import { useCostHeatmap } from '../composables/useCostHeatmap'
-import { useTheme } from '../composables/useTheme'
-import { toast } from '../composables/useToast'
-import { chartColors } from '../utils/chartColors'
+import { useTheme } from '@/composables/useTheme'
+import { toast } from '@/composables/useToast'
+import { useCostHeatmap } from '@/features/analytics/composables/useCostHeatmap'
+import { chartColors } from '@/utils/chartColors'
 
 const RGB_CHANNELS_RE = /^rgba?\(([^)]+?)(?:,\s*[\d.]+)?\)$/
 

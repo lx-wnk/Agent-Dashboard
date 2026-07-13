@@ -1,5 +1,5 @@
 import { onUnmounted, ref, shallowRef } from 'vue'
-import { errorMessage } from '../utils/errorMessage'
+import { errorMessage } from '@/utils/errorMessage'
 
 const POLL_INTERVAL_MS = 60_000
 

@@ -70,13 +70,13 @@ function withSetup<T>(composable: () => T) {
   return result
 }
 
-let useEvalMetrics: typeof import('../useEvalMetrics')
+let useEvalMetrics: typeof import('@/features/analytics/composables/useEvalMetrics')
 
 beforeEach(async () => {
   MockEventSource.instances = []
   vi.stubGlobal('EventSource', MockEventSource)
   vi.resetModules()
-  useEvalMetrics = await import('../useEvalMetrics')
+  useEvalMetrics = await import('@/features/analytics/composables/useEvalMetrics')
 })
 
 afterEach(() => {

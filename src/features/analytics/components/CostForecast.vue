@@ -1,14 +1,14 @@
 <script setup lang="ts">
-import type { ForecastPoint, ForecastTrendPoint } from '../composables/useCostForecast'
+import type { ForecastPoint, ForecastTrendPoint } from '@/features/analytics/composables/useCostForecast'
 import { axisBottom, axisLeft } from 'd3-axis'
 import { scaleLinear, scaleTime } from 'd3-scale'
 import { select } from 'd3-selection'
 import { line } from 'd3-shape'
 import { ref, watch } from 'vue'
-import { useCostForecast } from '../composables/useCostForecast'
-import { useTheme } from '../composables/useTheme'
-import { toast } from '../composables/useToast'
-import { chartColors } from '../utils/chartColors'
+import { useTheme } from '@/composables/useTheme'
+import { toast } from '@/composables/useToast'
+import { useCostForecast } from '@/features/analytics/composables/useCostForecast'
+import { chartColors } from '@/utils/chartColors'
 
 const svgRef = ref<SVGSVGElement | null>(null)
 const { trend, forecast, alerts, loading, error } = useCostForecast()

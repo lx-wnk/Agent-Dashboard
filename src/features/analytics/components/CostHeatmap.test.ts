@@ -1,6 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import CostHeatmap from './CostHeatmap.vue'
+import CostHeatmap from '@/features/analytics/components/CostHeatmap.vue'
 
 const mockGrid = Array.from(
   { length: 7 },

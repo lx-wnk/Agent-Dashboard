@@ -1,6 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
-import CostForecast from './CostForecast.vue'
+import CostForecast from '@/features/analytics/components/CostForecast.vue'
 
 vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
   ok: true,

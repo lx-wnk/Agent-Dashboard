@@ -2,7 +2,7 @@ import { mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
 
-let useCostHeatmap: typeof import('../useCostHeatmap').useCostHeatmap
+let useCostHeatmap: typeof import('@/features/analytics/composables/useCostHeatmap').useCostHeatmap
 
 function withSetup<T>(composable: () => T) {
   let result!: T
@@ -27,7 +27,7 @@ beforeEach(async () => {
     status: 200,
   }))
   vi.resetModules()
-  const mod = await import('../useCostHeatmap')
+  const mod = await import('@/features/analytics/composables/useCostHeatmap')
   useCostHeatmap = mod.useCostHeatmap
 })
 
@@ -67,7 +67,7 @@ describe('useCostHeatmap', () => {
       json: () => Promise.resolve({}),
     } as Response)
     vi.resetModules()
-    const mod = await import('../useCostHeatmap')
+    const mod = await import('@/features/analytics/composables/useCostHeatmap')
     useCostHeatmap = mod.useCostHeatmap
 
     const { result } = withSetup(() => useCostHeatmap())

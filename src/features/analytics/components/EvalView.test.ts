@@ -1,7 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { toast } from '../composables/useToast'
-import EvalView from './EvalView.vue'
+import { toast } from '@/composables/useToast'
+import EvalView from '@/features/analytics/components/EvalView.vue'
 
 const emptyAlerts: unknown[] = []
 
