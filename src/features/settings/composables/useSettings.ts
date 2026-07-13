@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import { errorMessage } from '../utils/errorMessage'
+import { errorMessage } from '@/utils/errorMessage'
 
 export interface SettingView {
   key: string

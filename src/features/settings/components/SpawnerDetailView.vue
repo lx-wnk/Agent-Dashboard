@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import type { Spawner, SpawnerAdapterType } from '../types'
+import type { Spawner, SpawnerAdapterType } from '@/types'
 import { computed } from 'vue'
-import ConfigExplorer from './ConfigExplorer.vue'
-import AppButton from './ui/AppButton.vue'
+import ConfigExplorer from '@/components/ConfigExplorer.vue'
+import AppButton from '@/components/ui/AppButton.vue'
 
 // Read-only inspection of a single spawner: its settings shown non-editable,
 // plus the skills/commands/memory that a stage agent spawned by it would have.

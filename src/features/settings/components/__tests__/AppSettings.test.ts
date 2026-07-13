@@ -3,13 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 
 let AppSettings: any
-let toastMod: typeof import('../../composables/useToast')
+let toastMod: typeof import('@/composables/useToast')
 
 beforeEach(async () => {
   vi.resetModules()
-  toastMod = await import('../../composables/useToast')
+  toastMod = await import('@/composables/useToast')
   vi.spyOn(toastMod.toast, 'error')
-  AppSettings = (await import('../AppSettings.vue')).default
+  AppSettings = (await import('@/features/settings/components/AppSettings.vue')).default
 })
 
 describe('appSettings', () => {

@@ -1,6 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import ApiKeySettings from './ApiKeySettings.vue'
+import ApiKeySettings from '@/features/settings/components/ApiKeySettings.vue'
 
 // The nav is data-driven by the in-component SECTIONS array (CQ-35). These specs
 // guard that the extraction keeps one nav item per section and that clicking a

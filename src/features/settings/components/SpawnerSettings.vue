@@ -1,19 +1,19 @@
 <script setup lang="ts">
-import type { Spawner, SpawnerAdapterType } from '../types'
+import type { Spawner, SpawnerAdapterType } from '@/types'
 import { computed, ref, watch } from 'vue'
-import { useAdapterCatalog } from '../composables/useAdapterCatalog'
+import AppButton from '@/components/ui/AppButton.vue'
+import { useAdapterCatalog } from '@/composables/useAdapterCatalog'
 import {
   createSpawner,
   deleteSpawner,
   setDefaultSpawner,
   updateSpawner,
   useSpawners,
-} from '../composables/useSpawners'
-import { toast } from '../composables/useToast'
-import { errorMessage } from '../utils/errorMessage'
-import { isAllowedSpawnerCommand } from '../utils/validation'
-import SpawnerDetailView from './SpawnerDetailView.vue'
-import AppButton from './ui/AppButton.vue'
+} from '@/composables/useSpawners'
+import { toast } from '@/composables/useToast'
+import SpawnerDetailView from '@/features/settings/components/SpawnerDetailView.vue'
+import { errorMessage } from '@/utils/errorMessage'
+import { isAllowedSpawnerCommand } from '@/utils/validation'
 
 withDefaults(defineProps<{ hideTitle?: boolean }>(), { hideTitle: false })
 

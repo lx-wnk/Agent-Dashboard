@@ -1,33 +1,33 @@
 <script setup lang="ts">
-import type { ApiKey, McpScope } from '../types'
+import type { ApiKey, McpScope } from '@/types'
 import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useClipboardCopy } from '../composables/useCopyId'
-import { useHistoryImport } from '../composables/useHistoryImport'
-import { useOnboarding } from '../composables/useOnboarding'
-import { usePermissionPresets } from '../composables/usePermissionPresets'
-import { useServerConfig } from '../composables/useServerConfig'
-import { useTheme } from '../composables/useTheme'
-import { toast } from '../composables/useToast'
-import { useUser } from '../composables/useUser'
-import { errorMessage } from '../utils/errorMessage'
-import { maskToken } from '../utils/format'
-import { buildMcpAddCommand, buildMcpJsonConfig } from '../utils/mcpCommand'
-import AuditLogTab from './AuditLogTab.vue'
-import PipelineConfigSettings from './PipelineConfigSettings.vue'
-import ProjectSettings from './ProjectSettings.vue'
-import RemoteSettings from './RemoteSettings.vue'
-import SpawnerSettings from './SpawnerSettings.vue'
-import SystemPromptSettings from './SystemPromptSettings.vue'
-import AppButton from './ui/AppButton.vue'
-import AppModal from './ui/AppModal.vue'
+import AuditLogTab from '@/components/AuditLogTab.vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppModal from '@/components/ui/AppModal.vue'
+import { useClipboardCopy } from '@/composables/useCopyId'
+import { useHistoryImport } from '@/composables/useHistoryImport'
+import { useOnboarding } from '@/composables/useOnboarding'
+import { usePermissionPresets } from '@/composables/usePermissionPresets'
+import { useServerConfig } from '@/composables/useServerConfig'
+import { useTheme } from '@/composables/useTheme'
+import { toast } from '@/composables/useToast'
+import { useUser } from '@/composables/useUser'
+import PipelineConfigSettings from '@/features/settings/components/PipelineConfigSettings.vue'
+import ProjectSettings from '@/features/settings/components/ProjectSettings.vue'
+import RemoteSettings from '@/features/settings/components/RemoteSettings.vue'
+import SpawnerSettings from '@/features/settings/components/SpawnerSettings.vue'
+import SystemPromptSettings from '@/features/settings/components/SystemPromptSettings.vue'
+import { errorMessage } from '@/utils/errorMessage'
+import { maskToken } from '@/utils/format'
+import { buildMcpAddCommand, buildMcpJsonConfig } from '@/utils/mcpCommand'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: [] }>()
-const NotificationSettings = defineAsyncComponent(() => import('./NotificationSettings.vue'))
+const NotificationSettings = defineAsyncComponent(() => import('@/features/settings/components/NotificationSettings.vue'))
 const PluginSettings = defineAsyncComponent(() => import('@/features/plugins/components/PluginSettings.vue'))
-const ProviderSettings = defineAsyncComponent(() => import('./ProviderSettings.vue'))
-const TrackerSettingsPanel = defineAsyncComponent(() => import('./TrackerSettingsPanel.vue'))
-const AppSettings = defineAsyncComponent(() => import('./AppSettings.vue'))
+const ProviderSettings = defineAsyncComponent(() => import('@/features/settings/components/ProviderSettings.vue'))
+const TrackerSettingsPanel = defineAsyncComponent(() => import('@/features/settings/components/TrackerSettingsPanel.vue'))
+const AppSettings = defineAsyncComponent(() => import('@/features/settings/components/AppSettings.vue'))
 
 const { preference: themePref, setTheme } = useTheme()
 const { authEnabled } = useUser()

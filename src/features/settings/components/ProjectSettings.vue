@@ -1,26 +1,26 @@
 <script setup lang="ts">
-import type { Project, ProjectFolder } from '../types'
+import type { Project, ProjectFolder } from '@/types'
 import { ref, watch } from 'vue'
-import { useProjectPipelineConfig } from '@/features/pipeline/composables/useProjectPipelineConfig'
+import AppButton from '@/components/ui/AppButton.vue'
 import {
   createFolder,
   deleteFolder,
   fetchProjectFolders,
   updateFolder,
-} from '../composables/useProjectFolders'
+} from '@/composables/useProjectFolders'
 import {
   createProject,
   deleteProject,
   updateProject,
   useProjects,
-} from '../composables/useProjects'
-import { useSpawners } from '../composables/useSpawners'
-import { toast } from '../composables/useToast'
-import { errorMessage } from '../utils/errorMessage'
-import { AVAILABLE_MODELS } from '../utils/models'
-import { STAGE_LABELS } from '../utils/stageLabels'
-import { isAbsolutePath } from '../utils/validation'
-import AppButton from './ui/AppButton.vue'
+} from '@/composables/useProjects'
+import { useSpawners } from '@/composables/useSpawners'
+import { toast } from '@/composables/useToast'
+import { useProjectPipelineConfig } from '@/features/pipeline/composables/useProjectPipelineConfig'
+import { errorMessage } from '@/utils/errorMessage'
+import { AVAILABLE_MODELS } from '@/utils/models'
+import { STAGE_LABELS } from '@/utils/stageLabels'
+import { isAbsolutePath } from '@/utils/validation'
 
 withDefaults(defineProps<{ hideTitle?: boolean }>(), { hideTitle: false })
 

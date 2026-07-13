@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import { toast } from '../composables/useToast'
-import { errorMessage } from '../utils/errorMessage'
+import { toast } from '@/composables/useToast'
+import { errorMessage } from '@/utils/errorMessage'
 
 const SECRET_SENTINEL = '********'
 

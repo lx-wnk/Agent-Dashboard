@@ -2,7 +2,7 @@ import { mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
 
-let useRemotes: typeof import('../useRemotes').useRemotes
+let useRemotes: typeof import('@/features/settings/composables/useRemotes').useRemotes
 
 function withSetup<T>(composable: () => T) {
   let result!: T
@@ -28,7 +28,7 @@ beforeEach(async () => {
     status: 200,
   }))
   vi.resetModules()
-  const mod = await import('../useRemotes')
+  const mod = await import('@/features/settings/composables/useRemotes')
   useRemotes = mod.useRemotes
 })
 
@@ -73,7 +73,7 @@ describe('useRemotes', () => {
       } as Response)
 
     vi.resetModules()
-    const mod = await import('../useRemotes')
+    const mod = await import('@/features/settings/composables/useRemotes')
     useRemotes = mod.useRemotes
 
     const { result } = withSetup(() => useRemotes())
@@ -98,7 +98,7 @@ describe('useRemotes', () => {
       } as Response)
 
     vi.resetModules()
-    const mod = await import('../useRemotes')
+    const mod = await import('@/features/settings/composables/useRemotes')
     useRemotes = mod.useRemotes
 
     const { result } = withSetup(() => useRemotes())
@@ -115,7 +115,7 @@ describe('useRemotes', () => {
       json: () => Promise.resolve({}),
     } as Response)
     vi.resetModules()
-    const mod = await import('../useRemotes')
+    const mod = await import('@/features/settings/composables/useRemotes')
     useRemotes = mod.useRemotes
 
     const { result } = withSetup(() => useRemotes())

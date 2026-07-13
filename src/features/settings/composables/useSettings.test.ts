@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { useSettings } from './useSettings'
+import { useSettings } from '@/features/settings/composables/useSettings'
 
 describe('useSettings', () => {
   it('patches a setting and updates local state', async () => {

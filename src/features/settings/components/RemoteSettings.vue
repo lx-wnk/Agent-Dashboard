@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useRemotes } from '../composables/useRemotes'
-import { toast } from '../composables/useToast'
-import { errorMessage } from '../utils/errorMessage'
+import { toast } from '@/composables/useToast'
+import { useRemotes } from '@/features/settings/composables/useRemotes'
+import { errorMessage } from '@/utils/errorMessage'
 
 const { remotes, addRemote, removeRemote } = useRemotes()
 
