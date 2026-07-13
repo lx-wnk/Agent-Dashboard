@@ -1,16 +1,16 @@
 <script setup lang="ts">
 import type { SankeyLink } from 'd3-sankey'
 import type { Selection } from 'd3-selection'
-import type { SankeyData } from '../../sdk.generated'
+import type { SankeyData } from '@/sdk.generated'
 import { sankey as d3Sankey, sankeyLinkHorizontal } from 'd3-sankey'
 import { scaleOrdinal } from 'd3-scale'
 import { select } from 'd3-selection'
 import { computed, onUnmounted, ref, watch } from 'vue'
-import { useTheme } from '../../composables/useTheme'
-import { toast } from '../../composables/useToast'
-import { chartColors, chartPalette } from '../../utils/chartColors'
-import { errorMessage } from '../../utils/errorMessage'
-import ChartDataTable from '../ui/ChartDataTable.vue'
+import ChartDataTable from '@/components/ui/ChartDataTable.vue'
+import { useTheme } from '@/composables/useTheme'
+import { toast } from '@/composables/useToast'
+import { chartColors, chartPalette } from '@/utils/chartColors'
+import { errorMessage } from '@/utils/errorMessage'
 
 // User-defined node/link properties carried through the layout, on top of the
 // d3-sankey-computed geometry (x0/y0/width/…).

@@ -51,7 +51,7 @@ const AgentModal = defineAsyncComponent(() => import('@/features/agents/componen
 const CostAnalyticsView = defineAsyncComponent(() => import('@/features/analytics/components/CostAnalyticsView.vue'))
 const EvalView = defineAsyncComponent(() => import('@/features/analytics/components/EvalView.vue'))
 const PipelineBoard = defineAsyncComponent(() => import('@/features/pipeline/components/PipelineBoard.vue'))
-const WorkflowsView = defineAsyncComponent(() => import('./components/WorkflowsView.vue'))
+const WorkflowsView = defineAsyncComponent(() => import('@/features/workflows/components/WorkflowsView.vue'))
 const SchedulesView = defineAsyncComponent(() => import('./components/SchedulesView.vue'))
 // Heavy modal loaded on demand — split into its own chunk (includes DependencyGraph + StageCostWaterfall).
 const TaskModal = defineAsyncComponent(() => import('@/features/pipeline/components/TaskModal.vue'))

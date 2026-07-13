@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import type { SpawnTreeData } from '../../sdk.generated'
+import type { SpawnTreeData } from '@/sdk.generated'
 import { computed, ref, watch } from 'vue'
-import { useTheme } from '../../composables/useTheme'
-import { toast } from '../../composables/useToast'
-import { paletteColor } from '../../utils/chartColors'
+import { useTheme } from '@/composables/useTheme'
+import { toast } from '@/composables/useToast'
+import { paletteColor } from '@/utils/chartColors'
 
 const props = defineProps<{
   data: SpawnTreeData | null

@@ -1,7 +1,7 @@
-import type { DAGData } from '../../sdk.generated'
+import type { DAGData } from '@/sdk.generated'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
-import SessionDagChart from './SessionDagChart.vue'
+import SessionDagChart from '@/features/workflows/components/visualizations/SessionDagChart.vue'
 
 const data: DAGData = {
   nodes: [

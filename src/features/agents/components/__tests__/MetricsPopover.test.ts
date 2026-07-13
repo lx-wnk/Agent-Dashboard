@@ -1,6 +1,6 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
-import MetricsPopover from '../MetricsPopover.vue'
+import MetricsPopover from '@/features/agents/components/MetricsPopover.vue'
 
 function makeAgent(overrides = {}) {
   return {

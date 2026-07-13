@@ -1,8 +1,8 @@
-import type { SankeyData } from '../../sdk.generated'
+import type { SankeyData } from '@/sdk.generated'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
-import { axe } from '../../utils/testA11y'
-import SankeyChart from './SankeyChart.vue'
+import SankeyChart from '@/features/workflows/components/visualizations/SankeyChart.vue'
+import { axe } from '@/utils/testA11y'
 
 const data: SankeyData = {
   nodes: [
