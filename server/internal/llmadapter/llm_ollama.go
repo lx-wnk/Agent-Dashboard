@@ -1,16 +1,15 @@
 package llmadapter
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/lx-wnk/agent-dashboard/server/internal/ollamaclient"
 )
 
 // OllamaSpawner calls the Ollama HTTP API synchronously and writes a
@@ -19,66 +18,34 @@ type OllamaSpawner struct {
 	Host         string // e.g. "http://localhost:11434"
 	DefaultModel string
 	clientOnce   sync.Once
-	client       *http.Client
+	client       *ollamaclient.Client
 }
 
 func (o *OllamaSpawner) Name() string { return "ollama" }
 
-func (o *OllamaSpawner) Spawn(ctx context.Context, args LLMSpawnArgs) (LLMSpawnResult, error) {
+func (o *OllamaSpawner) ollamaClient() *ollamaclient.Client {
+	o.clientOnce.Do(func() { o.client = ollamaclient.New(o.Host, 5*time.Minute) })
+	return o.client
+}
+
+func (o *OllamaSpawner) chatRequest(args LLMSpawnArgs) ollamaclient.ChatRequest {
 	model := args.Model
 	if model == "" {
 		model = o.DefaultModel
 	}
-	host := o.Host
-	if host == "" {
-		host = "http://localhost:11434"
-	}
-
-	type message struct {
-		Role    string `json:"role"`
-		Content string `json:"content"`
-	}
-	type request struct {
-		Model    string    `json:"model"`
-		Messages []message `json:"messages"`
-		Stream   bool      `json:"stream"`
-	}
-	body, err := json.Marshal(request{
+	return ollamaclient.ChatRequest{
 		Model: model,
-		Messages: []message{
+		Messages: []ollamaclient.ChatMessage{
 			{Role: "system", Content: args.SystemPrompt},
 			{Role: "user", Content: args.UserPrompt},
 		},
-		Stream: false,
-	})
-	if err != nil {
-		return LLMSpawnResult{}, fmt.Errorf("OllamaSpawner: marshal request: %w", err)
 	}
+}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, host+"/api/chat", bytes.NewReader(body))
+func (o *OllamaSpawner) Spawn(ctx context.Context, args LLMSpawnArgs) (LLMSpawnResult, error) {
+	result, err := o.ollamaClient().Chat(ctx, o.chatRequest(args))
 	if err != nil {
-		return LLMSpawnResult{}, fmt.Errorf("OllamaSpawner: build request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	o.clientOnce.Do(func() { o.client = &http.Client{Timeout: 5 * time.Minute} })
-	resp, err := o.client.Do(req)
-	if err != nil {
-		return LLMSpawnResult{}, fmt.Errorf("OllamaSpawner: POST /api/chat: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 400 {
-		body, _ := io.ReadAll(resp.Body)
-		return LLMSpawnResult{}, fmt.Errorf("OllamaSpawner: HTTP %d: %s", resp.StatusCode, body)
-	}
-
-	var result struct {
-		Message struct {
-			Content string `json:"content"`
-		} `json:"message"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return LLMSpawnResult{}, fmt.Errorf("OllamaSpawner: decode response: %w", err)
+		return LLMSpawnResult{}, fmt.Errorf("OllamaSpawner: %w", err)
 	}
 
 	sessionFile, err := writeSyntheticSession(args.WorkDir, args.StageRunID, result.Message.Content)
@@ -92,65 +59,18 @@ func (o *OllamaSpawner) Spawn(ctx context.Context, args LLMSpawnArgs) (LLMSpawnR
 // chunks on the returned channel. The channel is closed when the stream ends or
 // the context is cancelled.
 func (o *OllamaSpawner) SpawnStream(ctx context.Context, args LLMSpawnArgs) (<-chan string, error) {
-	model := args.Model
-	if model == "" {
-		model = o.DefaultModel
-	}
-	host := o.Host
-	if host == "" {
-		host = "http://localhost:11434"
-	}
-
-	type message struct {
-		Role    string `json:"role"`
-		Content string `json:"content"`
-	}
-	type request struct {
-		Model    string    `json:"model"`
-		Messages []message `json:"messages"`
-		Stream   bool      `json:"stream"`
-	}
-	body, err := json.Marshal(request{
-		Model: model,
-		Messages: []message{
-			{Role: "system", Content: args.SystemPrompt},
-			{Role: "user", Content: args.UserPrompt},
-		},
-		Stream: true,
-	})
+	body, err := o.ollamaClient().ChatStream(ctx, o.chatRequest(args))
 	if err != nil {
-		return nil, fmt.Errorf("OllamaSpawner.SpawnStream: marshal request: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, host+"/api/chat", bytes.NewReader(body))
-	if err != nil {
-		return nil, fmt.Errorf("OllamaSpawner.SpawnStream: build request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	o.clientOnce.Do(func() { o.client = &http.Client{Timeout: 5 * time.Minute} })
-	resp, err := o.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("OllamaSpawner.SpawnStream: POST /api/chat: %w", err)
-	}
-	if resp.StatusCode >= 400 {
-		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		return nil, fmt.Errorf("OllamaSpawner.SpawnStream: HTTP %d: %s", resp.StatusCode, body)
+		return nil, fmt.Errorf("OllamaSpawner.SpawnStream: %w", err)
 	}
 
 	ch := make(chan string, 16)
 	go func() {
 		defer close(ch)
-		defer resp.Body.Close()
-		dec := json.NewDecoder(resp.Body)
+		defer body.Close()
+		dec := json.NewDecoder(body)
 		for dec.More() {
-			var chunk struct {
-				Message struct {
-					Content string `json:"content"`
-				} `json:"message"`
-				Done bool `json:"done"`
-			}
+			var chunk ollamaclient.ChatResponse
 			if err := dec.Decode(&chunk); err != nil {
 				ch <- "[ERROR] OllamaSpawner.SpawnStream: decode: " + err.Error()
 				return
