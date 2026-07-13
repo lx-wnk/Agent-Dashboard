@@ -96,6 +96,23 @@ func TestScanJSONLLines_LargeLine(t *testing.T) {
 	}
 }
 
+func TestScanJSONLLines_OverLongLineSkippedNotFailed(t *testing.T) {
+	over := strings.Repeat("y", 5*1024*1024) // over the 4 MB per-line cap
+	input := "first\n" + over + "\n" + "last\n"
+
+	var got []string
+	err := ScanJSONLLines(strings.NewReader(input), func(line []byte) error {
+		got = append(got, string(line))
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 2 || got[0] != "first" || got[1] != "last" {
+		t.Fatalf("got %v, want [first last] (over-long line skipped, not failed)", got)
+	}
+}
+
 func TestOpenJSONLReader_MaxBytesZero_SmallFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.jsonl")

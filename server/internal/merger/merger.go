@@ -44,36 +44,104 @@ func realTmuxActivity(pane string) (time.Time, bool) {
 	return time.Unix(sec, 0), true
 }
 
+// readDiscoveryFileFn is a seam over os.ReadFile so tests can count or fail
+// discovery-file reads. Production always uses os.ReadFile.
+var readDiscoveryFileFn = os.ReadFile
+
+// discoveryState is the combined result of reading an agent's two channel
+// discovery files exactly once each.
+type discoveryState struct {
+	channelAvailable bool
+	liveInjectable   bool
+	recentOutput     bool
+}
+
+// readChannelDiscovery reads {pid}.json (channel bridge) and {pid}.pty.json
+// (pty broker) exactly once each and derives channelAvailable, liveInjectable,
+// and recentOutput from those two decodes — the combined replacement for what
+// were previously two independent double-reads (channelDiscovery +
+// recentChannelOutput each read both files).
+//
+// Two files are consulted independently (a missing or unreadable file simply
+// contributes nothing — no error):
+//
+//   - {pid}.json     — channel bridge: written by bridge.go. Presence implies
+//     channelAvailable. Contains tmuxPane/tmuxSocket for tmux-based injection.
+//   - {pid}.pty.json — pty broker: written by ptyhost.go. Presence also implies
+//     channelAvailable. Contains ptyInject:true for loopback-HTTP injection and
+//     lastOutputAt for output-recency detection.
+//
+// This two-file model avoids the collision that occurred on the no-tmux path:
+// previously ptyhost.go and bridge.go both wrote to {pid}.json, and the bridge
+// (booting ~1s after ptyhost) overwrote the ptyInject field, breaking
+// liveInjectable detection.
+//
+// channelAvailable is true when either file exists. liveInjectable is true
+// when the bridge file's tmuxPane is non-empty OR the pty file's ptyInject
+// field is true. recentOutput is true when the pty file's lastOutputAt is
+// within outputThreshold — checked first — OR, only when that check does not
+// already satisfy recency, the bridge file's tmuxPane has recent
+// window_activity (tmuxActivityFn), preserving the original short-circuit that
+// avoids shelling out to tmux when the pty signal already answered it.
+func readChannelDiscovery(home string, pid int) discoveryState {
+	var s discoveryState
+	var tmuxPane string
+
+	if data, err := readDiscoveryFileFn(channelconfig.DiscoveryFile(home, pid)); err == nil {
+		s.channelAvailable = true
+		var bridge struct {
+			TmuxPane string `json:"tmuxPane"`
+		}
+		if json.Unmarshal(data, &bridge) == nil {
+			tmuxPane = bridge.TmuxPane
+			if tmuxPane != "" {
+				s.liveInjectable = true
+			}
+		}
+	}
+
+	if data, err := readDiscoveryFileFn(channelconfig.DiscoveryPtyFile(home, pid)); err == nil {
+		s.channelAvailable = true
+		var pty struct {
+			PtyInject    bool   `json:"ptyInject"`
+			LastOutputAt string `json:"lastOutputAt"`
+		}
+		if json.Unmarshal(data, &pty) == nil {
+			if pty.PtyInject {
+				s.liveInjectable = true
+			}
+			if pty.LastOutputAt != "" {
+				if ts, perr := time.Parse(time.RFC3339, pty.LastOutputAt); perr == nil && time.Since(ts) < outputThreshold {
+					s.recentOutput = true
+				}
+			}
+		}
+	}
+
+	if !s.recentOutput && tmuxPane != "" {
+		if ts, ok := tmuxActivityFn(tmuxPane); ok && time.Since(ts) < outputThreshold {
+			s.recentOutput = true
+		}
+	}
+
+	return s
+}
+
+// readAgentChannelState resolves the home directory once and reads both
+// discovery files once via readChannelDiscovery — the single call buildAgent
+// makes per agent per tick.
+func readAgentChannelState(pid int) discoveryState {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return discoveryState{}
+	}
+	return readChannelDiscovery(home, pid)
+}
+
 // recentChannelOutput reports whether a live session emitted output within
 // outputThreshold: a pty broker's lastOutputAt, or a tmux pane's window_activity.
 func recentChannelOutput(pid int) bool {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return false
-	}
-	// pty: lastOutputAt in {pid}.pty.json
-	if data, err := os.ReadFile(channelconfig.DiscoveryPtyFile(home, pid)); err == nil {
-		var d struct {
-			LastOutputAt string `json:"lastOutputAt"`
-		}
-		if json.Unmarshal(data, &d) == nil && d.LastOutputAt != "" {
-			if ts, perr := time.Parse(time.RFC3339, d.LastOutputAt); perr == nil && time.Since(ts) < outputThreshold {
-				return true
-			}
-		}
-	}
-	// tmux: window_activity for the pane in {pid}.json
-	if data, err := os.ReadFile(channelconfig.DiscoveryFile(home, pid)); err == nil {
-		var d struct {
-			TmuxPane string `json:"tmuxPane"`
-		}
-		if json.Unmarshal(data, &d) == nil && d.TmuxPane != "" {
-			if ts, ok := tmuxActivityFn(d.TmuxPane); ok && time.Since(ts) < outputThreshold {
-				return true
-			}
-		}
-	}
-	return false
+	return readAgentChannelState(pid).recentOutput
 }
 
 // CalculateStatus returns the agent status based on time since last activity.
@@ -90,52 +158,11 @@ func CalculateStatus(lastActivity time.Time) sdk.AgentStatus {
 }
 
 // channelDiscovery reads the dashboard-channel discovery files for the given PID
-// and returns both availability and live-injectability.
-//
-// Two files are consulted independently (a missing or unreadable file simply
-// contributes nothing — no error):
-//
-//   - {pid}.json     — channel bridge: written by bridge.go. Presence implies
-//     channelAvailable. Contains tmuxPane/tmuxSocket for tmux-based injection.
-//   - {pid}.pty.json — pty broker: written by ptyhost.go. Presence also implies
-//     channelAvailable. Contains ptyInject:true for loopback-HTTP injection.
-//
-// This two-file model avoids the collision that occurred on the no-tmux path:
-// previously ptyhost.go and bridge.go both wrote to {pid}.json, and the bridge
-// (booting ~1s after ptyhost) overwrote the ptyInject field, breaking
-// liveInjectable detection.
-//
-// channelAvailable is true when either file exists.
-// liveInjectable is true when the bridge file's tmuxPane is non-empty OR the
-// pty file's ptyInject field is true.
+// and returns both availability and live-injectability. See readChannelDiscovery
+// for the two-file model this derives from.
 func channelDiscovery(pid int) (channelAvailable, liveInjectable bool) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return false, false
-	}
-	// Read bridge file ({pid}.json).
-	if data, err := os.ReadFile(channelconfig.DiscoveryFile(home, pid)); err == nil {
-		channelAvailable = true
-		var disc struct {
-			TmuxPane string `json:"tmuxPane"`
-		}
-		if json.Unmarshal(data, &disc) == nil && disc.TmuxPane != "" {
-			liveInjectable = true
-		}
-	}
-
-	// Read pty file ({pid}.pty.json).
-	if data, err := os.ReadFile(channelconfig.DiscoveryPtyFile(home, pid)); err == nil {
-		channelAvailable = true
-		var disc struct {
-			PtyInject bool `json:"ptyInject"`
-		}
-		if json.Unmarshal(data, &disc) == nil && disc.PtyInject {
-			liveInjectable = true
-		}
-	}
-
-	return channelAvailable, liveInjectable
+	s := readAgentChannelState(pid)
+	return s.channelAvailable, s.liveInjectable
 }
 
 // strPtr returns nil if s is empty, otherwise a pointer to s.
@@ -419,9 +446,9 @@ func (m *Merger) buildAgent(proc scanner.ProcessInfo, session *parser.SessionDat
 		c = CostBreakdown{Total: rc.Total, CacheCreate: rc.CacheCreate, CacheRead: rc.CacheRead, Unknown: rc.Unknown}
 		costLocal = rc.Local
 	}
-	chanAvail, chanInject := channelDiscovery(proc.PID)
+	discovery := readAgentChannelState(proc.PID)
 	var pendingQuestion *sdk.DetectedQuestion
-	if chanInject && m.questionProbe != nil {
+	if discovery.liveInjectable && m.questionProbe != nil {
 		pendingQuestion = m.questionProbe(proc.PID)
 	}
 	health := ComputeHealthScore(session, c.Total, c.Unknown, baselineCost)
@@ -436,9 +463,9 @@ func (m *Merger) buildAgent(proc scanner.ProcessInfo, session *parser.SessionDat
 		ClaudeConfigDir:           proc.ClaudeConfigDir,
 		Entrypoint:                session.Entrypoint,
 		Status:                    CalculateStatus(session.LastActivity),
-		Working:                   session.TurnOpen || recentChannelOutput(proc.PID),
-		ChannelAvailable:          chanAvail,
-		LiveInjectable:            chanInject,
+		Working:                   session.TurnOpen || discovery.recentOutput,
+		ChannelAvailable:          discovery.channelAvailable,
+		LiveInjectable:            discovery.liveInjectable,
 		PendingQuestion:           pendingQuestion,
 		Uptime:                    proc.Uptime,
 		LastActivity:              session.LastActivity.Format(time.RFC3339),

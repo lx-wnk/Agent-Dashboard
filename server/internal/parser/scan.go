@@ -5,12 +5,18 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"log/slog"
 	"os"
 )
 
 // ErrStopScan, when returned from a ScanJSONLLines callback, stops the scan
 // without surfacing an error.
 var ErrStopScan = errors.New("stop scan")
+
+// maxLineBytes bounds the size of a single JSONL line ScanJSONLLines will
+// hand to its callback. A line beyond this is skipped (not decoded, not
+// invoked) rather than aborting the whole scan.
+const maxLineBytes = 4 * 1024 * 1024
 
 // tailReadCloser wraps a LimitReader over an *os.File so Close reaches the file.
 type tailReadCloser struct {
@@ -47,23 +53,44 @@ func OpenJSONLReader(path string, maxBytes int64) (io.ReadCloser, error) {
 }
 
 // ScanJSONLLines scans r line by line, trimming whitespace and skipping empty
-// lines, invoking fn for each non-empty line. A fn returning ErrStopScan stops
-// the scan with no error; any other fn error (or a scanner error) propagates.
-// The callback receives a slice valid only for the duration of the call — do not retain it.
+// lines, invoking fn for each non-empty line. A line longer than maxLineBytes
+// is skipped (fn is not invoked) and logged at Info, rather than aborting the
+// scan — this keeps a single oversized JSONL line from silently truncating the
+// token/message totals for the rest of the file. A fn returning ErrStopScan
+// stops the scan with no error; any other fn error (or a read error)
+// propagates. The callback receives a slice valid only for the duration of
+// the call — do not retain it.
 func ScanJSONLLines(r io.Reader, fn func(line []byte) error) error {
-	scanner := bufio.NewScanner(r)
-	scanner.Buffer(make([]byte, 0, 256*1024), 4*1024*1024)
-	for scanner.Scan() {
-		line := bytes.TrimSpace(scanner.Bytes())
-		if len(line) == 0 {
-			continue
+	br := bufio.NewReaderSize(r, 256*1024)
+	for {
+		raw, readErr := br.ReadBytes('\n')
+		if len(raw) > 0 {
+			if err := scanJSONLLine(raw, fn); err != nil {
+				if errors.Is(err, ErrStopScan) {
+					return nil
+				}
+				return err
+			}
 		}
-		if err := fn(line); err != nil {
-			if errors.Is(err, ErrStopScan) {
+		if readErr != nil {
+			if errors.Is(readErr, io.EOF) {
 				return nil
 			}
-			return err
+			return readErr
 		}
 	}
-	return scanner.Err()
+}
+
+// scanJSONLLine handles one line already read from the underlying reader
+// (still carrying its trailing newline, if any).
+func scanJSONLLine(raw []byte, fn func(line []byte) error) error {
+	if len(raw) > maxLineBytes {
+		slog.Info("parser: skipping over-long JSONL line", "bytes", len(raw))
+		return nil
+	}
+	line := bytes.TrimSpace(raw)
+	if len(line) == 0 {
+		return nil
+	}
+	return fn(line)
 }
