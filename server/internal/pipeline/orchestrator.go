@@ -513,7 +513,10 @@ func (o *PipelineOrchestrator) enforceBudgetsAndTimeout(ctx context.Context, tas
 	if o.enforceBudget(ctx, task, run, task.TokenBudget, o.opts.StageRunRepo.SumCompletedTokens, "token", "tokens used", "tokens") {
 		return
 	}
-	// Stage timeout enforcement (subprocess runs only)
+	// Stage timeout enforcement (subprocess runs only).
+	// StartedAt is read from the passed-in run, not a re-fetch: it is written once
+	// at spawn and never mutated on an existing stage_run row (requeues allocate a
+	// new row at iter+1), so the in-memory copy always equals the DB value here.
 	if run.Pid != nil {
 		timeoutSec := o.getCachedConfigNumber(ctx, stageTimeoutKey, defaultStageTimeoutSeconds)
 		if timeoutSec > 0 && run.StartedAt != nil && time.Since(*run.StartedAt) > time.Duration(timeoutSec)*time.Second {
