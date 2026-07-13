@@ -1,4 +1,4 @@
-package pluginsettings
+package plugin
 
 import (
 	"context"
@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
 	"github.com/lx-wnk/agent-dashboard/server/internal/secretbox"
 )
 
@@ -40,8 +39,8 @@ func (f *fakeRepo) DeleteByPlugin(_ context.Context, _ string) error {
 func TestService_PutEncryptsSecret_GetMasks(t *testing.T) {
 	box, _ := secretbox.New(make([]byte, 32))
 	repo := &fakeRepo{rows: map[string]row{}}
-	svc := New(repo, box)
-	schema := []plugin.SettingField{
+	svc := NewSettingsService(repo, box)
+	schema := []SettingField{
 		{Key: "endpoint", Type: "url"},
 		{Key: "apiKey", Type: "string", Secret: true},
 	}
@@ -69,8 +68,8 @@ func TestService_PutEncryptsSecret_GetMasks(t *testing.T) {
 func TestService_DecryptedAll_ReturnsPlaintext(t *testing.T) {
 	box, _ := secretbox.New(make([]byte, 32))
 	repo := &fakeRepo{rows: map[string]row{}}
-	svc := New(repo, box)
-	schema := []plugin.SettingField{
+	svc := NewSettingsService(repo, box)
+	schema := []SettingField{
 		{Key: "endpoint", Type: "url"},
 		{Key: "apiKey", Type: "string", Secret: true},
 	}
@@ -94,7 +93,7 @@ func TestService_Put_TypeValidation(t *testing.T) {
 	box, _ := secretbox.New(make([]byte, 32))
 	ctx := context.Background()
 
-	schema := []plugin.SettingField{
+	schema := []SettingField{
 		{Key: "count", Type: "int"},
 		{Key: "enabled", Type: "bool"},
 		{Key: "endpoint", Type: "url"},
@@ -131,7 +130,7 @@ func TestService_Put_TypeValidation(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := &fakeRepo{rows: map[string]row{}}
-			svc := New(repo, box)
+			svc := NewSettingsService(repo, box)
 			err := svc.Put(ctx, "p1", schema, tc.values)
 			if tc.wantErr {
 				require.Error(t, err)
@@ -148,8 +147,8 @@ func TestService_Put_TypeValidation(t *testing.T) {
 func TestService_Put_ValidationFailDoesNotPersist(t *testing.T) {
 	box, _ := secretbox.New(make([]byte, 32))
 	repo := &fakeRepo{rows: map[string]row{}}
-	svc := New(repo, box)
-	schema := []plugin.SettingField{
+	svc := NewSettingsService(repo, box)
+	schema := []SettingField{
 		{Key: "count", Type: "int"},
 		{Key: "label", Type: "string"},
 	}

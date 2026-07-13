@@ -1,4 +1,4 @@
-package pluginlifecycle
+package plugin
 
 import (
 	"context"
@@ -10,8 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
-	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
-	"github.com/lx-wnk/agent-dashboard/server/internal/pluginsctl"
 )
 
 type fakePluginRepo struct {
@@ -46,7 +44,7 @@ type recordingHooks struct {
 	failOn string
 }
 
-func (r *recordingHooks) Call(_ context.Context, _ plugin.Descriptor, hook string) error {
+func (r *recordingHooks) Call(_ context.Context, _ Descriptor, hook string) error {
 	r.called = append(r.called, hook)
 	if hook == r.failOn {
 		return assertErr
@@ -60,16 +58,16 @@ type hookErr struct{}
 
 func (*hookErr) Error() string { return "hook failed" }
 
-func desc() plugin.Descriptor {
-	return plugin.Descriptor{ID: "p1", Version: "1.0.0",
-		Lifecycle: plugin.LifecycleHooks{Install: "/i", Activate: "/a", Deactivate: "/d", Uninstall: "/u"}}
+func desc() Descriptor {
+	return Descriptor{ID: "p1", Version: "1.0.0",
+		Lifecycle: LifecycleHooks{Install: "/i", Activate: "/a", Deactivate: "/d", Uninstall: "/u"}}
 }
 
 func TestEngine_InstallActivateDeactivateUninstall(t *testing.T) {
 	pr := &fakePluginRepo{}
 	hk := &recordingHooks{}
 	settings := &fakeClearer{}
-	e := New(pr, hk, settings, nil)
+	e := NewLifecycleEngine(pr, hk, settings, nil)
 	ctx := context.Background()
 	d := desc()
 
@@ -91,7 +89,7 @@ func TestEngine_InstallActivateDeactivateUninstall(t *testing.T) {
 
 func TestEngine_ActivateOnDiscoveredPlugin_AutoInstalls(t *testing.T) {
 	pr := &fakePluginRepo{}
-	e := New(pr, &recordingHooks{}, &fakeClearer{}, nil)
+	e := NewLifecycleEngine(pr, &recordingHooks{}, &fakeClearer{}, nil)
 	err := e.Activate(context.Background(), desc())
 	require.NoError(t, err)
 	assert.NotNil(t, pr.installedAt)
@@ -100,7 +98,7 @@ func TestEngine_ActivateOnDiscoveredPlugin_AutoInstalls(t *testing.T) {
 
 func TestEngine_InstallWhenAlreadyInstalledRejected(t *testing.T) {
 	now := time.Now()
-	e := New(&fakePluginRepo{installedAt: &now}, &recordingHooks{}, &fakeClearer{}, nil)
+	e := NewLifecycleEngine(&fakePluginRepo{installedAt: &now}, &recordingHooks{}, &fakeClearer{}, nil)
 	err := e.Install(context.Background(), desc())
 	require.Error(t, err)
 	require.ErrorIs(t, err, ErrIllegalTransition)
@@ -108,7 +106,7 @@ func TestEngine_InstallWhenAlreadyInstalledRejected(t *testing.T) {
 
 func TestEngine_HookFailureAbortsTransition(t *testing.T) {
 	pr := &fakePluginRepo{}
-	e := New(pr, &recordingHooks{failOn: "/i"}, &fakeClearer{}, nil)
+	e := NewLifecycleEngine(pr, &recordingHooks{failOn: "/i"}, &fakeClearer{}, nil)
 	require.Error(t, e.Install(context.Background(), desc()))
 	assert.Nil(t, pr.installedAt) // state not changed when hook fails
 }
@@ -145,7 +143,7 @@ type eventHooks struct {
 	fail   bool
 }
 
-func (h *eventHooks) Call(_ context.Context, _ plugin.Descriptor, path string) error {
+func (h *eventHooks) Call(_ context.Context, _ Descriptor, path string) error {
 	*h.events = append(*h.events, "hook:"+path)
 	if h.fail {
 		return fmt.Errorf("hook failed")
@@ -175,9 +173,9 @@ func TestActivateStartsBeforeHookThenSetsActive(t *testing.T) {
 	var events []string
 	repo := newInstalledRepo(&events)
 	hooks := &eventHooks{events: &events}
-	eng := New(repo, hooks, &fakeClearer{}, fakeProc{events: &events})
+	eng := NewLifecycleEngine(repo, hooks, &fakeClearer{}, fakeProc{events: &events})
 
-	d := plugin.Descriptor{ID: "voice", Lifecycle: plugin.LifecycleHooks{Activate: "/lifecycle/activate"}}
+	d := Descriptor{ID: "voice", Lifecycle: LifecycleHooks{Activate: "/lifecycle/activate"}}
 	require.NoError(t, eng.Activate(context.Background(), d))
 
 	require.Equal(t, []string{"start:voice", "hook:/lifecycle/activate", "setActive:true"}, events)
@@ -187,9 +185,9 @@ func TestActivateHookFailureStopsAndDoesNotActivate(t *testing.T) {
 	var events []string
 	repo := newInstalledRepo(&events)
 	hooks := &eventHooks{events: &events, fail: true}
-	eng := New(repo, hooks, &fakeClearer{}, fakeProc{events: &events})
+	eng := NewLifecycleEngine(repo, hooks, &fakeClearer{}, fakeProc{events: &events})
 
-	d := plugin.Descriptor{ID: "voice", Lifecycle: plugin.LifecycleHooks{Activate: "/lifecycle/activate"}}
+	d := Descriptor{ID: "voice", Lifecycle: LifecycleHooks{Activate: "/lifecycle/activate"}}
 	require.Error(t, eng.Activate(context.Background(), d))
 	require.Equal(t, []string{"start:voice", "hook:/lifecycle/activate", "stop:voice"}, events)
 	require.False(t, repo.active)
@@ -198,10 +196,10 @@ func TestActivateHookFailureStopsAndDoesNotActivate(t *testing.T) {
 func TestEngine_UpdateRefreshesManifestHash(t *testing.T) {
 	now := time.Now()
 	pr := &fakePluginRepo{installedAt: &now}
-	e := New(pr, &recordingHooks{}, &fakeClearer{}, nil)
-	d := plugin.Descriptor{
+	e := NewLifecycleEngine(pr, &recordingHooks{}, &fakeClearer{}, nil)
+	d := Descriptor{
 		ID: "p1", Version: "2.0.0",
-		Lifecycle: plugin.LifecycleHooks{Update: "/update"},
+		Lifecycle: LifecycleHooks{Update: "/update"},
 	}
 	require.NoError(t, e.Update(context.Background(), d, "hash-v2"))
 	assert.Equal(t, "2.0.0", pr.version)
@@ -211,10 +209,10 @@ func TestEngine_UpdateRefreshesManifestHash(t *testing.T) {
 func TestEngine_UpdateBeforeInstallRejected(t *testing.T) {
 	pr := &fakePluginRepo{version: "1.0.0", manifestHash: "hash-v1"}
 	hk := &recordingHooks{}
-	e := New(pr, hk, &fakeClearer{}, nil)
-	d := plugin.Descriptor{
+	e := NewLifecycleEngine(pr, hk, &fakeClearer{}, nil)
+	d := Descriptor{
 		ID: "p1", Version: "2.0.0",
-		Lifecycle: plugin.LifecycleHooks{Update: "/update"},
+		Lifecycle: LifecycleHooks{Update: "/update"},
 	}
 	err := e.Update(context.Background(), d, "hash-v2")
 	require.Error(t, err)
@@ -233,20 +231,20 @@ func (notFoundRepo) GetState(_ context.Context, _ string) (State, error) {
 }
 
 func TestEngine_UpdateUndiscoveredReturnsUnknownPlugin(t *testing.T) {
-	e := New(&notFoundRepo{}, &recordingHooks{}, &fakeClearer{}, nil)
-	d := plugin.Descriptor{ID: "p1", Version: "2.0.0", Lifecycle: plugin.LifecycleHooks{Update: "/update"}}
+	e := NewLifecycleEngine(&notFoundRepo{}, &recordingHooks{}, &fakeClearer{}, nil)
+	d := Descriptor{ID: "p1", Version: "2.0.0", Lifecycle: LifecycleHooks{Update: "/update"}}
 	err := e.Update(context.Background(), d, "hash-v2")
 	require.Error(t, err)
-	require.ErrorIs(t, err, pluginsctl.ErrUnknownPlugin)
+	require.ErrorIs(t, err, ErrUnknownPlugin)
 }
 
 func TestInstallWrapsHooksInTransient(t *testing.T) {
 	var events []string
 	repo := &eventRepo{events: &events}
 	hooks := &eventHooks{events: &events}
-	eng := New(repo, hooks, &fakeClearer{}, fakeProc{events: &events})
+	eng := NewLifecycleEngine(repo, hooks, &fakeClearer{}, fakeProc{events: &events})
 
-	d := plugin.Descriptor{ID: "voice", Lifecycle: plugin.LifecycleHooks{Install: "/lifecycle/install"}}
+	d := Descriptor{ID: "voice", Lifecycle: LifecycleHooks{Install: "/lifecycle/install"}}
 	require.NoError(t, eng.Install(context.Background(), d))
 
 	require.Equal(t, "transient-begin:voice", events[0])
@@ -259,13 +257,13 @@ func TestInstallWrapsHooksInTransient(t *testing.T) {
 func TestActivate_DiscoveredPlugin_AutoInstallsAndActivates(t *testing.T) {
 	pr := &fakePluginRepo{} // installedAt=nil → discovered
 	hk := &recordingHooks{}
-	e := New(pr, hk, &fakeClearer{}, nil)
+	e := NewLifecycleEngine(pr, hk, &fakeClearer{}, nil)
 	ctx := context.Background()
 
-	d := plugin.Descriptor{
+	d := Descriptor{
 		ID:      "voice-whisper",
 		Version: "1.0.0",
-		Lifecycle: plugin.LifecycleHooks{
+		Lifecycle: LifecycleHooks{
 			Install:  "/install",
 			Activate: "/activate",
 		},
@@ -284,13 +282,13 @@ func TestActivate_InactivePlugin_NoDoubleInstall(t *testing.T) {
 	now := time.Now()
 	pr := &fakePluginRepo{installedAt: &now, active: false}
 	hk := &recordingHooks{}
-	e := New(pr, hk, &fakeClearer{}, nil)
+	e := NewLifecycleEngine(pr, hk, &fakeClearer{}, nil)
 	ctx := context.Background()
 
-	d := plugin.Descriptor{
+	d := Descriptor{
 		ID:      "voice-whisper",
 		Version: "1.0.0",
-		Lifecycle: plugin.LifecycleHooks{
+		Lifecycle: LifecycleHooks{
 			Install:  "/install",
 			Activate: "/activate",
 		},
@@ -308,13 +306,13 @@ func TestActivate_InactivePlugin_NoDoubleInstall(t *testing.T) {
 func TestActivate_DiscoveredPlugin_InstallHookFail_AbortsBeforeActivate(t *testing.T) {
 	pr := &fakePluginRepo{}
 	hk := &recordingHooks{failOn: "/install"}
-	e := New(pr, hk, &fakeClearer{}, nil)
+	e := NewLifecycleEngine(pr, hk, &fakeClearer{}, nil)
 	ctx := context.Background()
 
-	d := plugin.Descriptor{
+	d := Descriptor{
 		ID:      "voice-whisper",
 		Version: "1.0.0",
-		Lifecycle: plugin.LifecycleHooks{
+		Lifecycle: LifecycleHooks{
 			Install:  "/install",
 			Activate: "/activate",
 		},

@@ -6,27 +6,25 @@ import (
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
-	"github.com/lx-wnk/agent-dashboard/server/internal/pluginlifecycle"
-	"github.com/lx-wnk/agent-dashboard/server/internal/pluginsettings"
 )
 
 // pluginSettingRepoAdapter maps the ent-backed PluginSettingRepo onto the
-// pluginsettings.Repo interface (Stored ↔ PluginSettingInput/ent.PluginSetting).
+// plugin.Repo interface (Stored ↔ PluginSettingInput/ent.PluginSetting).
 type pluginSettingRepoAdapter struct{ inner repo.PluginSettingRepo }
 
-func (a pluginSettingRepoAdapter) ListByPlugin(ctx context.Context, pluginID string) ([]pluginsettings.Stored, error) {
+func (a pluginSettingRepoAdapter) ListByPlugin(ctx context.Context, pluginID string) ([]plugin.Stored, error) {
 	rows, err := a.inner.ListByPlugin(ctx, pluginID)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]pluginsettings.Stored, len(rows))
+	out := make([]plugin.Stored, len(rows))
 	for i, r := range rows {
-		out[i] = pluginsettings.Stored{Key: r.Key, Value: r.Value, Nonce: r.Nonce, Secret: r.Secret}
+		out[i] = plugin.Stored{Key: r.Key, Value: r.Value, Nonce: r.Nonce, Secret: r.Secret}
 	}
 	return out, nil
 }
 
-func (a pluginSettingRepoAdapter) Upsert(ctx context.Context, pluginID string, s pluginsettings.Stored) error {
+func (a pluginSettingRepoAdapter) Upsert(ctx context.Context, pluginID string, s plugin.Stored) error {
 	_, err := a.inner.Upsert(ctx, repo.PluginSettingInput{
 		PluginID: pluginID, Key: s.Key, Value: s.Value, Nonce: s.Nonce, Secret: s.Secret,
 	})
@@ -38,15 +36,15 @@ func (a pluginSettingRepoAdapter) DeleteByPlugin(ctx context.Context, pluginID s
 }
 
 // pluginStateRepoAdapter maps the ent-backed PluginRepo onto the
-// pluginlifecycle.StateRepo interface (ent.Plugin → pluginlifecycle.State).
+// plugin.StateRepo interface (ent.Plugin → plugin.State).
 type pluginStateRepoAdapter struct{ inner repo.PluginRepo }
 
-func (a pluginStateRepoAdapter) GetState(ctx context.Context, id string) (pluginlifecycle.State, error) {
+func (a pluginStateRepoAdapter) GetState(ctx context.Context, id string) (plugin.State, error) {
 	p, err := a.inner.Get(ctx, id)
 	if err != nil {
-		return pluginlifecycle.State{}, err
+		return plugin.State{}, err
 	}
-	return pluginlifecycle.State{InstalledAt: p.InstalledAt, Active: p.Active, Version: p.Version}, nil
+	return plugin.State{InstalledAt: p.InstalledAt, Active: p.Active, Version: p.Version}, nil
 }
 
 func (a pluginStateRepoAdapter) SetInstalledAt(ctx context.Context, id string, at *time.Time) error {
@@ -66,14 +64,14 @@ func (a pluginStateRepoAdapter) SetManifestHash(ctx context.Context, id, hash st
 }
 
 // pluginDiscoverRepoAdapter maps the ent-backed PluginRepo onto the
-// pluginlifecycle.DiscoverRepo interface. It reads the prior manifest hash to
+// plugin.DiscoverRepo interface. It reads the prior manifest hash to
 // report update-available, then upserts (the upsert preserves installed_at/active).
 type pluginDiscoverRepoAdapter struct {
 	inner    repo.PluginRepo
 	settings repo.PluginSettingRepo
 }
 
-func (a pluginDiscoverRepoAdapter) UpsertDiscovered(ctx context.Context, in pluginlifecycle.DiscoveredPlugin) (bool, error) {
+func (a pluginDiscoverRepoAdapter) UpsertDiscovered(ctx context.Context, in plugin.DiscoveredPlugin) (bool, error) {
 	var oldHash string
 	if existing, err := a.inner.Get(ctx, in.ID); err == nil {
 		oldHash = existing.ManifestHash
@@ -119,7 +117,7 @@ func (a pluginDiscoverRepoAdapter) Remove(ctx context.Context, id string) error 
 }
 
 // pluginProcessAdapter lets the lifecycle engine drive the plugin registry's
-// process lifecycle without the plugin package importing pluginlifecycle.
+// process lifecycle without the plugin package importing plugin.
 type pluginProcessAdapter struct{ reg *plugin.Registry }
 
 func (a pluginProcessAdapter) Start(ctx context.Context, id string) error {

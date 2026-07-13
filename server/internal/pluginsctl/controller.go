@@ -6,7 +6,6 @@ package pluginsctl
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,14 +13,6 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
 )
-
-// ErrUnknownPlugin signals that an ID matched no discovered plugin. The handler
-// maps it to 400; any other error is a persistence failure mapped to 500.
-var ErrUnknownPlugin = errors.New("pluginsctl: unknown plugin")
-
-// ErrInvalidAction signals an unsupported lifecycle action (not one of
-// install|activate|deactivate|uninstall). The handler maps it to 400.
-var ErrInvalidAction = errors.New("pluginsctl: invalid action")
 
 // Registry is the minimal subset of *plugin.Registry the controller needs,
 // declared locally so tests can fake it.

@@ -11,7 +11,6 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pluginlifecyclectl"
-	"github.com/lx-wnk/agent-dashboard/server/internal/pluginsctl"
 )
 
 type fakeRepo struct {
@@ -199,7 +198,7 @@ func TestTransition_InvalidAction(t *testing.T) {
 	c := pluginlifecyclectl.NewWithLoader(repo, &fakeEngine{}, &fakeSettings{}, loader, nil)
 
 	_, err := c.Transition(context.Background(), "p1", "frobnicate")
-	if !errors.Is(err, pluginsctl.ErrInvalidAction) {
+	if !errors.Is(err, plugin.ErrInvalidAction) {
 		t.Fatalf("expected ErrInvalidAction, got %v", err)
 	}
 }
@@ -210,7 +209,7 @@ func TestTransition_UnknownPlugin(t *testing.T) {
 	c := pluginlifecyclectl.NewWithLoader(repo, &fakeEngine{}, &fakeSettings{}, loader, nil)
 
 	_, err := c.Transition(context.Background(), "ghost", "activate")
-	if !errors.Is(err, pluginsctl.ErrUnknownPlugin) {
+	if !errors.Is(err, plugin.ErrUnknownPlugin) {
 		t.Fatalf("expected ErrUnknownPlugin, got %v", err)
 	}
 }

@@ -18,7 +18,6 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
-	"github.com/lx-wnk/agent-dashboard/server/internal/pluginsctl"
 )
 
 // Repo is the subset of repo.PluginRepo the controller reads.
@@ -27,7 +26,7 @@ type Repo interface {
 	Get(ctx context.Context, id string) (*ent.Plugin, error)
 }
 
-// Engine is the lifecycle transition surface (satisfied by *pluginlifecycle.Engine).
+// Engine is the lifecycle transition surface (satisfied by *plugin.Engine).
 type Engine interface {
 	Install(ctx context.Context, d plugin.Descriptor) error
 	Activate(ctx context.Context, d plugin.Descriptor) error
@@ -36,7 +35,7 @@ type Engine interface {
 	Update(ctx context.Context, d plugin.Descriptor, manifestHash string) error
 }
 
-// Settings is the per-plugin settings surface (satisfied by *pluginsettings.Service).
+// Settings is the per-plugin settings surface (satisfied by *plugin.Service).
 type Settings interface {
 	Get(ctx context.Context, pluginID string, schema []plugin.SettingField) (map[string]string, error)
 	Put(ctx context.Context, pluginID string, schema []plugin.SettingField, values map[string]string) error
@@ -172,7 +171,7 @@ func (c *Controller) List(ctx context.Context) ([]plugins.PluginView, error) {
 }
 
 // descriptorFor resolves a plugin's descriptor + manifest hash, mapping a
-// missing plugin to pluginsctl.ErrUnknownPlugin.
+// missing plugin to plugin.ErrUnknownPlugin.
 func (c *Controller) descriptorFor(ctx context.Context, id string) (plugin.Descriptor, string, error) {
 	path := ""
 	row, err := c.repo.Get(ctx, id)
@@ -186,7 +185,7 @@ func (c *Controller) descriptorFor(ctx context.Context, id string) (plugin.Descr
 	}
 	desc, hash, lerr := c.loader.Load(id, path)
 	if lerr != nil {
-		return plugin.Descriptor{}, "", fmt.Errorf("%w: %q", pluginsctl.ErrUnknownPlugin, id)
+		return plugin.Descriptor{}, "", fmt.Errorf("%w: %q", plugin.ErrUnknownPlugin, id)
 	}
 	if desc.ID == "" {
 		desc.ID = id
@@ -195,7 +194,7 @@ func (c *Controller) descriptorFor(ctx context.Context, id string) (plugin.Descr
 }
 
 // Transition loads the descriptor, dispatches to the engine, and returns the
-// refreshed view. An unsupported action yields pluginsctl.ErrInvalidAction.
+// refreshed view. An unsupported action yields plugin.ErrInvalidAction.
 // Transitions on the same plugin ID are serialized via a per-plugin lock to
 // prevent concurrent Activate/Deactivate from racing on process and DB state.
 func (c *Controller) Transition(ctx context.Context, id, action string) (plugins.PluginView, error) {
@@ -219,7 +218,7 @@ func (c *Controller) Transition(ctx context.Context, id, action string) (plugins
 	case "update":
 		err = c.engine.Update(ctx, desc, hash)
 	default:
-		return plugins.PluginView{}, fmt.Errorf("%w: %q", pluginsctl.ErrInvalidAction, action)
+		return plugins.PluginView{}, fmt.Errorf("%w: %q", plugin.ErrInvalidAction, action)
 	}
 	if err != nil {
 		return plugins.PluginView{}, fmt.Errorf("pluginlifecyclectl: %s %q: %w", action, id, err)

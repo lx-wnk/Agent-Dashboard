@@ -1,4 +1,4 @@
-package pluginlifecycle
+package plugin
 
 import (
 	"context"
@@ -9,8 +9,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-
-	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
 )
 
 // DiscoveredPlugin is the upsert payload for one found manifest.
@@ -35,7 +33,9 @@ type Discoverer struct {
 	repo DiscoverRepo
 }
 
-func NewDiscoverer(dir string, repo DiscoverRepo) *Discoverer { return &Discoverer{dir: dir, repo: repo} }
+func NewDiscoverer(dir string, repo DiscoverRepo) *Discoverer {
+	return &Discoverer{dir: dir, repo: repo}
+}
 
 // Result summarizes a discovery pass.
 type Result struct {
@@ -66,11 +66,11 @@ func (d *Discoverer) Discover(ctx context.Context) (Result, error) {
 		if err != nil {
 			continue // no manifest — skip (existing behavior)
 		}
-		var desc plugin.Descriptor
+		var desc Descriptor
 		if err := json.Unmarshal(raw, &desc); err != nil || desc.ID == "" {
 			continue
 		}
-		if !plugin.ValidID(desc.ID) {
+		if !ValidID(desc.ID) {
 			slog.Warn("discover: skip — plugin id is malformed", "dir", e.Name(), "id", desc.ID)
 			continue
 		}

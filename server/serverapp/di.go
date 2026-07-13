@@ -56,9 +56,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
-	"github.com/lx-wnk/agent-dashboard/server/internal/pluginlifecycle"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pluginlifecyclectl"
-	"github.com/lx-wnk/agent-dashboard/server/internal/pluginsettings"
 	"github.com/lx-wnk/agent-dashboard/server/internal/provider"
 	"github.com/lx-wnk/agent-dashboard/server/internal/providersettings"
 	"github.com/lx-wnk/agent-dashboard/server/internal/refine"
@@ -247,7 +245,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 
 	// Build settings service early so the provider is wired before Load.
 	// Nil when running without a database (no entClient).
-	var pluginSettingsSvc *pluginsettings.Service
+	var pluginSettingsSvc *plugin.Service
 	if entClient != nil {
 		masterKey, keyErr := secretbox.LoadOrGenerateMasterKey(os.Getenv("DASHBOARD_SECRET_KEY"))
 		if keyErr != nil {
@@ -258,7 +256,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 			return nil, fmt.Errorf("plugin secretbox: %w", boxErr)
 		}
 		pluginSettingRepo := repo.NewPluginSettingRepo(entClient)
-		pluginSettingsSvc = pluginsettings.New(pluginSettingRepoAdapter{inner: pluginSettingRepo}, box)
+		pluginSettingsSvc = plugin.NewSettingsService(pluginSettingRepoAdapter{inner: pluginSettingRepo}, box)
 		pluginRegistry.SetSettingsProvider(func(ctx context.Context, id string) (map[string]string, error) {
 			return pluginSettingsSvc.DecryptedAll(ctx, id)
 		})
@@ -310,13 +308,13 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	var pluginLifecycleHandler *apiplugins.LifecycleHandler
 	if pluginSettingsSvc != nil {
 		pluginSettingRepo := repo.NewPluginSettingRepo(entClient)
-		lifecycleEngine := pluginlifecycle.New(
+		lifecycleEngine := plugin.NewLifecycleEngine(
 			pluginStateRepoAdapter{inner: pluginRepo},
-			pluginlifecycle.NewHTTPHookCaller(),
+			plugin.NewHTTPHookCaller(),
 			pluginSettingsSvc,
 			pluginProcessAdapter{reg: pluginRegistry},
 		)
-		discoverer := pluginlifecycle.NewDiscoverer(cfg.PluginDir, pluginDiscoverRepoAdapter{inner: pluginRepo, settings: pluginSettingRepo})
+		discoverer := plugin.NewDiscoverer(cfg.PluginDir, pluginDiscoverRepoAdapter{inner: pluginRepo, settings: pluginSettingRepo})
 		lifecycleProbe := func(id string) (bool, bool) {
 			e, ok := pluginRegistry.Lookup(id)
 			return ok, ok && e.Healthy()
