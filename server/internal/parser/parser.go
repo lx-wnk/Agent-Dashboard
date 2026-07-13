@@ -358,6 +358,73 @@ func scanFullFileTokenUsage(path string) (fullScanUsage, error) {
 	return total, nil
 }
 
+// tokenOffsetCacheEntry tracks the incremental token-scan position for one
+// session file, keyed by inode. offset only ever advances for a given inode —
+// the JSONL is append-only (CI-4), so a lifetime total is an exact running sum
+// of appended bytes and never needs to re-read history.
+type tokenOffsetCacheEntry struct {
+	offset  int64
+	running sdk.TokenUsage
+}
+
+var (
+	tokenOffsetCacheMu sync.Mutex
+	tokenOffsetCache   = make(map[uint64]*tokenOffsetCacheEntry)
+)
+
+// tokenOffsetCacheMaxEntries bounds tokenOffsetCache so idle/rotated session
+// files don't accumulate forever. Exceeding it drops the whole cache — crude,
+// but session file counts stay far below this in practice, so it never fires
+// in normal operation.
+const tokenOffsetCacheMaxEntries = 4096
+
+// tokenUsageForFile returns the lifetime token total for the session file at
+// path, scanning only the bytes appended since the previous call when the
+// file's inode is unchanged and has not shrunk. Falls back to a full rescan
+// (scanFullFileTokenUsage) — and reseeds the cache entry — on first sighting,
+// an inode change, a truncation (size < cached offset), or any incremental-
+// scan error: a partial delta is never trusted, per CI-4 / PERF-HOT1.
+func tokenUsageForFile(path string) (fullScanUsage, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return fullScanUsage{}, fmt.Errorf("stat %s: %w", path, err)
+	}
+	inode := inodeOf(info)
+	size := info.Size()
+
+	tokenOffsetCacheMu.Lock()
+	entry, ok := tokenOffsetCache[inode]
+	tokenOffsetCacheMu.Unlock()
+
+	if ok && size >= entry.offset {
+		usage, newOffset, scanErr := ScanMessagesFrom(path, entry.offset)
+		if scanErr == nil {
+			tokenOffsetCacheMu.Lock()
+			entry.running.InputTokens += usage.InputTokens
+			entry.running.OutputTokens += usage.OutputTokens
+			entry.running.CacheCreationTokens += usage.CacheCreationTokens
+			entry.running.CacheReadTokens += usage.CacheReadTokens
+			entry.offset = newOffset
+			running := entry.running
+			tokenOffsetCacheMu.Unlock()
+			return fullScanUsage{TokenUsage: running}, nil
+		}
+		slog.Warn("parser: incremental token scan failed — falling back to full rescan", "path", path, "err", scanErr)
+	}
+
+	full, err := scanFullFileTokenUsage(path)
+	if err != nil {
+		return fullScanUsage{}, err
+	}
+	tokenOffsetCacheMu.Lock()
+	if !ok && len(tokenOffsetCache) >= tokenOffsetCacheMaxEntries {
+		tokenOffsetCache = make(map[uint64]*tokenOffsetCacheEntry, tokenOffsetCacheMaxEntries)
+	}
+	tokenOffsetCache[inode] = &tokenOffsetCacheEntry{offset: size, running: full.TokenUsage}
+	tokenOffsetCacheMu.Unlock()
+	return full, nil
+}
+
 // SessionData is the parsed output of a Claude Code JSONL session log.
 type SessionData struct {
 	SessionID           string
@@ -803,7 +870,7 @@ func ParseSessionFile(path string) (*SessionData, error) {
 	// scan is the only source of TokenUsage; the tail loop deliberately left it
 	// untouched. This runs on the cache-miss path only — ParseSessionFile is not
 	// called on an SSE cache hit.
-	if full, scanErr := scanFullFileTokenUsage(path); scanErr != nil {
+	if full, scanErr := tokenUsageForFile(path); scanErr != nil {
 		// Non-fatal: fall back to a tail-only sum rather than dropping the whole
 		// session. Undercounting a large session is better than no data at all.
 		slog.Warn("parser: full token scan failed — falling back to tail-only token totals (may undercount)", "path", path, "err", scanErr)

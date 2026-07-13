@@ -90,6 +90,64 @@ func BenchmarkFindSessionForProject_CacheHit(b *testing.B) {
 	}
 }
 
+const benchAppendLine = `{"type":"assistant","timestamp":"2025-01-15T10:30:00.000Z","message":{"role":"assistant","model":"claude-sonnet-4-6","content":[{"type":"tool_use","name":"Bash","input":{"command":"ls"}}],"usage":{"input_tokens":100,"output_tokens":50,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}}}` + "\n"
+
+// BenchmarkTokenUsageForFile_Incremental measures the PERF-HOT1 append-then-
+// retick pattern against a large pre-existing session: each iteration appends
+// one turn and re-derives the lifetime token total, which should only scan the
+// newly appended bytes (not the whole file). Compare against
+// BenchmarkTokenUsageForFile_FullRescanBaseline, which runs the identical
+// append pattern through the pre-PERF-HOT1 whole-file re-scan.
+func BenchmarkTokenUsageForFile_Incremental(b *testing.B) {
+	path := buildBenchSession(b, 2000)
+	parser.ResetTokenOffsetCache()
+	if _, err := parser.TokenUsageForFile(path); err != nil {
+		b.Fatalf("warm-up: %v", err)
+	}
+
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o640)
+	if err != nil {
+		b.Fatalf("open for append: %v", err)
+	}
+	defer f.Close() //nolint:errcheck
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := f.WriteString(benchAppendLine); err != nil {
+			b.Fatalf("append: %v", err)
+		}
+		if _, err := parser.TokenUsageForFile(path); err != nil {
+			b.Fatalf("TokenUsageForFile: %v", err)
+		}
+	}
+}
+
+// BenchmarkTokenUsageForFile_FullRescanBaseline runs the same append-then-
+// retick pattern as BenchmarkTokenUsageForFile_Incremental, but through the
+// pre-PERF-HOT1 whole-file re-scan (scanFullFileTokenUsage) so the two
+// benchmarks are directly comparable before/after numbers.
+func BenchmarkTokenUsageForFile_FullRescanBaseline(b *testing.B) {
+	path := buildBenchSession(b, 2000)
+
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o640)
+	if err != nil {
+		b.Fatalf("open for append: %v", err)
+	}
+	defer f.Close() //nolint:errcheck
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := f.WriteString(benchAppendLine); err != nil {
+			b.Fatalf("append: %v", err)
+		}
+		if _, err := parser.ScanFullFileTokenUsage(path); err != nil {
+			b.Fatalf("ScanFullFileTokenUsage: %v", err)
+		}
+	}
+}
+
 // BenchmarkTailRead measures the tail-read I/O primitive on files of varying sizes.
 func BenchmarkTailRead(b *testing.B) {
 	sizes := []int{10, 200, 500}
