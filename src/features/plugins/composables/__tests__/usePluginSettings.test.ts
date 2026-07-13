@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { usePluginSettings } from '../usePluginSettings'
+import { usePluginSettings } from '@/features/plugins/composables/usePluginSettings'
 
 // onMounted is registered but never invoked in a plain vitest context (no
 // component instance), so no initial fetchPlugins fires automatically.
@@ -34,7 +34,7 @@ describe('usePluginSettings.update', () => {
 describe('pluginView type', () => {
   it('healthy field is present in the interface (type-only check)', () => {
     // If PluginView does not have healthy, TypeScript compilation fails here.
-    const view: import('../usePluginSettings').PluginView = {
+    const view: import('@/features/plugins/composables/usePluginSettings').PluginView = {
       id: 'p',
       name: 'P',
       version: '1.0',

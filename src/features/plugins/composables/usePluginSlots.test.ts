@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { loadSlotAddons, resetSlotCaches } from './usePluginSlots'
+import { loadSlotAddons, resetSlotCaches } from '@/features/plugins/composables/usePluginSlots'
 
 const addonFor = (slot: string) => ({ default: { slot, mount: () => () => {} } })
 const bareAddon = () => ({ default: { mount: () => () => {} } })

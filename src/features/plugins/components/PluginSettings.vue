@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { usePluginSettings } from '../composables/usePluginSettings'
-import { useServerReconnect } from '../composables/useServerReconnect'
-import { toast } from '../composables/useToast'
-import { errorMessage } from '../utils/errorMessage'
-import PluginSettingsForm from './PluginSettingsForm.vue'
-import PluginSlot from './PluginSlot.vue'
+import { useServerReconnect } from '@/composables/useServerReconnect'
+import { toast } from '@/composables/useToast'
+import PluginSettingsForm from '@/features/plugins/components/PluginSettingsForm.vue'
+import PluginSlot from '@/features/plugins/components/PluginSlot.vue'
+import { usePluginSettings } from '@/features/plugins/composables/usePluginSettings'
+import { errorMessage } from '@/utils/errorMessage'
 
 const { plugins, loading, setActive, getSettings, putSettings, update } = usePluginSettings()
 const { triggerRestart } = useServerReconnect()

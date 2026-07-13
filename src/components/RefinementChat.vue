@@ -4,9 +4,9 @@ import type { LoadedAddon, SlotContext } from '../utils/pluginSlot'
 import type { ImageAttachment } from '@/features/pipeline/composables/useRefinementChat'
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useRefinementChat } from '@/features/pipeline/composables/useRefinementChat'
+import PluginSlot from '@/features/plugins/components/PluginSlot.vue'
 import { toast } from '../composables/useToast'
 import { renderMarkdown as renderMarkdownShared } from '../utils/markdown'
-import PluginSlot from './PluginSlot.vue'
 
 const props = defineProps<{
   open: boolean

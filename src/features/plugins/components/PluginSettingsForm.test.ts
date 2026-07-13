@@ -1,6 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { expect, it, vi } from 'vitest'
-import PluginSettingsForm from './PluginSettingsForm.vue'
+import PluginSettingsForm from '@/features/plugins/components/PluginSettingsForm.vue'
 
 const schema = [
   { key: 'endpoint', type: 'url', label: 'Endpoint', secret: false },

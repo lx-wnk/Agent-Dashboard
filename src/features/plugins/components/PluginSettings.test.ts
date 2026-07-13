@@ -1,7 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { resetSlotCaches } from '../composables/usePluginSlots'
-import PluginSettings from './PluginSettings.vue'
+import PluginSettings from '@/features/plugins/components/PluginSettings.vue'
+import { resetSlotCaches } from '@/features/plugins/composables/usePluginSlots'
 
 function makePlugin(id: string, capabilities: string[], state: 'active' | 'inactive' = 'active') {
   return { id, name: id, version: '1.0.0', state, updateAvailable: false, capabilities, hasSettings: false }

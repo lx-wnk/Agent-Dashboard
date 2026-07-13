@@ -2,7 +2,7 @@ import { mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
 
-let usePlugins: typeof import('../usePlugins').usePlugins
+let usePlugins: typeof import('@/features/plugins/composables/usePlugins').usePlugins
 
 function withSetup<T>(composable: () => T) {
   let result!: T
@@ -28,7 +28,7 @@ beforeEach(async () => {
     status: 200,
   }))
   vi.resetModules()
-  const mod = await import('../usePlugins')
+  const mod = await import('@/features/plugins/composables/usePlugins')
   usePlugins = mod.usePlugins
 })
 
@@ -71,7 +71,7 @@ describe('usePlugins', () => {
       json: () => Promise.resolve({}),
     } as Response)
     vi.resetModules()
-    const mod = await import('../usePlugins')
+    const mod = await import('@/features/plugins/composables/usePlugins')
     usePlugins = mod.usePlugins
 
     const { result } = withSetup(() => usePlugins())
