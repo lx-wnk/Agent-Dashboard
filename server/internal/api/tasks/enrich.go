@@ -8,6 +8,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/rawrepo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
+	"github.com/lx-wnk/agent-dashboard/server/internal/proc"
 	"github.com/lx-wnk/agent-dashboard/server/internal/taskcontrol"
 )
 
@@ -77,13 +78,13 @@ type ActiveChild struct {
 	LatestOutput    string `json:"latestOutput"`
 }
 
-// pidAliveMemo returns a func(int) bool that wraps pipeline.IsPidAlive and caches
+// pidAliveMemo returns a func(int) bool that wraps proc.IsPidAlive and caches
 // each distinct pid's liveness for the lifetime of the returned closure. A single
 // memo is shared across one enrich pass so a pid reused by several sibling tasks
 // costs exactly one syscall. The closure is not safe for concurrent use — build
 // one per enrich call.
 func pidAliveMemo() func(int) bool {
-	return memoizeProbe(pipeline.IsPidAlive)
+	return memoizeProbe(proc.IsPidAlive)
 }
 
 // memoizeProbe caches each distinct pid's probe result for the lifetime of the

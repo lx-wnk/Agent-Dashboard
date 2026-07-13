@@ -13,6 +13,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
+	"github.com/lx-wnk/agent-dashboard/server/internal/proc"
 )
 
 var claudeBin = resolvebin("claude")
@@ -108,7 +109,7 @@ func (h *Handler) analyzeTask(w http.ResponseWriter, r *http.Request) error {
 	// Dedup: reject if a live analysis agent is already running for this task.
 	analysisMu.Lock()
 	if existingPID, ok := activeAnalysisPIDs[id]; ok {
-		if pipeline.IsPidAlive(existingPID) {
+		if proc.IsPidAlive(existingPID) {
 			analysisMu.Unlock()
 			return apierr.NewAppError(http.StatusConflict, fmt.Sprintf(
 				"analysis session already running for this task (pid %d)", existingPID))

@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/proc"
 )
 
 const agentMessageMaxChars = 2000
@@ -90,7 +91,7 @@ type CompletionDeps struct {
 func DetectCompletion(sr *ent.StageRun, cwd string, deps CompletionDeps) (CompletionResult, error) {
 	isPidAliveFn := deps.IsPidAlive
 	if isPidAliveFn == nil {
-		isPidAliveFn = IsPidAlive
+		isPidAliveFn = proc.IsPidAlive
 	}
 	readOutputFn := deps.ReadOutput
 	if readOutputFn == nil {

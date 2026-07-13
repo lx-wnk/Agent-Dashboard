@@ -3,51 +3,11 @@ package pipeline
 import (
 	"context"
 	"fmt"
-	"os"
-	"os/exec"
-	"strconv"
-	"strings"
-	"syscall"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
-	"github.com/lx-wnk/agent-dashboard/server/internal/platform"
+	"github.com/lx-wnk/agent-dashboard/server/internal/proc"
 )
-
-func isPidZombie(pid int) bool {
-	if platform.IsLinux {
-		data, err := os.ReadFile(fmt.Sprintf("/proc/%d/status", pid))
-		if err != nil {
-			return false
-		}
-		s := string(data)
-		return strings.Contains(s, "State:\tZ") || strings.Contains(s, "State: Z")
-	}
-	cmd := exec.Command("ps", "-p", strconv.Itoa(pid), "-o", "stat=") //nolint:gosec
-	out, err := cmd.Output()
-	if err != nil {
-		return false
-	}
-	return strings.HasPrefix(strings.TrimSpace(string(out)), "Z")
-}
-
-func IsPidAlive(pid int) bool {
-	if pid <= 0 {
-		return false
-	}
-	proc, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-	err = proc.Signal(syscall.Signal(0))
-	if err == nil {
-		return !isPidZombie(pid)
-	}
-	if err == syscall.EPERM {
-		return true
-	}
-	return false
-}
 
 type RecoveryDecision struct {
 	Kind   string
@@ -59,7 +19,7 @@ func DecideRecovery(sr *ent.StageRun) RecoveryDecision {
 	if sr.Pid != nil {
 		pid = *sr.Pid
 	}
-	if IsPidAlive(pid) {
+	if proc.IsPidAlive(pid) {
 		return RecoveryDecision{Kind: "alive", Reason: fmt.Sprintf("PID %d still running", pid)}
 	}
 	if sr.SessionID != nil && *sr.SessionID != "" {

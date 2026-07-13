@@ -1,10 +1,20 @@
 version: '2'
 linters:
   enable:
+    - depguard
     - gosec
     - misspell
     - revive
   settings:
+    depguard:
+      rules:
+        no-pipeline-from-rawrepo:
+          list-mode: lax
+          files:
+            - "**/internal/db/rawrepo/**"
+          deny:
+            - pkg: "github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
+              desc: "db/rawrepo is a low-level persistence package and must not import the pipeline orchestration core (layer-direction inversion); use internal/proc for process-liveness checks (ADR-0009)"
     revive:
       rules:
         - name: exported

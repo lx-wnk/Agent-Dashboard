@@ -9,6 +9,7 @@ import (
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	"github.com/lx-wnk/agent-dashboard/server/internal/proc"
 )
 
 // runProgressTaskLocked is the core of ProgressTask — called with the per-task
@@ -44,7 +45,7 @@ func (o *PipelineOrchestrator) runProgressTaskLocked(ctx context.Context, taskID
 				pid = *latest.Pid
 			}
 			isTerminal := latest.Status == "failed" || latest.Status == "done"
-			isZombieAwait := latest.Status == "awaiting_user" && !IsPidAlive(pid)
+			isZombieAwait := latest.Status == "awaiting_user" && !proc.IsPidAlive(pid)
 			if isTerminal || isZombieAwait {
 				n, _ := o.opts.PermissionRepo.CountForStageRun(ctx, latest.ID)
 				if n > 0 {
@@ -100,7 +101,7 @@ func (o *PipelineOrchestrator) runProgressTaskLocked(ctx context.Context, taskID
 		if stageRun.Pid != nil {
 			pid = *stageRun.Pid
 		}
-		if (stageRun.Status == "running" || stageRun.Status == "awaiting_user") && IsPidAlive(pid) {
+		if (stageRun.Status == "running" || stageRun.Status == "awaiting_user") && proc.IsPidAlive(pid) {
 			slog.Info("orchestrator: re-entry skipped — live PID already running",
 				"stage", stageRun.Stage, "runID", stageRun.ID, "pid", pid)
 			return stageRun, nil

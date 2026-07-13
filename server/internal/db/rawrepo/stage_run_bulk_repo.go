@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
-	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
+	"github.com/lx-wnk/agent-dashboard/server/internal/proc"
 )
 
 // StageRunBulkRepo provides bulk raw-SQL helpers for stage_runs that cannot
@@ -47,14 +47,14 @@ type sqlStageRunBulkRepo struct {
 }
 
 // NewStageRunBulkRepo returns a StageRunBulkRepo backed by db.
-// pipeline.IsPidAlive is used as the default liveness probe; tests can
+// proc.IsPidAlive is used as the default liveness probe; tests can
 // substitute a fake by calling newStageRunBulkRepoWithProbe directly.
 func NewStageRunBulkRepo(db *sql.DB) StageRunBulkRepo {
-	return &sqlStageRunBulkRepo{db: db, isPidAlive: pipeline.IsPidAlive}
+	return &sqlStageRunBulkRepo{db: db, isPidAlive: proc.IsPidAlive}
 }
 
 // NewStageRunBulkRepoWithProbe is the test-seam constructor that substitutes
-// the default pipeline.IsPidAlive with a custom probe.
+// the default proc.IsPidAlive with a custom probe.
 func NewStageRunBulkRepoWithProbe(db *sql.DB, probe func(int) bool) StageRunBulkRepo {
 	return &sqlStageRunBulkRepo{db: db, isPidAlive: probe}
 }

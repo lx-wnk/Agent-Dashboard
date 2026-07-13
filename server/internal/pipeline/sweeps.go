@@ -8,6 +8,7 @@ import (
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	"github.com/lx-wnk/agent-dashboard/server/internal/proc"
 )
 
 // sweepAwaitingUserRuns reaps awaiting_user stage_runs whose agent process has
@@ -26,7 +27,7 @@ func (o *PipelineOrchestrator) sweepAwaitingUserRuns(ctx context.Context, allRun
 		// Only reap runs that had a live agent process which has since died.
 		// Nil-PID runs are legitimate: concept/backlog WaitUser transitions never
 		// spawn an agent, so IsPidAlive(0) == false must not trigger the reaper.
-		if run.Pid != nil && !IsPidAlive(*run.Pid) {
+		if run.Pid != nil && !proc.IsPidAlive(*run.Pid) {
 			slog.Warn("orchestrator: awaiting_user run has dead PID — reaping as failed",
 				"runID", run.ID, "stage", run.Stage, "pid", *run.Pid)
 			if _, locked, err := o.sweepApplyTransition(ctx, task, run, FailTransition{
@@ -116,7 +117,7 @@ func (o *PipelineOrchestrator) sweepOrphanRuns(ctx context.Context, allRunning [
 			if fresh.Pid != nil {
 				pid = *fresh.Pid
 			}
-			if IsPidAlive(pid) {
+			if proc.IsPidAlive(pid) {
 				_ = syscallKill(pid)
 			}
 			slog.Warn("orchestrator: orphan stage_run — task is parked, reaping run as failed",
@@ -131,7 +132,7 @@ func (o *PipelineOrchestrator) sweepOrphanRuns(ctx context.Context, allRunning [
 			continue
 		}
 		// Case 2: on_hold with dead PID
-		if run.Status == "on_hold" && run.Pid != nil && !IsPidAlive(*run.Pid) {
+		if run.Status == "on_hold" && run.Pid != nil && !proc.IsPidAlive(*run.Pid) {
 			fresh, _ := o.opts.StageRunRepo.GetByID(ctx, run.ID)
 			if fresh == nil || fresh.Status == "done" || fresh.Status == "failed" {
 				continue
