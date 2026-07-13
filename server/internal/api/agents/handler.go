@@ -32,16 +32,40 @@ func NewHandler(getAgents GetAgentsFn, broadcaster *sse.Broadcaster) *Handler {
 
 // List handles GET /api/agents — returns the current agent list as JSON.
 // A nil slice is normalized to an empty slice so the frontend always receives [].
+// Serves the broadcaster's last frame (PERF-LOW2) instead of a fresh scan when
+// available, so a burst of requests costs one scan per broadcast tick rather
+// than one per request. Falls back to a scan before the loop's first tick.
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) error {
-	agents, err := h.getAgents(r.Context())
-	if err != nil {
-		return fmt.Errorf("get agents: %w", err)
+	agents, ok := h.agentsFromLastFrame()
+	if !ok {
+		var err error
+		agents, err = h.getAgents(r.Context())
+		if err != nil {
+			return fmt.Errorf("get agents: %w", err)
+		}
 	}
 	if agents == nil {
 		agents = []sdk.Agent{}
 	}
 	w.Header().Set("Content-Type", "application/json")
 	return json.NewEncoder(w).Encode(agents)
+}
+
+// agentsFromLastFrame extracts the agent list from the broadcaster's last
+// frame. Returns ok=false if no frame has been broadcast yet or the frame
+// cannot be decoded, signalling the caller to fall back to a fresh scan.
+func (h *Handler) agentsFromLastFrame() ([]sdk.Agent, bool) {
+	frame := h.broadcaster.LastFrame()
+	if frame == nil {
+		return nil, false
+	}
+	var envelope struct {
+		Agents []sdk.Agent `json:"agents"`
+	}
+	if err := json.Unmarshal(frame, &envelope); err != nil {
+		return nil, false
+	}
+	return envelope.Agents, true
 }
 
 // Stream handles GET /api/agents/stream — SSE endpoint.
@@ -56,8 +80,12 @@ func (h *Handler) Stream(w http.ResponseWriter, r *http.Request) {
 	sse.WriteHeaders(w)
 
 	// Send current state immediately so client doesn't wait for first tick.
-	// Wrap in {agents, trend} — the SSE client expects this shape.
-	if agents, err := h.getAgents(r.Context()); err == nil {
+	// PERF-LOW2: reuse the broadcaster's last frame — already {agents, trend}
+	// shaped — instead of a fresh scan. Falls back to a scan before the first tick.
+	if frame := h.broadcaster.LastFrame(); frame != nil {
+		fmt.Fprintf(w, "data: %s\n\n", frame)
+		flusher.Flush()
+	} else if agents, err := h.getAgents(r.Context()); err == nil {
 		if data, err := json.Marshal(map[string]any{"agents": agents, "trend": []any{}}); err == nil {
 			fmt.Fprintf(w, "data: %s\n\n", data)
 			flusher.Flush()

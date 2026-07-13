@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 )
 
 const subscriberBufferSize = 10
@@ -34,6 +35,13 @@ type subscriber struct {
 type Broadcaster struct {
 	mu          sync.RWMutex
 	subscribers map[*subscriber]struct{}
+	// lastFrame holds the most recent data payload passed to Broadcast (the raw
+	// payload, not the "data: ...\n\n" SSE-framed bytes), so read paths that would
+	// otherwise re-scan on every request/reconnect (PERF-LOW2) can serve it
+	// instead. nil until the first Broadcast call. Comment frames (heartbeats)
+	// do not update it. atomic.Pointer avoids lock contention with Subscribe/
+	// Unsubscribe/snapshot, which guard the subscriber map separately.
+	lastFrame atomic.Pointer[[]byte]
 }
 
 // NewBroadcaster creates a ready-to-use Broadcaster.
@@ -118,10 +126,23 @@ func send(s *subscriber, data []byte) {
 // blocking the broadcaster goroutine.
 // Subscribers are snapshotted under RLock; iteration happens without lock. (F-PERF-018)
 func (b *Broadcaster) Broadcast(payload []byte) {
+	b.lastFrame.Store(&payload)
 	frame := fmt.Appendf(nil, "data: %s\n\n", payload)
 	for _, s := range b.snapshot() {
 		send(s, frame)
 	}
+}
+
+// LastFrame returns the payload passed to the most recent Broadcast call, or
+// nil if Broadcast has never been called (e.g. a fresh install before the
+// broadcast loop's first tick). Callers must fall back to a fresh scan when
+// it returns nil. Safe for concurrent use.
+func (b *Broadcaster) LastFrame() []byte {
+	p := b.lastFrame.Load()
+	if p == nil {
+		return nil
+	}
+	return *p
 }
 
 // BroadcastComment sends a fully-formed SSE comment frame (": <text>\n\n") to

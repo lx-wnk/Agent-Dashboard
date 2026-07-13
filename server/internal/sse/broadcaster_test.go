@@ -93,6 +93,32 @@ func TestBroadcaster_BroadcastToZeroSubscribers(t *testing.T) {
 	b.Broadcast([]byte("no one listening"))
 }
 
+// TestBroadcaster_LastFrame_NilBeforeFirstBroadcast confirms LastFrame reports
+// "no frame yet" (nil) on a fresh Broadcaster, so callers know to fall back to
+// a scan (PERF-LOW2 cold-start case, e.g. a fresh install before the loop's
+// first tick).
+func TestBroadcaster_LastFrame_NilBeforeFirstBroadcast(t *testing.T) {
+	b := sse.NewBroadcaster()
+	require.Nil(t, b.LastFrame())
+}
+
+// TestBroadcaster_LastFrame_ReturnsLatestPayload confirms LastFrame returns the
+// payload passed to the most recent Broadcast call — the raw payload, not the
+// "data: ...\n\n" SSE-framed bytes — and that BroadcastComment (heartbeats)
+// does not overwrite it. (PERF-LOW2)
+func TestBroadcaster_LastFrame_ReturnsLatestPayload(t *testing.T) {
+	b := sse.NewBroadcaster()
+
+	b.Broadcast([]byte(`{"agents":[],"trend":[]}`))
+	require.Equal(t, `{"agents":[],"trend":[]}`, string(b.LastFrame()))
+
+	b.Broadcast([]byte(`{"agents":[{"id":"x"}],"trend":[]}`))
+	require.Equal(t, `{"agents":[{"id":"x"}],"trend":[]}`, string(b.LastFrame()), "must reflect the latest Broadcast call")
+
+	b.BroadcastComment([]byte("heartbeat"))
+	require.Equal(t, `{"agents":[{"id":"x"}],"trend":[]}`, string(b.LastFrame()), "comment frames must not overwrite the last data frame")
+}
+
 // TestBroadcaster_UnsubscribeDuringBroadcast verifies that a concurrent
 // Unsubscribe while send() is running does not panic with "send on closed channel".
 // This is the regression test for Issue 2a (per-channel closed-flag with mutex).
