@@ -2,6 +2,7 @@ package db_test
 
 import (
 	"database/sql"
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -185,4 +186,119 @@ func TestOpen_MigratesLegacyPipelineConfig(t *testing.T) {
 	}
 	require.Equal(t, "3", byKey["maxAutoRetries"])
 	require.Equal(t, "claude-opus-4-8", byKey["stageModel.implementation"])
+}
+
+func TestOpen_StageRunSessionIDIndex_FreshDB(t *testing.T) {
+	bundle, err := db.Open(":memory:")
+	require.NoError(t, err)
+	defer func() { _ = bundle.Client.Close() }()
+
+	require.True(t, hasIndex(t, bundle.DB, "stage_runs", "stagerun_session_id"))
+}
+
+// TestOpen_StageRunSessionIDIndex_ExistingDB seeds a pre-index stage_runs
+// table (the shape before this migration) and confirms db.Open pre-seeds the
+// index via CREATE INDEX IF NOT EXISTS so ent's auto-migrate sees it already
+// present, rather than driving a table rebuild — the PR #207 rebuild-crash
+// class of bug. Also confirms a second Open is a clean idempotent no-op.
+func TestOpen_StageRunSessionIDIndex_ExistingDB(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "preindex.db")
+
+	raw, err := sql.Open("sqlite", "file:"+path+"?_pragma=foreign_keys(1)")
+	require.NoError(t, err)
+	_, err = raw.Exec(`CREATE TABLE stage_runs (
+		id text NOT NULL,
+		task_id text NOT NULL,
+		stage text NOT NULL,
+		session_id text NULL,
+		session_name text NULL,
+		pid integer NULL,
+		status text NOT NULL DEFAULT 'pending',
+		iteration integer NOT NULL DEFAULT 0,
+		output json NULL,
+		tokens_used integer NOT NULL DEFAULT 0,
+		cost_cents integer NOT NULL DEFAULT 0,
+		started_at datetime NULL,
+		ended_at datetime NULL,
+		last_grant_at datetime NULL,
+		retry_count integer NOT NULL DEFAULT 0,
+		next_retry_at datetime NULL,
+		pending_user_prompt text NULL,
+		created_at datetime NOT NULL DEFAULT (datetime('now')),
+		PRIMARY KEY (id)
+	)`)
+	require.NoError(t, err)
+	_, err = raw.Exec(`CREATE INDEX stagerun_status ON stage_runs (status)`)
+	require.NoError(t, err)
+	_, err = raw.Exec(`CREATE INDEX stagerun_task_id_stage_iteration ON stage_runs (task_id, stage, iteration)`)
+	require.NoError(t, err)
+	_, err = raw.Exec(`CREATE INDEX stagerun_task_id_created_at ON stage_runs (task_id, created_at)`)
+	require.NoError(t, err)
+	_, err = raw.Exec(`CREATE UNIQUE INDEX stagerun_task_id ON stage_runs (task_id) WHERE status = 'running'`)
+	require.NoError(t, err)
+	require.NoError(t, raw.Close())
+
+	require.False(t, hasIndexAtPath(t, path, "stage_runs", "stagerun_session_id"),
+		"seeded DB must not already have the session_id index")
+
+	bundle1, err := db.Open(path)
+	require.NoError(t, err, "Open must not crash migrating a pre-index stage_runs table")
+	require.True(t, hasIndex(t, bundle1.DB, "stage_runs", "stagerun_session_id"))
+	require.NoError(t, bundle1.Close())
+
+	// Idempotency: a second Open on the already-migrated file is a clean no-op.
+	bundle2, err := db.Open(path)
+	require.NoError(t, err)
+	defer func() { _ = bundle2.Close() }()
+	require.True(t, hasIndex(t, bundle2.DB, "stage_runs", "stagerun_session_id"))
+}
+
+func TestOpen_StageRunSessionIDIndex_QueryPlanUsesIndex(t *testing.T) {
+	bundle, err := db.Open(":memory:")
+	require.NoError(t, err)
+	defer func() { _ = bundle.Client.Close() }()
+
+	rows, err := bundle.DB.Query(`EXPLAIN QUERY PLAN SELECT * FROM stage_runs WHERE session_id = 'x'`)
+	require.NoError(t, err)
+	defer func() { _ = rows.Close() }()
+
+	var plan string
+	for rows.Next() {
+		var id, parent, notUsed int
+		var detail string
+		require.NoError(t, rows.Scan(&id, &parent, &notUsed, &detail))
+		plan += detail + "\n"
+	}
+	require.NoError(t, rows.Err())
+	require.Contains(t, plan, "stagerun_session_id")
+	require.NotContains(t, plan, "SCAN stage_runs")
+}
+
+func hasIndex(t *testing.T, sqlDB *sql.DB, table, indexName string) bool {
+	t.Helper()
+	rows, err := sqlDB.Query(fmt.Sprintf("PRAGMA index_list(%s)", table))
+	require.NoError(t, err)
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var seq int
+		var name string
+		var unique, partial int
+		var origin string
+		require.NoError(t, rows.Scan(&seq, &name, &unique, &origin, &partial))
+		if name == indexName {
+			return true
+		}
+	}
+	require.NoError(t, rows.Err())
+	return false
+}
+
+func hasIndexAtPath(t *testing.T, path, table, indexName string) bool {
+	t.Helper()
+	raw, err := sql.Open("sqlite", "file:"+path+"?_pragma=foreign_keys(1)")
+	require.NoError(t, err)
+	defer func() { _ = raw.Close() }()
+	return hasIndex(t, raw, table, indexName)
 }

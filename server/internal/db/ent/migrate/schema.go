@@ -600,6 +600,11 @@ var (
 				Columns: []*schema.Column{StageRunsColumns[5]},
 			},
 			{
+				Name:    "stagerun_session_id",
+				Unique:  false,
+				Columns: []*schema.Column{StageRunsColumns[2]},
+			},
+			{
 				Name:    "stagerun_task_id_stage_iteration",
 				Unique:  false,
 				Columns: []*schema.Column{StageRunsColumns[17], StageRunsColumns[1], StageRunsColumns[6]},
