@@ -1,11 +1,11 @@
-import type { Agent } from '../types'
+import type { Agent } from '@/types'
 import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 
 import AgentModal from './AgentModal.vue'
 import AgentTerminal from './AgentTerminal.vue'
 
-vi.mock('../composables/useAgentIdentity', () => ({
+vi.mock('@/features/agents/composables/useAgentIdentity', () => ({
   useAgentIdentity: () => ({ getIdentity: () => ({ emoji: '🤖' }) }),
 }))
 

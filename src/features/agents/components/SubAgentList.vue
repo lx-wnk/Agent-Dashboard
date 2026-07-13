@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import type { SubAgent } from '../types'
-import AppBadge from './ui/AppBadge.vue'
+import type { SubAgent } from '@/types'
+import AppBadge from '@/components/ui/AppBadge.vue'
 
 defineProps<{ subagents: SubAgent[] }>()
 </script>

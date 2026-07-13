@@ -1,16 +1,16 @@
 <script setup lang="ts">
-import type { Agent } from '../types'
+import type { Agent } from '@/types'
 import { computed, ref } from 'vue'
-import { useAgentIdentity } from '../composables/useAgentIdentity'
-import { useNow } from '../composables/useNow'
-import { formatCost, formatDuration, formatTokens, formatUptime, isStalled, secondsSince, shortModel, totalTokenCount } from '../utils/format'
-import { friendlyProjectName } from '../utils/friendlyProjectName'
-import MachineBadge from './MachineBadge.vue'
-import MetricsPopover from './MetricsPopover.vue'
-import PromptInput from './PromptInput.vue'
-import ProviderBadge from './ProviderBadge.vue'
-import AppBadge from './ui/AppBadge.vue'
-import AppCard from './ui/AppCard.vue'
+import MachineBadge from '@/components/MachineBadge.vue'
+import MetricsPopover from '@/components/MetricsPopover.vue'
+import PromptInput from '@/components/PromptInput.vue'
+import ProviderBadge from '@/components/ProviderBadge.vue'
+import AppBadge from '@/components/ui/AppBadge.vue'
+import AppCard from '@/components/ui/AppCard.vue'
+import { useNow } from '@/composables/useNow'
+import { useAgentIdentity } from '@/features/agents/composables/useAgentIdentity'
+import { formatCost, formatDuration, formatTokens, formatUptime, isStalled, secondsSince, shortModel, totalTokenCount } from '@/utils/format'
+import { friendlyProjectName } from '@/utils/friendlyProjectName'
 
 const props = defineProps<{ agent: Agent }>()
 const emit = defineEmits<{ select: [agent: Agent], dismiss: [pid: number] }>()

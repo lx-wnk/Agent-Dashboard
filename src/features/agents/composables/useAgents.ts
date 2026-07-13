@@ -1,12 +1,12 @@
-import type { Agent } from '../types'
+import type { Agent } from '@/types'
 import { computed, onUnmounted, ref, shallowRef, watch } from 'vue'
-import { needsAttention, sortByTriage } from '../utils/attention'
-import { errorMessage } from '../utils/errorMessage'
-import { secondsSince, totalTokenCount } from '../utils/format'
-import { AGENTS_POLL_MS } from '../utils/sse'
-import { startNowTicking } from './useNow'
-import { drainPendingMessages } from './usePendingMessages'
-import { createSseResource } from './useSseResource'
+import { startNowTicking } from '@/composables/useNow'
+import { drainPendingMessages } from '@/composables/usePendingMessages'
+import { createSseResource } from '@/composables/useSseResource'
+import { needsAttention, sortByTriage } from '@/utils/attention'
+import { errorMessage } from '@/utils/errorMessage'
+import { secondsSince, totalTokenCount } from '@/utils/format'
+import { AGENTS_POLL_MS } from '@/utils/sse'
 
 export interface TrendPoint {
   t: number

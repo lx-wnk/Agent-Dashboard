@@ -2,7 +2,7 @@
 import type { Agent, PipelineStage, PipelineTask, Project, Spawner } from '../types'
 import { useIntervalFn } from '@vueuse/core'
 import { computed, ref } from 'vue'
-import { useAgentIdentity } from '../composables/useAgentIdentity'
+import { useAgentIdentity } from '@/features/agents/composables/useAgentIdentity'
 import { shortId, useCopyId } from '../composables/useCopyId'
 import { usePipelineConfig } from '../composables/usePipelineConfig'
 import { formatCost, formatDuration } from '../utils/format'

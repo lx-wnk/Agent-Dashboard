@@ -2,7 +2,7 @@
 // Network/composable side-effects are stubbed so the heavy hosts mount in jsdom.
 import { shallowMount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import AgentModal from './AgentModal.vue'
+import AgentModal from '@/features/agents/components/AgentModal.vue'
 import PluginSettings from './PluginSettings.vue'
 import TaskCard from './TaskCard.vue'
 import TaskModal from './TaskModal.vue'

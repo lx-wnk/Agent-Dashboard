@@ -2,7 +2,7 @@
 import type { SlashCommandDef } from '../composables/useSlashCommands'
 import type { Agent, OutputMessage } from '../types'
 import { computed, nextTick, ref, useId, watch } from 'vue'
-import { useAgentPrompt } from '../composables/useAgentPrompt'
+import { useAgentPrompt } from '@/features/agents/composables/useAgentPrompt'
 import { fetchDynamicCommands, SLASH_COMMAND_DEFS } from '../composables/useSlashCommands'
 import TemplatePicker from './TemplatePicker.vue'
 

@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import type { Agent, PipelineTask } from './types'
 import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import AgentCardGrid from './components/AgentCardGrid.vue'
-import AgentTable from './components/AgentTable.vue'
-import AgentTriageBand from './components/AgentTriageBand.vue'
+import AgentCardGrid from '@/features/agents/components/AgentCardGrid.vue'
+import AgentTable from '@/features/agents/components/AgentTable.vue'
+import AgentTriageBand from '@/features/agents/components/AgentTriageBand.vue'
+import EmptyAgentState from '@/features/agents/components/EmptyAgentState.vue'
+import { useAgents } from '@/features/agents/composables/useAgents'
 import ApiKeySettings from './components/ApiKeySettings.vue'
 import AutoApprovingStrip from './components/AutoApprovingStrip.vue'
 import BacklogForm from './components/BacklogForm.vue'
-import EmptyAgentState from './components/EmptyAgentState.vue'
 import LoginPage from './components/LoginPage.vue'
 import OnboardingFlow from './components/onboarding/OnboardingFlow.vue'
 import ServerReconnectOverlay from './components/ServerReconnectOverlay.vue'
@@ -24,7 +25,6 @@ import SpotlightSearch from './components/SpotlightSearch.vue'
 import ToastHost from './components/ToastHost.vue'
 import AppModal from './components/ui/AppModal.vue'
 import AppModalHeader from './components/ui/AppModalHeader.vue'
-import { useAgents } from './composables/useAgents'
 import { useInstallPrompt } from './composables/useInstallPrompt'
 import { useNow } from './composables/useNow'
 import { useOnboarding } from './composables/useOnboarding'
@@ -46,7 +46,7 @@ import { formatCost } from './utils/format'
 import { friendlyProjectName } from './utils/friendlyProjectName'
 
 // PERF-BUNDLE1: AgentModal is only ever rendered on agent selection — split into its own chunk
-const AgentModal = defineAsyncComponent(() => import('./components/AgentModal.vue'))
+const AgentModal = defineAsyncComponent(() => import('@/features/agents/components/AgentModal.vue'))
 // F-PERF-019: top-level heavy views loaded on demand — each becomes its own chunk
 const CostAnalyticsView = defineAsyncComponent(() => import('./components/CostAnalyticsView.vue'))
 const EvalView = defineAsyncComponent(() => import('./components/EvalView.vue'))

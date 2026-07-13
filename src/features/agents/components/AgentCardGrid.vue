@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import type { Agent } from '../types'
-import type { AgentGroup, AgentGrouping } from '../utils/agentGroup'
+import type { Agent } from '@/types'
+import type { AgentGroup, AgentGrouping } from '@/utils/agentGroup'
 import { computed, ref, watch } from 'vue'
+import GroupHeader from '@/components/shell/GroupHeader.vue'
 import AgentCard from './AgentCard.vue'
-import GroupHeader from './shell/GroupHeader.vue'
 
 const props = defineProps<{
   agents: Agent[]

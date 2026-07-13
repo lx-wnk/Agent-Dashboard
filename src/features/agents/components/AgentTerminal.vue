@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import type { UseTerminalSocket } from '../composables/useTerminalSocket'
-import type { DetectedQuestion } from '../utils/askQuestionScreen'
+import type { UseTerminalSocket } from '@/composables/useTerminalSocket'
+import type { DetectedQuestion } from '@/utils/askQuestionScreen'
 import { FitAddon } from '@xterm/addon-fit'
 import { Terminal } from '@xterm/xterm'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useTerminalSocket } from '../composables/useTerminalSocket'
-import { detectQuestion } from '../utils/askQuestionScreen'
-import QuestionOverlay from './QuestionOverlay.vue'
+import QuestionOverlay from '@/components/QuestionOverlay.vue'
+import { useTerminalSocket } from '@/composables/useTerminalSocket'
+import { detectQuestion } from '@/utils/askQuestionScreen'
 import '@xterm/xterm/css/xterm.css'
 
 const props = defineProps<{
