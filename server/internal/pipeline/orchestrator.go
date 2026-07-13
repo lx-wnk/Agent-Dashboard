@@ -487,6 +487,150 @@ func (o *PipelineOrchestrator) enforceBudget(
 	return true
 }
 
+// enforceBudgetsAndTimeout handles a "still_running" completion result:
+// attaching the session ID for the live cross-link banner, enforcing the
+// cost/token budgets, and enforcing the stage timeout. Any of these may kill
+// the agent and fail the run; the caller (finalizeCompletedAsyncRuns) always
+// continues its loop afterward regardless of outcome, matching the original
+// inline still_running branch.
+// CQ-04: extracted from finalizeCompletedAsyncRuns.
+func (o *PipelineOrchestrator) enforceBudgetsAndTimeout(ctx context.Context, task *ent.Task, run *ent.StageRun, cwd string) {
+	// Try to attach session_id for live cross-link banner (subprocess runs only).
+	// F-PERF-008: dedupe inflight goroutines via attachInFlight sync.Map.
+	if run.Pid != nil && run.SessionID == nil && run.StartedAt != nil {
+		if _, loaded := o.attachInFlight.LoadOrStore(run.ID, struct{}{}); !loaded {
+			go func(runID, taskID, cwd string, startedAt time.Time) {
+				defer o.attachInFlight.Delete(runID)
+				o.tryAttachSessionID(ctx, runID, taskID, cwd, startedAt)
+			}(run.ID, task.ID, cwd, *run.StartedAt)
+		}
+	}
+	// Cost budget enforcement (subprocess runs only — HTTP runs finalize atomically)
+	if o.enforceBudget(ctx, task, run, task.CostBudgetCents, o.opts.StageRunRepo.SumCompletedCostCents, "cost", "cents spent", "cents") {
+		return
+	}
+	// Token budget enforcement (subprocess runs only — HTTP runs finalize atomically)
+	if o.enforceBudget(ctx, task, run, task.TokenBudget, o.opts.StageRunRepo.SumCompletedTokens, "token", "tokens used", "tokens") {
+		return
+	}
+	// Stage timeout enforcement (subprocess runs only)
+	if run.Pid != nil {
+		timeoutSec := o.getCachedConfigNumber(ctx, stageTimeoutKey, defaultStageTimeoutSeconds)
+		if timeoutSec > 0 && run.StartedAt != nil && time.Since(*run.StartedAt) > time.Duration(timeoutSec)*time.Second {
+			elapsed := time.Since(*run.StartedAt).Seconds()
+			slog.Warn("orchestrator: stage timed out — killing agent",
+				"runID", run.ID, "stage", run.Stage, "elapsedSec", elapsed)
+			_ = syscallKill(*run.Pid)
+			fresh, _ := o.opts.StageRunRepo.GetByID(ctx, run.ID)
+			if fresh != nil && fresh.Status == "running" {
+				if _, err := o.applyTransition(ctx, task, fresh, FailTransition{
+					Reason: fmt.Sprintf("stage timeout: ran %.0fs (limit %ds)", elapsed, timeoutSec),
+				}); err != nil {
+					slog.Error("finalizeCompletedAsyncRuns.timeout", "err", err)
+				}
+			}
+		}
+	}
+}
+
+// handleFailedResult classifies a failed completion result into one of four
+// outcomes, checked in priority order: rate-limited requeue/exhaust, infra
+// requeue/exhaust, schema-validation retry (iterate) or wait-user, or a plain
+// hard fail.
+// CQ-04: extracted from finalizeCompletedAsyncRuns's failure ladder.
+func (o *PipelineOrchestrator) handleFailedResult(ctx context.Context, task *ent.Task, fresh *ent.StageRun, result CompletionResult) {
+	// RateLimited implies Infra; check it first so it uses the dedicated budget and fixed backoff.
+	// RetryCount is shared with the infra-retry counter.
+	if result.RateLimited {
+		maxRL := o.getCachedConfigNumber(ctx, maxRateLimitRetriesKey, defaultMaxRateLimitRetries)
+		if fresh.RetryCount < maxRL {
+			attempt := fresh.RetryCount + 1
+			backoffSec := o.getCachedConfigNumber(ctx, rateLimitBackoffKey, defaultRateLimitBackoff)
+			nextRetryAt := time.Now().Add(time.Duration(backoffSec) * time.Second)
+			slog.Info("orchestrator: requeuing rate-limited run",
+				"runID", fresh.ID, "stage", fresh.Stage, "attempt", attempt,
+				"maxRateLimitRetries", maxRL, "backoffSec", backoffSec)
+			if _, err := o.applyTransition(ctx, task, fresh, RequeueTransition{
+				Reason:      result.Error,
+				Output:      result.Output,
+				Attempt:     attempt,
+				NextRetryAt: nextRetryAt,
+			}); err != nil {
+				slog.Error("finalizeCompletedAsyncRuns.applyTransition.rateLimitRequeue", "err", err)
+			}
+		} else {
+			slog.Warn("orchestrator: rate-limit retry budget exhausted — hard failing",
+				"runID", fresh.ID, "stage", fresh.Stage, "maxRateLimitRetries", maxRL)
+			output := make(map[string]any, len(result.Output)+1)
+			for k, v := range result.Output {
+				output[k] = v
+			}
+			output["rate_limit_retries_exhausted"] = maxRL
+			if _, err := o.applyTransition(ctx, task, fresh, FailTransition{Reason: result.Error, Output: output}); err != nil {
+				slog.Error("finalizeCompletedAsyncRuns.applyTransition.rateLimitHardFail", "err", err)
+			}
+		}
+		return
+	}
+
+	if result.Infra {
+		maxRetries := o.getCachedConfigNumber(ctx, maxAutoRetriesKey, defaultMaxAutoRetries)
+		if fresh.RetryCount < maxRetries {
+			attempt := fresh.RetryCount + 1
+			backoffSec := o.getCachedConfigNumber(ctx, retryBackoffKey, defaultRetryBackoff) * attempt // linear backoff
+			nextRetryAt := time.Now().Add(time.Duration(backoffSec) * time.Second)
+			slog.Info("orchestrator: requeuing infra-failed run",
+				"runID", fresh.ID, "stage", fresh.Stage, "attempt", attempt,
+				"maxAutoRetries", maxRetries, "backoffSec", backoffSec)
+			if _, err := o.applyTransition(ctx, task, fresh, RequeueTransition{
+				Reason:      result.Error,
+				Output:      result.Output,
+				Attempt:     attempt,
+				NextRetryAt: nextRetryAt,
+			}); err != nil {
+				slog.Error("finalizeCompletedAsyncRuns.applyTransition.requeue", "err", err)
+			}
+		} else {
+			slog.Warn("orchestrator: auto-retry budget exhausted — hard failing",
+				"runID", fresh.ID, "stage", fresh.Stage, "maxAutoRetries", maxRetries)
+			output := make(map[string]any, len(result.Output)+1)
+			for k, v := range result.Output {
+				output[k] = v
+			}
+			output["auto_retries_exhausted"] = maxRetries
+			if _, err := o.applyTransition(ctx, task, fresh, FailTransition{Reason: result.Error, Output: output}); err != nil {
+				slog.Error("finalizeCompletedAsyncRuns.applyTransition.hardFail", "err", err)
+			}
+		}
+		return
+	}
+
+	if result.Retryable {
+		// Schema rejection retry logic: iter 0 → iterate; iter >= 1 → wait_user
+		if fresh.Iteration == 0 {
+			if _, err := o.applyTransition(ctx, task, fresh, IterateTransition{Output: map[string]any{
+				"validation_error": result.Error,
+				"rejected_output":  result.Output,
+			}}); err != nil {
+				slog.Error("finalizeCompletedAsyncRuns.applyTransition.iterate", "err", err)
+			}
+		} else {
+			if _, err := o.applyTransition(ctx, task, fresh, WaitUserTransition{
+				Reason:    fmt.Sprintf("schema validation failed twice at stage %s: %s", fresh.Stage, result.Error),
+				Output:    map[string]any{"validation_error": result.Error, "rejected_output": result.Output},
+				AgentDone: true,
+			}); err != nil {
+				slog.Error("finalizeCompletedAsyncRuns.applyTransition.waitUser", "err", err)
+			}
+		}
+		return
+	}
+
+	if _, err := o.applyTransition(ctx, task, fresh, FailTransition{Reason: result.Error, Output: result.Output}); err != nil {
+		slog.Error("finalizeCompletedAsyncRuns.applyTransition.hardFail", "err", err)
+	}
+}
+
 func (o *PipelineOrchestrator) finalizeCompletedAsyncRuns(ctx context.Context, allRunning []*ent.StageRun) error {
 	for _, run := range allRunning {
 		if run.Status != "running" {
@@ -538,42 +682,7 @@ func (o *PipelineOrchestrator) finalizeCompletedAsyncRuns(ctx context.Context, a
 			continue
 		}
 		if result.Kind == "still_running" {
-			// Try to attach session_id for live cross-link banner (subprocess runs only).
-			// F-PERF-008: dedupe inflight goroutines via attachInFlight sync.Map.
-			if run.Pid != nil && run.SessionID == nil && run.StartedAt != nil {
-				if _, loaded := o.attachInFlight.LoadOrStore(run.ID, struct{}{}); !loaded {
-					go func(runID, taskID, cwd string, startedAt time.Time) {
-						defer o.attachInFlight.Delete(runID)
-						o.tryAttachSessionID(ctx, runID, taskID, cwd, startedAt)
-					}(run.ID, task.ID, cwd, *run.StartedAt)
-				}
-			}
-			// Cost budget enforcement (subprocess runs only — HTTP runs finalize atomically)
-			if o.enforceBudget(ctx, task, run, task.CostBudgetCents, o.opts.StageRunRepo.SumCompletedCostCents, "cost", "cents spent", "cents") {
-				continue
-			}
-			// Token budget enforcement (subprocess runs only — HTTP runs finalize atomically)
-			if o.enforceBudget(ctx, task, run, task.TokenBudget, o.opts.StageRunRepo.SumCompletedTokens, "token", "tokens used", "tokens") {
-				continue
-			}
-			// Stage timeout enforcement (subprocess runs only)
-			if run.Pid != nil {
-				timeoutSec := o.getCachedConfigNumber(ctx, stageTimeoutKey, defaultStageTimeoutSeconds)
-				if timeoutSec > 0 && run.StartedAt != nil && time.Since(*run.StartedAt) > time.Duration(timeoutSec)*time.Second {
-					elapsed := time.Since(*run.StartedAt).Seconds()
-					slog.Warn("orchestrator: stage timed out — killing agent",
-						"runID", run.ID, "stage", run.Stage, "elapsedSec", elapsed)
-					_ = syscallKill(*run.Pid)
-					fresh, _ := o.opts.StageRunRepo.GetByID(ctx, run.ID)
-					if fresh != nil && fresh.Status == "running" {
-						if _, err := o.applyTransition(ctx, task, fresh, FailTransition{
-							Reason: fmt.Sprintf("stage timeout: ran %.0fs (limit %ds)", elapsed, timeoutSec),
-						}); err != nil {
-							slog.Error("finalizeCompletedAsyncRuns.timeout", "err", err)
-						}
-					}
-				}
-			}
+			o.enforceBudgetsAndTimeout(ctx, task, run, cwd)
 			continue
 		}
 
@@ -595,98 +704,7 @@ func (o *PipelineOrchestrator) finalizeCompletedAsyncRuns(ctx context.Context, a
 			continue
 		}
 
-		// failed — four cases in priority order
-
-		// RateLimited implies Infra; check it first so it uses the dedicated budget and fixed backoff.
-		// RetryCount is shared with the infra-retry counter.
-		if result.RateLimited {
-			maxRL := o.getCachedConfigNumber(ctx, maxRateLimitRetriesKey, defaultMaxRateLimitRetries)
-			if fresh.RetryCount < maxRL {
-				attempt := fresh.RetryCount + 1
-				backoffSec := o.getCachedConfigNumber(ctx, rateLimitBackoffKey, defaultRateLimitBackoff)
-				nextRetryAt := time.Now().Add(time.Duration(backoffSec) * time.Second)
-				slog.Info("orchestrator: requeuing rate-limited run",
-					"runID", fresh.ID, "stage", fresh.Stage, "attempt", attempt,
-					"maxRateLimitRetries", maxRL, "backoffSec", backoffSec)
-				if _, err := o.applyTransition(ctx, task, fresh, RequeueTransition{
-					Reason:      result.Error,
-					Output:      result.Output,
-					Attempt:     attempt,
-					NextRetryAt: nextRetryAt,
-				}); err != nil {
-					slog.Error("finalizeCompletedAsyncRuns.applyTransition.rateLimitRequeue", "err", err)
-				}
-			} else {
-				slog.Warn("orchestrator: rate-limit retry budget exhausted — hard failing",
-					"runID", fresh.ID, "stage", fresh.Stage, "maxRateLimitRetries", maxRL)
-				output := make(map[string]any, len(result.Output)+1)
-				for k, v := range result.Output {
-					output[k] = v
-				}
-				output["rate_limit_retries_exhausted"] = maxRL
-				if _, err := o.applyTransition(ctx, task, fresh, FailTransition{Reason: result.Error, Output: output}); err != nil {
-					slog.Error("finalizeCompletedAsyncRuns.applyTransition.rateLimitHardFail", "err", err)
-				}
-			}
-			continue
-		}
-
-		if result.Infra {
-			maxRetries := o.getCachedConfigNumber(ctx, maxAutoRetriesKey, defaultMaxAutoRetries)
-			if fresh.RetryCount < maxRetries {
-				attempt := fresh.RetryCount + 1
-				backoffSec := o.getCachedConfigNumber(ctx, retryBackoffKey, defaultRetryBackoff) * attempt // linear backoff
-				nextRetryAt := time.Now().Add(time.Duration(backoffSec) * time.Second)
-				slog.Info("orchestrator: requeuing infra-failed run",
-					"runID", fresh.ID, "stage", fresh.Stage, "attempt", attempt,
-					"maxAutoRetries", maxRetries, "backoffSec", backoffSec)
-				if _, err := o.applyTransition(ctx, task, fresh, RequeueTransition{
-					Reason:      result.Error,
-					Output:      result.Output,
-					Attempt:     attempt,
-					NextRetryAt: nextRetryAt,
-				}); err != nil {
-					slog.Error("finalizeCompletedAsyncRuns.applyTransition.requeue", "err", err)
-				}
-			} else {
-				slog.Warn("orchestrator: auto-retry budget exhausted — hard failing",
-					"runID", fresh.ID, "stage", fresh.Stage, "maxAutoRetries", maxRetries)
-				output := make(map[string]any, len(result.Output)+1)
-				for k, v := range result.Output {
-					output[k] = v
-				}
-				output["auto_retries_exhausted"] = maxRetries
-				if _, err := o.applyTransition(ctx, task, fresh, FailTransition{Reason: result.Error, Output: output}); err != nil {
-					slog.Error("finalizeCompletedAsyncRuns.applyTransition.hardFail", "err", err)
-				}
-			}
-			continue
-		}
-
-		if result.Retryable {
-			// Schema rejection retry logic: iter 0 → iterate; iter >= 1 → wait_user
-			if fresh.Iteration == 0 {
-				if _, err := o.applyTransition(ctx, task, fresh, IterateTransition{Output: map[string]any{
-					"validation_error": result.Error,
-					"rejected_output":  result.Output,
-				}}); err != nil {
-					slog.Error("finalizeCompletedAsyncRuns.applyTransition.iterate", "err", err)
-				}
-			} else {
-				if _, err := o.applyTransition(ctx, task, fresh, WaitUserTransition{
-					Reason:    fmt.Sprintf("schema validation failed twice at stage %s: %s", fresh.Stage, result.Error),
-					Output:    map[string]any{"validation_error": result.Error, "rejected_output": result.Output},
-					AgentDone: true,
-				}); err != nil {
-					slog.Error("finalizeCompletedAsyncRuns.applyTransition.waitUser", "err", err)
-				}
-			}
-			continue
-		}
-
-		if _, err := o.applyTransition(ctx, task, fresh, FailTransition{Reason: result.Error, Output: result.Output}); err != nil {
-			slog.Error("finalizeCompletedAsyncRuns.applyTransition.hardFail", "err", err)
-		}
+		o.handleFailedResult(ctx, task, fresh, result)
 	}
 	return nil
 }
