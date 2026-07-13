@@ -15,7 +15,7 @@ import (
 // and completes them synchronously with a DoneTransition so the stage run lands
 // in a terminal state that is easy to assert.
 type progressRecorder struct {
-	mu          sync.Mutex
+	mu            sync.Mutex
 	progressedIDs []string
 }
 
@@ -34,8 +34,8 @@ func (r *progressRecorder) record(taskID string) {
 // captureHandler records the task ID when Execute is called, then delegates to
 // an inner transition so the orchestrator can complete the stage run normally.
 type captureHandler struct {
-	recorder   *progressRecorder
-	inner      pipeline.StageTransition
+	recorder *progressRecorder
+	inner    pipeline.StageTransition
 }
 
 func (h *captureHandler) Stage() string       { return "implementation" }
