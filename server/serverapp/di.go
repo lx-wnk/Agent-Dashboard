@@ -108,10 +108,27 @@ func (noopSettingsRepo) ListAll(context.Context) (map[string]string, error) {
 	return map[string]string{}, nil
 }
 
-func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, restartCtl *restart.Controller) (*api.Server, *sse.Broadcaster, *merger.Merger, *pipeline.PipelineOrchestrator, *scheduler.Scheduler, *histsvc.Importer, agentbroadcast.BaselineProvider, merger.Enricher, *eval.Service, *settings.Service, func(), error) {
+// ServerComponents bundles everything initializeServer wires up. Cleanup may be
+// set even when an error is also returned (e.g. plugin registry already
+// loaded) — callers must invoke it whenever it is non-nil, regardless of err.
+type ServerComponents struct {
+	API          *api.Server
+	Broadcaster  *sse.Broadcaster
+	Merger       *merger.Merger
+	Orchestrator *pipeline.PipelineOrchestrator
+	Scheduler    *scheduler.Scheduler
+	HistImporter *histsvc.Importer
+	Baseline     agentbroadcast.BaselineProvider
+	Enricher     merger.Enricher
+	Eval         *eval.Service
+	Settings     *settings.Service
+	Cleanup      func()
+}
+
+func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, restartCtl *restart.Controller) (*ServerComponents, error) {
 	bundle, err := provideDB(cfg)
 	if err != nil {
-		return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, err
+		return nil, err
 	}
 	var entClient *ent.Client
 	if bundle != nil {
@@ -148,7 +165,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		Pricing: merger.PricingAdapter(),
 	})
 	if err != nil {
-		return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("provider registry: %w", err)
+		return nil, fmt.Errorf("provider registry: %w", err)
 	}
 	var providerSettingRepo repo.ProviderSettingRepo
 	if entClient != nil {
@@ -160,7 +177,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	)
 	if providerSettingRepo != nil {
 		if err := providerSettingsSvc.Load(ctx); err != nil {
-			return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("provider settings load: %w", err)
+			return nil, fmt.Errorf("provider settings load: %w", err)
 		}
 	}
 	providerRegistry.SetEnabled(providerSettingsSvc.EnabledFunc())
@@ -176,13 +193,13 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		appSettingRepo := repo.NewAppSettingRepo(entClient)
 		settingsSvc = settings.New(settingsRepoAdapter{inner: appSettingRepo})
 		if err := settingsSvc.Load(ctx); err != nil {
-			return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("settings load: %w", err)
+			return nil, fmt.Errorf("settings load: %w", err)
 		}
 		settingsHandler = settingsapi.NewHandler(settingsSvc)
 	} else {
 		settingsSvc = settings.New(noopSettingsRepo{})
 		if err := settingsSvc.Load(ctx); err != nil {
-			return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("settings load: %w", err)
+			return nil, fmt.Errorf("settings load: %w", err)
 		}
 	}
 
@@ -209,7 +226,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	if entClient != nil {
 		pluginRepo = repo.NewPluginRepo(entClient)
 		if err := seedPluginsFromEnabledList(ctx, settingsSvc, pluginRepo); err != nil {
-			return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("seed plugins from enabled list: %w", err)
+			return nil, fmt.Errorf("seed plugins from enabled list: %w", err)
 		}
 	}
 
@@ -220,7 +237,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	if pluginRepo != nil {
 		rows, listErr := pluginRepo.List(ctx)
 		if listErr != nil {
-			return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("plugin enablement snapshot: %w", listErr)
+			return nil, fmt.Errorf("plugin enablement snapshot: %w", listErr)
 		}
 		for _, p := range rows {
 			activePlugins[p.ID] = p.Active
@@ -234,11 +251,11 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	if entClient != nil {
 		masterKey, keyErr := secretbox.LoadOrGenerateMasterKey(os.Getenv("DASHBOARD_SECRET_KEY"))
 		if keyErr != nil {
-			return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("plugin secret key: %w", keyErr)
+			return nil, fmt.Errorf("plugin secret key: %w", keyErr)
 		}
 		box, boxErr := secretbox.New(masterKey)
 		if boxErr != nil {
-			return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("plugin secretbox: %w", boxErr)
+			return nil, fmt.Errorf("plugin secretbox: %w", boxErr)
 		}
 		pluginSettingRepo := repo.NewPluginSettingRepo(entClient)
 		pluginSettingsSvc = pluginsettings.New(pluginSettingRepoAdapter{inner: pluginSettingRepo}, box)
@@ -267,7 +284,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 			slog.Info("auth: using plugin provider", "loginURL", loginURL)
 		},
 	}); err != nil {
-		return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("plugin registry: load failed: %w", err)
+		return nil, fmt.Errorf("plugin registry: load failed: %w", err)
 	}
 	cleanup := func() { pluginRegistry.Shutdown() }
 
@@ -278,7 +295,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	if pluginRegistry.HasDir() &&
 		pluginRegistry.HasAttemptedCapability(plugin.CapAuthProvider) &&
 		pluginRegistry.FindByCapability(plugin.CapAuthProvider) == nil {
-		return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, cleanup, fmt.Errorf(
+		return &ServerComponents{Cleanup: cleanup}, fmt.Errorf(
 			"auth_provider plugin configured but failed health-check — refusing to start with auth disabled",
 		)
 	}
@@ -337,14 +354,14 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		spawnerRepo = repo.NewSpawnerRepo(entClient)
 		if bundle != nil {
 			if err := repairSpawnerAdapterConfig(ctx, bundle.DB); err != nil {
-				return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, cleanup, fmt.Errorf("repair spawner adapter_config: %w", err)
+				return &ServerComponents{Cleanup: cleanup}, fmt.Errorf("repair spawner adapter_config: %w", err)
 			}
 		}
 		if err := seedSpawners(ctx, spawnerRepo); err != nil {
-			return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, cleanup, fmt.Errorf("seed spawners: %w", err)
+			return &ServerComponents{Cleanup: cleanup}, fmt.Errorf("seed spawners: %w", err)
 		}
 		if err := migrateAdapterConfigToSpawners(ctx, cfg, spawnerRepo); err != nil {
-			return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, cleanup, fmt.Errorf("migrate adapter config: %w", err)
+			return &ServerComponents{Cleanup: cleanup}, fmt.Errorf("migrate adapter config: %w", err)
 		}
 		pipelineConfigRepo := repo.NewPipelineConfigRepo(entClient)
 		spawnerResolver = services.NewSpawnerResolver(taskRepoForResolver, projectRepo, spawnerRepo, pipelineConfigRepo)
@@ -414,7 +431,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 
 	orch, err = provideOrchestrator(cfg, settingsSvc, entClient, taskBroadcaster, systemPromptRepo, spawnerResolver, cpStart, cpStop)
 	if err != nil {
-		return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, cleanup, err
+		return &ServerComponents{Cleanup: cleanup}, err
 	}
 
 	// Construct the detached refinement runner before the task handler so the
@@ -665,7 +682,19 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	}
 	router := api.NewRouter(routerDeps)
 	server := provideServer(cfg, settingsSvc, router)
-	return server, broadcaster, agentMerger, orch, sched, histImporter, baselineProvider, agentEnricher, evalService, settingsSvc, cleanup, nil
+	return &ServerComponents{
+		API:          server,
+		Broadcaster:  broadcaster,
+		Merger:       agentMerger,
+		Orchestrator: orch,
+		Scheduler:    sched,
+		HistImporter: histImporter,
+		Baseline:     baselineProvider,
+		Enricher:     agentEnricher,
+		Eval:         evalService,
+		Settings:     settingsSvc,
+		Cleanup:      cleanup,
+	}, nil
 }
 
 // activePluginIDs returns a closure listing the IDs of plugins currently marked

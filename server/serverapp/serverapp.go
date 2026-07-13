@@ -31,47 +31,48 @@ func Run(ctx context.Context, cfg config.Config, cfgFile string, restartCtl *res
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	srv, broadcaster, agentMerger, orch, sched, histImporter, baselineProvider, enricher, evalService, settingsSvc, cleanup, err := initializeServer(runCtx, cfg, cfgFile, restartCtl)
+	comps, err := initializeServer(runCtx, cfg, cfgFile, restartCtl)
 	if err != nil {
-		if cleanup != nil {
-			cleanup()
+		if comps != nil && comps.Cleanup != nil {
+			comps.Cleanup()
 		}
 		return err
 	}
+	cleanup := comps.Cleanup
 
 	g, gCtx := errgroup.WithContext(runCtx)
 
-	interval := time.Duration(settingsSvc.Int("sse.intervalMs")) * time.Millisecond
+	interval := time.Duration(comps.Settings.Int("sse.intervalMs")) * time.Millisecond
 	parser.SessionCacheTTL = max(interval, parser.SessionCacheTTL)
 	g.Go(func() error {
-		agentbroadcast.Run(gCtx, agentMerger, broadcaster, interval, baselineProvider, enricher)
+		agentbroadcast.Run(gCtx, comps.Merger, comps.Broadcaster, interval, comps.Baseline, comps.Enricher)
 		return nil
 	})
 
 	g.Go(func() error {
-		return srv.Run(gCtx)
+		return comps.API.Run(gCtx)
 	})
 
 	g.Go(func() error {
-		return orch.Run(gCtx)
+		return comps.Orchestrator.Run(gCtx)
 	})
 
-	if sched != nil {
+	if comps.Scheduler != nil {
 		g.Go(func() error {
-			return sched.Run(gCtx)
+			return comps.Scheduler.Run(gCtx)
 		})
 	}
 
-	if histImporter != nil {
+	if comps.HistImporter != nil {
 		g.Go(func() error {
-			histImporter.RunScheduled(gCtx, time.Duration(settingsSvc.Int("cost.scanIntervalMs"))*time.Millisecond)
+			comps.HistImporter.RunScheduled(gCtx, time.Duration(comps.Settings.Int("cost.scanIntervalMs"))*time.Millisecond)
 			return nil
 		})
 	}
 
-	if evalService != nil {
+	if comps.Eval != nil {
 		g.Go(func() error {
-			evalService.RunLoop(gCtx, time.Duration(settingsSvc.Int("eval.scanIntervalMs"))*time.Millisecond)
+			comps.Eval.RunLoop(gCtx, time.Duration(comps.Settings.Int("eval.scanIntervalMs"))*time.Millisecond)
 			return nil
 		})
 	}
