@@ -56,7 +56,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
-	"github.com/lx-wnk/agent-dashboard/server/internal/pluginlifecyclectl"
+	"github.com/lx-wnk/agent-dashboard/server/internal/pluginmgmt"
 	"github.com/lx-wnk/agent-dashboard/server/internal/provider"
 	"github.com/lx-wnk/agent-dashboard/server/internal/providersettings"
 	"github.com/lx-wnk/agent-dashboard/server/internal/refine"
@@ -319,7 +319,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 			e, ok := pluginRegistry.Lookup(id)
 			return ok, ok && e.Healthy()
 		}
-		lifecycleController := pluginlifecyclectl.New(pluginRepo, lifecycleEngine, pluginSettingsSvc, cfg.PluginDir, lifecycleProbe)
+		lifecycleController := pluginmgmt.New(pluginRepo, lifecycleEngine, pluginSettingsSvc, cfg.PluginDir, lifecycleProbe)
 		pluginLifecycleHandler = apiplugins.NewLifecycle(lifecycleController)
 
 		if res, discErr := discoverer.Discover(ctx); discErr != nil {

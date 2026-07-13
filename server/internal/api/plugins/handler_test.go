@@ -44,7 +44,7 @@ func TestLegacySettingsPluginsRouteGone(t *testing.T) {
 	}
 }
 
-// fakeLifecycle stands in for *pluginlifecyclectl.Controller.
+// fakeLifecycle stands in for *pluginmgmt.Controller.
 type fakeLifecycle struct {
 	views        []plugins.PluginView
 	transition   plugins.PluginView

@@ -1,8 +1,8 @@
-// Package pluginlifecyclectl is the control plane behind the /api/plugins
+// Package pluginmgmt is the control plane behind the /api/plugins
 // lifecycle + settings endpoints. It wires the discovery state (plugin repo),
 // the lifecycle engine, and the settings service, reading each plugin's manifest
 // from disk for its descriptor + settings schema.
-package pluginlifecyclectl
+package pluginmgmt
 
 import (
 	"context"
@@ -62,7 +62,7 @@ func (l FileManifestLoader) Load(id, path string) (plugin.Descriptor, string, er
 	}
 	var d plugin.Descriptor
 	if err := json.Unmarshal(raw, &d); err != nil {
-		return plugin.Descriptor{}, "", fmt.Errorf("pluginlifecyclectl: parse manifest %s: %w", id, err)
+		return plugin.Descriptor{}, "", fmt.Errorf("pluginmgmt: parse manifest %s: %w", id, err)
 	}
 	sum := sha256.Sum256(raw)
 	return d, hex.EncodeToString(sum[:]), nil
@@ -148,7 +148,7 @@ func (c *Controller) fillHealthy(view *plugins.PluginView, id string) {
 func (c *Controller) List(ctx context.Context) ([]plugins.PluginView, error) {
 	rows, err := c.repo.List(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("pluginlifecyclectl.List: %w", err)
+		return nil, fmt.Errorf("pluginmgmt.List: %w", err)
 	}
 	out := make([]plugins.PluginView, 0, len(rows))
 	for _, p := range rows {
@@ -181,7 +181,7 @@ func (c *Controller) descriptorFor(ctx context.Context, id string) (plugin.Descr
 	case repo.IsNotFound(err):
 		// fall through: loader fallback dir may still resolve it
 	default:
-		return plugin.Descriptor{}, "", fmt.Errorf("pluginlifecyclectl: get %q: %w", id, err)
+		return plugin.Descriptor{}, "", fmt.Errorf("pluginmgmt: get %q: %w", id, err)
 	}
 	desc, hash, lerr := c.loader.Load(id, path)
 	if lerr != nil {
@@ -221,11 +221,11 @@ func (c *Controller) Transition(ctx context.Context, id, action string) (plugins
 		return plugins.PluginView{}, fmt.Errorf("%w: %q", plugin.ErrInvalidAction, action)
 	}
 	if err != nil {
-		return plugins.PluginView{}, fmt.Errorf("pluginlifecyclectl: %s %q: %w", action, id, err)
+		return plugins.PluginView{}, fmt.Errorf("pluginmgmt: %s %q: %w", action, id, err)
 	}
 	row, err := c.repo.Get(ctx, id)
 	if err != nil {
-		return plugins.PluginView{}, fmt.Errorf("pluginlifecyclectl: reload %q: %w", id, err)
+		return plugins.PluginView{}, fmt.Errorf("pluginmgmt: reload %q: %w", id, err)
 	}
 	view := plugins.PluginView{
 		ID:              row.ID,
@@ -248,7 +248,7 @@ func (c *Controller) GetSettings(ctx context.Context, id string) ([]plugin.Setti
 	}
 	values, err := c.settings.Get(ctx, id, desc.Settings)
 	if err != nil {
-		return nil, nil, fmt.Errorf("pluginlifecyclectl: get settings %q: %w", id, err)
+		return nil, nil, fmt.Errorf("pluginmgmt: get settings %q: %w", id, err)
 	}
 	return desc.Settings, values, nil
 }
@@ -260,7 +260,7 @@ func (c *Controller) PutSettings(ctx context.Context, id string, values map[stri
 		return err
 	}
 	if err := c.settings.Put(ctx, id, desc.Settings, values); err != nil {
-		return fmt.Errorf("pluginlifecyclectl: put settings %q: %w", id, err)
+		return fmt.Errorf("pluginmgmt: put settings %q: %w", id, err)
 	}
 	return nil
 }

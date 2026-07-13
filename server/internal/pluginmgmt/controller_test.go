@@ -1,4 +1,4 @@
-package pluginlifecyclectl_test
+package pluginmgmt_test
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
-	"github.com/lx-wnk/agent-dashboard/server/internal/pluginlifecyclectl"
+	"github.com/lx-wnk/agent-dashboard/server/internal/pluginmgmt"
 )
 
 type fakeRepo struct {
@@ -99,7 +99,7 @@ func TestList_DerivesStateAndFlags(t *testing.T) {
 		},
 		hashes: map[string]string{"disc": "h-disc", "inact": "h-new", "act": "h-act"},
 	}
-	c := pluginlifecyclectl.NewWithLoader(repo, &fakeEngine{}, &fakeSettings{}, loader, nil)
+	c := pluginmgmt.NewWithLoader(repo, &fakeEngine{}, &fakeSettings{}, loader, nil)
 
 	views, err := c.List(context.Background())
 	if err != nil {
@@ -153,7 +153,7 @@ func TestTransition_DispatchesAndReturnsState(t *testing.T) {
 		manifests: map[string]plugin.Descriptor{"p1": {ID: "p1", Capabilities: []string{"auth_provider"}}},
 		hashes:    map[string]string{"p1": "h"},
 	}
-	c := pluginlifecyclectl.NewWithLoader(repo, engine, &fakeSettings{}, loader, nil)
+	c := pluginmgmt.NewWithLoader(repo, engine, &fakeSettings{}, loader, nil)
 
 	view, err := c.Transition(context.Background(), "p1", "activate")
 	if err != nil {
@@ -178,7 +178,7 @@ func TestTransition_UpdateDispatchesToEngine(t *testing.T) {
 		manifests: map[string]plugin.Descriptor{"p1": {ID: "p1", Version: "2.0"}},
 		hashes:    map[string]string{"p1": "h-new"},
 	}
-	c := pluginlifecyclectl.NewWithLoader(repo, engine, &fakeSettings{}, loader, nil)
+	c := pluginmgmt.NewWithLoader(repo, engine, &fakeSettings{}, loader, nil)
 
 	view, err := c.Transition(context.Background(), "p1", "update")
 	if err != nil {
@@ -195,7 +195,7 @@ func TestTransition_UpdateDispatchesToEngine(t *testing.T) {
 func TestTransition_InvalidAction(t *testing.T) {
 	repo := &fakeRepo{rows: map[string]*ent.Plugin{"p1": {ID: "p1"}}}
 	loader := &fakeLoader{manifests: map[string]plugin.Descriptor{"p1": {ID: "p1"}}, hashes: map[string]string{"p1": "h"}}
-	c := pluginlifecyclectl.NewWithLoader(repo, &fakeEngine{}, &fakeSettings{}, loader, nil)
+	c := pluginmgmt.NewWithLoader(repo, &fakeEngine{}, &fakeSettings{}, loader, nil)
 
 	_, err := c.Transition(context.Background(), "p1", "frobnicate")
 	if !errors.Is(err, plugin.ErrInvalidAction) {
@@ -206,7 +206,7 @@ func TestTransition_InvalidAction(t *testing.T) {
 func TestTransition_UnknownPlugin(t *testing.T) {
 	repo := &fakeRepo{rows: map[string]*ent.Plugin{}}
 	loader := &fakeLoader{manifests: map[string]plugin.Descriptor{}}
-	c := pluginlifecyclectl.NewWithLoader(repo, &fakeEngine{}, &fakeSettings{}, loader, nil)
+	c := pluginmgmt.NewWithLoader(repo, &fakeEngine{}, &fakeSettings{}, loader, nil)
 
 	_, err := c.Transition(context.Background(), "ghost", "activate")
 	if !errors.Is(err, plugin.ErrUnknownPlugin) {
@@ -224,7 +224,7 @@ func TestTransition_SetsHealthyFromProbe(t *testing.T) {
 		hashes:    map[string]string{"p1": "h"},
 	}
 	probe := func(id string) (bool, bool) { return id == "p1", id == "p1" }
-	c := pluginlifecyclectl.NewWithLoader(repo, &fakeEngine{}, &fakeSettings{}, loader, probe)
+	c := pluginmgmt.NewWithLoader(repo, &fakeEngine{}, &fakeSettings{}, loader, probe)
 
 	view, err := c.Transition(context.Background(), "p1", "activate")
 	if err != nil {
@@ -240,7 +240,7 @@ func TestGetSettings_DelegatesWithSchema(t *testing.T) {
 	repo := &fakeRepo{rows: map[string]*ent.Plugin{"p1": {ID: "p1"}}}
 	loader := &fakeLoader{manifests: map[string]plugin.Descriptor{"p1": {ID: "p1", Settings: schema}}, hashes: map[string]string{"p1": "h"}}
 	settings := &fakeSettings{}
-	c := pluginlifecyclectl.NewWithLoader(repo, &fakeEngine{}, settings, loader, nil)
+	c := pluginmgmt.NewWithLoader(repo, &fakeEngine{}, settings, loader, nil)
 
 	gotSchema, values, err := c.GetSettings(context.Background(), "p1")
 	if err != nil {
@@ -312,7 +312,7 @@ func TestTransition_SamePluginSerializes(t *testing.T) {
 		manifests: map[string]plugin.Descriptor{"p1": {ID: "p1"}},
 		hashes:    map[string]string{"p1": "h"},
 	}
-	c := pluginlifecyclectl.NewWithLoader(repo, eng, &fakeSettings{}, loader, nil)
+	c := pluginmgmt.NewWithLoader(repo, eng, &fakeSettings{}, loader, nil)
 
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -342,7 +342,7 @@ func TestPutSettings_DelegatesWithSchema(t *testing.T) {
 	repo := &fakeRepo{rows: map[string]*ent.Plugin{"p1": {ID: "p1"}}}
 	loader := &fakeLoader{manifests: map[string]plugin.Descriptor{"p1": {ID: "p1", Settings: schema}}, hashes: map[string]string{"p1": "h"}}
 	settings := &fakeSettings{}
-	c := pluginlifecyclectl.NewWithLoader(repo, &fakeEngine{}, settings, loader, nil)
+	c := pluginmgmt.NewWithLoader(repo, &fakeEngine{}, settings, loader, nil)
 
 	err := c.PutSettings(context.Background(), "p1", map[string]string{"endpoint": "https://x"})
 	if err != nil {
@@ -377,7 +377,7 @@ func TestList_HealthProbeSetHealthy(t *testing.T) {
 		}
 		return false, false
 	}
-	c := pluginlifecyclectl.NewWithLoader(repo, &fakeEngine{}, &fakeSettings{}, loader, probe)
+	c := pluginmgmt.NewWithLoader(repo, &fakeEngine{}, &fakeSettings{}, loader, probe)
 
 	views, err := c.List(context.Background())
 	if err != nil {

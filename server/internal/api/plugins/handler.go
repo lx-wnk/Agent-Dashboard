@@ -28,7 +28,7 @@ type PluginView struct {
 }
 
 // controller is the lifecycle behaviour the handler needs; faked in tests and
-// implemented by pluginlifecyclectl. Action is one of install|activate|
+// implemented by pluginmgmt. Action is one of install|activate|
 // deactivate|uninstall.
 type controller interface {
 	List(ctx context.Context) ([]PluginView, error)
