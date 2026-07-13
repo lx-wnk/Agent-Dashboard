@@ -5,16 +5,54 @@ import (
 	"log/slog"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/ranking"
 )
 
-// pickNextTasksForFreeSlots selects tasks for available runner slots and calls
-// ProgressTask for each. allRunning is the prefetched set of non-terminal
-// stage_runs (running + awaiting_user + on_hold) already loaded by tick().
-// F-PERF-007: busyTaskIDs is derived from the already-loaded allRunning slice —
-// no second ListByStatus("running") call is issued here.
-func (o *PipelineOrchestrator) pickNextTasksForFreeSlots(ctx context.Context, allRunning []*ent.StageRun) {
-	max := o.configCache.Number(ctx, maxParallelKey, defaultMaxParallel)
+const (
+	maxParallelKey     = "maxParallelOrchestrators"
+	defaultMaxParallel = 3
+)
+
+// scheduler decides runner-slot capacity and selects the next tasks to spawn.
+// It does not dispatch — callers apply the returned tasks via ProgressTask.
+type scheduler struct {
+	cache        *configCache
+	taskRepo     repo.TaskRepo
+	stageRunRepo repo.StageRunRepo
+	depRepo      repo.DependencyRepo
+}
+
+// newScheduler constructs a scheduler backed by the orchestrator's shared
+// configCache and the given repos.
+func newScheduler(cache *configCache, taskRepo repo.TaskRepo, stageRunRepo repo.StageRunRepo, depRepo repo.DependencyRepo) *scheduler {
+	return &scheduler{cache: cache, taskRepo: taskRepo, stageRunRepo: stageRunRepo, depRepo: depRepo}
+}
+
+// HasFreeSlot checks whether a runner slot is available for the given task.
+// Called from the route/MCP-triggered ProgressTask path where no prefetched
+// running set is available — issues one ListByStatus("running") query.
+// F-PERF-007: the tick()-driven path uses Pick which derives busyTaskIDs from
+// the already-loaded allRunning slice, bypassing this function entirely for
+// the normal picker flow.
+func (s *scheduler) HasFreeSlot(ctx context.Context, exceptTaskID string) bool {
+	max := s.cache.Number(ctx, maxParallelKey, defaultMaxParallel)
+	running, _ := s.stageRunRepo.ListByStatus(ctx, "running")
+	busyTaskIDs := make(map[string]bool)
+	for _, r := range running {
+		if r.TaskID != exceptTaskID {
+			busyTaskIDs[r.TaskID] = true
+		}
+	}
+	return len(busyTaskIDs) < max
+}
+
+// Pick selects tasks for available runner slots. allRunning is the prefetched
+// set of non-terminal stage_runs (running + awaiting_user + on_hold) already
+// loaded by tick(). F-PERF-007: busyTaskIDs is derived from the already-loaded
+// allRunning slice — no second ListByStatus("running") call is issued here.
+func (s *scheduler) Pick(ctx context.Context, allRunning []*ent.StageRun) []*ent.Task {
+	max := s.cache.Number(ctx, maxParallelKey, defaultMaxParallel)
 	busyTaskIDs := make(map[string]bool)
 	for _, r := range allRunning {
 		if r.Status == "running" {
@@ -23,9 +61,9 @@ func (o *PipelineOrchestrator) pickNextTasksForFreeSlots(ctx context.Context, al
 	}
 	freeSlots := max - len(busyTaskIDs)
 	if freeSlots <= 0 {
-		return
+		return nil
 	}
-	candidates, _ := o.opts.TaskRepo.ListPickable(ctx)
+	candidates, _ := s.taskRepo.ListPickable(ctx)
 
 	// Batch-fetch the latest run per candidate to avoid N+1 per task.
 	candidateIDs := make([]string, len(candidates))
@@ -34,7 +72,7 @@ func (o *PipelineOrchestrator) pickNextTasksForFreeSlots(ctx context.Context, al
 	}
 	var latestByTask map[string]*ent.StageRun
 	if len(candidateIDs) > 0 {
-		latestByTask, _ = o.opts.StageRunRepo.GetLatestForTasks(ctx, candidateIDs)
+		latestByTask, _ = s.stageRunRepo.GetLatestForTasks(ctx, candidateIDs)
 	}
 
 	var ready []*ent.Task
@@ -50,17 +88,17 @@ func (o *PipelineOrchestrator) pickNextTasksForFreeSlots(ctx context.Context, al
 		}
 		// Dependency gate: skip unless all upstream deps are satisfied.
 		// N+1 per candidate is intentional here (upstreams are rare and small).
-		if o.opts.DepRepo != nil {
+		if s.depRepo != nil {
 			resolveStage := func(ctx context.Context, id string) (string, error) {
-				upstream, err := o.opts.TaskRepo.GetByID(ctx, id)
+				upstream, err := s.taskRepo.GetByID(ctx, id)
 				if err != nil {
 					return "", err
 				}
 				return upstream.CurrentStage, nil
 			}
-			allSat, _, _, err := EvaluateTaskDeps(ctx, t.ID, o.opts.DepRepo, resolveStage)
+			allSat, _, _, err := EvaluateTaskDeps(ctx, t.ID, s.depRepo, resolveStage)
 			if err != nil {
-				slog.Warn("orchestrator: dep eval failed", "taskID", t.ID, "err", err)
+				slog.Warn("scheduler: dep eval failed", "taskID", t.ID, "err", err)
 				continue
 			}
 			if !allSat {
@@ -77,11 +115,7 @@ func (o *PipelineOrchestrator) pickNextTasksForFreeSlots(ctx context.Context, al
 	if len(picks) > freeSlots {
 		picks = picks[:freeSlots]
 	}
-	for _, task := range picks {
-		if _, err := o.ProgressTask(ctx, task.ID, nil); err != nil {
-			slog.Error("orchestrator: pickup failed", "taskID", task.ID, "err", err)
-		}
-	}
+	return picks
 }
 
 // sortByStageIndex performs an insertion sort by stage index descending (further
