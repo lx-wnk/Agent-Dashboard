@@ -14,7 +14,7 @@ import (
 // F-PERF-007: busyTaskIDs is derived from the already-loaded allRunning slice —
 // no second ListByStatus("running") call is issued here.
 func (o *PipelineOrchestrator) pickNextTasksForFreeSlots(ctx context.Context, allRunning []*ent.StageRun) {
-	max := o.getCachedConfigNumber(ctx, maxParallelKey, defaultMaxParallel)
+	max := o.configCache.Number(ctx, maxParallelKey, defaultMaxParallel)
 	busyTaskIDs := make(map[string]bool)
 	for _, r := range allRunning {
 		if r.Status == "running" {

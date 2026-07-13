@@ -73,7 +73,7 @@ type PipelineOrchestrator struct {
 	taskLocks        sync.Map                // map[taskID string]*sync.Mutex
 	handlerOverrides sync.Map                // map[stage string]StageHandler — test seam
 	detectCompletion func(*ent.StageRun, string, CompletionDeps) (CompletionResult, error)
-	configCache      sync.Map // map[key string]cachedConfig
+	configCache      *configCache
 
 	httpResultCh chan httpSpawnResult // buffered channel for goroutine pool results
 	httpPoolSem  chan struct{}        // semaphore: limits concurrent HTTP spawns
@@ -81,16 +81,6 @@ type PipelineOrchestrator struct {
 	// F-PERF-008: dedupe inflight tryAttachSessionID goroutines.
 	// Key: stageRunID string; Value: struct{} (presence = goroutine in flight).
 	attachInFlight sync.Map
-}
-
-type cachedConfig struct {
-	value     int
-	expiresAt time.Time
-}
-
-type cachedConfigStr struct {
-	value     string
-	expiresAt time.Time
 }
 
 // ProgressOpts carries optional parameters for ProgressTask.
@@ -133,6 +123,7 @@ func NewOrchestrator(opts OrchestratorOptions) (*PipelineOrchestrator, error) {
 		opts:             opts,
 		handlers:         NewStageHandlers(sf),
 		detectCompletion: DetectCompletion,
+		configCache:      newConfigCache(opts.ConfigRepo),
 		httpPoolSem:      make(chan struct{}, poolSize),
 		httpResultCh:     make(chan httpSpawnResult, poolSize*2),
 	}
@@ -156,7 +147,7 @@ func (o *PipelineOrchestrator) SetCompletionDetector(fn func(*ent.StageRun, stri
 
 // InvalidateConfigCache clears the TTL config cache — call after REST writes to pipeline_config.
 func (o *PipelineOrchestrator) InvalidateConfigCache() {
-	o.configCache.Range(func(k, _ any) bool { o.configCache.Delete(k); return true })
+	o.configCache.Invalidate()
 }
 
 func (o *PipelineOrchestrator) resolveHandler(stage string) StageHandler {
@@ -164,30 +155,6 @@ func (o *PipelineOrchestrator) resolveHandler(stage string) StageHandler {
 		return h.(StageHandler)
 	}
 	return o.handlers[stage]
-}
-
-func (o *PipelineOrchestrator) getCachedConfigNumber(ctx context.Context, key string, fallback int) int {
-	if v, ok := o.configCache.Load(key); ok {
-		c, ok := v.(cachedConfig)
-		if ok && time.Now().Before(c.expiresAt) {
-			return c.value
-		}
-	}
-	n := int(o.opts.ConfigRepo.GetNumber(ctx, key, float64(fallback)))
-	o.configCache.Store(key, cachedConfig{value: n, expiresAt: time.Now().Add(60 * time.Second)})
-	return n
-}
-
-func (o *PipelineOrchestrator) getCachedConfigString(ctx context.Context, key string, fallback string) string {
-	if v, ok := o.configCache.Load(key); ok {
-		c, ok := v.(cachedConfigStr)
-		if ok && time.Now().Before(c.expiresAt) {
-			return c.value
-		}
-	}
-	s := o.opts.ConfigRepo.GetString(ctx, key, fallback)
-	o.configCache.Store(key, cachedConfigStr{value: s, expiresAt: time.Now().Add(60 * time.Second)})
-	return s
 }
 
 // EffectiveStageModel returns the effective global model for the given stage,
@@ -221,7 +188,7 @@ func (o *PipelineOrchestrator) stageModelDefault(ctx context.Context, stage stri
 	}
 	if projectID == nil {
 		// Global-only path: use the cached global lookup.
-		return o.getCachedConfigString(ctx, stageModelKeyPrefix+stage, coded)
+		return o.configCache.String(ctx, stageModelKeyPrefix+stage, coded)
 	}
 	// Project-scoped path: project row → global row → coded default (no cache bypass needed).
 	return o.opts.ConfigRepo.GetStringScoped(ctx, projectID, stageModelKeyPrefix+stage, coded)
@@ -342,7 +309,7 @@ func (o *PipelineOrchestrator) ProgressTask(ctx context.Context, taskID string, 
 // derives busyTaskIDs from the already-loaded allRunning slice, bypassing this
 // function entirely for the normal picker flow.
 func (o *PipelineOrchestrator) hasFreeRunnerSlot(ctx context.Context, exceptTaskID string) bool {
-	max := o.getCachedConfigNumber(ctx, maxParallelKey, defaultMaxParallel)
+	max := o.configCache.Number(ctx, maxParallelKey, defaultMaxParallel)
 	running, _ := o.opts.StageRunRepo.ListByStatus(ctx, "running")
 	busyTaskIDs := make(map[string]bool)
 	for _, r := range running {
@@ -518,7 +485,7 @@ func (o *PipelineOrchestrator) enforceBudgetsAndTimeout(ctx context.Context, tas
 	// at spawn and never mutated on an existing stage_run row (requeues allocate a
 	// new row at iter+1), so the in-memory copy always equals the DB value here.
 	if run.Pid != nil {
-		timeoutSec := o.getCachedConfigNumber(ctx, stageTimeoutKey, defaultStageTimeoutSeconds)
+		timeoutSec := o.configCache.Number(ctx, stageTimeoutKey, defaultStageTimeoutSeconds)
 		if timeoutSec > 0 && run.StartedAt != nil && time.Since(*run.StartedAt) > time.Duration(timeoutSec)*time.Second {
 			elapsed := time.Since(*run.StartedAt).Seconds()
 			slog.Warn("orchestrator: stage timed out — killing agent",
@@ -545,10 +512,10 @@ func (o *PipelineOrchestrator) handleFailedResult(ctx context.Context, task *ent
 	// RateLimited implies Infra; check it first so it uses the dedicated budget and fixed backoff.
 	// RetryCount is shared with the infra-retry counter.
 	if result.RateLimited {
-		maxRL := o.getCachedConfigNumber(ctx, maxRateLimitRetriesKey, defaultMaxRateLimitRetries)
+		maxRL := o.configCache.Number(ctx, maxRateLimitRetriesKey, defaultMaxRateLimitRetries)
 		if fresh.RetryCount < maxRL {
 			attempt := fresh.RetryCount + 1
-			backoffSec := o.getCachedConfigNumber(ctx, rateLimitBackoffKey, defaultRateLimitBackoff)
+			backoffSec := o.configCache.Number(ctx, rateLimitBackoffKey, defaultRateLimitBackoff)
 			nextRetryAt := time.Now().Add(time.Duration(backoffSec) * time.Second)
 			slog.Info("orchestrator: requeuing rate-limited run",
 				"runID", fresh.ID, "stage", fresh.Stage, "attempt", attempt,
@@ -577,10 +544,10 @@ func (o *PipelineOrchestrator) handleFailedResult(ctx context.Context, task *ent
 	}
 
 	if result.Infra {
-		maxRetries := o.getCachedConfigNumber(ctx, maxAutoRetriesKey, defaultMaxAutoRetries)
+		maxRetries := o.configCache.Number(ctx, maxAutoRetriesKey, defaultMaxAutoRetries)
 		if fresh.RetryCount < maxRetries {
 			attempt := fresh.RetryCount + 1
-			backoffSec := o.getCachedConfigNumber(ctx, retryBackoffKey, defaultRetryBackoff) * attempt // linear backoff
+			backoffSec := o.configCache.Number(ctx, retryBackoffKey, defaultRetryBackoff) * attempt // linear backoff
 			nextRetryAt := time.Now().Add(time.Duration(backoffSec) * time.Second)
 			slog.Info("orchestrator: requeuing infra-failed run",
 				"runID", fresh.ID, "stage", fresh.Stage, "attempt", attempt,
