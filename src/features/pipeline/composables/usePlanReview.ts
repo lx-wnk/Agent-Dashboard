@@ -1,6 +1,6 @@
-import type { PipelineTask } from '../types'
+import type { PipelineTask } from '@/types'
 import { ref } from 'vue'
-import { actionEndpoint } from './useRunAction'
+import { actionEndpoint } from '@/composables/useRunAction'
 
 const POLL_INTERVAL_MS = 1500
 

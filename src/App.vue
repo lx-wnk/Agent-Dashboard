@@ -57,8 +57,8 @@ const SchedulesView = defineAsyncComponent(() => import('./components/SchedulesV
 const TaskModal = defineAsyncComponent(() => import('@/features/pipeline/components/TaskModal.vue'))
 // Modal/panel components that drag in marked + dompurify (RefinementChat) and diff (EditGateModal) —
 // load on demand so those libs stay out of the first-load entry chunk.
-const RefinementChat = defineAsyncComponent(() => import('./components/RefinementChat.vue'))
-const PlanReviewPanel = defineAsyncComponent(() => import('./components/PlanReviewPanel.vue'))
+const RefinementChat = defineAsyncComponent(() => import('@/features/pipeline/components/RefinementChat.vue'))
+const PlanReviewPanel = defineAsyncComponent(() => import('@/features/pipeline/components/PlanReviewPanel.vue'))
 const EditGateModal = defineAsyncComponent(() => import('./components/EditGateModal.vue'))
 
 const { user, authEnabled, loaded, loadUser } = useUser()

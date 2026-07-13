@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import type { PipelineTask } from '../types'
+import type { PipelineTask } from '@/types'
 import { onUnmounted, ref, watch } from 'vue'
-import { usePlanReview } from '../composables/usePlanReview'
-import { toast } from '../composables/useToast'
-import { renderMarkdown } from '../utils/markdown'
+import { toast } from '@/composables/useToast'
+import { usePlanReview } from '@/features/pipeline/composables/usePlanReview'
+import { renderMarkdown } from '@/utils/markdown'
 
 defineOptions({ name: 'PlanReviewPanel' })
 

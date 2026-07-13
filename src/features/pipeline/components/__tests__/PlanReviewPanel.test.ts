@@ -8,7 +8,7 @@ const fetchStatusMock = vi.fn().mockResolvedValue(undefined)
 const startMock = vi.fn().mockResolvedValue(undefined)
 const stopMock = vi.fn()
 
-vi.mock('../../composables/usePlanReview', () => ({
+vi.mock('@/features/pipeline/composables/usePlanReview', () => ({
   usePlanReview: () => ({
     gateState: ref('awaiting_user'),
     approvedPlan: ref({ steps: ['step one', 'step two'] }),
@@ -22,7 +22,7 @@ vi.mock('../../composables/usePlanReview', () => ({
   }),
 }))
 
-vi.mock('../../utils/markdown', () => ({
+vi.mock('@/utils/markdown', () => ({
   renderMarkdown: (text: string) => `<p>${text}</p>`,
 }))
 
@@ -31,7 +31,7 @@ let PlanReviewPanel: any
 
 beforeEach(async () => {
   vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, status: 200, json: async () => ({}) })))
-  const mod = await import('../PlanReviewPanel.vue')
+  const mod = await import('@/features/pipeline/components/PlanReviewPanel.vue')
   PlanReviewPanel = mod.default
 })
 

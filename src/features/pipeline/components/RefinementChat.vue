@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import type { PipelineTask } from '../types'
-import type { LoadedAddon, SlotContext } from '../utils/pluginSlot'
 import type { ImageAttachment } from '@/features/pipeline/composables/useRefinementChat'
+import type { PipelineTask } from '@/types'
+import type { LoadedAddon, SlotContext } from '@/utils/pluginSlot'
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
+import { toast } from '@/composables/useToast'
 import { useRefinementChat } from '@/features/pipeline/composables/useRefinementChat'
-import PluginSlot from '@/features/plugins/components/PluginSlot.vue'
-import { toast } from '../composables/useToast'
-import { renderMarkdown as renderMarkdownShared } from '../utils/markdown'
+import { PluginSlot } from '@/features/plugins'
+import { renderMarkdown as renderMarkdownShared } from '@/utils/markdown'
 
 const props = defineProps<{
   open: boolean
