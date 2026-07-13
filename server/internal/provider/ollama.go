@@ -1,11 +1,12 @@
 package provider
 
 import (
-	"encoding/json"
-	"net/http"
+	"context"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/lx-wnk/agent-dashboard/server/internal/ollamaclient"
 )
 
 // OllamaClassifier decides whether a model is a locally-served (zero-cost)
@@ -13,8 +14,7 @@ import (
 // a short TTL; an unreachable Ollama yields an empty set (by-name match fails,
 // but an explicit provider=="ollama" still classifies local).
 type OllamaClassifier struct {
-	base string
-	http *http.Client
+	client *ollamaclient.Client
 
 	mu      sync.Mutex
 	tags    map[string]bool
@@ -24,9 +24,8 @@ type OllamaClassifier struct {
 
 func NewOllamaClassifier(base string) *OllamaClassifier {
 	return &OllamaClassifier{
-		base: strings.TrimRight(base, "/"),
-		http: &http.Client{Timeout: 800 * time.Millisecond},
-		ttl:  10 * time.Second,
+		client: ollamaclient.New(base, 800*time.Millisecond),
+		ttl:    10 * time.Second,
 	}
 }
 
@@ -64,21 +63,12 @@ func (o *OllamaClassifier) tagSet() map[string]bool {
 
 func (o *OllamaClassifier) fetchTags() map[string]bool {
 	set := map[string]bool{}
-	resp, err := o.http.Get(o.base + "/api/tags")
+	names, err := o.client.Tags(context.Background())
 	if err != nil {
 		return set
 	}
-	defer resp.Body.Close()
-	var body struct {
-		Models []struct {
-			Name string `json:"name"`
-		} `json:"models"`
-	}
-	if json.NewDecoder(resp.Body).Decode(&body) != nil {
-		return set
-	}
-	for _, m := range body.Models {
-		set[strings.ToLower(m.Name)] = true
+	for _, name := range names {
+		set[strings.ToLower(name)] = true
 	}
 	return set
 }
