@@ -1,8 +1,8 @@
-import type { CoOccurrenceData } from '../../sdk.generated'
+import type { CoOccurrenceData } from '@/sdk.generated'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
-import { axe } from '../../utils/testA11y'
-import CoOccurrenceMatrix from './CoOccurrenceMatrix.vue'
+import CoOccurrenceMatrix from '@/features/workflows/components/visualizations/CoOccurrenceMatrix.vue'
+import { axe } from '@/utils/testA11y'
 
 const data: CoOccurrenceData = {
   tools: ['Read', 'Edit', 'Bash'],

@@ -1,14 +1,14 @@
 <script setup lang="ts">
-import type { WorkflowsFilters, WorkflowTab } from '../composables/useWorkflows'
+import type { WorkflowsFilters, WorkflowTab } from '@/features/workflows/composables/useWorkflows'
 import { computed, onMounted, ref, watch } from 'vue'
-import { usePatterns } from '../composables/usePatterns'
-import { useSessions } from '../composables/useSessions'
-import { defaultWorkflowsFilters, useWorkflows } from '../composables/useWorkflows'
-import AppCard from './ui/AppCard.vue'
-import CoOccurrenceMatrix from './visualizations/CoOccurrenceMatrix.vue'
-import SankeyChart from './visualizations/SankeyChart.vue'
-import SessionDagChart from './visualizations/SessionDagChart.vue'
-import SpawnTreeChart from './visualizations/SpawnTreeChart.vue'
+import AppCard from '@/components/ui/AppCard.vue'
+import { usePatterns } from '@/composables/usePatterns'
+import { useSessions } from '@/composables/useSessions'
+import CoOccurrenceMatrix from '@/features/workflows/components/visualizations/CoOccurrenceMatrix.vue'
+import SankeyChart from '@/features/workflows/components/visualizations/SankeyChart.vue'
+import SessionDagChart from '@/features/workflows/components/visualizations/SessionDagChart.vue'
+import SpawnTreeChart from '@/features/workflows/components/visualizations/SpawnTreeChart.vue'
+import { defaultWorkflowsFilters, useWorkflows } from '@/features/workflows/composables/useWorkflows'
 
 defineEmits<{ navigate: [sessionId: string] }>()
 const TOOL_ARGS_RE = /\(.*$/

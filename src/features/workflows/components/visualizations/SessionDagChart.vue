@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import type { DAGData } from '../../sdk.generated'
+import type { DAGData } from '@/sdk.generated'
 import { scaleLinear } from 'd3-scale'
 import { select } from 'd3-selection'
 import { computed, onUnmounted, ref, watch } from 'vue'
-import { useTheme } from '../../composables/useTheme'
-import { toast } from '../../composables/useToast'
-import { chartColors } from '../../utils/chartColors'
-import ChartDataTable from '../ui/ChartDataTable.vue'
+import ChartDataTable from '@/components/ui/ChartDataTable.vue'
+import { useTheme } from '@/composables/useTheme'
+import { toast } from '@/composables/useToast'
+import { chartColors } from '@/utils/chartColors'
 
 const props = defineProps<{
   data: DAGData | null

@@ -9,7 +9,7 @@ beforeEach(async () => {
   vi.resetModules()
   toastMod = await import('../../composables/useToast')
   vi.spyOn(toastMod.toast, 'error')
-  SankeyChart = (await import('../visualizations/SankeyChart.vue')).default
+  SankeyChart = (await import('@/features/workflows/components/visualizations/SankeyChart.vue')).default
 })
 
 describe('sankeyChart', () => {

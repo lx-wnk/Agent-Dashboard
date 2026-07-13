@@ -1,6 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
-import WorkflowsView from './WorkflowsView.vue'
+import WorkflowsView from '@/features/workflows/components/WorkflowsView.vue'
 
 function emptySankey() {
   return { nodes: [], links: [], meta: { sessionCount: 0, callCount: 0 } }

@@ -1,7 +1,7 @@
 import type { Ref } from 'vue'
-import type { CoOccurrenceData, DAGData, SankeyData, SpawnTreeData } from '../sdk.generated'
+import type { CoOccurrenceData, DAGData, SankeyData, SpawnTreeData } from '@/sdk.generated'
 import { getCurrentScope, onScopeDispose, reactive, shallowRef, watch } from 'vue'
-import { errorMessage } from '../utils/errorMessage'
+import { errorMessage } from '@/utils/errorMessage'
 
 export interface WorkflowsFilters {
   sessionId?: string

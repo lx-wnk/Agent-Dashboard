@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import type { Agent } from '../types'
+import type { Agent } from '@/types'
 import { computed } from 'vue'
-import { useNow } from '../composables/useNow'
-import { formatBurnRate, formatCost, formatRelativeActivity, formatUptime, secondsSince } from '../utils/format'
+import { useNow } from '@/composables/useNow'
+import { formatBurnRate, formatCost, formatRelativeActivity, formatUptime, secondsSince } from '@/utils/format'
 
 const props = defineProps<{ agent: Agent }>()
 const { nowMs } = useNow()
