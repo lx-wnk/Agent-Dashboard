@@ -14,14 +14,13 @@ import (
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
 	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
-	"github.com/lx-wnk/agent-dashboard/server/internal/pluginsettings"
 	"github.com/lx-wnk/agent-dashboard/server/internal/tracker"
 )
 
 const settingsPluginID = "tracker"
 
 // trackerSchema is the canonical settings schema for tracker credentials.
-// The two *.token entries are secret — encrypted at rest via pluginsettings.Service.
+// The two *.token entries are secret — encrypted at rest via plugin.Service.
 var trackerSchema = []plugin.SettingField{
 	{Key: "tracker.github.token", Type: "string", Label: "GitHub personal access token", Secret: true},
 	{Key: "tracker.github.defaultRepo", Type: "string", Label: "GitHub default repo (owner/repo)", Secret: false},
@@ -35,14 +34,14 @@ type ResolverFn func(ref string, cfg tracker.Config, client *http.Client) (track
 
 // Handler serves /api/tracker/* endpoints.
 type Handler struct {
-	settings *pluginsettings.Service
+	settings *plugin.Service
 	httpCli  *http.Client
 	resolver ResolverFn
 }
 
 // NewHandler builds a Handler. resolver defaults to tracker.Resolve if nil;
 // httpCli defaults to a 30-second client if nil.
-func NewHandler(settings *pluginsettings.Service, httpCli *http.Client, resolver ResolverFn) *Handler {
+func NewHandler(settings *plugin.Service, httpCli *http.Client, resolver ResolverFn) *Handler {
 	if resolver == nil {
 		resolver = tracker.Resolve
 	}
@@ -88,7 +87,7 @@ func (h *Handler) putSettings(w http.ResponseWriter, r *http.Request) error {
 		return fmt.Errorf("%w: invalid JSON", apierr.ErrBadRequest)
 	}
 	if err := h.settings.Put(r.Context(), settingsPluginID, trackerSchema, body.Values); err != nil {
-		if errors.Is(err, pluginsettings.ErrUnknownKey) || errors.Is(err, pluginsettings.ErrInvalidValue) {
+		if errors.Is(err, plugin.ErrUnknownKey) || errors.Is(err, plugin.ErrInvalidValue) {
 			return apierr.NewAppError(http.StatusBadRequest, err.Error())
 		}
 		return fmt.Errorf("tracker.settings.put: %w", err)

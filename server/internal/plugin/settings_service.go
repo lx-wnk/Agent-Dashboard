@@ -1,6 +1,6 @@
-// Package pluginsettings manages per-plugin configuration values, encrypting
-// secret fields at rest and masking them in API responses.
-package pluginsettings
+// Per-plugin configuration values: encrypted secret fields at rest, masked in
+// API responses.
+package plugin
 
 import (
 	"context"
@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"strconv"
 
-	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
 	"github.com/lx-wnk/agent-dashboard/server/internal/secretbox"
 )
 
@@ -42,7 +41,9 @@ type Service struct {
 	box  *secretbox.Box
 }
 
-func New(repo Repo, box *secretbox.Box) *Service { return &Service{repo: repo, box: box} }
+func NewSettingsService(repo Repo, box *secretbox.Box) *Service {
+	return &Service{repo: repo, box: box}
+}
 
 func (s *Service) load(ctx context.Context, pluginID string) (map[string]Stored, error) {
 	rows, err := s.repo.ListByPlugin(ctx, pluginID)
@@ -57,7 +58,7 @@ func (s *Service) load(ctx context.Context, pluginID string) (map[string]Stored,
 }
 
 // Get returns key->value for the schema; secret values are masked.
-func (s *Service) Get(ctx context.Context, pluginID string, schema []plugin.SettingField) (map[string]string, error) {
+func (s *Service) Get(ctx context.Context, pluginID string, schema []SettingField) (map[string]string, error) {
 	stored, err := s.load(ctx, pluginID)
 	if err != nil {
 		return nil, err
@@ -78,7 +79,7 @@ func (s *Service) Get(ctx context.Context, pluginID string, schema []plugin.Sett
 	return out, nil
 }
 
-func validateValue(f plugin.SettingField, v string) error {
+func validateValue(f SettingField, v string) error {
 	switch f.Type {
 	case "int":
 		if _, err := strconv.Atoi(v); err != nil {
@@ -109,8 +110,8 @@ func validateValue(f plugin.SettingField, v string) error {
 // masked sentinel is skipped (left unchanged). Unknown keys (not in schema) are
 // rejected. Values are type-checked against the field's declared Type before any
 // persistence — validation failure persists nothing.
-func (s *Service) Put(ctx context.Context, pluginID string, schema []plugin.SettingField, values map[string]string) error {
-	schemaMap := make(map[string]plugin.SettingField, len(schema))
+func (s *Service) Put(ctx context.Context, pluginID string, schema []SettingField, values map[string]string) error {
+	schemaMap := make(map[string]SettingField, len(schema))
 	for _, f := range schema {
 		schemaMap[f.Key] = f
 	}
@@ -154,7 +155,7 @@ func (s *Service) Put(ctx context.Context, pluginID string, schema []plugin.Sett
 }
 
 // Decrypted returns key->plaintext (secrets decrypted) for env injection (SP2).
-func (s *Service) Decrypted(ctx context.Context, pluginID string, schema []plugin.SettingField) (map[string]string, error) {
+func (s *Service) Decrypted(ctx context.Context, pluginID string, schema []SettingField) (map[string]string, error) {
 	stored, err := s.load(ctx, pluginID)
 	if err != nil {
 		return nil, err

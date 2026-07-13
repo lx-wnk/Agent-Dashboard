@@ -1,4 +1,4 @@
-package pluginlifecycle
+package plugin
 
 import (
 	"context"
@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
 )
 
 // HTTPHookCaller POSTs hooks to the plugin's Addr. Reachability (process running)
@@ -18,7 +16,7 @@ func NewHTTPHookCaller() *HTTPHookCaller {
 	return &HTTPHookCaller{client: &http.Client{Timeout: 30 * time.Second}}
 }
 
-func (h *HTTPHookCaller) Call(ctx context.Context, d plugin.Descriptor, hook string) error {
+func (h *HTTPHookCaller) Call(ctx context.Context, d Descriptor, hook string) error {
 	url := "http://" + d.Addr + hook
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader("{}"))
 	if err != nil {

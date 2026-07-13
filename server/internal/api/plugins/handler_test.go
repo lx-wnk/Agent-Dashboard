@@ -14,9 +14,6 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/plugins"
 	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
-	"github.com/lx-wnk/agent-dashboard/server/internal/pluginlifecycle"
-	"github.com/lx-wnk/agent-dashboard/server/internal/pluginsctl"
-	"github.com/lx-wnk/agent-dashboard/server/internal/pluginsettings"
 )
 
 const testJWTSecret = "test-secret-plugins"
@@ -47,7 +44,7 @@ func TestLegacySettingsPluginsRouteGone(t *testing.T) {
 	}
 }
 
-// fakeLifecycle stands in for *pluginlifecyclectl.Controller.
+// fakeLifecycle stands in for *pluginmgmt.Controller.
 type fakeLifecycle struct {
 	views        []plugins.PluginView
 	transition   plugins.PluginView
@@ -187,7 +184,7 @@ func TestLifecycleTransition_ActivateReturnsState(t *testing.T) {
 }
 
 func TestLifecycleTransition_UnknownID_400(t *testing.T) {
-	ctl := &fakeLifecycle{transErr: fmt.Errorf("ctl: %w: %q", pluginsctl.ErrUnknownPlugin, "nope")}
+	ctl := &fakeLifecycle{transErr: fmt.Errorf("ctl: %w: %q", plugin.ErrUnknownPlugin, "nope")}
 	req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/plugins/nope/activate", nil))
 	rr := httptest.NewRecorder()
 	mountLifecycle(t, ctl).ServeHTTP(rr, req)
@@ -212,7 +209,7 @@ func TestLifecycleTransition_InvalidAction_400(t *testing.T) {
 }
 
 func TestLifecycleTransition_IllegalTransition_409(t *testing.T) {
-	ctl := &fakeLifecycle{transErr: fmt.Errorf("%w: p1 already installed", pluginlifecycle.ErrIllegalTransition)}
+	ctl := &fakeLifecycle{transErr: fmt.Errorf("%w: p1 already installed", plugin.ErrIllegalTransition)}
 	req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/plugins/p1/install", nil))
 	rr := httptest.NewRecorder()
 	mountLifecycle(t, ctl).ServeHTTP(rr, req)
@@ -237,7 +234,7 @@ func TestLifecycleTransition_UpdateAccepted(t *testing.T) {
 }
 
 func TestLifecycleTransition_UpdateIllegalTransition_409(t *testing.T) {
-	ctl := &fakeLifecycle{transErr: fmt.Errorf("%w: p1 not installed", pluginlifecycle.ErrIllegalTransition)}
+	ctl := &fakeLifecycle{transErr: fmt.Errorf("%w: p1 not installed", plugin.ErrIllegalTransition)}
 	req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/plugins/p1/update", nil))
 	rr := httptest.NewRecorder()
 	mountLifecycle(t, ctl).ServeHTTP(rr, req)
@@ -310,7 +307,7 @@ func TestLifecyclePutSettings_Persists(t *testing.T) {
 }
 
 func TestLifecyclePutSettings_UnknownKey_400(t *testing.T) {
-	ctl := &fakeLifecycle{putErr: fmt.Errorf("%w: %q", pluginsettings.ErrUnknownKey, "bogus")}
+	ctl := &fakeLifecycle{putErr: fmt.Errorf("%w: %q", plugin.ErrUnknownKey, "bogus")}
 	body := `{"values":{"bogus":"x"}}`
 	req := withAuth(t, httptest.NewRequest(http.MethodPut, "/api/plugins/p1/settings", strings.NewReader(body)))
 	rr := httptest.NewRecorder()
@@ -322,7 +319,7 @@ func TestLifecyclePutSettings_UnknownKey_400(t *testing.T) {
 }
 
 func TestLifecyclePutSettings_InvalidValue_400(t *testing.T) {
-	ctl := &fakeLifecycle{putErr: fmt.Errorf("%w: field %q requires an integer", pluginsettings.ErrInvalidValue, "count")}
+	ctl := &fakeLifecycle{putErr: fmt.Errorf("%w: field %q requires an integer", plugin.ErrInvalidValue, "count")}
 	body := `{"values":{"count":"abc"}}`
 	req := withAuth(t, httptest.NewRequest(http.MethodPut, "/api/plugins/p1/settings", strings.NewReader(body)))
 	rr := httptest.NewRecorder()
@@ -333,7 +330,7 @@ func TestLifecyclePutSettings_InvalidValue_400(t *testing.T) {
 	}
 }
 
-const pluginsettingsMasked = pluginsettings.MaskedSentinel
+const pluginsettingsMasked = plugin.MaskedSentinel
 
 func TestLifecycleTransition_MalformedID_400(t *testing.T) {
 	ctl := &fakeLifecycle{}

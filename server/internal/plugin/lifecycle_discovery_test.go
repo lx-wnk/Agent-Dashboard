@@ -1,4 +1,4 @@
-package pluginlifecycle
+package plugin
 
 import (
 	"context"

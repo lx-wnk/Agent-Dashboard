@@ -1,8 +1,8 @@
-// Package pluginlifecyclectl is the control plane behind the /api/plugins
+// Package pluginmgmt is the control plane behind the /api/plugins
 // lifecycle + settings endpoints. It wires the discovery state (plugin repo),
 // the lifecycle engine, and the settings service, reading each plugin's manifest
 // from disk for its descriptor + settings schema.
-package pluginlifecyclectl
+package pluginmgmt
 
 import (
 	"context"
@@ -18,7 +18,6 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
-	"github.com/lx-wnk/agent-dashboard/server/internal/pluginsctl"
 )
 
 // Repo is the subset of repo.PluginRepo the controller reads.
@@ -27,7 +26,7 @@ type Repo interface {
 	Get(ctx context.Context, id string) (*ent.Plugin, error)
 }
 
-// Engine is the lifecycle transition surface (satisfied by *pluginlifecycle.Engine).
+// Engine is the lifecycle transition surface (satisfied by *plugin.Engine).
 type Engine interface {
 	Install(ctx context.Context, d plugin.Descriptor) error
 	Activate(ctx context.Context, d plugin.Descriptor) error
@@ -36,7 +35,7 @@ type Engine interface {
 	Update(ctx context.Context, d plugin.Descriptor, manifestHash string) error
 }
 
-// Settings is the per-plugin settings surface (satisfied by *pluginsettings.Service).
+// Settings is the per-plugin settings surface (satisfied by *plugin.Service).
 type Settings interface {
 	Get(ctx context.Context, pluginID string, schema []plugin.SettingField) (map[string]string, error)
 	Put(ctx context.Context, pluginID string, schema []plugin.SettingField, values map[string]string) error
@@ -63,7 +62,7 @@ func (l FileManifestLoader) Load(id, path string) (plugin.Descriptor, string, er
 	}
 	var d plugin.Descriptor
 	if err := json.Unmarshal(raw, &d); err != nil {
-		return plugin.Descriptor{}, "", fmt.Errorf("pluginlifecyclectl: parse manifest %s: %w", id, err)
+		return plugin.Descriptor{}, "", fmt.Errorf("pluginmgmt: parse manifest %s: %w", id, err)
 	}
 	sum := sha256.Sum256(raw)
 	return d, hex.EncodeToString(sum[:]), nil
@@ -149,7 +148,7 @@ func (c *Controller) fillHealthy(view *plugins.PluginView, id string) {
 func (c *Controller) List(ctx context.Context) ([]plugins.PluginView, error) {
 	rows, err := c.repo.List(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("pluginlifecyclectl.List: %w", err)
+		return nil, fmt.Errorf("pluginmgmt.List: %w", err)
 	}
 	out := make([]plugins.PluginView, 0, len(rows))
 	for _, p := range rows {
@@ -172,7 +171,7 @@ func (c *Controller) List(ctx context.Context) ([]plugins.PluginView, error) {
 }
 
 // descriptorFor resolves a plugin's descriptor + manifest hash, mapping a
-// missing plugin to pluginsctl.ErrUnknownPlugin.
+// missing plugin to plugin.ErrUnknownPlugin.
 func (c *Controller) descriptorFor(ctx context.Context, id string) (plugin.Descriptor, string, error) {
 	path := ""
 	row, err := c.repo.Get(ctx, id)
@@ -182,11 +181,11 @@ func (c *Controller) descriptorFor(ctx context.Context, id string) (plugin.Descr
 	case repo.IsNotFound(err):
 		// fall through: loader fallback dir may still resolve it
 	default:
-		return plugin.Descriptor{}, "", fmt.Errorf("pluginlifecyclectl: get %q: %w", id, err)
+		return plugin.Descriptor{}, "", fmt.Errorf("pluginmgmt: get %q: %w", id, err)
 	}
 	desc, hash, lerr := c.loader.Load(id, path)
 	if lerr != nil {
-		return plugin.Descriptor{}, "", fmt.Errorf("%w: %q", pluginsctl.ErrUnknownPlugin, id)
+		return plugin.Descriptor{}, "", fmt.Errorf("%w: %q", plugin.ErrUnknownPlugin, id)
 	}
 	if desc.ID == "" {
 		desc.ID = id
@@ -195,7 +194,7 @@ func (c *Controller) descriptorFor(ctx context.Context, id string) (plugin.Descr
 }
 
 // Transition loads the descriptor, dispatches to the engine, and returns the
-// refreshed view. An unsupported action yields pluginsctl.ErrInvalidAction.
+// refreshed view. An unsupported action yields plugin.ErrInvalidAction.
 // Transitions on the same plugin ID are serialized via a per-plugin lock to
 // prevent concurrent Activate/Deactivate from racing on process and DB state.
 func (c *Controller) Transition(ctx context.Context, id, action string) (plugins.PluginView, error) {
@@ -219,14 +218,14 @@ func (c *Controller) Transition(ctx context.Context, id, action string) (plugins
 	case "update":
 		err = c.engine.Update(ctx, desc, hash)
 	default:
-		return plugins.PluginView{}, fmt.Errorf("%w: %q", pluginsctl.ErrInvalidAction, action)
+		return plugins.PluginView{}, fmt.Errorf("%w: %q", plugin.ErrInvalidAction, action)
 	}
 	if err != nil {
-		return plugins.PluginView{}, fmt.Errorf("pluginlifecyclectl: %s %q: %w", action, id, err)
+		return plugins.PluginView{}, fmt.Errorf("pluginmgmt: %s %q: %w", action, id, err)
 	}
 	row, err := c.repo.Get(ctx, id)
 	if err != nil {
-		return plugins.PluginView{}, fmt.Errorf("pluginlifecyclectl: reload %q: %w", id, err)
+		return plugins.PluginView{}, fmt.Errorf("pluginmgmt: reload %q: %w", id, err)
 	}
 	view := plugins.PluginView{
 		ID:              row.ID,
@@ -249,7 +248,7 @@ func (c *Controller) GetSettings(ctx context.Context, id string) ([]plugin.Setti
 	}
 	values, err := c.settings.Get(ctx, id, desc.Settings)
 	if err != nil {
-		return nil, nil, fmt.Errorf("pluginlifecyclectl: get settings %q: %w", id, err)
+		return nil, nil, fmt.Errorf("pluginmgmt: get settings %q: %w", id, err)
 	}
 	return desc.Settings, values, nil
 }
@@ -261,7 +260,7 @@ func (c *Controller) PutSettings(ctx context.Context, id string, values map[stri
 		return err
 	}
 	if err := c.settings.Put(ctx, id, desc.Settings, values); err != nil {
-		return fmt.Errorf("pluginlifecyclectl: put settings %q: %w", id, err)
+		return fmt.Errorf("pluginmgmt: put settings %q: %w", id, err)
 	}
 	return nil
 }

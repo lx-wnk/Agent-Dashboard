@@ -11,9 +11,6 @@ import (
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
 	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
-	"github.com/lx-wnk/agent-dashboard/server/internal/pluginlifecycle"
-	"github.com/lx-wnk/agent-dashboard/server/internal/pluginsctl"
-	"github.com/lx-wnk/agent-dashboard/server/internal/pluginsettings"
 )
 
 // PluginView is the narrow lifecycle DTO served under /api/plugins. It
@@ -31,7 +28,7 @@ type PluginView struct {
 }
 
 // controller is the lifecycle behaviour the handler needs; faked in tests and
-// implemented by pluginlifecyclectl. Action is one of install|activate|
+// implemented by pluginmgmt. Action is one of install|activate|
 // deactivate|uninstall.
 type controller interface {
 	List(ctx context.Context) ([]PluginView, error)
@@ -76,11 +73,11 @@ func (h *LifecycleHandler) Mount(r chi.Router) {
 // classify maps the controller sentinels to 400 and everything else to a plain
 // 500 wrap.
 func classify(err error, wrap string) error {
-	if errors.Is(err, pluginlifecycle.ErrIllegalTransition) {
+	if errors.Is(err, plugin.ErrIllegalTransition) {
 		return fmt.Errorf("%w: %s", apierr.ErrConflict, err.Error())
 	}
-	if errors.Is(err, pluginsctl.ErrUnknownPlugin) || errors.Is(err, pluginsctl.ErrInvalidAction) ||
-		errors.Is(err, pluginsettings.ErrUnknownKey) || errors.Is(err, pluginsettings.ErrInvalidValue) {
+	if errors.Is(err, plugin.ErrUnknownPlugin) || errors.Is(err, plugin.ErrInvalidAction) ||
+		errors.Is(err, plugin.ErrUnknownKey) || errors.Is(err, plugin.ErrInvalidValue) {
 		return fmt.Errorf("%w: %s", apierr.ErrBadRequest, err.Error())
 	}
 	return fmt.Errorf("%s: %w", wrap, err)

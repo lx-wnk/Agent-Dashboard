@@ -15,6 +15,7 @@ import (
 	apianalytics "github.com/lx-wnk/agent-dashboard/server/internal/api/analytics"
 	apicost "github.com/lx-wnk/agent-dashboard/server/internal/api/cost"
 	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
+	apiplugins "github.com/lx-wnk/agent-dashboard/server/internal/api/plugins"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/presets"
 	refineapi "github.com/lx-wnk/agent-dashboard/server/internal/api/refine"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/remotes"
@@ -30,6 +31,7 @@ import (
 	histsvc "github.com/lx-wnk/agent-dashboard/server/internal/history"
 	"github.com/lx-wnk/agent-dashboard/server/internal/merger"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
+	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
 	refinesvc "github.com/lx-wnk/agent-dashboard/server/internal/refine"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 	"github.com/lx-wnk/agent-dashboard/server/internal/webpush"
@@ -129,6 +131,11 @@ func buildBypassRouter(t *testing.T) http.Handler {
 		AnalyticsHandler:      apianalytics.NewHandler(rawrepo.NewAnalyticsRepo(rawDB), rawDB, repo.NewPipelineConfigRepo(c)),
 		CostHandler:           apicost.NewHandler(rawDB),
 		VisualizationsHandler: visualizations.NewHandler(),
+		// Wire the plugin route surface so the route-golden and the bypass-auth
+		// smoke both cover it. The registry is empty and the controller is a stub —
+		// route registration is static, independent of runtime plugin state.
+		PluginRegistry:         plugin.New(""),
+		PluginLifecycleHandler: apiplugins.NewLifecycle(stubPluginController{}),
 	}
 
 	return NewRouter(deps)

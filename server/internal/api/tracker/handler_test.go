@@ -12,30 +12,29 @@ import (
 	"github.com/go-chi/chi/v5"
 	trackerapi "github.com/lx-wnk/agent-dashboard/server/internal/api/tracker"
 	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
-	"github.com/lx-wnk/agent-dashboard/server/internal/pluginsettings"
 	"github.com/lx-wnk/agent-dashboard/server/internal/secretbox"
 	"github.com/lx-wnk/agent-dashboard/server/internal/tracker"
 )
 
-// memRepo is an in-memory pluginsettings.Repo for tests.
+// memRepo is an in-memory plugin.Repo for tests.
 type memRepo struct {
 	mu   sync.Mutex
-	rows map[string]pluginsettings.Stored // key -> row
+	rows map[string]plugin.Stored // key -> row
 }
 
-func newMemRepo() *memRepo { return &memRepo{rows: make(map[string]pluginsettings.Stored)} }
+func newMemRepo() *memRepo { return &memRepo{rows: make(map[string]plugin.Stored)} }
 
-func (m *memRepo) ListByPlugin(_ context.Context, _ string) ([]pluginsettings.Stored, error) {
+func (m *memRepo) ListByPlugin(_ context.Context, _ string) ([]plugin.Stored, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	out := make([]pluginsettings.Stored, 0, len(m.rows))
+	out := make([]plugin.Stored, 0, len(m.rows))
 	for _, r := range m.rows {
 		out = append(out, r)
 	}
 	return out, nil
 }
 
-func (m *memRepo) Upsert(_ context.Context, _ string, s pluginsettings.Stored) error {
+func (m *memRepo) Upsert(_ context.Context, _ string, s plugin.Stored) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.rows[s.Key] = s
@@ -59,10 +58,10 @@ func newTestBox(t *testing.T) *secretbox.Box {
 	return box
 }
 
-func newTestHandler(t *testing.T) (*trackerapi.Handler, *pluginsettings.Service) {
+func newTestHandler(t *testing.T) (*trackerapi.Handler, *plugin.Service) {
 	t.Helper()
 	repo := newMemRepo()
-	svc := pluginsettings.New(repo, newTestBox(t))
+	svc := plugin.NewSettingsService(repo, newTestBox(t))
 	h := trackerapi.NewHandler(svc, &http.Client{}, tracker.Resolve)
 	return h, svc
 }
@@ -81,7 +80,7 @@ func (f fakeTracker) FetchIssue(context.Context, string) (tracker.Issue, error) 
 // handlerWithTracker builds a handler whose resolver always returns tr.
 func handlerWithTracker(t *testing.T, tr tracker.Tracker) *trackerapi.Handler {
 	t.Helper()
-	svc := pluginsettings.New(newMemRepo(), newTestBox(t))
+	svc := plugin.NewSettingsService(newMemRepo(), newTestBox(t))
 	resolver := func(string, tracker.Config, *http.Client) (tracker.Tracker, error) { return tr, nil }
 	return trackerapi.NewHandler(svc, &http.Client{}, resolver)
 }
@@ -137,7 +136,7 @@ func TestPutSettings_SecretRoundTrip(t *testing.T) {
 		Values map[string]string `json:"values"`
 	}
 	_ = json.NewDecoder(w2.Body).Decode(&resp)
-	if resp.Values["tracker.github.token"] != pluginsettings.MaskedSentinel {
+	if resp.Values["tracker.github.token"] != plugin.MaskedSentinel {
 		t.Errorf("secret not masked: %q", resp.Values["tracker.github.token"])
 	}
 }
@@ -148,7 +147,7 @@ func TestPutSettings_SentinelPreservesExistingSecret(t *testing.T) {
 		"values": map[string]string{"tracker.github.token": "initial-secret"},
 	})
 	_ = doRequest(t, h, http.MethodPut, "/api/tracker/settings", map[string]any{
-		"values": map[string]string{"tracker.github.token": pluginsettings.MaskedSentinel},
+		"values": map[string]string{"tracker.github.token": plugin.MaskedSentinel},
 	})
 	// Assert the STORED plaintext is unchanged — GET masks unconditionally, so
 	// only inspecting the decrypted value proves the secret was preserved.

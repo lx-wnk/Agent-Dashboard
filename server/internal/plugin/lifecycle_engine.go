@@ -1,7 +1,6 @@
-// Package pluginlifecycle drives plugin state transitions (install/activate/
-// deactivate/uninstall/update), persisting state and invoking declared HTTP
-// hooks. Process orchestration (start/stop, reachability) is SP2.
-package pluginlifecycle
+// Lifecycle engine: plugin state transitions (install/activate/deactivate/
+// uninstall/update), persisting state and invoking declared HTTP hooks.
+package plugin
 
 import (
 	"context"
@@ -10,13 +9,20 @@ import (
 	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
-	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
-	"github.com/lx-wnk/agent-dashboard/server/internal/pluginsctl"
 )
 
 // ErrIllegalTransition is returned when a lifecycle action cannot be applied in
 // the plugin's current state (e.g. install-when-already-installed).
 var ErrIllegalTransition = errors.New("pluginlifecycle: illegal transition")
+
+// ErrUnknownPlugin signals that an ID matched no discovered plugin.
+// ErrInvalidAction signals an unsupported lifecycle action. Both are raised by
+// the runtime and matched by the control plane; the message text is preserved
+// verbatim because it is wrapped into the externally-observable HTTP error body.
+var (
+	ErrUnknownPlugin = errors.New("pluginsctl: unknown plugin")
+	ErrInvalidAction = errors.New("pluginsctl: invalid action")
+)
 
 // State is a plugin's persisted lifecycle state.
 type State struct {
@@ -37,7 +43,7 @@ type StateRepo interface {
 // HookCaller POSTs a lifecycle hook to a plugin. hook is the path (may be empty
 // = no-op). The real impl is HTTP; SP2 ensures reachability.
 type HookCaller interface {
-	Call(ctx context.Context, d plugin.Descriptor, hook string) error
+	Call(ctx context.Context, d Descriptor, hook string) error
 }
 
 // SettingsClearer removes a plugin's settings on uninstall.
@@ -61,7 +67,7 @@ type Engine struct {
 	proc     ProcessManager
 }
 
-func New(repo StateRepo, hooks HookCaller, settings SettingsClearer, proc ProcessManager) *Engine {
+func NewLifecycleEngine(repo StateRepo, hooks HookCaller, settings SettingsClearer, proc ProcessManager) *Engine {
 	return &Engine{repo: repo, hooks: hooks, settings: settings, proc: proc}
 }
 
@@ -87,7 +93,7 @@ func (e *Engine) withTransient(ctx context.Context, id string, fn func() error) 
 }
 
 // callHook runs a hook only when its path is non-empty.
-func (e *Engine) callHook(ctx context.Context, d plugin.Descriptor, path string) error {
+func (e *Engine) callHook(ctx context.Context, d Descriptor, path string) error {
 	if path == "" {
 		return nil
 	}
@@ -98,7 +104,7 @@ func (e *Engine) callHook(ctx context.Context, d plugin.Descriptor, path string)
 // It does not guard against already-installed — callers are responsible for
 // that check. This is the shared install step used by both Install and the
 // auto-install path in Activate.
-func (e *Engine) performInstall(ctx context.Context, d plugin.Descriptor) error {
+func (e *Engine) performInstall(ctx context.Context, d Descriptor) error {
 	if err := e.withTransient(ctx, d.ID, func() error {
 		if err := e.callHook(ctx, d, d.Lifecycle.Install); err != nil {
 			return fmt.Errorf("install hook: %w", err)
@@ -111,7 +117,7 @@ func (e *Engine) performInstall(ctx context.Context, d plugin.Descriptor) error 
 	return e.repo.SetInstalledAt(ctx, d.ID, &now)
 }
 
-func (e *Engine) Install(ctx context.Context, d plugin.Descriptor) error {
+func (e *Engine) Install(ctx context.Context, d Descriptor) error {
 	st, err := e.repo.GetState(ctx, d.ID)
 	if err != nil {
 		return err
@@ -122,7 +128,7 @@ func (e *Engine) Install(ctx context.Context, d plugin.Descriptor) error {
 	return e.performInstall(ctx, d)
 }
 
-func (e *Engine) Activate(ctx context.Context, d plugin.Descriptor) error {
+func (e *Engine) Activate(ctx context.Context, d Descriptor) error {
 	st, err := e.repo.GetState(ctx, d.ID)
 	if err != nil {
 		return err
@@ -146,7 +152,7 @@ func (e *Engine) Activate(ctx context.Context, d plugin.Descriptor) error {
 	return nil
 }
 
-func (e *Engine) Deactivate(ctx context.Context, d plugin.Descriptor) error {
+func (e *Engine) Deactivate(ctx context.Context, d Descriptor) error {
 	if err := e.callHook(ctx, d, d.Lifecycle.Deactivate); err != nil {
 		return fmt.Errorf("deactivate hook: %w", err)
 	}
@@ -156,11 +162,11 @@ func (e *Engine) Deactivate(ctx context.Context, d plugin.Descriptor) error {
 	return e.stop(ctx, d.ID)
 }
 
-func (e *Engine) Update(ctx context.Context, d plugin.Descriptor, manifestHash string) error {
+func (e *Engine) Update(ctx context.Context, d Descriptor, manifestHash string) error {
 	st, err := e.repo.GetState(ctx, d.ID)
 	if err != nil {
 		if ent.IsNotFound(err) {
-			return fmt.Errorf("%w: %s", pluginsctl.ErrUnknownPlugin, d.ID)
+			return fmt.Errorf("%w: %s", ErrUnknownPlugin, d.ID)
 		}
 		return err
 	}
@@ -178,7 +184,7 @@ func (e *Engine) Update(ctx context.Context, d plugin.Descriptor, manifestHash s
 	return e.repo.SetManifestHash(ctx, d.ID, manifestHash)
 }
 
-func (e *Engine) Uninstall(ctx context.Context, d plugin.Descriptor) error {
+func (e *Engine) Uninstall(ctx context.Context, d Descriptor) error {
 	st, err := e.repo.GetState(ctx, d.ID)
 	if err != nil {
 		return err
