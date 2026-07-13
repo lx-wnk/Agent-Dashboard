@@ -1,14 +1,14 @@
 <script setup lang="ts">
-import type { DriftAlert, EvalMetricSnapshot, MetricKey } from '../types'
+import type { DriftAlert, EvalMetricSnapshot, MetricKey } from '@/types'
 import { max } from 'd3-array'
 import { axisBottom, axisLeft } from 'd3-axis'
 import { scaleLinear, scalePoint } from 'd3-scale'
 import { select } from 'd3-selection'
 import { curveMonotoneX, line as d3line } from 'd3-shape'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useEvalMetrics } from '../composables/useEvalMetrics'
-import { toast } from '../composables/useToast'
-import { METRIC_KEYS, metricLabel } from '../utils/evalMetrics'
+import { toast } from '@/composables/useToast'
+import { useEvalMetrics } from '@/features/analytics/composables/useEvalMetrics'
+import { METRIC_KEYS, metricLabel } from '@/utils/evalMetrics'
 
 const { snapshots, openAlerts, isLoading, error, acknowledge, runScan, start } = useEvalMetrics()
 

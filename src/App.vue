@@ -48,8 +48,8 @@ import { friendlyProjectName } from './utils/friendlyProjectName'
 // PERF-BUNDLE1: AgentModal is only ever rendered on agent selection — split into its own chunk
 const AgentModal = defineAsyncComponent(() => import('@/features/agents/components/AgentModal.vue'))
 // F-PERF-019: top-level heavy views loaded on demand — each becomes its own chunk
-const CostAnalyticsView = defineAsyncComponent(() => import('./components/CostAnalyticsView.vue'))
-const EvalView = defineAsyncComponent(() => import('./components/EvalView.vue'))
+const CostAnalyticsView = defineAsyncComponent(() => import('@/features/analytics/components/CostAnalyticsView.vue'))
+const EvalView = defineAsyncComponent(() => import('@/features/analytics/components/EvalView.vue'))
 const PipelineBoard = defineAsyncComponent(() => import('@/features/pipeline/components/PipelineBoard.vue'))
 const WorkflowsView = defineAsyncComponent(() => import('./components/WorkflowsView.vue'))
 const SchedulesView = defineAsyncComponent(() => import('./components/SchedulesView.vue'))

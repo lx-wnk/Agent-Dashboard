@@ -2,7 +2,7 @@ import { mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
 
-let useCostForecast: typeof import('../useCostForecast').useCostForecast
+let useCostForecast: typeof import('@/features/analytics/composables/useCostForecast').useCostForecast
 
 function withSetup<T>(composable: () => T) {
   let result!: T
@@ -38,7 +38,7 @@ beforeEach(async () => {
     status: 200,
   }))
   vi.resetModules()
-  const mod = await import('../useCostForecast')
+  const mod = await import('@/features/analytics/composables/useCostForecast')
   useCostForecast = mod.useCostForecast
 })
 
@@ -79,7 +79,7 @@ describe('useCostForecast', () => {
       json: () => Promise.resolve({}),
     } as Response)
     vi.resetModules()
-    const mod = await import('../useCostForecast')
+    const mod = await import('@/features/analytics/composables/useCostForecast')
     useCostForecast = mod.useCostForecast
 
     const { result } = withSetup(() => useCostForecast())
