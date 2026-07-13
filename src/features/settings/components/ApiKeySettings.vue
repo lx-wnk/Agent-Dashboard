@@ -24,7 +24,7 @@ import { buildMcpAddCommand, buildMcpJsonConfig } from '@/utils/mcpCommand'
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: [] }>()
 const NotificationSettings = defineAsyncComponent(() => import('@/features/settings/components/NotificationSettings.vue'))
-const PluginSettings = defineAsyncComponent(() => import('@/features/plugins/components/PluginSettings.vue'))
+const PluginSettings = defineAsyncComponent(() => import('@/features/plugins').then(m => m.PluginSettings))
 const ProviderSettings = defineAsyncComponent(() => import('@/features/settings/components/ProviderSettings.vue'))
 const TrackerSettingsPanel = defineAsyncComponent(() => import('@/features/settings/components/TrackerSettingsPanel.vue'))
 const AppSettings = defineAsyncComponent(() => import('@/features/settings/components/AppSettings.vue'))

@@ -20,7 +20,7 @@ import { TaskActionsKey, TaskDetailsKey, TaskRefKey } from '@/features/pipeline/
 import { usePipelineConfig } from '@/features/pipeline/composables/usePipelineConfig'
 import { useTaskActions } from '@/features/pipeline/composables/useTaskActions'
 import { useTaskDetails } from '@/features/pipeline/composables/useTaskDetails'
-import PluginSlot from '@/features/plugins/components/PluginSlot.vue'
+import { PluginSlot } from '@/features/plugins'
 import { secondsUntil } from '@/utils/retryCountdown'
 import { STAGE_LABELS } from '@/utils/stageLabels'
 import { stageTone } from '@/utils/statusColors'
