@@ -45,16 +45,6 @@ const (
 	defaultRateLimitBackoff    = 600
 	maxRateLimitRetriesKey     = "maxRateLimitRetries"
 	defaultMaxRateLimitRetries = 36
-
-	// Per-stage model config key prefix (e.g. stageModelKeyPrefix+"implementation").
-	stageModelKeyPrefix = "stageModel."
-
-	// Balanced defaults: implementation gets the most capable model, finalization
-	// the fastest. An explicit DB row or task/spawner override takes precedence.
-	defaultModelImplementation = "claude-opus-4-6"
-	defaultModelSelfReview     = "claude-sonnet-4-6"
-	defaultModelPlanReview     = "claude-sonnet-4-6"
-	defaultModelFinalization   = "claude-haiku-4-5"
 )
 
 // httpSpawnResult carries the outcome of an asynchronous HTTP-adapter spawn.
@@ -74,6 +64,7 @@ type PipelineOrchestrator struct {
 	handlerOverrides sync.Map                // map[stage string]StageHandler — test seam
 	detectCompletion func(*ent.StageRun, string, CompletionDeps) (CompletionResult, error)
 	configCache      *configCache
+	modelResolver    *modelResolver
 
 	httpResultCh chan httpSpawnResult // buffered channel for goroutine pool results
 	httpPoolSem  chan struct{}        // semaphore: limits concurrent HTTP spawns
@@ -119,11 +110,13 @@ func NewOrchestrator(opts OrchestratorOptions) (*PipelineOrchestrator, error) {
 		}
 	}
 	poolSize := defaultMaxParallel
+	cc := newConfigCache(opts.ConfigRepo)
 	o := &PipelineOrchestrator{
 		opts:             opts,
 		handlers:         NewStageHandlers(sf),
 		detectCompletion: DetectCompletion,
-		configCache:      newConfigCache(opts.ConfigRepo),
+		configCache:      cc,
+		modelResolver:    newModelResolver(cc, opts.ConfigRepo),
 		httpPoolSem:      make(chan struct{}, poolSize),
 		httpResultCh:     make(chan httpSpawnResult, poolSize*2),
 	}
@@ -161,37 +154,14 @@ func (o *PipelineOrchestrator) resolveHandler(stage string) StageHandler {
 // applying coded default → global DB config row precedence.
 // Exported for use by api/* handlers (global reads, no project context).
 func (o *PipelineOrchestrator) EffectiveStageModel(ctx context.Context, stage string) string {
-	return o.stageModelDefault(ctx, stage, nil)
+	return o.modelResolver.StageDefault(ctx, stage, nil)
 }
 
 // EffectiveStageModelForProject returns the effective model for the given stage
 // and project, applying coded default → global DB row → project DB row.
 // Exported for use by api/* handlers that serve per-project config reads.
 func (o *PipelineOrchestrator) EffectiveStageModelForProject(ctx context.Context, projectID *string, stage string) string {
-	return o.stageModelDefault(ctx, stage, projectID)
-}
-
-// stageModelDefault returns the effective per-stage model string for the given
-// project scope. Precedence: coded default → global config row → project config row
-// (project→global→coded via GetStringScoped). Caller applies task/spawner override on top.
-func (o *PipelineOrchestrator) stageModelDefault(ctx context.Context, stage string, projectID *string) string {
-	var coded string
-	switch stage {
-	case "implementation":
-		coded = defaultModelImplementation
-	case "self_review":
-		coded = defaultModelSelfReview
-	case "plan_review":
-		coded = defaultModelPlanReview
-	case "finalization":
-		coded = defaultModelFinalization
-	}
-	if projectID == nil {
-		// Global-only path: use the cached global lookup.
-		return o.configCache.String(ctx, stageModelKeyPrefix+stage, coded)
-	}
-	// Project-scoped path: project row → global row → coded default (no cache bypass needed).
-	return o.opts.ConfigRepo.GetStringScoped(ctx, projectID, stageModelKeyPrefix+stage, coded)
+	return o.modelResolver.StageDefault(ctx, stage, projectID)
 }
 
 // Run starts the orchestrator tick loop. It blocks until ctx is cancelled.
