@@ -1,7 +1,7 @@
 import type { Ref } from 'vue'
 import type { Agent, PermissionRequest, PipelineTask, StageRun, TaskFeedback, TaskPermission } from '@/types'
 import { computed, onUnmounted, ref, watch } from 'vue'
-import { useAgents } from '@/features/agents/composables/useAgents'
+import { useAgents } from '@/features/agents'
 import {
   fetchPendingPermissionRequests,
   fetchStageRunAgentOutput,

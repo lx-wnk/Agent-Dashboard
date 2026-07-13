@@ -16,7 +16,7 @@ import {
 } from '@/composables/useProjects'
 import { useSpawners } from '@/composables/useSpawners'
 import { toast } from '@/composables/useToast'
-import { useProjectPipelineConfig } from '@/features/pipeline/composables/useProjectPipelineConfig'
+import { useProjectPipelineConfig } from '@/features/pipeline'
 import { errorMessage } from '@/utils/errorMessage'
 import { AVAILABLE_MODELS } from '@/utils/models'
 import { STAGE_LABELS } from '@/utils/stageLabels'

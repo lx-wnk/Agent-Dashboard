@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { TrendPoint } from '@/features/agents/composables/useAgents'
+import type { TrendPoint } from '@/features/agents'
 import { computed } from 'vue'
 import { formatTokens } from '@/utils/format'
 
