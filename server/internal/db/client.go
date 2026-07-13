@@ -86,6 +86,14 @@ func Open(path string) (*DBBundle, error) {
 		_ = client.Close()
 		return nil, fmt.Errorf("db: migrate legacy pipeline_configs: %w", err)
 	}
+	// Pre-seed the stage_run.session_id index so ent's auto-migrate sees it
+	// already present and does a no-op instead of a table rebuild (which
+	// crashes on existing DBs with "NOT NULL constraint failed: ...id" — see
+	// PR #207). Idempotent via IF NOT EXISTS.
+	if err := migrateEnsureStageRunSessionIndex(sqlDB); err != nil {
+		_ = client.Close()
+		return nil, fmt.Errorf("db: ensure stage_run session_id index: %w", err)
+	}
 	if err := client.Schema.Create(context.Background()); err != nil {
 		_ = client.Close()
 		return nil, fmt.Errorf("db: auto-migrate: %w", err)
@@ -416,4 +424,29 @@ func migrateLegacyPipelineConfig(db *sql.DB) error {
 		}
 	}
 	return tx.Commit()
+}
+
+// migrateEnsureStageRunSessionIndex pre-creates the stage_run.session_id index
+// under the exact name ent generates (stagerun_session_id) before ent
+// auto-migrate runs. Without this, ent's diff would find the index missing on
+// existing databases and add it via SQLite's 12-step table rebuild, which
+// crashes with "NOT NULL constraint failed: stage_runs.id" (PR #207).
+// Idempotent via IF NOT EXISTS; on a fresh database the table does not yet
+// exist, so the CREATE INDEX simply targets ent's own subsequently-created table.
+func migrateEnsureStageRunSessionIndex(db *sql.DB) error {
+	var hasTable int
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='stage_runs'`,
+	).Scan(&hasTable); err != nil {
+		return fmt.Errorf("check stage_runs table: %w", err)
+	}
+	if hasTable == 0 {
+		return nil // fresh database; ent will create the table with the index already declared
+	}
+	if _, err := db.Exec(
+		`CREATE INDEX IF NOT EXISTS stagerun_session_id ON stage_runs(session_id)`,
+	); err != nil {
+		return fmt.Errorf("create stage_run session_id index: %w", err)
+	}
+	return nil
 }

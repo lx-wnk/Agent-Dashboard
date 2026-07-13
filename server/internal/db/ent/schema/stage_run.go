@@ -45,6 +45,7 @@ func (StageRun) Edges() []ent.Edge {
 func (StageRun) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("status"),
+		index.Fields("session_id"),
 		index.Fields("task_id", "stage", "iteration"),
 		index.Fields("task_id", "created_at"),
 		// DB-level guard: at most one running stage_run per task.
