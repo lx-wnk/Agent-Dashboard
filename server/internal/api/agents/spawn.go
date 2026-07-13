@@ -242,7 +242,7 @@ func (m *SpawnManager) enforceSpawnPolicy(body map[string]any) (*spawnRequest, e
 // resolveSpawner looks up the spawner row when spawnerId is set in the body,
 // rejects unsupported adapter types, and hydrates req.model from ModelOverride
 // when the caller did not supply one.
-func (m *SpawnManager) resolveSpawner(sub string, body map[string]any, req *spawnRequest) (*ent.Spawner, error) {
+func (m *SpawnManager) resolveSpawner(body map[string]any, req *spawnRequest) (*ent.Spawner, error) {
 	spawnerID, ok := body["spawnerId"].(string)
 	if !ok || spawnerID == "" {
 		return nil, nil
@@ -343,7 +343,7 @@ func (m *SpawnManager) Spawn(sub string, body map[string]any) (int, error) {
 		return 0, err
 	}
 
-	spawnerRow, err := m.resolveSpawner(sub, body, req)
+	spawnerRow, err := m.resolveSpawner(body, req)
 	if err != nil {
 		return 0, err
 	}

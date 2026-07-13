@@ -547,7 +547,7 @@ func (h *Handler) cwdNotInProjectWarning(ctx context.Context, projectID, cwd str
 
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) error {
 	id := chi.URLParam(r, "id")
-	existing, err := h.taskRepo.GetByID(r.Context(), id)
+	_, err := h.taskRepo.GetByID(r.Context(), id)
 	if err != nil {
 		return apierr.ErrNotFound
 	}
@@ -638,7 +638,6 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) error {
 	// this PATCH body. The PATCH does not actually mutate cwd (no setter
 	// exposed yet), so we compare the post-update task's cwd against the
 	// effective project's folders.
-	_ = existing
 	cwdInPatch := body.Cwd != nil
 	projectInPatch := projectIDPtr != nil || clearProject
 	if cwdInPatch || projectInPatch {

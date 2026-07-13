@@ -13,6 +13,7 @@ import (
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/agentbroadcast"
 	"github.com/lx-wnk/agent-dashboard/server/internal/config"
+	"github.com/lx-wnk/agent-dashboard/server/internal/parser"
 	"github.com/lx-wnk/agent-dashboard/server/internal/restart"
 )
 
@@ -41,6 +42,7 @@ func Run(ctx context.Context, cfg config.Config, cfgFile string, restartCtl *res
 	g, gCtx := errgroup.WithContext(runCtx)
 
 	interval := time.Duration(settingsSvc.Int("sse.intervalMs")) * time.Millisecond
+	parser.SessionCacheTTL = max(interval, parser.SessionCacheTTL)
 	g.Go(func() error {
 		agentbroadcast.Run(gCtx, agentMerger, broadcaster, interval, baselineProvider, enricher)
 		return nil

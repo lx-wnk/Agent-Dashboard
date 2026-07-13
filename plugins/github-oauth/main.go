@@ -139,11 +139,12 @@ func main() {
 	mux.HandleFunc("GET /capabilities/auth/user", h.user)
 
 	srv := &http.Server{
-		Addr:         listenAddr,
-		Handler:      mux,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		Addr:              listenAddr,
+		Handler:           mux,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      15 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		ReadHeaderTimeout: 5 * time.Second,
 	}
 
 	slog.Info("github-oauth plugin listening", "addr", listenAddr)
@@ -249,6 +250,11 @@ func (h *handler) callback(w http.ResponseWriter, r *http.Request) {
 		Path:   "/",
 	})
 
+	if errParam := r.URL.Query().Get("error"); errParam != "" {
+		slog.Warn("callback: oauth error from provider", "error", errParam, "description", r.URL.Query().Get("error_description"))
+		writeError(w, http.StatusForbidden, "authentication denied by provider")
+		return
+	}
 	code := r.URL.Query().Get("code")
 	if code == "" {
 		writeError(w, http.StatusBadRequest, "missing code")
@@ -287,7 +293,7 @@ func (h *handler) callback(w http.ResponseWriter, r *http.Request) {
 // nonce is the flow-binding JWT issued by core on the initial redirect; core validates it.
 func (h *handler) createCoreSession(ctx context.Context, profile *oauthUserProfile, nonce string) (*http.Cookie, error) {
 	body, err := json.Marshal(map[string]string{
-		"provider_id":    profile.ID,
+		"provider_id":  profile.ID,
 		"login":        profile.Login,
 		"display_name": profile.DisplayName,
 		"avatar_url":   profile.AvatarURL,

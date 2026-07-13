@@ -53,9 +53,9 @@ func main() {
 		Level: slog.LevelInfo,
 	})))
 
-	clientID     := os.Getenv("AZURE_CLIENT_ID")
+	clientID := os.Getenv("AZURE_CLIENT_ID")
 	clientSecret := os.Getenv("AZURE_CLIENT_SECRET")
-	tenantID     := os.Getenv("AZURE_TENANT_ID")
+	tenantID := os.Getenv("AZURE_TENANT_ID")
 	dashboardURL := os.Getenv("DASHBOARD_URL")
 	pluginSecret := os.Getenv("DASHBOARD_AUTH_PLUGIN_SECRET")
 	allowedGroup := os.Getenv("OFFICE365_ALLOWED_GROUP_ID")
@@ -82,16 +82,16 @@ func main() {
 	}
 
 	h := &handler{
-		clientID:        clientID,
-		clientSecret:    clientSecret,
-		tenantID:        tenantID,
-		dashboardURL:    strings.TrimRight(dashboardURL, "/"),
-		pluginSecret:    pluginSecret,
-		allowedGroup:    allowedGroup,
-		httpClient:      &http.Client{Timeout: 10 * time.Second},
-		callbackURL:     "http://" + listenAddr + "/callback",
-		tokenURL:        fmt.Sprintf("https://login.microsoftonline.com/%s/oauth2/v2.0/token", url.PathEscape(tenantID)),
-		msGraphMeURL:    graphMeURL,
+		clientID:         clientID,
+		clientSecret:     clientSecret,
+		tenantID:         tenantID,
+		dashboardURL:     strings.TrimRight(dashboardURL, "/"),
+		pluginSecret:     pluginSecret,
+		allowedGroup:     allowedGroup,
+		httpClient:       &http.Client{Timeout: 10 * time.Second},
+		callbackURL:      "http://" + listenAddr + "/callback",
+		tokenURL:         fmt.Sprintf("https://login.microsoftonline.com/%s/oauth2/v2.0/token", url.PathEscape(tenantID)),
+		msGraphMeURL:     graphMeURL,
 		msGraphMemberURL: graphMemberOfURL,
 	}
 
@@ -126,8 +126,8 @@ type handler struct {
 	callbackURL  string
 	httpClient   *http.Client
 	// injectable for testing; set from constants/tenant in main.
-	tokenURL        string
-	msGraphMeURL    string
+	tokenURL         string
+	msGraphMeURL     string
 	msGraphMemberURL string
 }
 
@@ -359,12 +359,14 @@ func (h *handler) isMember(ctx context.Context, accessToken, groupID string) (bo
 			return false, fmt.Errorf("isMember: read body: %w", readErr)
 		}
 		if resp.StatusCode != http.StatusOK {
-			return false, fmt.Errorf("isMember: HTTP %d: %s", resp.StatusCode, body)
+			return false, fmt.Errorf("isMember: HTTP %d: %s", resp.StatusCode, truncateBody(body))
 		}
 
 		var page struct {
-			Value    []struct{ ID string `json:"id"` } `json:"value"`
-			NextLink string                             `json:"@odata.nextLink"`
+			Value []struct {
+				ID string `json:"id"`
+			} `json:"value"`
+			NextLink string `json:"@odata.nextLink"`
 		}
 		if err := json.Unmarshal(body, &page); err != nil {
 			return false, fmt.Errorf("isMember: decode: %w", err)
@@ -386,7 +388,7 @@ func (h *handler) isMember(ctx context.Context, accessToken, groupID string) (bo
 
 func (h *handler) createCoreSession(ctx context.Context, profile *msUserProfile, nonce string) (*http.Cookie, error) {
 	body, err := json.Marshal(map[string]string{
-		"provider_id":    profile.ID,
+		"provider_id":  profile.ID,
 		"login":        profile.UserPrincipalName,
 		"display_name": profile.DisplayName,
 		"avatar_url":   "",

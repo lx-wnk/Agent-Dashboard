@@ -230,51 +230,47 @@ func skillsInDir(dir, source string) []SkillEntry {
 	return out
 }
 
-func dedupAndSortCommands(in []CommandDetail) []CommandDetail {
+// dedupAndSort stable-sorts in by source rank, drops later duplicates sharing
+// a name (keeping the highest-ranked first occurrence), then re-sorts the
+// deduped result by source string and name — with an additional leading
+// source-rank tiebreak when rankTiebreak is true (commands need it since
+// "plugin:<id>" does not sort alphabetically after "user"/"project"; skills'
+// original sort never had this tiebreak, so it is preserved as false there).
+func dedupAndSort[T any](in []T, name func(T) string, source func(T) string, rankTiebreak bool) []T {
 	sort.SliceStable(in, func(i, j int) bool {
-		return sourceRank(in[i].Source) < sourceRank(in[j].Source)
+		return sourceRank(source(in[i])) < sourceRank(source(in[j]))
 	})
 	seen := make(map[string]bool, len(in))
-	deduped := make([]CommandDetail, 0, len(in))
-	for _, c := range in {
-		if seen[c.Name] {
+	deduped := make([]T, 0, len(in))
+	for _, item := range in {
+		n := name(item)
+		if seen[n] {
 			continue
 		}
-		seen[c.Name] = true
-		deduped = append(deduped, c)
+		seen[n] = true
+		deduped = append(deduped, item)
 	}
 	sort.SliceStable(deduped, func(i, j int) bool {
-		if ri, rj := sourceRank(deduped[i].Source), sourceRank(deduped[j].Source); ri != rj {
-			return ri < rj
+		si, sj := source(deduped[i]), source(deduped[j])
+		if rankTiebreak {
+			if ri, rj := sourceRank(si), sourceRank(sj); ri != rj {
+				return ri < rj
+			}
 		}
-		if deduped[i].Source != deduped[j].Source {
-			return deduped[i].Source < deduped[j].Source
+		if si != sj {
+			return si < sj
 		}
-		return deduped[i].Name < deduped[j].Name
+		return name(deduped[i]) < name(deduped[j])
 	})
 	return deduped
 }
 
+func dedupAndSortCommands(in []CommandDetail) []CommandDetail {
+	return dedupAndSort(in, func(c CommandDetail) string { return c.Name }, func(c CommandDetail) string { return c.Source }, true)
+}
+
 func dedupAndSortSkills(in []SkillEntry) []SkillEntry {
-	sort.SliceStable(in, func(i, j int) bool {
-		return sourceRank(in[i].Source) < sourceRank(in[j].Source)
-	})
-	seen := make(map[string]bool, len(in))
-	deduped := make([]SkillEntry, 0, len(in))
-	for _, s := range in {
-		if seen[s.Name] {
-			continue
-		}
-		seen[s.Name] = true
-		deduped = append(deduped, s)
-	}
-	sort.SliceStable(deduped, func(i, j int) bool {
-		if deduped[i].Source != deduped[j].Source {
-			return deduped[i].Source < deduped[j].Source
-		}
-		return deduped[i].Name < deduped[j].Name
-	})
-	return deduped
+	return dedupAndSort(in, func(s SkillEntry) string { return s.Name }, func(s SkillEntry) string { return s.Source }, false)
 }
 
 // ---- filesystem helpers (single canonical copy) ----
@@ -475,11 +471,27 @@ func parseSkillFrontmatter(path string) (string, string) {
 		return "", ""
 	}
 	defer f.Close()
+	return parseFrontmatter(f, false)
+}
 
-	sc := bufio.NewScanner(f)
+// parseFrontmatterDescription extracts the `description:` field from the leading
+// YAML frontmatter of a command markdown file. Returns "" when none is present.
+func parseFrontmatterDescription(r io.Reader) string {
+	_, description := parseFrontmatter(r, true)
+	return description
+}
+
+// parseFrontmatter scans the leading YAML frontmatter (capped at 80 lines) of
+// r for the `name:` and `description:` keys, resolving block-scalar markers
+// (>-, >, |, |-) against the following indented line. When stopAtDescription
+// is true, it returns as soon as a description value is resolved — the shape
+// parseFrontmatterDescription needs, since it never reads name: anyway; when
+// false, it scans to the end of the frontmatter so parseSkillFrontmatter can
+// also collect name.
+func parseFrontmatter(r io.Reader, stopAtDescription bool) (name, description string) {
+	sc := bufio.NewScanner(r)
 	lineNum := 0
 	inFrontmatter := false
-	var name, description string
 	readingDesc := false
 
 	for sc.Scan() {
@@ -500,8 +512,13 @@ func parseSkillFrontmatter(path string) (string, string) {
 			break
 		}
 
-		if readingDesc && description == "" && strings.HasPrefix(line, " ") {
-			description = strings.TrimSpace(line)
+		if readingDesc && strings.HasPrefix(line, " ") {
+			if stopAtDescription {
+				return name, strings.TrimSpace(line)
+			}
+			if description == "" {
+				description = strings.TrimSpace(line)
+			}
 			readingDesc = false
 			continue
 		}
@@ -516,49 +533,12 @@ func parseSkillFrontmatter(path string) (string, string) {
 			case ">-", ">", "|", "|-":
 				readingDesc = true
 			default:
+				if stopAtDescription {
+					return name, strings.Trim(desc, `"'`)
+				}
 				description = strings.Trim(desc, `"'`)
 			}
 		}
 	}
 	return name, description
-}
-
-// parseFrontmatterDescription extracts the `description:` field from the leading
-// YAML frontmatter of a command markdown file. Returns "" when none is present.
-func parseFrontmatterDescription(r io.Reader) string {
-	sc := bufio.NewScanner(r)
-	lineNum := 0
-	inFrontmatter := false
-	readingDesc := false
-	for sc.Scan() {
-		lineNum++
-		if lineNum > 80 {
-			break
-		}
-		line := sc.Text()
-		if lineNum == 1 {
-			if line == "---" {
-				inFrontmatter = true
-				continue
-			}
-			return ""
-		}
-		if !inFrontmatter || line == "---" {
-			break
-		}
-		if readingDesc && strings.HasPrefix(line, " ") {
-			return strings.TrimSpace(line)
-		}
-		readingDesc = false
-		if strings.HasPrefix(line, "description:") {
-			desc := strings.TrimSpace(strings.TrimPrefix(line, "description:"))
-			switch desc {
-			case ">-", ">", "|", "|-":
-				readingDesc = true
-			default:
-				return strings.Trim(desc, `"'`)
-			}
-		}
-	}
-	return ""
 }

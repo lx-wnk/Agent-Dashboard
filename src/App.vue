@@ -2,7 +2,6 @@
 import type { Agent, PipelineTask } from './types'
 import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import AgentCardGrid from './components/AgentCardGrid.vue'
-import AgentModal from './components/AgentModal.vue'
 import AgentTable from './components/AgentTable.vue'
 import AgentTriageBand from './components/AgentTriageBand.vue'
 import ApiKeySettings from './components/ApiKeySettings.vue'
@@ -43,10 +42,11 @@ import { useUsage } from './composables/useUsage'
 import { useUser } from './composables/useUser'
 import { useViewState } from './composables/useViewState'
 import { groupAgents, sortAgents } from './utils/agentGroup'
-import { needsAttention } from './utils/attention'
-import { formatCost, formatTokens, secondsSince, totalTokenCount } from './utils/format'
+import { formatCost } from './utils/format'
 import { friendlyProjectName } from './utils/friendlyProjectName'
 
+// PERF-BUNDLE1: AgentModal is only ever rendered on agent selection — split into its own chunk
+const AgentModal = defineAsyncComponent(() => import('./components/AgentModal.vue'))
 // F-PERF-019: top-level heavy views loaded on demand — each becomes its own chunk
 const CostAnalyticsView = defineAsyncComponent(() => import('./components/CostAnalyticsView.vue'))
 const EvalView = defineAsyncComponent(() => import('./components/EvalView.vue'))
@@ -131,11 +131,6 @@ const costDelta = computed(() => {
   return last.cost - baseline.cost
 })
 
-const totalCost = computed(() => agents.value.reduce((sum, a) => sum + a.costEstimate, 0))
-const totalTokens = computed(() => agents.value.reduce((sum, a) => sum + totalTokenCount(a.tokenUsage), 0))
-const _totalCostLabel = computed(() => formatCost(totalCost.value))
-const _totalTokensLabel = computed(() => formatTokens(totalTokens.value))
-
 const todayCostLabel = computed(() => (todayUsd.value === null ? '—' : formatCost(todayUsd.value)))
 
 const { nowMs } = useNow()
@@ -166,9 +161,6 @@ const rosterAgents = computed(() => {
   return sortAgents(base, dashboardSort.value, nowMs.value)
 })
 const rosterGroups = computed(() => groupAgents(rosterAgents.value, dashboardGroup.value))
-const _rosterAttentionCount = computed(() =>
-  rosterAgents.value.filter(a => needsAttention(a, secondsSince(a.lastActivity, nowMs.value))).length,
-)
 const projectOptions = computed(() => [
   { value: 'all', label: 'All projects' },
   ...[...new Set(agents.value.map(a => a.projectName))].sort().map(n => ({ value: n, label: friendlyProjectName(n) })),

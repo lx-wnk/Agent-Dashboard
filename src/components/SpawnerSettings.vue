@@ -547,7 +547,7 @@ async function handleSetDefault(id: string) {
             <div v-for="k in currentAdapterMeta.configKeys" :key="k.key">
               <label class="block text-[11px] font-medium text-fg-mute mb-1" :for="`sp-cfg-${k.key}`">
                 <span class="font-mono">{{ k.key }}</span>
-                <span v-if="k.required" class="text-red-500 ml-0.5">*</span>
+                <span v-if="k.required" class="text-danger-text ml-0.5">*</span>
               </label>
               <input
                 :id="`sp-cfg-${k.key}`"

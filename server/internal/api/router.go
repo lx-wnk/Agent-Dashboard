@@ -294,7 +294,11 @@ func NewRouter(deps RouterDeps) http.Handler {
 		}
 
 		if deps.SettingsHandler != nil {
-			deps.SettingsHandler.Mount(r)
+			deps.SettingsHandler.MountRead(r)
+			r.Group(func(r chi.Router) {
+				r.Use(authpkg.RequireAdminOrBypass(deps.Config.BypassAuth))
+				deps.SettingsHandler.MountWrite(r)
+			})
 		}
 
 		if deps.OnboardingHandler != nil {

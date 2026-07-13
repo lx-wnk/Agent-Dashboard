@@ -103,6 +103,13 @@ None of the following integrations are active by default. Data only leaves your 
 
 The notification-config API accepts and persists `webhook_url` (with HMAC authentication) and an `email` channel. **No delivery code for these channels exists yet** — as of the current release, configuring them stores the URL or address locally but nothing is sent via them. When and if delivery is implemented, task notification payloads (title, status, and stage output, which may contain source-code excerpts or other content from the task) will be sent to the configured SMTP server or webhook endpoint. You will be responsible for that endpoint's data handling and applicable transfer basis. This document will be updated when delivery is shipped.
 
+### Issue-tracker import (Jira / GitHub)
+
+- If you paste a GitHub or Jira issue reference into the **Import from issue** field and click **Fetch**, the dashboard sends the configured GitHub personal-access token or Jira API token, together with the issue reference, to `api.github.com` or your Jira Cloud tenant (`*.atlassian.net`) to resolve the issue.
+- The response (issue title, body, URL, labels) is pulled into the local task description — this content may include personal data of third parties (e.g. issue reporters or commenters quoted in the body).
+- Tokens are stored encrypted at rest (AES-GCM secretbox) in the SQLite database and masked in the settings UI (**Settings → Tracker**).
+- **Transfer basis:** GitHub Inc. is a US entity covered by the EU–US Data Privacy Framework (DPF). Jira Cloud's transfer basis depends on your Atlassian tenant's data-residency region — you are responsible for confirming it meets your compliance requirements.
+
 ### Remote dashboard proxy (`DASHBOARD_REMOTES`)
 
 - If you configure remote instances, the local dashboard acts as a proxy and aggregates session data from those instances over your network.
@@ -113,7 +120,7 @@ The notification-config API accepts and persists `webhook_url` (with HMAC authen
 
 ## 4. What Is NOT Collected
 
-The following is explicitly absent from the codebase and has been grep-verified during an audit (2026-05-24):
+The following is explicitly absent from the codebase and has been grep-verified during an audit (2026-07-12):
 
 - No telemetry or usage analytics
 - No phone-home pings or update-check requests
@@ -122,7 +129,7 @@ The following is explicitly absent from the codebase and has been grep-verified 
 - No advertising identifiers
 - No background sync to any cloud service
 
-The dashboard makes no outbound network connections unless you configure an integration in section 3.
+The dashboard makes no outbound network connections unless you configure an integration in section 3 — this now explicitly includes the issue-tracker import feature (GitHub / Jira), which is opt-in and only triggered when you fetch an issue.
 
 ---
 

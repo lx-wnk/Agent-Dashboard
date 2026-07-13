@@ -110,7 +110,7 @@ watch(() => props.task?.id, (id, prevId) => {
             {{ task.title }}
           </h2>
         </div>
-        <button type="button" class="bg-transparent border-none text-fg-mute text-2xl cursor-pointer px-1 leading-none hover:text-fg" title="Close (Esc)" @click="emit('close')">
+        <button type="button" aria-label="Close" class="bg-transparent border-none text-fg-mute text-2xl cursor-pointer px-1 leading-none hover:text-fg" title="Close (Esc)" @click="emit('close')">
           &times;
         </button>
       </header>

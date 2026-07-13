@@ -4,8 +4,9 @@ import { axisBottom, axisLeft } from 'd3-axis'
 import { scaleBand, scaleLinear, scaleOrdinal, scalePoint } from 'd3-scale'
 import { select } from 'd3-selection'
 import { area, curveMonotoneX, line, stack } from 'd3-shape'
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useCostAnalytics } from '../composables/useCostAnalytics'
+import { useHistoryImport } from '../composables/useHistoryImport'
 import { useTheme } from '../composables/useTheme'
 import { toast } from '../composables/useToast'
 import { chartColors, chartPalette } from '../utils/chartColors'
@@ -23,67 +24,9 @@ watch(error, (msg) => {
 const { theme } = useTheme()
 
 // --- Historical data rescan ---
-const importStatus = ref('')
-const isImporting = ref(false)
-let importEs: EventSource | null = null
-
-onUnmounted(() => {
-  importEs?.close()
+const { isImporting, importStatus, start: startRescan } = useHistoryImport({
+  onDone: () => void refresh(),
 })
-
-async function startRescan() {
-  if (isImporting.value)
-    return
-  isImporting.value = true
-  importStatus.value = 'Starting…'
-  const res = await fetch('/api/history/import', { method: 'POST' })
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}))
-    const errMsg = (body as { error?: string }).error ?? res.statusText
-    if (res.status === 409) {
-      // Already running — still attach to the stream for live progress
-      importStatus.value = `${errMsg} — watching progress…`
-    }
-    else {
-      importStatus.value = `Error: ${errMsg}`
-      isImporting.value = false
-      return
-    }
-  }
-  else {
-    importStatus.value = 'Scanning…'
-  }
-  importEs = new EventSource('/api/history/import/status')
-  importEs.onmessage = (ev) => {
-    let p: { total: number, processed: number, imported: number, errors: number, done: boolean }
-    try {
-      p = JSON.parse(ev.data)
-    }
-    catch {
-      // Malformed frame — treat like a stream error so the button doesn't
-      // stay stuck disabled with the EventSource left open.
-      importStatus.value = 'Connection lost — scan may still be running'
-      importEs?.close()
-      importEs = null
-      isImporting.value = false
-      return
-    }
-    importStatus.value = `Scanning… ${p.processed}/${p.total}`
-    if (p.done) {
-      importStatus.value = `Imported ${p.imported} sessions`
-      importEs?.close()
-      importEs = null
-      isImporting.value = false
-      void refresh()
-    }
-  }
-  importEs.onerror = () => {
-    importStatus.value = 'Connection lost — scan may still be running'
-    importEs?.close()
-    importEs = null
-    isImporting.value = false
-  }
-}
 
 const stackedRef = ref<SVGSVGElement | null>(null)
 const trendRef = ref<SVGSVGElement | null>(null)

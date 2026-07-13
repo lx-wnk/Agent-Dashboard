@@ -128,7 +128,7 @@ async function onSubmit() {
         v-if="previewError"
         role="status"
         aria-live="polite"
-        class="text-red-500 text-sm"
+        class="text-danger-text text-sm"
       >
         {{ previewError }}
       </div>
@@ -240,7 +240,7 @@ async function onSubmit() {
     <div
       v-if="submitError"
       role="alert"
-      class="text-red-500 text-sm"
+      class="text-danger-text text-sm"
     >
       {{ submitError }}
     </div>

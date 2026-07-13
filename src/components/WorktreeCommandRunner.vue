@@ -98,7 +98,7 @@ function abort() {
       <div v-if="output" role="log" aria-live="polite" class="text-[11px] font-mono bg-slate-950 text-slate-100 rounded p-3 max-h-96 overflow-y-auto resize-y whitespace-pre-wrap">
         <span
           class="block mb-1 text-[10px] font-sans"
-          :class="exitCode === 0 ? 'text-green-400' : 'text-red-400'"
+          :class="exitCode === 0 ? 'text-success-text' : 'text-danger-text'"
         >Exit {{ exitCode }}</span>{{ output }}
       </div>
     </div>

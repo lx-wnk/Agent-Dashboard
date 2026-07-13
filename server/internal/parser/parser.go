@@ -59,7 +59,7 @@ func classifyAPIError(status int, text string) sdk.ErrorState {
 // SessionCacheTTL is the maximum age of a cached FindSessionForProject result.
 // Set to the SSE broadcast interval (default 3 s) so each tick re-uses the
 // cached parse instead of tail-reading every JSONL file again.
-// The merger package raises this at startup when a non-default interval is configured.
+// serverapp.Run raises this at startup when a non-default interval is configured.
 var SessionCacheTTL = 3 * time.Second
 
 // sessionCacheKey identifies a cached parse result.

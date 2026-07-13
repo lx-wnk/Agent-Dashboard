@@ -49,13 +49,11 @@ def fetch_agents(base_url: str, token: str, timeout: float) -> list[dict[str, An
             return json.loads(resp.read().decode())
     except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError):
         return []
-    except Exception:
-        return []
 
 
 def summarize(agents: list[dict[str, Any]]) -> dict[str, Any]:
     active = sum(1 for a in agents if a.get("status") == "active")
-    cost_per_hour = sum(
+    cost_total = sum(
         a.get("costEstimate", 0) for a in agents if a.get("status") == "active"
     )
     total_tokens = sum(
@@ -64,7 +62,7 @@ def summarize(agents: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "active": active,
         "total": len(agents),
-        "cost_per_hour": cost_per_hour,
+        "cost_total": cost_total,
         "total_tokens": total_tokens,
     }
 
@@ -73,8 +71,8 @@ def format_statusline(s: dict[str, Any]) -> str:
     if s["total"] == 0:
         return ""
     tok_k = s["total_tokens"] / 1000
-    cost = s["cost_per_hour"]
-    return f"⚡ {s['active']} active | ${cost:.2f}/h | {tok_k:.0f}K tok"
+    cost = s["cost_total"]
+    return f"⚡ {s['active']} active | ${cost:.2f} | {tok_k:.0f}K tok"
 
 
 def get_status(port: int, timeout: float, fmt: str) -> str:

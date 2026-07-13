@@ -46,7 +46,8 @@ func newRouterWithRepo(t *testing.T, repo settingssvc.Repo) (http.Handler, *sett
 	require.NoError(t, svc.Load(context.Background()))
 	h := settingsapi.NewHandler(svc)
 	r := chi.NewRouter()
-	h.Mount(r)
+	h.MountRead(r)
+	h.MountWrite(r)
 	return r, svc
 }
 

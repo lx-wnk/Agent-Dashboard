@@ -11,9 +11,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
-
-	"golang.org/x/sync/errgroup"
 
 	"github.com/lx-wnk/agent-dashboard/sdk"
 	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
@@ -308,10 +307,12 @@ func (m *Merger) GetAgents(ctx context.Context, opts GetAgentsOpts) ([]sdk.Agent
 		scan = m.registry.NewSessionScan()
 	}
 
-	g, _ := errgroup.WithContext(ctx)
+	var wg sync.WaitGroup
 	for _, idxs := range groups {
 		idxs := idxs
-		g.Go(func() error {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
 			// Resolve youngest process first so a freshly-started agent claims
 			// the freshest session in the fallback path; deterministic ordering
 			// keeps the UI stable across ticks.
@@ -328,12 +329,9 @@ func (m *Merger) GetAgents(ctx context.Context, opts GetAgentsOpts) ([]sdk.Agent
 				agents[i] = m.buildAgent(proc, session, extra, opts.BaselinePerSessionCostUSD)
 				sessionPaths[i] = session.Path
 			}
-			return nil
-		})
+		}()
 	}
-	if err := g.Wait(); err != nil {
-		return nil, err
-	}
+	wg.Wait()
 	// Filter out zero-value entries (processes with no matching session) and
 	// record each live controllable agent's snapshot. Only channel-available
 	// agents are recorded, so only they can later surface as a finished card.

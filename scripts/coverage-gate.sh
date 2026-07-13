@@ -44,11 +44,9 @@ done
 # `go tool cover -func` output:
 #   github.com/.../internal/pipeline/foo.go:12:  FuncName  87.5%
 #   total:                                       (statements)            45.6%
-# We aggregate per-package: take the directory of the file path and average the
-# percentages. Simpler and more honest: report the MIN percentage across funcs
-# in each matched package — if any function in pipeline drops to 0% we surface
-# it. To keep the gate stable, we instead compute the per-package coverage as
-# the average of all function percentages in that package.
+# We aggregate per-package: take the directory of the file path and compute the
+# per-package coverage as the unweighted average of all function percentages
+# in that package (not weighted by statement count).
 
 # shellcheck disable=SC2016
 awk -v re="$RE" -v thr="$THRESHOLD" '

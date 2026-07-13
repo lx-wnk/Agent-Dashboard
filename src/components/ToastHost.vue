@@ -25,6 +25,8 @@ const typeClasses: Record<string, string> = {
         :class="typeClasses[t.type]"
         @mouseenter="pauseToast(t.id)"
         @mouseleave="resumeToast(t.id)"
+        @focusin="pauseToast(t.id)"
+        @focusout="resumeToast(t.id)"
       >
         <span>{{ t.message }}</span>
         <button

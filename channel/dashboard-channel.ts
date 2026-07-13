@@ -189,7 +189,14 @@ mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
 
 mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
   if (req.params.name === 'dashboard_reply') {
-    const { message } = req.params.arguments as { message: string }
+    const args = req.params.arguments as { message?: string } | undefined
+    const message = args?.message
+    if (typeof message !== 'string' || !message) {
+      return {
+        content: [{ type: 'text', text: 'dashboard_reply requires a `message` string.' }],
+        isError: true,
+      }
+    }
 
     try {
       const res = await fetch(`http://127.0.0.1:${DASHBOARD_PORT}/api/channel-reply`, {
@@ -358,10 +365,23 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
 
 // ─── HTTP Server (receives messages from dashboard) ──────
 
+const MAX_BODY_BYTES = 64 * 1024
+
+class PayloadTooLargeError extends Error {}
+
 function readBody(req: import('node:http').IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = []
-    req.on('data', c => chunks.push(c))
+    let size = 0
+    req.on('data', (c: Buffer) => {
+      size += c.length
+      if (size > MAX_BODY_BYTES) {
+        req.destroy()
+        reject(new PayloadTooLargeError(`Request body exceeds ${MAX_BODY_BYTES} byte limit`))
+        return
+      }
+      chunks.push(c)
+    })
     req.on('end', () => resolve(Buffer.concat(chunks).toString()))
     req.on('error', reject)
   })
@@ -424,6 +444,11 @@ const httpServer = createServer(async (req, res) => {
       res.end(JSON.stringify({ ok: true }))
     }
     catch (err) {
+      if (err instanceof PayloadTooLargeError) {
+        res.writeHead(413, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: err.message }))
+        return
+      }
       res.writeHead(500, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ error: (err as Error).message }))
     }
