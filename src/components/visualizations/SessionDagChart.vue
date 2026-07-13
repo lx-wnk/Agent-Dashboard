@@ -6,6 +6,7 @@ import { computed, onUnmounted, ref, watch } from 'vue'
 import { useTheme } from '../../composables/useTheme'
 import { toast } from '../../composables/useToast'
 import { chartColors } from '../../utils/chartColors'
+import ChartDataTable from '../ui/ChartDataTable.vue'
 
 const props = defineProps<{
   data: DAGData | null
@@ -23,6 +24,33 @@ watch(() => props.error, (msg) => {
 }, { immediate: true })
 
 const isEmpty = computed(() => !props.data || props.data.nodes.length === 0)
+
+const tableColumns = [
+  { key: 'node', label: 'Node' },
+  { key: 'type', label: 'Type' },
+  { key: 'parent', label: 'Parent' },
+  { key: 'timestamp', label: 'Timestamp' },
+]
+
+const tableRows = computed(() => {
+  if (!props.data)
+    return []
+
+  const byId = new Map(props.data.nodes.map(n => [n.id, n]))
+  const parentsOf = new Map<string, string[]>()
+  for (const link of props.data.links) {
+    if (!parentsOf.has(link.target))
+      parentsOf.set(link.target, [])
+    parentsOf.get(link.target)!.push(byId.get(link.source)?.label ?? link.source)
+  }
+
+  return props.data.nodes.map(node => ({
+    node: node.label,
+    type: node.type,
+    parent: parentsOf.get(node.id)?.join(', ') || '—',
+    timestamp: node.ts || '—',
+  }))
+})
 
 interface DAGNodeFlat {
   id: string
@@ -248,8 +276,15 @@ onUnmounted(() => {
     <div v-else-if="isEmpty" class="text-sm text-fg-mute p-4">
       Pick a session to view its DAG.
     </div>
-    <div v-else style="overflow-x: auto;">
-      <svg ref="svgRef" :style="{ minHeight: '340px' }" aria-label="Session DAG" role="img" />
+    <div v-else>
+      <div style="overflow-x: auto;">
+        <svg ref="svgRef" :style="{ minHeight: '340px' }" aria-label="Session DAG" role="img" />
+      </div>
+      <ChartDataTable
+        caption="Session DAG — nodes, their type, and parent edges"
+        :columns="tableColumns"
+        :rows="tableRows"
+      />
     </div>
   </div>
 </template>
