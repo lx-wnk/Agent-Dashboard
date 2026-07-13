@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	oauthkit "github.com/lx-wnk/agent-dashboard-plugin-oauthkit"
 )
 
 const (
@@ -45,10 +47,9 @@ func newHandler(tokenSrv, userSrv, coreSrv *httptest.Server) *handler {
 // --- /health ---
 
 func TestHealth(t *testing.T) {
-	h := newHandler(nil, nil, nil)
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	rr := httptest.NewRecorder()
-	h.health(rr, req)
+	oauthkit.Health(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -488,29 +489,6 @@ func TestUserHandler_GitHubError(t *testing.T) {
 		t.Fatalf("expected 502, got %d", rr.Code)
 	}
 	assertErrorBody(t, rr, "failed to fetch user profile")
-}
-
-// --- randomState ---
-
-func TestRandomState_ReturnsNonEmptyUniqueStrings(t *testing.T) {
-	a, err := randomState()
-	if err != nil {
-		t.Fatalf("randomState: %v", err)
-	}
-	b, err := randomState()
-	if err != nil {
-		t.Fatalf("randomState: %v", err)
-	}
-	if a == "" {
-		t.Error("expected non-empty state")
-	}
-	if a == b {
-		t.Error("expected unique states, got identical values")
-	}
-	// base64 raw URL-encoding of 32 bytes = 43 chars
-	if len(a) != 43 {
-		t.Errorf("expected 43 chars, got %d", len(a))
-	}
 }
 
 // --- helpers ---
