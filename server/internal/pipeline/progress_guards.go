@@ -73,7 +73,7 @@ func (o *PipelineOrchestrator) runProgressTaskLocked(ctx context.Context, taskID
 		(task.WorktreePath == nil || *task.WorktreePath == "") &&
 		(o.opts.ForceWorktrees || (task.SourceBranch != nil && *task.SourceBranch != ""))
 	if needsWorktree {
-		wtPath, wtBranch, wtErr := o.opts.EnsureWorktreeFn(task, o.opts.WorktreeRoot)
+		wtPath, wtBranch, wtErr := o.opts.EnsureWorktreeFn(ctx, task, o.opts.WorktreeRoot)
 		if wtErr != nil {
 			return o.applyTransition(ctx, task, stageRun,
 				FailTransition{Reason: fmt.Sprintf("worktree creation failed: %v", wtErr)})

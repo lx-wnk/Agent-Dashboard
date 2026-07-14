@@ -19,7 +19,7 @@ func strptr(s string) *string { return &s }
 
 // orchWithWorktreeFn builds an orchestrator whose EnsureWorktreeFn is replaced by
 // the given stub, and registers an implementation handler stub.
-func orchWithWorktreeFn(t *testing.T, bundle *db.DBBundle, wt func(*ent.Task, string) (string, string, error), handlerTransition pipeline.StageTransition) (*pipeline.PipelineOrchestrator, repo.TaskRepo) {
+func orchWithWorktreeFn(t *testing.T, bundle *db.DBBundle, wt func(context.Context, *ent.Task, string) (string, string, error), handlerTransition pipeline.StageTransition) (*pipeline.PipelineOrchestrator, repo.TaskRepo) {
 	t.Helper()
 	c := bundle.Client
 	orch, err := pipeline.NewOrchestrator(pipeline.OrchestratorOptions{
@@ -48,7 +48,7 @@ func TestOrchestrator_WorktreeFailureRecordedAsFailedRun(t *testing.T) {
 
 	wtErr := errors.New("'feat/x' is already used by worktree at /tmp/other")
 	orch, taskRepo := orchWithWorktreeFn(t, bundle,
-		func(*ent.Task, string) (string, string, error) { return "", "", wtErr },
+		func(context.Context, *ent.Task, string) (string, string, error) { return "", "", wtErr },
 		pipeline.FailTransition{Reason: "handler must not be reached"},
 	)
 
@@ -88,7 +88,7 @@ func TestOrchestrator_WorktreeSuccessPersistsPath(t *testing.T) {
 	const wtPath = "/tmp/wt/worktree-ok"
 	calls := 0
 	orch, taskRepo := orchWithWorktreeFn(t, bundle,
-		func(_ *ent.Task, _ string) (string, string, error) {
+		func(_ context.Context, _ *ent.Task, _ string) (string, string, error) {
 			calls++
 			return wtPath, "feat/x", nil
 		},

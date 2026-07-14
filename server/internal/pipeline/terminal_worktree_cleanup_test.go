@@ -171,7 +171,7 @@ func TestEnsureTaskWorktree_RejectsHeldBranch(t *testing.T) {
 	git("worktree", "add", "-b", "feat/held", leftover)
 
 	task := &ent.Task{Slug: "new-task", Cwd: repoDir, SourceBranch: strptr("feat/held")}
-	_, _, err := pipeline.EnsureTaskWorktree(task, t.TempDir())
+	_, _, err := pipeline.EnsureTaskWorktree(context.Background(), task, t.TempDir())
 	require.Error(t, err, "must reject a branch already held by another worktree")
 	require.Contains(t, err.Error(), "already checked out", "error must be descriptive")
 	require.Contains(t, err.Error(), leftover, "error must name the holding worktree path")

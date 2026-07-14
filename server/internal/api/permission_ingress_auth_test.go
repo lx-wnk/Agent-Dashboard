@@ -82,7 +82,6 @@ func buildIngressRouter(t *testing.T, rawToken string) http.Handler {
 			SRRepo:            repo.NewStageRunRepo(c),
 			PermRepo:          repo.NewPermissionRepo(c),
 			AuditRepo:         repo.NewAuditEventRepo(c),
-			AuditEventRepo:    repo.NewAuditEventRepo(c),
 			CfgRepo:           repo.NewPipelineConfigRepo(c),
 			DepRepo:           repo.NewDependencyRepo(c),
 			ProjectRepo:       repo.NewProjectRepo(c),

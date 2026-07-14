@@ -68,6 +68,22 @@ type gitStatus struct {
 	RemoteURL   *string        `json:"remoteUrl"`
 }
 
+// confineToHome rejects a working directory that resolves outside the user's
+// home directory. Best-effort: when the home directory cannot be determined it
+// does not block. Applied to every handler that runs git in a task-supplied cwd.
+func confineToHome(cwd string) error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+	cwdAbs, _ := filepath.Abs(cwd)
+	homeAbs, _ := filepath.Abs(home)
+	if !strings.HasPrefix(cwdAbs+string(filepath.Separator), homeAbs+string(filepath.Separator)) {
+		return apierr.NewAppError(http.StatusForbidden, "task directory is outside the user home directory")
+	}
+	return nil
+}
+
 func runGit(ctx context.Context, cwd string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
@@ -167,6 +183,9 @@ func (h *Handler) getGitStatusHandler(w http.ResponseWriter, r *http.Request) er
 	if task.WorktreePath != nil && *task.WorktreePath != "" {
 		cwd = *task.WorktreePath
 	}
+	if err := confineToHome(cwd); err != nil {
+		return err
+	}
 	status := getGitStatus(r.Context(), cwd)
 	return jsonReply(w, http.StatusOK, status)
 }
@@ -195,6 +214,9 @@ func (h *Handler) gitActionHandler(w http.ResponseWriter, r *http.Request) error
 	cwd := task.Cwd
 	if task.WorktreePath != nil && *task.WorktreePath != "" {
 		cwd = *task.WorktreePath
+	}
+	if err := confineToHome(cwd); err != nil {
+		return err
 	}
 	var output string
 	if body.Action == "fetch" {
@@ -236,12 +258,8 @@ func (h *Handler) taskRunHandler(w http.ResponseWriter, r *http.Request) error {
 	if task.WorktreePath != nil && *task.WorktreePath != "" {
 		cwd = *task.WorktreePath
 	}
-	if home, err := os.UserHomeDir(); err == nil {
-		cwdAbs, _ := filepath.Abs(cwd)
-		homeAbs, _ := filepath.Abs(home)
-		if !strings.HasPrefix(cwdAbs+string(filepath.Separator), homeAbs+string(filepath.Separator)) {
-			return apierr.NewAppError(http.StatusForbidden, "task directory is outside the user home directory")
-		}
+	if err := confineToHome(cwd); err != nil {
+		return err
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()

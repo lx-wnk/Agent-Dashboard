@@ -50,7 +50,7 @@ jobs:
           cd server
           go tool cover -func=coverage.out > coverage.func.txt
           cd ..
-          bash scripts/coverage-gate.sh server/coverage.func.txt 'internal/pipeline' 'internal/services'
+          bash scripts/coverage-gate.sh server/coverage.out 'internal/pipeline' 'internal/services'
 
   test-plugins:
     name: Test (plugins/${{ matrix.plugin }})
