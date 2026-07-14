@@ -6,25 +6,23 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 OUTPUT="${REPO_ROOT}/THIRD_PARTY_LICENSES.md"
 GO_LICENSES="$(go env GOPATH)/bin/go-licenses"
 
-# go-licenses v1.6.0 errors on every stdlib package under Go 1.26 ("Package
+# go-licenses v1.6.0 errored on every stdlib package under Go 1.26 ("Package
 # ... does not have module info. Non go modules projects are no longer
-# supported"), which collect_go() tolerates via `|| true`. Left unchecked,
-# that silently empties the Go section instead of failing the run. Investigated
-# 2026-07-12: go-licenses v2.0.1 (`go install
-# github.com/google/go-licenses/v2@v2.0.1`) runs cleanly under Go 1.26 with no
-# module-info errors, but regenerating with it changes ~14 lines of the
-# committed Go table (two newly-detected deps, a few version/URL drifts) —
-# more than trivial reordering, so the version bump was not carried into this
-# fix. Re-run that investigation and bump GO_LICENSES_VERSION below once ready
-# to review that diff on its own.
-GO_LICENSES_VERSION="v1.6.0"
+# supported"), which collect_go() tolerated via `|| true` — silently emptying
+# the Go section. Bumped 2026-07-14 to go-licenses/v2@v2.0.1, which runs cleanly
+# under Go 1.26. The v2 bump corrected one long-standing misclassification:
+# modernc.org/libc was reported MIT by v1.6.0 (it had classified the bundled
+# LICENSE-3RD-PARTY.md), but the module's own LICENSE is 3-clause BSD — v2
+# reads the right file and reports BSD-3-Clause. Install with:
+#   go install github.com/google/go-licenses/v2@v2.0.1
+GO_LICENSES_VERSION="v2.0.1"
 MIN_GO_DEP_ROWS=20
 
 # ── Tool check ─────────────────────────────────────────────────────────────────
 
 if [[ ! -x "${GO_LICENSES}" ]]; then
   echo "ERROR: go-licenses not found at ${GO_LICENSES}" >&2
-  echo "Install it with: go install github.com/google/go-licenses@v1.6.0" >&2
+  echo "Install it with: go install github.com/google/go-licenses/v2@${GO_LICENSES_VERSION}" >&2
   exit 1
 fi
 
@@ -63,14 +61,18 @@ export GOARCH=amd64
 collect_go() {
   local dir="$1"
   local gowork_off="${2:-false}"
+  # Optional GOOS override for platform-gated modules (e.g. desktop/ is
+  # //go:build darwin). go-licenses cross-lists via packages.Load, so a fixed
+  # non-host GOOS stays deterministic across CI/dev. Defaults to the global pin.
+  local goos="${3:-${GOOS}}"
 
   if [[ "${gowork_off}" == "true" ]]; then
-    (cd "${dir}" && GOWORK=off go build ./... 2>/dev/null || true)
-    (cd "${dir}" && GOWORK=off "${GO_LICENSES}" report ./... \
+    (cd "${dir}" && GOWORK=off GOOS="${goos}" go build ./... 2>/dev/null || true)
+    (cd "${dir}" && GOWORK=off GOOS="${goos}" "${GO_LICENSES}" report ./... \
       --ignore github.com/lx-wnk/agent-dashboard) || true
   else
-    (cd "${dir}" && go build ./... 2>/dev/null || true)
-    (cd "${dir}" && "${GO_LICENSES}" report ./... \
+    (cd "${dir}" && GOOS="${goos}" go build ./... 2>/dev/null || true)
+    (cd "${dir}" && GOOS="${goos}" "${GO_LICENSES}" report ./... \
       --ignore github.com/lx-wnk/agent-dashboard) || true
   fi
 }
@@ -87,6 +89,11 @@ for plugin_dir in "${REPO_ROOT}"/plugins/*/; do
   [[ -f "${plugin_dir}go.mod" ]] || continue
   collect_go "${plugin_dir}" true >> "${TMP_GO_RAW}" || true
 done
+
+# desktop/ is a macOS-only wails app (//go:build darwin); its real dependency
+# graph only exists under GOOS=darwin. go-licenses cross-lists it from any host.
+echo "Collecting Go deps: desktop/wails (GOWORK=off, GOOS=darwin)..."
+collect_go "${REPO_ROOT}/desktop" true darwin >> "${TMP_GO_RAW}" || true
 
 # ── Apply license overrides ────────────────────────────────────────────────────
 

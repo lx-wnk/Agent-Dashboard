@@ -19,6 +19,7 @@ The following third-party packages are used as transitive dependencies.
 | github.com/bahlo/generic-list-go | BSD-3-Clause | https://github.com/bahlo/generic-list-go/blob/v0.2.0/LICENSE |
 | github.com/bmatcuk/doublestar | MIT | https://github.com/bmatcuk/doublestar/blob/v1.3.4/LICENSE |
 | github.com/buger/jsonparser | MIT | https://github.com/buger/jsonparser/blob/v1.1.2/LICENSE |
+| github.com/coder/websocket | ISC | https://github.com/coder/websocket/blob/v1.8.15/LICENSE.txt |
 | github.com/creack/pty | MIT | https://github.com/creack/pty/blob/v1.1.24/LICENSE |
 | github.com/dustin/go-humanize | MIT | https://github.com/dustin/go-humanize/blob/v1.0.1/LICENSE |
 | github.com/fsnotify/fsnotify | BSD-3-Clause | https://github.com/fsnotify/fsnotify/blob/v1.9.0/LICENSE |
@@ -38,12 +39,19 @@ The following third-party packages are used as transitive dependencies.
 | github.com/knadh/koanf/providers/env | MIT | https://github.com/knadh/koanf/blob/providers/env/v1.1.0/providers/env/LICENSE |
 | github.com/knadh/koanf/providers/file | MIT | https://github.com/knadh/koanf/blob/providers/file/v1.2.1/providers/file/LICENSE |
 | github.com/knadh/koanf/v2 | MIT | https://github.com/knadh/koanf/blob/v2.3.5/LICENSE |
+| github.com/leaanthony/go-ansi-parser | MIT | https://github.com/leaanthony/go-ansi-parser/blob/v1.6.1/LICENSE |
+| github.com/leaanthony/slicer | MIT | https://github.com/leaanthony/slicer/blob/v1.6.0/LICENSE |
+| github.com/leaanthony/u | MIT | https://github.com/leaanthony/u/blob/v1.1.1/LICENSE |
+| github.com/mattn/go-isatty | MIT | https://github.com/mattn/go-isatty/blob/v0.0.20/LICENSE |
 | github.com/mitchellh/copystructure | MIT | https://github.com/mitchellh/copystructure/blob/v1.2.0/LICENSE |
 | github.com/mitchellh/go-wordwrap | MIT | https://github.com/mitchellh/go-wordwrap/blob/v1.0.1/LICENSE.md |
 | github.com/mitchellh/reflectwalk | MIT | https://github.com/mitchellh/reflectwalk/blob/v1.0.2/LICENSE |
 | github.com/modelcontextprotocol/go-sdk | Apache-2.0 | https://github.com/modelcontextprotocol/go-sdk/blob/v1.6.1/LICENSE |
+| github.com/ncruces/go-strftime | MIT | https://github.com/ncruces/go-strftime/blob/v1.0.0/LICENSE |
 | github.com/pb33f/ordered-map/v2 | Apache-2.0 | https://github.com/pb33f/ordered-map/blob/v2.3.1/LICENSE |
+| github.com/pkg/errors | BSD-2-Clause | https://github.com/pkg/errors/blob/v0.9.1/LICENSE |
 | github.com/remyoudompheng/bigfft | BSD-3-Clause | https://github.com/remyoudompheng/bigfft/blob/24d4a6f8daec/LICENSE |
+| github.com/rivo/uniseg | MIT | https://github.com/rivo/uniseg/blob/v0.4.7/LICENSE.txt |
 | github.com/robfig/cron/v3 | MIT | https://github.com/robfig/cron/blob/v3.0.1/LICENSE |
 | github.com/segmentio/asm | MIT | https://github.com/segmentio/asm/blob/v1.1.3/LICENSE |
 | github.com/segmentio/encoding | MIT | https://github.com/segmentio/encoding/blob/v0.5.4/LICENSE |
@@ -54,23 +62,26 @@ The following third-party packages are used as transitive dependencies.
 | github.com/tidwall/match | MIT | https://github.com/tidwall/match/blob/v1.1.1/LICENSE |
 | github.com/tidwall/pretty | MIT | https://github.com/tidwall/pretty/blob/v1.2.1/LICENSE |
 | github.com/tidwall/sjson | MIT | https://github.com/tidwall/sjson/blob/v1.2.5/LICENSE |
+| github.com/wailsapp/wails/v2 | MIT | https://github.com/wailsapp/wails/blob/v2.13.0/v2/LICENSE |
 | github.com/yosida95/uritemplate/v3 | BSD-3-Clause | https://github.com/yosida95/uritemplate/blob/v3.0.2/LICENSE |
 | github.com/zclconf/go-cty-yaml | Apache-2.0 | https://github.com/zclconf/go-cty-yaml/blob/v1.1.0/LICENSE |
 | github.com/zclconf/go-cty/cty | MIT | https://github.com/zclconf/go-cty/blob/v1.14.4/LICENSE |
 | go.yaml.in/yaml/v4 | MIT | https://github.com/yaml/go-yaml/blob/v4.0.0-rc.2/LICENSE |
-| golang.org/x/crypto/hkdf | BSD-3-Clause | https://cs.opensource.google/go/x/crypto/+/v0.45.0:LICENSE |
+| golang.org/x/crypto/hkdf | BSD-3-Clause | https://cs.opensource.google/go/x/crypto/+/v0.51.0:LICENSE |
 | golang.org/x/mod/semver | BSD-3-Clause | https://cs.opensource.google/go/x/mod/+/v0.36.0:LICENSE |
 | golang.org/x/oauth2 | BSD-3-Clause | https://cs.opensource.google/go/x/oauth2/+/v0.35.0:LICENSE |
+| golang.org/x/sync | BSD-3-Clause | https://cs.opensource.google/go/x/sync/+/v0.21.0:LICENSE |
 | golang.org/x/sync/errgroup | BSD-3-Clause | https://cs.opensource.google/go/x/sync/+/v0.16.0:LICENSE |
 | golang.org/x/sys | BSD-3-Clause | https://cs.opensource.google/go/x/sys/+/v0.46.0:LICENSE |
+| golang.org/x/sys/unix | BSD-3-Clause | https://cs.opensource.google/go/x/sys/+/v0.46.0:LICENSE |
 | golang.org/x/term | BSD-3-Clause | https://cs.opensource.google/go/x/term/+/v0.44.0:LICENSE |
-| golang.org/x/text | BSD-3-Clause | https://cs.opensource.google/go/x/text/+/v0.31.0:LICENSE |
+| golang.org/x/text | BSD-3-Clause | https://cs.opensource.google/go/x/text/+/v0.37.0:LICENSE |
 | golang.org/x/time/rate | BSD-3-Clause | https://cs.opensource.google/go/x/time/+/v0.15.0:LICENSE |
 | gopkg.in/yaml.v3 | MIT | https://github.com/go-yaml/yaml/blob/v3.0.1/LICENSE |
-| modernc.org/libc | MIT | https://gitlab.com/cznic/libc/blob/v1.73.4/LICENSE-3RD-PARTY.md |
-| modernc.org/mathutil | BSD-3-Clause | https://pkg.go.dev/modernc.org/mathutil |
-| modernc.org/memory | BSD-3-Clause | https://gitlab.com/cznic/memory/blob/v1.11.0/LICENSE-GO |
-| modernc.org/sqlite | BSD-3-Clause | https://gitlab.com/cznic/sqlite/blob/v1.53.0/LICENSE |
+| modernc.org/libc | BSD-3-Clause | https://gitlab.com/cznic/libc/-/blob/v1.73.4/LICENSE |
+| modernc.org/mathutil | BSD-3-Clause | https://gitlab.com/cznic/mathutil/-/blob/v1.7.1/LICENSE |
+| modernc.org/memory | BSD-3-Clause | https://gitlab.com/cznic/memory/-/blob/v1.11.0/LICENSE |
+| modernc.org/sqlite | BSD-3-Clause | https://gitlab.com/cznic/sqlite/-/blob/v1.53.0/LICENSE |
 
 ## Frontend Dependencies
 
