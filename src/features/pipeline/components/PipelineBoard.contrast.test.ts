@@ -52,3 +52,25 @@ describe('pipelineBoard needs-you column — warning token contrast', () => {
     expect(contrastRatio(DARK_WARNING_TEXT, darkWarningSoft)).toBeGreaterThanOrEqual(4.5)
   })
 })
+
+// A11Y-9: the needs-you column border/ring/badge previously used
+// warning-line (yellow-200 light / yellow-700 dark), which fails WCAG
+// 1.4.11 non-text contrast (3:1) against warning-soft — measured ~1.08:1
+// light, ~2.61:1 dark. Swapped to warning-text, which already clears 4.5:1
+// as text above and therefore comfortably clears the lower 3:1 bar as a
+// non-text border/ring indicator too.
+describe('pipelineBoard needs-you column — border/badge non-text contrast (WCAG 1.4.11)', () => {
+  it('meets 3:1 for warning-text border on warning-soft in light mode', () => {
+    expect(contrastRatio(LIGHT_WARNING_TEXT, LIGHT_WARNING_SOFT)).toBeGreaterThanOrEqual(3)
+  })
+
+  it('meets 3:1 for warning-text border on warning-soft in dark mode', () => {
+    const darkWarningSoft = rgbToHex(blend(DARK_WARNING_TEXT, DARK_WARNING_SOFT_ALPHA, DARK_CARD))
+    expect(contrastRatio(DARK_WARNING_TEXT, darkWarningSoft)).toBeGreaterThanOrEqual(3)
+  })
+
+  it('meets 3:1 for warning-text border against the badge card background', () => {
+    expect(contrastRatio(LIGHT_WARNING_TEXT, '#ffffff')).toBeGreaterThanOrEqual(3)
+    expect(contrastRatio(DARK_WARNING_TEXT, DARK_CARD)).toBeGreaterThanOrEqual(3)
+  })
+})

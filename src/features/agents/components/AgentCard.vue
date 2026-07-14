@@ -117,7 +117,7 @@ const showMetrics = ref(false)
           >
             <button
               type="button"
-              class="text-fg-mute hover:text-fg-soft text-[11px] leading-none focus-visible:outline-2 focus-visible:outline-ring rounded"
+              class="inline-flex items-center justify-center min-w-6 min-h-6 text-fg-mute hover:text-fg-soft text-[11px] leading-none focus-visible:outline-2 focus-visible:outline-ring rounded"
               aria-label="Show more metrics"
               data-testid="agent-card-info"
               @click.stop="showMetrics = !showMetrics"
@@ -127,7 +127,7 @@ const showMetrics = ref(false)
           <button
             v-if="isFinished"
             type="button"
-            class="text-fg-mute hover:text-danger-text text-sm leading-none px-1 focus-visible:outline-2 focus-visible:outline-ring rounded"
+            class="inline-flex items-center justify-center min-w-6 min-h-6 text-fg-mute hover:text-danger-text text-sm leading-none focus-visible:outline-2 focus-visible:outline-ring rounded"
             aria-label="Dismiss finished agent"
             data-testid="agent-card-dismiss"
             @click.stop="dismiss"
@@ -171,7 +171,7 @@ const showMetrics = ref(false)
           >{{ sa.latestOutput }}</span>
           <button
             type="button"
-            class="flex-shrink-0 text-[10px] text-fg-mute hover:text-fg-soft focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-accent rounded"
+            class="inline-flex items-center justify-center min-w-6 min-h-6 flex-shrink-0 text-[10px] text-fg-mute hover:text-fg-soft focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-accent rounded"
             :aria-label="expandedSubagentIds.has(sa.id) ? 'Collapse subagent output' : 'Expand subagent output'"
             data-testid="subagent-expand-toggle"
             @click.stop="toggleSubagentExpand(sa.id)"

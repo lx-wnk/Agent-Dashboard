@@ -246,7 +246,7 @@ function isHighlightCol(col: ColumnDef): boolean {
         :key="col.id"
         class="flex-[1_1_260px] min-w-[240px] rounded-lg flex flex-col"
         :class="isHighlightCol(col)
-          ? 'bg-warning-soft border border-warning-line'
+          ? 'bg-warning-soft border border-warning-text'
           : col.group === 'terminal'
             ? 'bg-card border border-line opacity-70'
             : 'bg-card border border-line'"
@@ -254,7 +254,7 @@ function isHighlightCol(col: ColumnDef): boolean {
         <div
           class="flex justify-between items-center px-3 py-2.5 border-b flex-shrink-0"
           :class="isHighlightCol(col)
-            ? 'border-warning-line'
+            ? 'border-warning-text'
             : 'border-line'"
         >
           <span
@@ -265,7 +265,7 @@ function isHighlightCol(col: ColumnDef): boolean {
           >
             <span
               v-if="isHighlightCol(col)"
-              class="inline-flex items-center justify-center w-4 h-4 rounded-full bg-card text-warning-text text-[10px] leading-none border border-warning-line"
+              class="inline-flex items-center justify-center w-4 h-4 rounded-full bg-card text-warning-text text-[10px] leading-none border border-warning-text"
               aria-hidden="true"
             >!</span>
             {{ col.label }}
@@ -273,7 +273,7 @@ function isHighlightCol(col: ColumnDef): boolean {
           <span
             class="text-[11px] px-2 py-px rounded-full font-mono"
             :class="isHighlightCol(col)
-              ? 'text-warning-text bg-card border border-warning-line'
+              ? 'text-warning-text bg-card border border-warning-text'
               : 'text-fg-mute bg-app'"
           >{{ tasks.length }}</span>
         </div>
