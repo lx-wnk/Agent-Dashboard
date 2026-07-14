@@ -36,7 +36,7 @@ func TestEnsureTaskWorktree_NoSourceBranch_DerivesSlug(t *testing.T) {
 	task := &ent.Task{Slug: "my-task", Cwd: repoDir}
 	root := filepath.Join(t.TempDir(), "worktrees")
 
-	path, branch, err := ensureTaskWorktree(task, root)
+	path, branch, err := ensureTaskWorktree(context.Background(), task, root)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -57,7 +57,7 @@ func TestEnsureTaskWorktree_CreatesAndIdempotent(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "worktrees")
 
 	// First call: creates worktree.
-	path1, _, err := ensureTaskWorktree(task, root)
+	path1, _, err := ensureTaskWorktree(context.Background(), task, root)
 	if err != nil {
 		t.Fatalf("first call failed: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestEnsureTaskWorktree_CreatesAndIdempotent(t *testing.T) {
 	}
 
 	// Second call: idempotent (directory exists → returns immediately).
-	path2, _, err := ensureTaskWorktree(task, root)
+	path2, _, err := ensureTaskWorktree(context.Background(), task, root)
 	if err != nil {
 		t.Fatalf("second call failed: %v", err)
 	}
@@ -77,7 +77,7 @@ func TestEnsureTaskWorktree_CreatesAndIdempotent(t *testing.T) {
 
 func TestRemoveTaskWorktree_EmptyPath(t *testing.T) {
 	// removeTaskWorktree with empty path is a no-op.
-	if err := removeTaskWorktree("/some/cwd", ""); err != nil {
+	if err := removeTaskWorktree(context.Background(), "/some/cwd", ""); err != nil {
 		t.Fatal("expected nil for empty path, got:", err)
 	}
 }
@@ -89,7 +89,7 @@ func TestEnsureTaskWorktree_CallsSetupFn(t *testing.T) {
 	task := &ent.Task{Slug: "setup-test", Cwd: repoDir}
 	root := filepath.Join(t.TempDir(), "worktrees")
 
-	path, _, err := ensureTaskWorktree(task, root)
+	path, _, err := ensureTaskWorktree(context.Background(), task, root)
 	require.NoError(t, err)
 
 	// Seam: verify the returned path is valid — setup fn is wired at orchestrator level.

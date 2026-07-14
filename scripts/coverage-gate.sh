@@ -2,10 +2,12 @@
 # coverage-gate.sh — enforce a per-package coverage floor on a Go coverage profile.
 #
 # Usage:
-#   scripts/coverage-gate.sh COVERAGE_FILE PATTERN [PATTERN...]
+#   scripts/coverage-gate.sh COVERAGE_PROFILE PATTERN [PATTERN...]
 #
-# Each PATTERN is matched against package paths in `go tool cover -func`.
-# All matching package lines must have a percentage >= COVERAGE_THRESHOLD.
+# COVERAGE_PROFILE is a raw `go test -coverprofile` file (the one with a leading
+# `mode:` line), NOT the `go tool cover -func` text output. Each PATTERN is
+# matched against package paths; every matching package must have a
+# statement-weighted coverage >= COVERAGE_THRESHOLD.
 #
 # Env:
 #   COVERAGE_THRESHOLD  (default 70)
@@ -18,7 +20,7 @@
 set -eu
 
 if [ "$#" -lt 2 ]; then
-  echo "Usage: $0 COVERAGE_FILE PATTERN [PATTERN...]" >&2
+  echo "Usage: $0 COVERAGE_PROFILE PATTERN [PATTERN...]" >&2
   exit 2
 fi
 
@@ -41,27 +43,26 @@ for p in "$@"; do
   fi
 done
 
-# `go tool cover -func` output:
-#   github.com/.../internal/pipeline/foo.go:12:  FuncName  87.5%
-#   total:                                       (statements)            45.6%
-# We aggregate per-package: take the directory of the file path and compute the
-# per-package coverage as the unweighted average of all function percentages
-# in that package (not weighted by statement count).
+# Raw coverage-profile format (after the `mode:` header line):
+#   github.com/.../internal/pipeline/foo.go:12.34,56.78 5 1
+#   <file>:<startLine.col>,<endLine.col> <numStatements> <execCount>
+# Per-package coverage is statement-weighted: the sum of executed statements
+# (execCount > 0) over the sum of all statements in that package — the same
+# measure `go tool cover -func` reports on its `total:` line, but scoped per
+# package. This does NOT equal the unweighted mean of per-function percentages.
 
 # shellcheck disable=SC2016
 awk -v re="$RE" -v thr="$THRESHOLD" '
-  $0 ~ "total:" { next }
-  {
-    # extract last column percentage, e.g. "87.5%"
-    pct = $NF
-    sub(/%$/, "", pct)
-    if (pct == "" || pct !~ /^[0-9.]+$/) next
-
-    # extract file path = $1 before the first ":"
+  /^mode:/ { next }
+  NF >= 3 {
     path = $1
-    sub(/:.*/, "", path)
+    # strip the trailing ":startLine.col,endLine.col" position span
+    sub(/:[0-9]+\.[0-9]+,[0-9]+\.[0-9]+$/, "", path)
 
-    # package path = dirname
+    numStmt = $2 + 0
+    execCount = $3 + 0
+
+    # package path = dirname of the file path
     n = split(path, parts, "/")
     pkg = ""
     for (i = 1; i < n; i++) {
@@ -69,19 +70,19 @@ awk -v re="$RE" -v thr="$THRESHOLD" '
     }
 
     if (pkg ~ re) {
-      sum[pkg] += pct + 0
-      cnt[pkg] += 1
+      total[pkg] += numStmt
+      if (execCount > 0) covered[pkg] += numStmt
     }
   }
   END {
     fail = 0
     matched = 0
-    for (pkg in sum) {
+    for (pkg in total) {
       matched++
-      avg = sum[pkg] / cnt[pkg]
-      status = (avg + 0 >= thr + 0) ? "OK" : "FAIL"
-      printf "%-6s %6.2f%%  %s  (threshold %s%%)\n", status, avg, pkg, thr
-      if (avg + 0 < thr + 0) fail = 1
+      pct = (total[pkg] > 0) ? (100.0 * covered[pkg] / total[pkg]) : 0
+      status = (pct + 0 >= thr + 0) ? "OK" : "FAIL"
+      printf "%-6s %6.2f%%  %s  (threshold %s%%)\n", status, pct, pkg, thr
+      if (pct + 0 < thr + 0) fail = 1
     }
     if (matched == 0) {
       print "ERROR: no packages matched the supplied patterns" > "/dev/stderr"

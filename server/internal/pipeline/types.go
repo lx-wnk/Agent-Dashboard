@@ -216,7 +216,7 @@ type OrchestratorOptions struct {
 	// EnsureWorktreeFn creates (or verifies) a git worktree for a task.
 	// Production wires ensureTaskWorktree; tests inject a stub to avoid real git.
 	// When nil the orchestrator defaults to ensureTaskWorktree.
-	EnsureWorktreeFn func(task *ent.Task, worktreeRoot string) (path, branch string, err error)
+	EnsureWorktreeFn func(ctx context.Context, task *ent.Task, worktreeRoot string) (path, branch string, err error)
 
 	// RemoveWorktreeFn force-removes a task's git worktree and clears its
 	// WorktreePath, freeing the source branch when the task reaches a terminal

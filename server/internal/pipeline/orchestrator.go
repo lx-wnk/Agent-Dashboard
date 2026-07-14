@@ -102,7 +102,7 @@ func NewOrchestrator(opts OrchestratorOptions) (*PipelineOrchestrator, error) {
 			if task == nil || task.WorktreePath == nil || *task.WorktreePath == "" {
 				return nil
 			}
-			if err := removeTaskWorktree(task.Cwd, *task.WorktreePath); err != nil {
+			if err := removeTaskWorktree(ctx, task.Cwd, *task.WorktreePath); err != nil {
 				return err
 			}
 			_, err := taskRepo.Update(ctx, task.ID, repo.UpdateTaskInput{ClearWorktreePath: true})
