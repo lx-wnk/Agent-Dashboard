@@ -51,6 +51,15 @@ export default defineConfig(({ mode }) => ({
             sizes: '512x512',
             type: 'image/png',
           },
+          // Maskable variant (SEO-P3-1b). The current icon is a solid fill, so it
+          // is inherently mask-safe (no content near the edges to clip); a
+          // dedicated padded asset should replace it once real branding exists.
+          {
+            src: '/icon-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable',
+          },
         ],
       },
       injectManifest: {
