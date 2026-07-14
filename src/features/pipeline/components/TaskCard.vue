@@ -104,7 +104,7 @@ const activeChildOutputExpanded = ref(false)
         <span v-if="props.sortable" class="relative z-10 flex items-center gap-0.5 -ml-1">
           <button
             type="button"
-            class="p-0.5 text-[9px] leading-none text-fg-mute hover:text-fg-soft disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-fg-mute focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-accent rounded"
+            class="inline-flex items-center justify-center min-w-6 min-h-6 text-[9px] leading-none text-fg-mute hover:text-fg-soft disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-fg-mute focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-accent rounded"
             :aria-label="`Move task ${task.title} up`"
             :disabled="isFirst"
             data-testid="task-move-up"
@@ -112,7 +112,7 @@ const activeChildOutputExpanded = ref(false)
           >▲</button>
           <button
             type="button"
-            class="p-0.5 text-[9px] leading-none text-fg-mute hover:text-fg-soft disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-fg-mute focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-accent rounded"
+            class="inline-flex items-center justify-center min-w-6 min-h-6 text-[9px] leading-none text-fg-mute hover:text-fg-soft disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-fg-mute focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-accent rounded"
             :aria-label="`Move task ${task.title} down`"
             :disabled="isLast"
             data-testid="task-move-down"
@@ -194,7 +194,7 @@ const activeChildOutputExpanded = ref(false)
         >{{ task.activeChild.latestOutput }}</span>
         <button
           type="button"
-          class="flex-shrink-0 text-[10px] text-fg-mute hover:text-fg-soft focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-accent rounded"
+          class="inline-flex items-center justify-center min-w-6 min-h-6 flex-shrink-0 text-[10px] text-fg-mute hover:text-fg-soft focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-accent rounded"
           :aria-label="activeChildOutputExpanded ? 'Collapse child output' : 'Expand child output'"
           data-testid="active-child-expand-toggle"
           @click="activeChildOutputExpanded = !activeChildOutputExpanded"
