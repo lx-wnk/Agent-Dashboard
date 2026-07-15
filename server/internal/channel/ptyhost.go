@@ -26,7 +26,7 @@ import (
 // its submitting carriage return. It gives Claude's debounced TUI input time to
 // register the pasted text before the Enter, so the prompt submits instead of
 // being left with a literal newline appended.
-const injectSubmitDelay = 60 * time.Millisecond
+const injectSubmitDelay = 250 * time.Millisecond
 
 // RunPTY launches command under a pseudo-terminal it owns, proxies the current
 // terminal to it (so the user interacts normally, full TUI), and serves a
