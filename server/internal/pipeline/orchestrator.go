@@ -797,6 +797,8 @@ func (o *PipelineOrchestrator) afterCommitTerminalCleanup(ctx context.Context, t
 // best-effort: a missing worktree is a no-op and any removal error is logged and
 // swallowed so terminal-state handling never fails on git. On success it records
 // a "worktree_removed" audit event (force=true discards uncommitted work).
+// When HasUnpushedWorkFn reports unpushed work it instead retains the worktree and
+// records a "worktree_retained_unpushed" audit event rather than removing it.
 func (o *PipelineOrchestrator) cleanupTerminalWorktree(ctx context.Context, task *ent.Task, force bool) {
 	if task == nil || task.WorktreePath == nil || *task.WorktreePath == "" {
 		return
@@ -805,6 +807,15 @@ func (o *PipelineOrchestrator) cleanupTerminalWorktree(ctx context.Context, task
 		return
 	}
 	path := *task.WorktreePath
+	// Retain (do not remove) a terminal task's worktree when it still holds
+	// unpushed commits or uncommitted changes, so the work is not orphaned.
+	// Keep the checkpoint refs too — they are part of the retained work.
+	if o.opts.HasUnpushedWorkFn != nil && o.opts.HasUnpushedWorkFn(ctx, task) {
+		slog.Warn("orchestrator: retaining terminal worktree with unpushed work", "taskID", task.ID, "path", path)
+		_ = o.opts.AuditRepo.RecordTaskAudit(ctx, task.ID, nil, "worktree_retained_unpushed", "task:"+task.ID,
+			map[string]any{"path": path})
+		return
+	}
 	// Stop the checkpoint watcher and prune its refs/rows before the worktree is
 	// removed (the refs live in the worktree's git dir).
 	if o.opts.CheckpointerStopFn != nil {

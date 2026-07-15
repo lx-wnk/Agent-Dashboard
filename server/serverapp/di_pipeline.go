@@ -123,6 +123,9 @@ func provideOrchestrator(
 		SetupWorktreeFn:       makeSetupWorktreeFn(projectRepo),
 		CheckpointerStartFn:   checkpointerStart,
 		CheckpointerStopFn:    checkpointerStop,
+		HasUnpushedWorkFn: func(ctx context.Context, task *ent.Task) bool {
+			return worktreeManager.HasUnpushedWork(ctx, task)
+		},
 		ResolveSpawner:        resolveFn,
 		ResolveAdditionalDirs: resolveAdditionalDirs(folderRepo),
 		// BuildTaskPayload is called inside applyTransitionWrites, bound to the

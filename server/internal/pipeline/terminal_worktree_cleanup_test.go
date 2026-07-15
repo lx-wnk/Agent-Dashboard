@@ -13,6 +13,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
+	"github.com/lx-wnk/agent-dashboard/server/internal/services"
 )
 
 // removeWorktreeSpy records every RemoveWorktreeFn invocation so tests can assert
@@ -175,6 +176,109 @@ func TestEnsureTaskWorktree_RejectsHeldBranch(t *testing.T) {
 	require.Error(t, err, "must reject a branch already held by another worktree")
 	require.Contains(t, err.Error(), "already checked out", "error must be descriptive")
 	require.Contains(t, err.Error(), leftover, "error must name the holding worktree path")
+}
+
+func orchWithUnpushedCheckFn(
+	t *testing.T,
+	bundle *db.DBBundle,
+	spy *removeWorktreeSpy,
+	hasUnpushedFn func(context.Context, *ent.Task) bool,
+) (*pipeline.PipelineOrchestrator, repo.TaskRepo) {
+	t.Helper()
+	c := bundle.Client
+	taskRepo := repo.NewTaskRepo(c)
+	orch, err := pipeline.NewOrchestrator(pipeline.OrchestratorOptions{
+		TaskRepo:          taskRepo,
+		StageRunRepo:      repo.NewStageRunRepo(c),
+		PermissionRepo:    repo.NewPermissionRepo(c),
+		AuditRepo:         repo.NewAuditEventRepo(c),
+		ConfigRepo:        repo.NewPipelineConfigRepo(c),
+		RemoveWorktreeFn:  spy.fn(taskRepo),
+		HasUnpushedWorkFn: hasUnpushedFn,
+	})
+	require.NoError(t, err)
+	return orch, taskRepo
+}
+
+// TestTerminalCleanup_RetainsWorktreeWhenUnpushed proves that when
+// HasUnpushedWorkFn returns true, RemoveWorktreeFn is NOT called and a
+// "worktree_retained_unpushed" audit event is recorded.
+func TestTerminalCleanup_RetainsWorktreeWhenUnpushed(t *testing.T) {
+	ctx := context.Background()
+	bundle := openSharedBundle(t)
+	spy := &removeWorktreeSpy{}
+	orch, taskRepo := orchWithUnpushedCheckFn(t, bundle, spy,
+		func(_ context.Context, _ *ent.Task) bool { return true },
+	)
+
+	task := seedTaskWithWorktree(t, ctx, taskRepo, "retain-unpushed", "implementation")
+	orch.NotifyTaskTerminated(ctx, task.ID, "cancelled")
+
+	require.Equal(t, int32(0), spy.calls.Load(), "RemoveWorktreeFn must NOT fire when HasUnpushedWorkFn returns true")
+
+	auditRepo := repo.NewAuditEventRepo(bundle.Client)
+	events, err := auditRepo.ListForTask(ctx, task.ID)
+	require.NoError(t, err)
+	require.True(t, hasAction(events, "worktree_retained_unpushed"),
+		"a worktree_retained_unpushed audit event must be recorded")
+}
+
+// TestTerminalCleanup_RemovesWorktreeWhenNoPendingWork proves that when
+// HasUnpushedWorkFn returns false, RemoveWorktreeFn IS called normally.
+func TestTerminalCleanup_RemovesWorktreeWhenNoPendingWork(t *testing.T) {
+	ctx := context.Background()
+	bundle := openSharedBundle(t)
+	spy := &removeWorktreeSpy{}
+	orch, taskRepo := orchWithUnpushedCheckFn(t, bundle, spy,
+		func(_ context.Context, _ *ent.Task) bool { return false },
+	)
+
+	task := seedTaskWithWorktree(t, ctx, taskRepo, "remove-clean", "implementation")
+	orch.NotifyTaskTerminated(ctx, task.ID, "cancelled")
+
+	require.Equal(t, int32(1), spy.calls.Load(), "RemoveWorktreeFn must fire when HasUnpushedWorkFn returns false")
+}
+
+// TestTerminalCleanup_VanishedWorktreeClearsPath proves that when a terminal
+// task's WorktreePath points to a directory that no longer exists on disk,
+// HasUnpushedWork returns false, RemoveWorktreeFn fires, WorktreePath is
+// cleared, and no "worktree_retained_unpushed" audit event is recorded.
+func TestTerminalCleanup_VanishedWorktreeClearsPath(t *testing.T) {
+	ctx := context.Background()
+	bundle := openSharedBundle(t)
+	spy := &removeWorktreeSpy{}
+
+	c := bundle.Client
+	taskRepo := repo.NewTaskRepo(c)
+	mgr := services.NewWorktreeManager(taskRepo)
+
+	orch, err := pipeline.NewOrchestrator(pipeline.OrchestratorOptions{
+		TaskRepo:          taskRepo,
+		StageRunRepo:      repo.NewStageRunRepo(c),
+		PermissionRepo:    repo.NewPermissionRepo(c),
+		AuditRepo:         repo.NewAuditEventRepo(c),
+		ConfigRepo:        repo.NewPipelineConfigRepo(c),
+		RemoveWorktreeFn:  spy.fn(taskRepo),
+		HasUnpushedWorkFn: mgr.HasUnpushedWork,
+	})
+	require.NoError(t, err)
+
+	task := seedTaskWithWorktree(t, ctx, taskRepo, "vanished-cleanup", "implementation")
+	// Overwrite WorktreePath with a path that does not exist on disk.
+	nonExistentPath := filepath.Join(t.TempDir(), "does-not-exist")
+	_, err = taskRepo.Update(ctx, task.ID, repo.UpdateTaskInput{WorktreePath: &nonExistentPath})
+	require.NoError(t, err)
+
+	orch.NotifyTaskTerminated(ctx, task.ID, "cancelled")
+
+	require.Equal(t, int32(1), spy.calls.Load(),
+		"RemoveWorktreeFn must fire: vanished directory is not unpushed work")
+
+	auditRepo := repo.NewAuditEventRepo(bundle.Client)
+	events, err := auditRepo.ListForTask(ctx, task.ID)
+	require.NoError(t, err)
+	require.False(t, hasAction(events, "worktree_retained_unpushed"),
+		"must NOT record worktree_retained_unpushed for a vanished directory")
 }
 
 func hasAction(events []*ent.AuditEvent, action string) bool {

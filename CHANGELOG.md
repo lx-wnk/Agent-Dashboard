@@ -256,6 +256,12 @@ Preparing the first public release.
 ### Fixed
 
 - Plugin enable/disable in the UI now calls the live lifecycle endpoints (`POST /api/plugins/{id}/activate` and `/deactivate`) instead of the `PATCH /api/settings/plugins-enabled/{id}` endpoint that was removed in SP2. Plugins with the `auth_provider` capability still require a server restart after activation; the UI surfaces this with a notice.
+- Terminal worktree cleanup no longer force-removes a finished task's worktree
+  when its branch still holds unpushed commits or uncommitted changes. Previously,
+  if git-push was disabled (no `DASHBOARD_ALLOW_GIT_PUSH=true`) or a push failed,
+  finalization committed only locally and the subsequent cleanup discarded the
+  branch — orphaning the work as dangling commits. Cleanup now detects unpushed
+  work and retains the worktree (audited as `worktree_retained_unpushed`) instead.
 - Plan-review gate: opening a `plan_review` task via deep-link, Spotlight, or
   cross-modal navigation now routes to the plan-approval panel instead of the
   generic task modal — the routing rule that previously lived only in the
