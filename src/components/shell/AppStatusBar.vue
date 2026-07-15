@@ -57,6 +57,14 @@ function barColor(pct: number): string {
   return pct > 85 ? 'bg-danger' : pct > 60 ? 'bg-warning' : 'bg-success'
 }
 
+function metricTextClass(pct: number): string {
+  if (pct >= 90)
+    return 'text-danger-text'
+  if (pct >= 75)
+    return 'text-warning-text'
+  return ''
+}
+
 function usageBarColor(): string {
   if (!worst.value || worst.value.pct === null)
     return 'bg-raised'
@@ -88,9 +96,9 @@ function formatDelta(d: number | null): string {
   <div v-else class="shrink-0 border-t border-line bg-card">
     <div v-if="openSegment === 'system'" data-testid="panel-system" class="px-4 py-3 border-b border-line text-[12px] text-fg-mute">
       <div v-if="systemInfo" class="grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono">
-        <div>CPU {{ Math.round(systemInfo.cpu.usage) }}% · {{ systemInfo.cpu.cores }} cores</div>
-        <div>MEM {{ Math.round(systemInfo.memory.usagePercent) }}%</div>
-        <div>DISK {{ Math.round(systemInfo.disk.usagePercent) }}%</div>
+        <div>CPU <span :class="metricTextClass(systemInfo.cpu.usage)">{{ Math.round(systemInfo.cpu.usage) }}%</span> · {{ systemInfo.cpu.cores }} cores</div>
+        <div>MEM <span data-testid="mem-pct" :class="metricTextClass(systemInfo.memory.usagePercent)">{{ Math.round(systemInfo.memory.usagePercent) }}%</span></div>
+        <div>DISK <span :class="metricTextClass(systemInfo.disk.usagePercent)">{{ Math.round(systemInfo.disk.usagePercent) }}%</span></div>
         <div>LOAD {{ systemInfo.loadAvg.map(l => l.toFixed(2)).join(' ') }}</div>
       </div>
     </div>
@@ -156,9 +164,9 @@ function formatDelta(d: number | null): string {
         <span v-if="systemInfo" class="flex items-center gap-1">CPU
           <span class="inline-block w-10 h-1.5 bg-raised rounded-full overflow-hidden align-middle">
             <span class="block h-full rounded-full" :class="barColor(systemInfo.cpu.usage)" :style="{ width: `${systemInfo.cpu.usage}%` }" /></span>
-          {{ Math.round(systemInfo.cpu.usage) }}%</span>
-        <span v-if="systemInfo">MEM {{ Math.round(systemInfo.memory.usagePercent) }}%</span>
-        <span v-if="systemInfo">DISK {{ Math.round(systemInfo.disk.usagePercent) }}%</span>
+          <span :class="metricTextClass(systemInfo.cpu.usage)">{{ Math.round(systemInfo.cpu.usage) }}%</span></span>
+        <span v-if="systemInfo">MEM <span data-testid="mem-pct-strip" :class="metricTextClass(systemInfo.memory.usagePercent)">{{ Math.round(systemInfo.memory.usagePercent) }}%</span></span>
+        <span v-if="systemInfo">DISK <span :class="metricTextClass(systemInfo.disk.usagePercent)">{{ Math.round(systemInfo.disk.usagePercent) }}%</span></span>
       </button>
       <span class="w-px h-3.5 bg-line" aria-hidden="true" />
       <button

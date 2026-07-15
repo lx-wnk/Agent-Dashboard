@@ -140,4 +140,52 @@ describe('appStatusBar', () => {
     const w = mount(Bar, { props: { costDelta: null, todayCostLabel: '$0.00', usageData: null } })
     expect(w.text()).toContain('—')
   })
+
+  it('does not color MEM below the warning threshold', async () => {
+    const Bar = await load()
+    const w = mount(Bar, { props: { costDelta: 0, todayCostLabel: '$0.00', usageData: null } })
+    const mem = w.get('[data-testid="mem-pct-strip"]')
+    expect(mem.classes()).not.toContain('text-warning-text')
+    expect(mem.classes()).not.toContain('text-danger-text')
+  })
+
+  it('colors MEM/CPU/DISK warning at >=75% usage', async () => {
+    vi.doMock('../../composables/useSystemResources', () => ({
+      useSystemResources: () => ({
+        info: {
+          value: {
+            cpu: { usage: 80, cores: 8, model: 'x' },
+            memory: { total: 100, used: 80, available: 20, usagePercent: 80 },
+            disk: { total: 100, used: 78, available: 22, usagePercent: 78, mount: '/' },
+            loadAvg: [1.2, 1.0, 0.8],
+            uptime: 100,
+          },
+        },
+      }),
+    }))
+    const Bar = await load()
+    const w = mount(Bar, { props: { costDelta: 0, todayCostLabel: '$0.00', usageData: null } })
+    const mem = w.get('[data-testid="mem-pct-strip"]')
+    expect(mem.classes()).toContain('text-warning-text')
+  })
+
+  it('colors MEM danger at >=90% usage', async () => {
+    vi.doMock('../../composables/useSystemResources', () => ({
+      useSystemResources: () => ({
+        info: {
+          value: {
+            cpu: { usage: 95, cores: 8, model: 'x' },
+            memory: { total: 100, used: 95, available: 5, usagePercent: 95 },
+            disk: { total: 100, used: 91, available: 9, usagePercent: 91, mount: '/' },
+            loadAvg: [1.2, 1.0, 0.8],
+            uptime: 100,
+          },
+        },
+      }),
+    }))
+    const Bar = await load()
+    const w = mount(Bar, { props: { costDelta: 0, todayCostLabel: '$0.00', usageData: null } })
+    const mem = w.get('[data-testid="mem-pct-strip"]')
+    expect(mem.classes()).toContain('text-danger-text')
+  })
 })

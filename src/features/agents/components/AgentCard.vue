@@ -17,6 +17,16 @@ const emit = defineEmits<{ select: [agent: Agent], dismiss: [pid: number] }>()
 
 const isFinished = computed(() => props.agent.status === 'finished')
 
+// Card-local display override: AgentStatus 'waiting' (30s-5min since last
+// activity, see server/internal/merger/merger.go CalculateStatus) collides in
+// meaning with the "needs you" banner's "waiting" (waiting for the user).
+// Relabel for this card only — the underlying status enum/value is unchanged.
+const displayStatus = computed(() => props.agent.working ? 'working' : props.agent.status)
+const statusBadgeLabel = computed(() => displayStatus.value === 'waiting' ? 'Queued' : undefined)
+const statusBadgeTitle = computed(() => displayStatus.value === 'waiting'
+  ? 'No new activity for a bit — the agent process is still alive, not waiting on you'
+  : undefined)
+
 async function dismiss() {
   const pid = props.agent.pid
   try {
@@ -64,7 +74,7 @@ const showMetrics = ref(false)
 </script>
 
 <template>
-  <AppCard surface="card" radius="lg" interactive class="relative flex flex-col h-[260px] overflow-hidden cursor-pointer" @click="emit('select', agent)">
+  <AppCard surface="card" radius="lg" interactive class="group relative flex flex-col h-[260px] overflow-hidden cursor-pointer" @click="emit('select', agent)">
     <button
       type="button"
       class="absolute inset-0 w-full h-full focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-[-2px]"
@@ -75,7 +85,7 @@ const showMetrics = ref(false)
 
     <div class="bg-raised px-3 pt-2 pb-1.5 flex flex-col gap-1">
       <div class="flex items-center gap-2 min-w-0">
-        <AppBadge :variant="agent.working ? 'working' : agent.status" />
+        <AppBadge :variant="displayStatus" :label="statusBadgeLabel" :title="statusBadgeTitle" />
         <span
           v-if="stalled"
           class="text-[10px] font-medium px-1 py-0.5 rounded bg-warning-soft text-warning-text whitespace-nowrap"
@@ -88,7 +98,10 @@ const showMetrics = ref(false)
           :title="projectLabel"
         >{{ projectLabel }}</span>
         <ProviderBadge :provider="agent.provider" />
-        <span class="text-[10px] font-mono text-fg-mute whitespace-nowrap shrink-0">{{ shortModel(agent.model ?? null) }}</span>
+        <span
+          class="text-[10px] font-mono text-fg-mute whitespace-nowrap shrink-0"
+          :title="agent.model ? `Model: ${agent.model}` : 'Model unknown'"
+        >{{ shortModel(agent.model ?? null) }}</span>
         <MachineBadge v-if="agent.machine" :machine="agent.machine" />
       </div>
 
@@ -142,7 +155,7 @@ const showMetrics = ref(false)
       </template>
       <span v-else-if="activityFallback" class="text-fg-soft">▶ running: {{ activityFallback }}</span>
       <span v-else class="text-fg-mute italic">No output yet</span>
-      <div class="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-card to-transparent pointer-events-none" />
+      <div class="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-card to-transparent pointer-events-none" />
     </div>
 
     <div
@@ -194,6 +207,14 @@ const showMetrics = ref(false)
       </div>
     </div>
 
-    <PromptInput v-if="!agent.machine" :agent="agent" variant="compact" class="relative z-10 shrink-0" @click.stop @keydown.enter.stop @keydown.space.stop />
+    <div
+      v-if="!agent.machine"
+      class="relative z-10 shrink-0 max-h-0 opacity-0 overflow-hidden transition-[max-height,opacity] duration-150 ease-out group-hover:max-h-40 group-hover:opacity-100 focus-within:max-h-40 focus-within:opacity-100"
+      @click.stop
+      @keydown.enter.stop
+      @keydown.space.stop
+    >
+      <PromptInput :agent="agent" variant="compact" />
+    </div>
   </AppCard>
 </template>
