@@ -27,13 +27,16 @@ function apply() {
 </script>
 
 <template>
-  <div class="flex flex-wrap items-center gap-2 text-[12px]">
+  <div v-if="templates.length > 0" class="flex flex-wrap items-center gap-2 text-[12px]">
+    <span class="text-fg-mute text-[11px]">Template:</span>
     <select
       v-model="selectedId"
+      title="Insert a saved prompt template"
+      aria-label="Insert a saved prompt template"
       class="bg-raised border border-line rounded px-2 py-1 text-fg-soft text-[12px] focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-accent"
     >
       <option value="">
-        Templates...
+        Choose…
       </option>
       <option v-for="t in templates" :key="t.id" :value="t.id">
         {{ t.name }}

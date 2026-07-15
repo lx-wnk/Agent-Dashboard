@@ -1,3 +1,4 @@
+import type { Ref } from 'vue'
 import type { Agent, OutputMessage } from '@/types'
 import { onUnmounted, ref } from 'vue'
 import { dispatchSlashCommand, parseSlashCommand, SLASH_COMMAND_DEFS } from '@/composables/useSlashCommands'
@@ -30,16 +31,36 @@ function isNetworkFailure(err: unknown): boolean {
   return err instanceof TypeError
 }
 
+/**
+ * `attachments` is an optional ref to image-attachment absolute paths (full
+ * variant only). They are appended to the message as trailing "@<path>" tokens
+ * so Claude Code resolves them as image references, and cleared once folded
+ * into a sent/staged message.
+ */
 export function useAgentPrompt(
   getAgent: () => Agent | null,
   onMessageSent?: OnMessageSent,
   ctx?: AgentPromptContext,
+  attachments?: Ref<string[]>,
 ) {
   const promptInput = ref('')
   const isSending = ref(false)
   const sendStatus = ref<'sent' | 'error' | 'queued' | null>(null)
   const sendError = ref('')
   const resumeConfirm = ref<string | null>(null)
+
+  /**
+   * Combines the typed text with any pending attachment paths into the final
+   * message. Attachments are appended as space-separated "@<path>" tokens so
+   * a text-less send (attachments only) still produces non-empty content.
+   */
+  function buildMessage(): string {
+    const text = promptInput.value.trim()
+    const paths = attachments?.value ?? []
+    if (paths.length === 0)
+      return text
+    return [text, ...paths.map(p => `@${p}`)].filter(Boolean).join(' ')
+  }
 
   /**
    * Shared delivery helper. Performs the correct fetch for inject vs resume,
@@ -120,7 +141,7 @@ export function useAgentPrompt(
 
   async function handleSend() {
     const agent = getAgent()
-    const msg = promptInput.value.trim()
+    const msg = buildMessage()
     if (!msg || isSending.value || !agent)
       return
 
@@ -132,6 +153,8 @@ export function useAgentPrompt(
       const isKnownCommand = SLASH_COMMAND_DEFS.some(def => def.name === cmd)
       if (isKnownCommand) {
         promptInput.value = ''
+        if (attachments)
+          attachments.value = []
         isSending.value = true
         sendError.value = ''
         try {
@@ -159,12 +182,19 @@ export function useAgentPrompt(
       // Live inject — immediate, no confirmation needed
       promptInput.value = ''
       await deliver(agent, msg, 'inject')
+      // Only clear attachments once delivery didn't fail outright — a queued
+      // (offline) send still consumed the paths into the queued message.
+      if (attachments && sendStatus.value !== 'error')
+        attachments.value = []
     }
     else {
       // Non-injectable session: require explicit user confirmation before resuming
-      // to prevent silent duplicate detached processes on each send.
+      // to prevent silent duplicate detached processes on each send. The staged
+      // message already carries any attachment "@<path>" tokens.
       resumeConfirm.value = msg
       promptInput.value = ''
+      if (attachments)
+        attachments.value = []
     }
   }
 
