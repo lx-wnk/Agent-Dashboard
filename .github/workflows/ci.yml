@@ -259,7 +259,7 @@ jobs:
         working-directory: desktop
         # -tags production selects the real wails app; the extldflags links
         # UniformTypeIdentifiers, which wails needs on the macOS 15 SDK but a
-        # plain build omits. This is the same incantation as `task desktop:build`.
+        # plain build omits. This is the same incantation as `task build:desktop`.
         run: CGO_ENABLED=1 go build -tags production -ldflags "-extldflags '-framework UniformTypeIdentifiers'" -o /dev/null .
 
   pr-checks:

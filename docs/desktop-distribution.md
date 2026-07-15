@@ -4,7 +4,7 @@ How to package `desktop/` (the wails v2 shell, see [CONTRIBUTING.md](../CONTRIBU
 into a `.app` bundle and `.dmg` for distribution, and how to sign + notarize that artifact so
 Gatekeeper accepts it without a warning.
 
-This is a separate, later step from `task desktop:run` / `task desktop:build`, which produce a bare
+This is a separate, later step from `task desktop:run` / `task build:desktop`, which produce a bare
 Mach-O binary for local dev smoke-testing only — not something you'd hand to another Mac.
 
 ## Prerequisites
@@ -27,7 +27,7 @@ task desktop:dmg    # -> bin/Agent Dashboard.dmg (chains desktop:dist)
 
 `desktop:dist` runs `wails build` (reading `desktop/wails.json` and `desktop/build/darwin/Info.plist`)
 with the same `-tags production` and `-ldflags "-extldflags '-framework UniformTypeIdentifiers'"`
-that `desktop:build` already uses for the raw-binary smoke build, so both paths link identically.
+that `build:desktop` already uses for the raw-binary smoke build, so both paths link identically.
 `desktop:dmg` packages the resulting bundle into a plain read-only DMG via `hdiutil create` — no
 `create-dmg` or other third-party tool required.
 

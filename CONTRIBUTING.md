@@ -98,7 +98,7 @@ IDE-embedded tools (Cursor, Copilot-in-VSCode, Windsurf) don't write file-per-se
 `desktop/` is its own Go module (wails v2) that wraps the dashboard server in a native WKWebView window. It is `//go:build darwin`-gated — the module does not build on other platforms; a `main_other.go` stub keeps `go build ./...` and CI green off macOS. Build and run it for a dev smoke (requires Go 1.26 + Xcode command-line tools, no `wails` CLI needed):
 
 ```bash
-task desktop:run        # or: task desktop:build  (writes bin/agent-dashboard-desktop)
+task desktop:run        # or: task build:desktop  (writes bin/agent-dashboard-desktop)
 ```
 
 Three non-obvious build requirements the `desktop:*` tasks encapsulate — a bare `cd desktop && go build .` runs but produces a broken app:
