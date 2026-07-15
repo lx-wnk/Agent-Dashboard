@@ -22,6 +22,12 @@ import (
 	"golang.org/x/term"
 )
 
+// injectSubmitDelay is the pause between writing an injected prompt's text and
+// its submitting carriage return. It gives Claude's debounced TUI input time to
+// register the pasted text before the Enter, so the prompt submits instead of
+// being left with a literal newline appended.
+const injectSubmitDelay = 60 * time.Millisecond
+
 // RunPTY launches command under a pseudo-terminal it owns, proxies the current
 // terminal to it (so the user interacts normally, full TUI), and serves a
 // loopback HTTP /message endpoint that injects text as real keyboard input into
@@ -148,9 +154,17 @@ func ptyMux(ptmx io.Writer, hub *ptyHub, token *rotatingToken) *http.ServeMux {
 			http.Error(w, `{"error":"missing message"}`, http.StatusBadRequest)
 			return
 		}
-		// Inject the text, then a carriage return to submit it. CR (\r) is what a
-		// real Enter sends on a pty.
-		if _, err := io.WriteString(ptmx, payload.Message+"\r"); err != nil {
+		// Inject the text, then submit with a carriage return written SEPARATELY
+		// after a short delay. Claude's TUI debounces pasted input, so a CR
+		// coalesced into the same write is absorbed as a literal newline in the
+		// prompt (typed-but-not-submitted) instead of triggering submit. Splitting
+		// the write mirrors the tmux path, which sends the text then a separate Enter.
+		if _, err := io.WriteString(ptmx, payload.Message); err != nil {
+			http.Error(w, `{"error":"write failed"}`, http.StatusInternalServerError)
+			return
+		}
+		time.Sleep(injectSubmitDelay)
+		if _, err := io.WriteString(ptmx, "\r"); err != nil {
 			http.Error(w, `{"error":"write failed"}`, http.StatusInternalServerError)
 			return
 		}
