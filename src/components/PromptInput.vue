@@ -39,10 +39,7 @@ const { promptInput, isSending, sendStatus, sendError, handleSend, resumeConfirm
 const isUploading = ref(false)
 const uploadError = ref('')
 
-async function onFileChange(e: Event) {
-  const input = e.target as HTMLInputElement
-  const files = Array.from(input.files ?? [])
-  input.value = '' // reset so the same file can be re-picked
+async function uploadFiles(files: File[]) {
   const pid = props.agent?.pid
   if (files.length === 0 || pid == null)
     return
@@ -68,6 +65,27 @@ async function onFileChange(e: Event) {
   finally {
     isUploading.value = false
   }
+}
+
+async function onFileChange(e: Event) {
+  const input = e.target as HTMLInputElement
+  const files = Array.from(input.files ?? [])
+  input.value = '' // reset so the same file can be re-picked
+  await uploadFiles(files)
+}
+
+// Paste an image straight from the clipboard (Cmd/Ctrl+V) into the prompt.
+// Only intercepts when the clipboard carries image files — plain-text paste
+// falls through to the default handler unchanged.
+function onPaste(e: ClipboardEvent) {
+  const imageFiles = Array.from(e.clipboardData?.items ?? [])
+    .filter(it => it.kind === 'file' && it.type.startsWith('image/'))
+    .map(it => it.getAsFile())
+    .filter((f): f is File => f !== null)
+  if (imageFiles.length === 0)
+    return
+  e.preventDefault()
+  void uploadFiles(imageFiles)
 }
 
 function removeAttachment(path: string) {
@@ -316,6 +334,7 @@ defineExpose({ focus })
         class="flex-1 bg-transparent border-none text-fg text-[13px] font-mono focus-visible:outline-none placeholder:text-fg-faint disabled:opacity-50 resize-none leading-snug min-h-[22px] max-h-36 overflow-y-auto"
         @keydown="onKeydown"
         @input="autoResize"
+        @paste="onPaste"
       />
       <input
         v-else
