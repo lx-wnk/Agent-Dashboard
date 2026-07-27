@@ -425,3 +425,41 @@ func TestDetectScreen(t *testing.T) {
 		}
 	})
 }
+
+// A borderless v2.1.220 render can bleed the modal's right border into a
+// content line; the detector must not carry that into the question text.
+func TestDetectQuestion_TrimsBorderBleed(t *testing.T) {
+	q := DetectQuestion([]string{
+		"Welches Tier soll es sein?─────────────────────────────────────────────╯",
+		"❯ 1. Katze",
+		"  2. Hund",
+		"  3. Type something.",
+		"  4. Chat about this",
+	})
+	if q == nil {
+		t.Fatal("expected non-nil DetectedQuestion")
+	}
+	if q.Question != "Welches Tier soll es sein?" {
+		t.Errorf("Question = %q, want the border run stripped", q.Question)
+	}
+	if q.Options[0].Label != "Katze" {
+		t.Errorf("Options[0].Label = %q", q.Options[0].Label)
+	}
+}
+
+// ASCII hyphens are outside the box-drawing range, so a label that legitimately
+// ends in one must survive the trim.
+func TestDetectQuestion_KeepsTrailingAsciiHyphen(t *testing.T) {
+	q := DetectQuestion([]string{
+		"Which flag?",
+		"❯ 1. --dry-run",
+		"  2. Type something.",
+		"  3. Chat about this",
+	})
+	if q == nil {
+		t.Fatal("expected non-nil DetectedQuestion")
+	}
+	if q.Options[0].Label != "--dry-run" {
+		t.Errorf("Options[0].Label = %q, want --dry-run", q.Options[0].Label)
+	}
+}

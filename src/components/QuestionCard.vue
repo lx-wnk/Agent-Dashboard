@@ -99,16 +99,16 @@ function handleDetectedChatSubmit() {
 <template>
   <div class="flex flex-col gap-3">
     <div class="flex flex-col gap-1.5">
-      <div class="text-[12px] font-semibold text-fg">
-        {{ detectedQuestion.header }}
-      </div>
-      <div class="text-[11px] text-fg-mute leading-snug mb-0.5">
+      <!-- No header row: what the detector puts in `header` is whatever
+           scrolled above the modal (a prompt echo, the welcome box), not a
+           title. The question is the card's heading. -->
+      <div class="text-[12px] font-semibold text-fg leading-snug mb-0.5">
         {{ detectedQuestion.question }}
       </div>
 
       <fieldset class="border-none m-0 p-0 flex flex-col gap-1.5">
         <legend class="sr-only">
-          {{ detectedQuestion.header }}
+          {{ detectedQuestion.question }}
         </legend>
         <label
           v-for="option in detectedQuestion.options"

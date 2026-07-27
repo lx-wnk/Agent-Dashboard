@@ -28,11 +28,13 @@ const multiQuestion: DetectedQuestion = {
 }
 
 describe('questionCard', () => {
-  it('renders the question header, prompt, and option labels', () => {
+  // The detector's `header` is scrollback above the modal, not a title, so the
+  // card deliberately does not render it — the question is the heading.
+  it('renders the question prompt and option labels, but not the detected header', () => {
     const wrapper = mount(QuestionCard, {
       props: { detectedQuestion: singleQuestion },
     })
-    expect(wrapper.text()).toContain('Choose framework')
+    expect(wrapper.text()).not.toContain('Choose framework')
     expect(wrapper.text()).toContain('Which frontend framework do you prefer?')
     expect(wrapper.text()).toContain('Vue')
     expect(wrapper.text()).toContain('Progressive framework')

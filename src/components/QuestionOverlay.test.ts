@@ -41,7 +41,7 @@ describe('questionOverlay', () => {
     })
 
     expect(wrapper.find('[data-testid="question-overlay"]').exists()).toBe(true)
-    expect(wrapper.text()).toContain('Pick a colour')
+    expect(wrapper.text()).toContain(singleQuestion.question)
     expect(wrapper.text()).toContain('Red')
     expect(wrapper.text()).toContain('Green')
     expect(wrapper.text()).toContain('Blue')
@@ -63,7 +63,7 @@ describe('questionOverlay', () => {
     const dialog = wrapper.find('[data-testid="question-overlay"]')
     expect(dialog.attributes('role')).toBe('dialog')
     expect(dialog.attributes('aria-modal')).toBe('true')
-    expect(dialog.attributes('aria-label')).toBe(singleQuestion.header)
+    expect(dialog.attributes('aria-label')).toBe(singleQuestion.question)
   })
 
   it('moves focus into the overlay (first control) once a question appears', async () => {

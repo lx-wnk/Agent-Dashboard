@@ -273,3 +273,31 @@ describe('screenSignature', () => {
     expect(screenSignature(null)).toBeNull()
   })
 })
+
+describe('border bleed', () => {
+  // A borderless v2.1.220 render can bleed the modal's right border into a
+  // content line; it must not end up in the question text.
+  it('strips a trailing box-drawing run from the question', () => {
+    const q = detectQuestion([
+      'Welches Tier soll es sein?─────────────────────────────────────────────╯',
+      '❯ 1. Katze',
+      '  2. Hund',
+      '  3. Type something.',
+      '  4. Chat about this',
+    ])!
+    expect(q).not.toBeNull()
+    expect(q.question).toBe('Welches Tier soll es sein?')
+    expect(q.options[0].label).toBe('Katze')
+  })
+
+  it('keeps a label that legitimately ends in an ASCII hyphen', () => {
+    const q = detectQuestion([
+      'Which flag?',
+      '❯ 1. --dry-run',
+      '  2. Type something.',
+      '  3. Chat about this',
+    ])!
+    expect(q.options[0].label).toBe('--dry-run')
+  })
+})
+

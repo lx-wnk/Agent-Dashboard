@@ -261,6 +261,9 @@ type DetectedOption struct {
 // contiguously 1..n, and the two UI-injected meta-rows follow immediately, so
 // TypeSomethingIndex == len(Options)+1 and ChatAboutIndex == TypeSomethingIndex+1.
 type DetectedQuestion struct {
+	// Header is a best-effort title line above the question. Bordered renders
+	// carry a real one; borderless renders leave whatever scrolled above the
+	// modal here (a prompt echo, the welcome box). Not UI-facing.
 	Header             string           `json:"header"`
 	Question           string           `json:"question"`
 	MultiSelect        bool             `json:"multiSelect"`

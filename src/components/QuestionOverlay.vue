@@ -15,7 +15,7 @@ const props = defineProps<{
 }>()
 
 const open = computed(() => props.question !== null || (props.confirm ?? null) !== null)
-const label = computed(() => props.question?.header ?? 'Review your answers')
+const label = computed(() => props.question?.question ?? 'Review your answers')
 
 const dialogRef = ref<HTMLElement | null>(null)
 

@@ -40,10 +40,15 @@ var (
 	borderOnlyRe  = regexp.MustCompile(`^[\s\x{2500}-\x{257F}=+-]*$`)
 	leadingBoxRe  = regexp.MustCompile(`^\s*[│║┃┆┇┊┋]`)
 	trailingBoxRe = regexp.MustCompile(`[│║┃┆┇┊┋]\s*$`)
-	numberedRowRe = regexp.MustCompile(`^❯?\s*(\d+)\.\s+(\S.*)$`)
-	checkboxRe    = regexp.MustCompile(`(?i)^\[[ x✔✓]\]\s*`)
-	trailingCRRe  = regexp.MustCompile(`\r$`)
-	toggleHintRe  = regexp.MustCompile(`(?i)toggle|space to`)
+	// A modal's right border can bleed into a content line when the row is not
+	// exactly border-width (e.g. "Which animal?────────╯"). A trailing RUN of
+	// box-drawing glyphs is always chrome — ASCII hyphens are outside the range,
+	// so a label ending in "-" survives.
+	trailingBoxRunRe = regexp.MustCompile(`[\s\x{2500}-\x{257F}]+$`)
+	numberedRowRe    = regexp.MustCompile(`^❯?\s*(\d+)\.\s+(\S.*)$`)
+	checkboxRe       = regexp.MustCompile(`(?i)^\[[ x✔✓]\]\s*`)
+	trailingCRRe     = regexp.MustCompile(`\r$`)
+	toggleHintRe     = regexp.MustCompile(`(?i)toggle|space to`)
 )
 
 // The meta-row copy drifts between Claude Code releases (e.g. v2.1.205 renders
@@ -72,7 +77,7 @@ func toContentLine(rawRow string) (string, bool) {
 		inner = inner[:len(inner)-len(m)]
 	}
 
-	trimmed := strings.TrimSpace(inner)
+	trimmed := strings.TrimSpace(trailingBoxRunRe.ReplaceAllString(inner, ""))
 	if trimmed == "" {
 		return "", false
 	}

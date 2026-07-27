@@ -14,6 +14,13 @@ export interface DetectedOption {
  * `null` from `detectQuestion` rather than a desynced result.
  */
 export interface DetectedQuestion {
+  /**
+   * Best-effort title line above the question. Bordered renders carry a real
+   * one; borderless renders leave whatever scrolled above the modal here (a
+   * prompt echo, the welcome box). Never shown in the UI and deliberately not
+   * part of `screenSignature` — as ordinary scrollback it can change while the
+   * modal stays put, which would read as a new question.
+   */
   header: string
   question: string
   multiSelect: boolean
@@ -61,6 +68,12 @@ const TRAILING_BOX_RE = new RegExp(`[${EDGE_BOX_CHARS}]\\s*$`)
 const NUMBERED_ROW_RE = /^❯?\s*(\d+)\.\s+(\S.*)$/
 const CHECKBOX_RE = /^\[[ x✔✓]\]\s*/i
 const TRAILING_CR_RE = /\r$/
+// A modal's right border can bleed into a content line when the row is not
+// exactly border-width (e.g. "Which animal?────────╯"). A trailing RUN of
+// box-drawing glyphs is always chrome — ASCII hyphens are outside the range, so
+// a label ending in "-" survives.
+// eslint-disable-next-line regexp/no-obscure-range -- intentional Unicode block range
+const TRAILING_BOX_RUN_RE = /[\s─-╿]+$/
 const TOGGLE_HINT_RE = /toggle|space to/i
 
 function toContentLine(rawRow: string): string | null {
@@ -76,7 +89,7 @@ function toContentLine(rawRow: string): string | null {
   if (trailing)
     inner = inner.slice(0, inner.length - trailing[0].length)
 
-  const trimmed = inner.trim()
+  const trimmed = inner.replace(TRAILING_BOX_RUN_RE, '').trim()
   return trimmed.length > 0 ? trimmed : null
 }
 
@@ -271,7 +284,6 @@ export function screenSignature(screen: DetectedQuestion | DetectedConfirm | nul
   if (screen === null)
     return null
   return JSON.stringify([
-    'header' in screen ? screen.header : '',
     screen.question,
     'multiSelect' in screen ? screen.multiSelect : null,
     screen.options.map(o => [o.index, o.label]),
