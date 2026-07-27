@@ -65,4 +65,29 @@ describe('confirmCard', () => {
     await wrapper.find('[data-testid="detected-confirm-send-btn"]').trigger('click')
     expect(wrapper.emitted('answer')).toEqual([[{ mode: 'single', index: 0 }]])
   })
+
+  // Same document-wide radio-group hazard as QuestionCard — see the note there.
+  it('does not share a radio group with a second card in the same document', async () => {
+    const hostA = document.createElement('div')
+    const hostB = document.createElement('div')
+    document.body.append(hostA, hostB)
+
+    const cardA = mount(ConfirmCard, { props: { detectedConfirm: confirmScreen }, attachTo: hostA })
+    const cardB = mount(ConfirmCard, { props: { detectedConfirm: confirmScreen }, attachTo: hostB })
+
+    const radioA = cardA.findAll('input[type="radio"]')[1].element as HTMLInputElement
+    const radioB = cardB.findAll('input[type="radio"]')[1].element as HTMLInputElement
+    expect(radioA.name).not.toBe(radioB.name)
+
+    radioA.click()
+    await cardA.vm.$nextTick()
+    radioB.click()
+    await cardB.vm.$nextTick()
+    expect(radioA.checked).toBe(true)
+
+    cardA.unmount()
+    cardB.unmount()
+    hostA.remove()
+    hostB.remove()
+  })
 })

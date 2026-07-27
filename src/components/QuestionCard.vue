@@ -3,6 +3,7 @@ import type { AnswerIntent } from '../utils/answerKeys'
 import type { DetectedQuestion } from '../utils/askQuestionScreen'
 import { computed, ref, watch } from 'vue'
 import { screenSignature } from '../utils/askQuestionScreen'
+import { nextRadioGroupName } from '../utils/radioGroup'
 import AppButton from './ui/AppButton.vue'
 
 const props = defineProps<{
@@ -12,6 +13,11 @@ const props = defineProps<{
 const emit = defineEmits<{
   answer: [intent: AnswerIntent]
 }>()
+
+// Two cards can be mounted at once (two agents with a question in the triage
+// band, or a band card plus the terminal overlay); a shared radio `name` would
+// make the browser uncheck the other card's radio. See nextRadioGroupName.
+const optionGroupName = nextRadioGroupName('detected-question-option')
 
 const detectedSelectedIndices = ref<number[]>([])
 const detectedCustomText = ref('')
@@ -119,7 +125,7 @@ function handleDetectedChatSubmit() {
           <input
             v-else
             type="radio"
-            name="detected-question-option"
+            :name="optionGroupName"
             :checked="detectedSelectedIndices.includes(option.index)"
             class="mt-0.5 accent-accent shrink-0"
             @change="toggleDetectedOption(option.index)"

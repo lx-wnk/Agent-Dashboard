@@ -135,4 +135,39 @@ describe('questionCard', () => {
     expect((wrapper.find('[data-testid="detected-custom-textarea"]').element as HTMLTextAreaElement).value)
       .toBe('Svelte, actually')
   })
+
+  // A radio `name` is a document-wide group. Two cards are routinely mounted at
+  // once — two agents with a question in the triage band, or a band card plus
+  // the terminal overlay — and a shared name makes the browser uncheck the
+  // other card's radio. Vue does not repair that (its bound `:checked` value is
+  // unchanged, so it patches nothing), leaving the selection visually gone
+  // while the component still holds it.
+  it('does not share a radio group with a second card in the same document', async () => {
+    const hostA = document.createElement('div')
+    const hostB = document.createElement('div')
+    document.body.append(hostA, hostB)
+
+    const cardA = mount(QuestionCard, { props: { detectedQuestion: singleQuestion }, attachTo: hostA })
+    const cardB = mount(QuestionCard, {
+      props: { detectedQuestion: { ...singleQuestion, header: 'Second card', question: 'Another question?' } },
+      attachTo: hostB,
+    })
+
+    const radioA = cardA.findAll('input[type="radio"]')[0].element as HTMLInputElement
+    const radioB = cardB.findAll('input[type="radio"]')[0].element as HTMLInputElement
+    expect(radioA.name).not.toBe(radioB.name)
+
+    radioA.click()
+    await cardA.vm.$nextTick()
+    expect(radioA.checked).toBe(true)
+
+    radioB.click()
+    await cardB.vm.$nextTick()
+    expect(radioA.checked).toBe(true)
+
+    cardA.unmount()
+    cardB.unmount()
+    hostA.remove()
+    hostB.remove()
+  })
 })

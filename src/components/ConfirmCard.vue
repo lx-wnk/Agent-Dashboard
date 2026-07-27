@@ -3,6 +3,7 @@ import type { AnswerIntent } from '../utils/answerKeys'
 import type { DetectedConfirm } from '../utils/askQuestionScreen'
 import { ref, watch } from 'vue'
 import { screenSignature } from '../utils/askQuestionScreen'
+import { nextRadioGroupName } from '../utils/radioGroup'
 import AppButton from './ui/AppButton.vue'
 
 const props = defineProps<{
@@ -12,6 +13,9 @@ const props = defineProps<{
 const emit = defineEmits<{
   answer: [intent: AnswerIntent]
 }>()
+
+// Per-instance radio group name — see nextRadioGroupName.
+const optionGroupName = nextRadioGroupName('detected-confirm-option')
 
 // The TUI puts the cursor on the first option (Submit), so pre-selecting it
 // mirrors what the terminal already shows and makes the common case one click.
@@ -61,7 +65,7 @@ function handleSubmit() {
         >
           <input
             type="radio"
-            name="detected-confirm-option"
+            :name="optionGroupName"
             :checked="selectedIndex === option.index"
             class="mt-0.5 accent-accent shrink-0"
             @change="selectedIndex = option.index"
