@@ -300,4 +300,3 @@ describe('border bleed', () => {
     expect(q.options[0].label).toBe('--dry-run')
   })
 })
-

@@ -41,6 +41,20 @@ watch(
   },
 )
 
+// Radios bind the option through v-model rather than :checked + @change, so
+// the selected value is declared once instead of being recomputed in a handler.
+// Note this is NOT a safety net: vModelRadio.beforeUpdate also writes el.checked
+// only when the bound value changes, so a DOM state cleared behind Vue's back
+// stays cleared. What prevents that is optionGroupName — nothing outside this
+// card shares its radio group anymore.
+const singleSelected = computed<number | null>({
+  get: () => detectedSelectedIndices.value[0] ?? null,
+  set: (index) => {
+    if (index !== null)
+      toggleDetectedOption(index)
+  },
+})
+
 const detectedAnswered = computed(() =>
   detectedSelectedIndices.value.length > 0 || detectedCustomText.value.trim().length > 0,
 )
@@ -124,11 +138,11 @@ function handleDetectedChatSubmit() {
           >
           <input
             v-else
+            v-model="singleSelected"
             type="radio"
             :name="optionGroupName"
-            :checked="detectedSelectedIndices.includes(option.index)"
+            :value="option.index"
             class="mt-0.5 accent-accent shrink-0"
-            @change="toggleDetectedOption(option.index)"
           >
           <span class="flex flex-col">
             <span class="text-[12px] font-medium text-fg leading-snug">{{ option.label }}</span>

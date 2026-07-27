@@ -172,4 +172,17 @@ describe('questionCard', () => {
     hostA.remove()
     hostB.remove()
   })
+
+  it('keeps Send disabled while nothing is selected or typed', async () => {
+    const wrapper = mount(QuestionCard, { props: { detectedQuestion: singleQuestion } })
+    const sendBtn = () => wrapper.find('[data-testid="detected-send-btn"]')
+    expect(sendBtn().attributes('disabled')).toBeDefined()
+
+    await wrapper.find('[data-testid="detected-custom-toggle"]').trigger('click')
+    await wrapper.find('[data-testid="detected-custom-textarea"]').setValue('   ')
+    expect(sendBtn().attributes('disabled')).toBeDefined()
+
+    await wrapper.find('[data-testid="detected-custom-textarea"]').setValue('Svelte')
+    expect(sendBtn().attributes('disabled')).toBeUndefined()
+  })
 })

@@ -63,12 +63,13 @@ function handleSubmit() {
           :key="option.index"
           class="flex items-start gap-2 cursor-pointer"
         >
+          <!-- v-model, not :checked — see the note in QuestionCard.vue. -->
           <input
+            v-model="selectedIndex"
             type="radio"
             :name="optionGroupName"
-            :checked="selectedIndex === option.index"
+            :value="option.index"
             class="mt-0.5 accent-accent shrink-0"
-            @change="selectedIndex = option.index"
           >
           <span class="text-[12px] font-medium text-fg leading-snug">{{ option.label }}</span>
         </label>
