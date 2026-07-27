@@ -1,0 +1,14 @@
+ ⊠ Ausführung  ⊠ Push + PR  ⊠ Skill-Review  ✓ Submit  →
+Review your answers
+
+● Wie soll der Plan ausgeführt werden?
+  → Subagent pro Task (Empfohlen)
+● Die drei Commits auf `users/aw/NTR-hakuna-calibration` — pushen und PR aufmachen?
+  → Erst nach der Umsetzung
+● `diw-skill-reviewer` über die geänderten Skills laufen lassen? (Handoff-Schritt 8)
+  → Nach der Umsetzung
+
+Ready to submit your answers?
+
+❯ 1. Submit answers
+  2. Cancel

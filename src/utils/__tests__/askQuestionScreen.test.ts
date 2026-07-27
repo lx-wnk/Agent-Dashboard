@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { detectQuestion } from '../askQuestionScreen'
+import { detectConfirmScreen, detectQuestion, screenSignature } from '../askQuestionScreen'
+import confirmScreen from './fixtures/askq-confirm.txt?raw'
 import multi from './fixtures/askq-multi.txt?raw'
 import nonModal from './fixtures/askq-nonmodal.txt?raw'
 import single from './fixtures/askq-single.txt?raw'
@@ -202,5 +203,73 @@ describe('detectQuestion', () => {
     const q = detectQuestion(raw)!
     expect(q).not.toBeNull()
     expect(q.multiSelect).toBe(false)
+  })
+})
+
+describe('detectConfirmScreen', () => {
+  it('detects the review/submit screen from a real render', () => {
+    const c = detectConfirmScreen(confirmScreen.split('\n'))!
+    expect(c).not.toBeNull()
+    expect(c.question).toBe('Ready to submit your answers?')
+    expect(c.options).toEqual([
+      { index: 1, label: 'Submit answers' },
+      { index: 2, label: 'Cancel' },
+    ])
+  })
+
+  // The confirm screen is exactly what detectQuestion is built to reject (no
+  // meta-rows); asserting it here pins WHY the second detector has to exist.
+  it('is rejected by detectQuestion', () => {
+    expect(detectQuestion(confirmScreen.split('\n'))).toBeNull()
+  })
+
+  it('tolerates copy drift in the submit label', () => {
+    const c = detectConfirmScreen(['Ready to submit your answers?', '❯ 1. Submit', '  2. Cancel'])
+    expect(c).not.toBeNull()
+  })
+
+  it('rejects a real question modal', () => {
+    expect(detectConfirmScreen(single.split('\n'))).toBeNull()
+  })
+
+  it('rejects an ordinary two-item numbered list', () => {
+    expect(detectConfirmScreen(['Files changed:', '1. server/main.go', '2. README.md'])).toBeNull()
+  })
+
+  it('rejects a submit/cancel pair with no preamble', () => {
+    expect(detectConfirmScreen(['❯ 1. Submit answers', '  2. Cancel'])).toBeNull()
+  })
+
+  it('rejects a two-option modal that still carries meta-rows', () => {
+    expect(detectConfirmScreen([
+      'Submit?',
+      '1. Submit answers',
+      '2. Cancel',
+      '3. Type something',
+      '4. Chat about this',
+    ])).toBeNull()
+  })
+})
+
+describe('screenSignature', () => {
+  it('is stable across re-parsing the same screen', () => {
+    const a = detectQuestion(single.split('\n'))
+    const b = detectQuestion(single.split('\n'))
+    expect(a).not.toBe(b)
+    expect(screenSignature(a)).toBe(screenSignature(b))
+  })
+
+  it('differs between two different screens', () => {
+    const singleSig = screenSignature(detectQuestion(single.split('\n')))
+    expect(singleSig).not.toBe(screenSignature(detectQuestion(multi.split('\n'))))
+  })
+
+  it('never collides a question with a confirm screen', () => {
+    const confirmSig = screenSignature(detectConfirmScreen(confirmScreen.split('\n')))
+    expect(confirmSig).not.toBe(screenSignature(detectQuestion(single.split('\n'))))
+  })
+
+  it('maps null to null', () => {
+    expect(screenSignature(null)).toBeNull()
   })
 })

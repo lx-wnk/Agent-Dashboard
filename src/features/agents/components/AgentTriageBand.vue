@@ -3,6 +3,7 @@ import type { PermissionItem } from '@/composables/usePendingPermissions'
 import type { Agent, PendingPermission, PermissionRequest } from '@/types'
 import type { AnswerIntent } from '@/utils/answerKeys'
 import { computed, nextTick, ref, watch } from 'vue'
+import ConfirmCard from '@/components/ConfirmCard.vue'
 import QuestionCard from '@/components/QuestionCard.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import { useNow } from '@/composables/useNow'
@@ -502,6 +503,16 @@ watch(() => props.focusedSessionId, (id) => {
             </div>
           </template>
 
+          <!-- Review/submit screen closing out a multi-question flow -->
+          <template v-else-if="agent.pendingConfirm">
+            <div :class="answeringQuestion[agent.sessionId] ? 'opacity-60 pointer-events-none' : ''">
+              <ConfirmCard
+                :detected-confirm="agent.pendingConfirm"
+                @answer="(intent) => answerQuestion(agent, intent)"
+              />
+            </div>
+          </template>
+
           <!-- Orchestrated agent with pending permissions (not covered by task items) -->
           <template v-else-if="agent.pipelineTaskId && agent.pendingPermissions?.length">
             <ul class="m-0 p-0 list-none flex flex-col gap-1" :aria-label="`Pending permissions for ${agent.projectName}`">
@@ -525,7 +536,7 @@ watch(() => props.focusedSessionId, (id) => {
           <div class="flex items-center gap-2 flex-wrap">
             <span class="text-[11px] text-fg-faint">{{ formatRelativeActivity(secondsSince(agent.lastActivity, nowMs)) }}</span>
 
-            <template v-if="!agent.pendingQuestion && agent.pipelineTaskId && agent.pendingPermissions?.length">
+            <template v-if="!agent.pendingQuestion && !agent.pendingConfirm && agent.pipelineTaskId && agent.pendingPermissions?.length">
               <AppButton
                 variant="success"
                 size="sm"

@@ -183,4 +183,34 @@ describe('questionOverlay', () => {
 
     expect(encodedCalls(sendMock)).toEqual(['5', 'Actually, let me explain', '\r'])
   })
+
+  it('renders the confirm screen and sends its digit', async () => {
+    const sendMock = vi.fn()
+    const wrapper = mount(QuestionOverlay, {
+      props: {
+        question: null,
+        confirm: {
+          question: 'Ready to submit your answers?',
+          options: [
+            { index: 1, label: 'Submit answers' },
+            { index: 2, label: 'Cancel' },
+          ],
+        },
+        send: sendMock,
+      },
+    })
+
+    expect(wrapper.find('[data-testid="question-overlay"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('Ready to submit your answers?')
+
+    await wrapper.find('[data-testid="detected-confirm-send-btn"]').trigger('click')
+    expect(encodedCalls(sendMock)).toEqual(['1'])
+  })
+
+  it('stays hidden when neither a question nor a confirm screen is open', () => {
+    const wrapper = mount(QuestionOverlay, {
+      props: { question: null, confirm: null, send: vi.fn() },
+    })
+    expect(wrapper.find('[data-testid="question-overlay"]').exists()).toBe(false)
+  })
 })

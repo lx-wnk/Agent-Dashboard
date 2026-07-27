@@ -16,6 +16,10 @@ export function attentionFor(agent: Agent, secondsSinceActivity: number | null):
   // A real, answerable AskUserQuestion outranks a generic permission prompt.
   if (agent.pendingQuestion)
     return { kind: 'question', label: 'Question', tone: 'warning', weight: -1 }
+  // The review/submit screen is equally answerable and equally blocking: the
+  // session sits there until someone presses a key.
+  if (agent.pendingConfirm)
+    return { kind: 'question', label: 'Confirm answers', tone: 'warning', weight: -1 }
   if (agent.pendingPermissions && agent.pendingPermissions.length > 0)
     return { kind: 'permission', label: 'Needs permission', tone: 'warning', weight: 0 }
   if (agent.pendingToolUse)

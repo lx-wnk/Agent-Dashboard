@@ -31,9 +31,9 @@ func TestGetAgents_PendingQuestion_InjectableAgentUsesProbe(t *testing.T) {
 
 	m := merger.New(
 		merger.WithScanFn(fs.ScanFn()),
-		merger.WithQuestionProbe(func(pid int) *sdk.DetectedQuestion {
+		merger.WithScreenProbe(func(pid int) *sdk.PendingScreen {
 			if pid == ag.PID {
-				return want
+				return &sdk.PendingScreen{Question: want}
 			}
 			return nil
 		}),
@@ -44,6 +44,39 @@ func TestGetAgents_PendingQuestion_InjectableAgentUsesProbe(t *testing.T) {
 	require.Len(t, agents, 1)
 	require.True(t, agents[0].LiveInjectable, "fixture must be injectable")
 	assert.Equal(t, want, agents[0].PendingQuestion)
+	assert.Nil(t, agents[0].PendingConfirm)
+}
+
+// TestGetAgents_PendingConfirm_InjectableAgentUsesProbe verifies the
+// review/submit screen reaches the agent payload on its own field, so the
+// dashboard can finish a multi-question flow the same way it answers one.
+func TestGetAgents_PendingConfirm_InjectableAgentUsesProbe(t *testing.T) {
+	fs := fakespawn.New(t)
+	ag := fs.Spawn(fakespawn.SpawnOpts{LiveInjectable: true})
+
+	want := &sdk.DetectedConfirm{
+		Question: "Ready to submit your answers?",
+		Options: []sdk.DetectedOption{
+			{Index: 1, Label: "Submit answers"},
+			{Index: 2, Label: "Cancel"},
+		},
+	}
+
+	m := merger.New(
+		merger.WithScanFn(fs.ScanFn()),
+		merger.WithScreenProbe(func(pid int) *sdk.PendingScreen {
+			if pid == ag.PID {
+				return &sdk.PendingScreen{Confirm: want}
+			}
+			return nil
+		}),
+	)
+
+	agents, err := m.GetAgents(context.Background(), merger.GetAgentsOpts{})
+	require.NoError(t, err)
+	require.Len(t, agents, 1)
+	assert.Equal(t, want, agents[0].PendingConfirm)
+	assert.Nil(t, agents[0].PendingQuestion)
 }
 
 // TestGetAgents_PendingQuestion_NilProbeLeavesFieldNil verifies that with no
@@ -59,6 +92,7 @@ func TestGetAgents_PendingQuestion_NilProbeLeavesFieldNil(t *testing.T) {
 	require.Len(t, agents, 1)
 	require.True(t, agents[0].LiveInjectable)
 	assert.Nil(t, agents[0].PendingQuestion)
+	assert.Nil(t, agents[0].PendingConfirm)
 }
 
 // TestGetAgents_PendingQuestion_NonInjectableAgentProbeNotCalled verifies the
@@ -72,9 +106,9 @@ func TestGetAgents_PendingQuestion_NonInjectableAgentProbeNotCalled(t *testing.T
 	called := false
 	m := merger.New(
 		merger.WithScanFn(fs.ScanFn()),
-		merger.WithQuestionProbe(func(pid int) *sdk.DetectedQuestion {
+		merger.WithScreenProbe(func(_ int) *sdk.PendingScreen {
 			called = true
-			return &sdk.DetectedQuestion{Header: "should not be called"}
+			return &sdk.PendingScreen{Question: &sdk.DetectedQuestion{Header: "should not be called"}}
 		}),
 	)
 

@@ -29,6 +29,8 @@ type (
 const (
 	typeSomethingLabel = "type something"
 	chatAboutLabel     = "chat about this"
+	submitLabel        = "submit"
+	cancelLabel        = "cancel"
 )
 
 var (
@@ -48,9 +50,12 @@ var (
 // "Type something." with a trailing period, v2.1.197 rendered "type something").
 // Match on a normalized prefix - lower-cased, trailing punctuation stripped - so
 // a cosmetic copy tweak does not silently disable question detection.
+func normalizeLabel(label string) string {
+	return trailingPunctRe.ReplaceAllString(strings.ToLower(label), "")
+}
+
 func metaLabelMatches(label, meta string) bool {
-	normalized := trailingPunctRe.ReplaceAllString(strings.ToLower(label), "")
-	return strings.HasPrefix(normalized, meta)
+	return strings.HasPrefix(normalizeLabel(label), meta)
 }
 
 func toContentLine(rawRow string) (string, bool) {
@@ -108,6 +113,46 @@ func parseNumberedRow(text string) parsedRow {
 	return parsedRow{text: text, hasNum: true, num: num, label: label, hasCheckbox: hasCheckbox}
 }
 
+// parseRows reduces raw terminal rows to the content lines that carry meaning
+// (borders and blank rows dropped), each already parsed for a leading "N." row
+// number, label and checkbox.
+func parseRows(rows []string) []parsedRow {
+	contentLines := make([]parsedRow, 0, len(rows))
+	for _, raw := range rows {
+		line, ok := toContentLine(raw)
+		if !ok {
+			continue
+		}
+		contentLines = append(contentLines, parseNumberedRow(line))
+	}
+	return contentLines
+}
+
+func numberedEntries(contentLines []parsedRow) []numberedEntry {
+	numbered := make([]numberedEntry, 0, len(contentLines))
+	for idx, row := range contentLines {
+		if row.hasNum {
+			numbered = append(numbered, numberedEntry{row: row, idx: idx})
+		}
+	}
+	return numbered
+}
+
+// questionFromPreamble picks the prompt line: the LAST preamble line ending in
+// "?" (scanning backwards, so a recap of earlier questions above the real
+// prompt does not win), falling back to the last preamble line.
+func questionFromPreamble(preamble []string) string {
+	for i := len(preamble) - 1; i >= 0; i-- {
+		if strings.HasSuffix(preamble[i], "?") {
+			return preamble[i]
+		}
+	}
+	if len(preamble) > 0 {
+		return preamble[len(preamble)-1]
+	}
+	return ""
+}
+
 // decideMultiSelect: PRIMARY signal is a checkbox on EVERY option row. Only
 // when there is zero checkbox evidence do we fall back to the true footer
 // (lines after the last numbered row) for a "toggle"/"space to" hint. Header,
@@ -154,21 +199,8 @@ func decideMultiSelect(optionEntries []numberedEntry, contentLines []parsedRow) 
 // index-continuous - is what separates a real modal from an ordinary
 // numbered list in terminal output.
 func DetectQuestion(rows []string) *sdk.DetectedQuestion {
-	contentLines := make([]parsedRow, 0, len(rows))
-	for _, raw := range rows {
-		line, ok := toContentLine(raw)
-		if !ok {
-			continue
-		}
-		contentLines = append(contentLines, parseNumberedRow(line))
-	}
-
-	numbered := make([]numberedEntry, 0, len(contentLines))
-	for idx, row := range contentLines {
-		if row.hasNum {
-			numbered = append(numbered, numberedEntry{row: row, idx: idx})
-		}
-	}
+	contentLines := parseRows(rows)
+	numbered := numberedEntries(contentLines)
 
 	typeRowIdx, chatRowIdx := -1, -1
 	for i, e := range numbered {
@@ -233,15 +265,9 @@ func DetectQuestion(rows []string) *sdk.DetectedQuestion {
 		header = preamble[0]
 	}
 
-	question := header
-	if len(preamble) > 0 {
-		question = preamble[len(preamble)-1]
-	}
-	for i := len(preamble) - 1; i >= 0; i-- {
-		if strings.HasSuffix(preamble[i], "?") {
-			question = preamble[i]
-			break
-		}
+	question := questionFromPreamble(preamble)
+	if question == "" {
+		question = header
 	}
 
 	return &sdk.DetectedQuestion{
@@ -252,4 +278,75 @@ func DetectQuestion(rows []string) *sdk.DetectedQuestion {
 		TypeSomethingIndex: typeSomethingIndex,
 		ChatAboutIndex:     chatAboutIndex,
 	}
+}
+
+// DetectConfirmScreen detects the AskUserQuestion review/submit screen - the
+// screen a multi-question flow lands on once every question is answered:
+//
+//	Review your answers
+//	  ... recap of the given answers ...
+//	Ready to submit your answers?
+//	❯ 1. Submit answers
+//	  2. Cancel
+//
+// It has NO meta-rows, so DetectQuestion rejects it by design; without this
+// second detector the dashboard goes blind exactly when the flow needs one last
+// keypress, and a multi-question round can never be completed from the UI.
+//
+// Gate: exactly two numbered rows, numbered 1 and 2, labelled Submit/Cancel,
+// with no meta-row anywhere on screen. The Submit/Cancel label pair is the
+// signal - deliberately NOT the surrounding copy ("Review your answers",
+// "Ready to submit your answers?"), which drifts between Claude Code releases
+// and would silently disable detection again the next time it is reworded.
+func DetectConfirmScreen(rows []string) *sdk.DetectedConfirm {
+	contentLines := parseRows(rows)
+	numbered := numberedEntries(contentLines)
+
+	if len(numbered) != 2 {
+		return nil
+	}
+	for _, e := range numbered {
+		if metaLabelMatches(e.row.label, typeSomethingLabel) || metaLabelMatches(e.row.label, chatAboutLabel) {
+			return nil
+		}
+	}
+
+	submit, cancel := numbered[0], numbered[1]
+	if submit.row.num != 1 || cancel.row.num != 2 {
+		return nil
+	}
+	if !strings.HasPrefix(normalizeLabel(submit.row.label), submitLabel) ||
+		normalizeLabel(cancel.row.label) != cancelLabel {
+		return nil
+	}
+
+	preamble := make([]string, 0, submit.idx)
+	for _, l := range contentLines[:submit.idx] {
+		preamble = append(preamble, l.text)
+	}
+	if len(preamble) == 0 {
+		return nil
+	}
+
+	return &sdk.DetectedConfirm{
+		Question: questionFromPreamble(preamble),
+		Options: []sdk.DetectedOption{
+			{Index: submit.row.num, Label: submit.row.label},
+			{Index: cancel.row.num, Label: cancel.row.label},
+		},
+	}
+}
+
+// DetectScreen runs both detectors over one set of rows and returns whichever
+// AskUserQuestion screen is open, or nil when neither is. Callers on the scan
+// hot path should use this rather than calling the detectors separately, so a
+// single capture serves both.
+func DetectScreen(rows []string) *sdk.PendingScreen {
+	if q := DetectQuestion(rows); q != nil {
+		return &sdk.PendingScreen{Question: q}
+	}
+	if c := DetectConfirmScreen(rows); c != nil {
+		return &sdk.PendingScreen{Confirm: c}
+	}
+	return nil
 }

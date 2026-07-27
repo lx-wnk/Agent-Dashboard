@@ -317,3 +317,111 @@ func TestDetectQuestionInline(t *testing.T) {
 		}
 	})
 }
+
+func TestDetectConfirmScreen(t *testing.T) {
+	t.Run("detects the review/submit screen from a real render", func(t *testing.T) {
+		c := DetectConfirmScreen(loadFixture(t, "askq-confirm.txt"))
+		if c == nil {
+			t.Fatal("expected non-nil DetectedConfirm")
+		}
+		if c.Question != "Ready to submit your answers?" {
+			t.Errorf("Question = %q, want the prompt line, not an answer recap line", c.Question)
+		}
+		if len(c.Options) != 2 {
+			t.Fatalf("len(Options) = %d, want 2", len(c.Options))
+		}
+		if c.Options[0].Index != 1 || c.Options[0].Label != "Submit answers" {
+			t.Errorf("Options[0] = %+v, want {1 Submit answers}", c.Options[0])
+		}
+		if c.Options[1].Index != 2 || c.Options[1].Label != "Cancel" {
+			t.Errorf("Options[1] = %+v, want {2 Cancel}", c.Options[1])
+		}
+	})
+
+	// The confirm screen is what DetectQuestion is designed to reject (no
+	// meta-rows); asserting it here pins WHY the second detector has to exist.
+	t.Run("is rejected by DetectQuestion", func(t *testing.T) {
+		if q := DetectQuestion(loadFixture(t, "askq-confirm.txt")); q != nil {
+			t.Fatalf("DetectQuestion matched the confirm screen: %+v", q)
+		}
+	})
+
+	t.Run("tolerates copy drift in the submit label", func(t *testing.T) {
+		raw := []string{
+			"Ready to submit your answers?",
+			"❯ 1. Submit",
+			"  2. Cancel",
+		}
+		if c := DetectConfirmScreen(raw); c == nil {
+			t.Fatal("expected non-nil DetectedConfirm for a bare \"Submit\" label")
+		}
+	})
+
+	t.Run("rejects a real question modal", func(t *testing.T) {
+		if c := DetectConfirmScreen(loadFixture(t, "askq-single.txt")); c != nil {
+			t.Fatalf("matched a question modal: %+v", c)
+		}
+	})
+
+	t.Run("rejects an ordinary two-item numbered list", func(t *testing.T) {
+		raw := []string{
+			"Files changed:",
+			"1. server/main.go",
+			"2. README.md",
+		}
+		if c := DetectConfirmScreen(raw); c != nil {
+			t.Fatalf("matched ordinary output: %+v", c)
+		}
+	})
+
+	t.Run("rejects a submit/cancel pair with no preamble", func(t *testing.T) {
+		raw := []string{
+			"❯ 1. Submit answers",
+			"  2. Cancel",
+		}
+		if c := DetectConfirmScreen(raw); c != nil {
+			t.Fatalf("matched a bare option pair: %+v", c)
+		}
+	})
+
+	t.Run("rejects a two-option modal that still carries meta-rows", func(t *testing.T) {
+		raw := []string{
+			"Submit?",
+			"1. Submit answers",
+			"2. Cancel",
+			"3. Type something",
+			"4. Chat about this",
+		}
+		if c := DetectConfirmScreen(raw); c != nil {
+			t.Fatalf("matched a question modal: %+v", c)
+		}
+	})
+}
+
+func TestDetectScreen(t *testing.T) {
+	t.Run("reports a question modal", func(t *testing.T) {
+		s := DetectScreen(loadFixture(t, "askq-single.txt"))
+		if s == nil || s.Question == nil {
+			t.Fatalf("expected a question screen, got %+v", s)
+		}
+		if s.Confirm != nil {
+			t.Error("expected Confirm to stay nil")
+		}
+	})
+
+	t.Run("reports the confirm screen", func(t *testing.T) {
+		s := DetectScreen(loadFixture(t, "askq-confirm.txt"))
+		if s == nil || s.Confirm == nil {
+			t.Fatalf("expected a confirm screen, got %+v", s)
+		}
+		if s.Question != nil {
+			t.Error("expected Question to stay nil")
+		}
+	})
+
+	t.Run("reports nil for ordinary output", func(t *testing.T) {
+		if s := DetectScreen(loadFixture(t, "askq-nonmodal.txt")); s != nil {
+			t.Fatalf("matched ordinary output: %+v", s)
+		}
+	})
+}

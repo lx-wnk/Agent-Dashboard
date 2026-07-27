@@ -269,6 +269,28 @@ type DetectedQuestion struct {
 	ChatAboutIndex     int              `json:"chatAboutIndex"`
 }
 
+// DetectedConfirm is the AskUserQuestion review/submit screen, detected from a
+// live terminal's rendered rows by askq.DetectConfirmScreen.
+//
+// It is the screen a multi-question AskUserQuestion flow lands on after the
+// last question has been answered ("Ready to submit your answers?" plus a
+// Submit/Cancel choice). It carries no meta-rows, so it is not a
+// DetectedQuestion: there is nothing to type and nothing to chat about, only
+// two numbered options to pick from.
+type DetectedConfirm struct {
+	Question string           `json:"question"`
+	Options  []DetectedOption `json:"options"`
+}
+
+// PendingScreen is whichever interactive AskUserQuestion screen is currently
+// open on a session's terminal. At most one field is non-nil; both are nil when
+// no such screen is open. Probing for both in one round-trip keeps the scan hot
+// path to a single capture per tick.
+type PendingScreen struct {
+	Question *DetectedQuestion `json:"question,omitempty"`
+	Confirm  *DetectedConfirm  `json:"confirm,omitempty"`
+}
+
 // Agent is the unified view of a running Claude Code process.
 type Agent struct {
 	PID         int      `json:"pid"`
@@ -315,7 +337,12 @@ type Agent struct {
 	// session's live terminal (render-sourced, via the pty broker's /question
 	// endpoint or a tmux capture-pane snapshot), or nil when no modal is open.
 	// Only ever set on injectable sessions.
-	PendingQuestion     *DetectedQuestion   `json:"pendingQuestion,omitempty"`
+	PendingQuestion *DetectedQuestion `json:"pendingQuestion,omitempty"`
+	// PendingConfirm is the AskUserQuestion review/submit screen currently
+	// detected on this session's live terminal, or nil. Mutually exclusive with
+	// PendingQuestion: the TUI shows one or the other, never both. Only ever set
+	// on injectable sessions.
+	PendingConfirm      *DetectedConfirm    `json:"pendingConfirm,omitempty"`
 	LastOutput          *string             `json:"lastOutput"`
 	ConvergenceAlert    bool                `json:"convergenceAlert"`
 	ConvergenceToolName *string             `json:"convergenceToolName"`

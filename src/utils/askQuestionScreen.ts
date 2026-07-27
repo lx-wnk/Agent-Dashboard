@@ -22,8 +22,21 @@ export interface DetectedQuestion {
   chatAboutIndex: number
 }
 
+/**
+ * The AskUserQuestion review/submit screen — the screen a multi-question flow
+ * lands on once every question is answered. It carries no meta-rows, so it is
+ * not a `DetectedQuestion`: there is nothing to type and nothing to chat about,
+ * only two numbered options to pick from.
+ */
+export interface DetectedConfirm {
+  question: string
+  options: DetectedOption[]
+}
+
 const TYPE_SOMETHING_LABEL = 'type something'
 const CHAT_ABOUT_LABEL = 'chat about this'
+const SUBMIT_LABEL = 'submit'
+const CANCEL_LABEL = 'cancel'
 
 const TRAILING_PUNCT_RE = /[\s.]+$/
 
@@ -31,8 +44,12 @@ const TRAILING_PUNCT_RE = /[\s.]+$/
 // "Type something." with a trailing period, v2.1.197 rendered "type something").
 // Match on a normalized prefix — lower-cased, trailing punctuation stripped — so
 // a cosmetic copy tweak does not silently disable question detection.
+function normalizeLabel(label: string): string {
+  return label.toLowerCase().replace(TRAILING_PUNCT_RE, '')
+}
+
 function metaLabelMatches(label: string, meta: string): boolean {
-  return label.toLowerCase().replace(TRAILING_PUNCT_RE, '').startsWith(meta)
+  return normalizeLabel(label).startsWith(meta)
 }
 
 // The box-drawing block (U+2500-U+257F) covers rounded corners, straight edges, and dashes.
@@ -88,6 +105,33 @@ function parseNumberedRow(text: string): ParsedRow {
 }
 
 /**
+ * Reduces raw terminal rows to the content lines that carry meaning (borders
+ * and blank rows dropped), each already parsed for a leading `N.` row number,
+ * label and checkbox.
+ */
+function parseRows(rows: string[]): ParsedRow[] {
+  return rows
+    .map(toContentLine)
+    .filter((line): line is string => line !== null)
+    .map(parseNumberedRow)
+}
+
+function numberedEntries(contentLines: ParsedRow[]): NumberedEntry[] {
+  return contentLines
+    .map((row, idx) => ({ row, idx }))
+    .filter((e): e is NumberedEntry => e.row.num !== undefined && e.row.label !== undefined)
+}
+
+/**
+ * Picks the prompt line: the LAST preamble line ending in `?` (scanning
+ * backwards, so a recap of earlier questions above the real prompt does not
+ * win), falling back to the last preamble line.
+ */
+function questionFromPreamble(preamble: string[]): string {
+  return [...preamble].reverse().find(l => l.endsWith('?')) ?? preamble[preamble.length - 1] ?? ''
+}
+
+/**
  * PRIMARY signal: a real multi-select renders a checkbox on EVERY option row.
  * Only when there is zero checkbox evidence do we fall back to the true footer
  * (lines after the last numbered row) for a "toggle"/"space to" hint. Header,
@@ -115,14 +159,8 @@ function decideMultiSelect(optionEntries: NumberedEntry[], contentLines: ParsedR
  * list in terminal output.
  */
 export function detectQuestion(rows: string[]): DetectedQuestion | null {
-  const contentLines = rows
-    .map(toContentLine)
-    .filter((line): line is string => line !== null)
-    .map(parseNumberedRow)
-
-  const numbered: NumberedEntry[] = contentLines
-    .map((row, idx) => ({ row, idx }))
-    .filter((e): e is NumberedEntry => e.row.num !== undefined && e.row.label !== undefined)
+  const contentLines = parseRows(rows)
+  const numbered = numberedEntries(contentLines)
 
   // The detector keys off the meta-row copy, which drifts between Claude Code
   // releases; metaLabelMatches normalizes for trailing punctuation and suffixes
@@ -159,7 +197,7 @@ export function detectQuestion(rows: string[]): DetectedQuestion | null {
 
   const preamble = contentLines.slice(0, optionEntries[0].idx).map(l => l.text)
   const header = preamble[0] ?? ''
-  const question = [...preamble].reverse().find(l => l.endsWith('?')) ?? preamble[preamble.length - 1] ?? header
+  const question = questionFromPreamble(preamble) || header
 
   return {
     header,
@@ -169,4 +207,73 @@ export function detectQuestion(rows: string[]): DetectedQuestion | null {
     typeSomethingIndex,
     chatAboutIndex,
   }
+}
+
+/**
+ * Detects the AskUserQuestion review/submit screen:
+ *
+ * ```
+ * Review your answers
+ *   ... recap of the given answers ...
+ * Ready to submit your answers?
+ * ❯ 1. Submit answers
+ *   2. Cancel
+ * ```
+ *
+ * It has NO meta-rows, so `detectQuestion` rejects it by design; without this
+ * second detector the dashboard goes blind exactly when the flow needs one last
+ * keypress, and a multi-question round can never be completed from the UI.
+ *
+ * Gate: exactly two numbered rows, numbered 1 and 2, labelled Submit/Cancel,
+ * with no meta-row anywhere on screen. The Submit/Cancel label pair is the
+ * signal — deliberately NOT the surrounding copy ("Review your answers",
+ * "Ready to submit your answers?"), which drifts between Claude Code releases
+ * and would silently disable detection again the next time it is reworded.
+ */
+export function detectConfirmScreen(rows: string[]): DetectedConfirm | null {
+  const contentLines = parseRows(rows)
+  const numbered = numberedEntries(contentLines)
+
+  if (numbered.length !== 2)
+    return null
+  if (numbered.some(e => metaLabelMatches(e.row.label, TYPE_SOMETHING_LABEL) || metaLabelMatches(e.row.label, CHAT_ABOUT_LABEL)))
+    return null
+
+  const [submit, cancel] = numbered
+  if (submit.row.num !== 1 || cancel.row.num !== 2)
+    return null
+  if (!normalizeLabel(submit.row.label).startsWith(SUBMIT_LABEL) || normalizeLabel(cancel.row.label) !== CANCEL_LABEL)
+    return null
+
+  const preamble = contentLines.slice(0, submit.idx).map(l => l.text)
+  if (preamble.length === 0)
+    return null
+
+  return {
+    question: questionFromPreamble(preamble),
+    options: [
+      { index: submit.row.num, label: submit.row.label },
+      { index: cancel.row.num, label: cancel.row.label },
+    ],
+  }
+}
+
+/**
+ * Identity of a detected screen by CONTENT, not object reference.
+ *
+ * Both detectors are stateless w.r.t. user input, so their output changes only
+ * when the SCREEN changes — but every SSE frame and every poll tick hands the
+ * UI a freshly deserialized object. Components key their local answer state
+ * (selections, typed text) off this signature so an unchanged screen never
+ * discards what the user has entered.
+ */
+export function screenSignature(screen: DetectedQuestion | DetectedConfirm | null): string | null {
+  if (screen === null)
+    return null
+  return JSON.stringify([
+    'header' in screen ? screen.header : '',
+    screen.question,
+    'multiSelect' in screen ? screen.multiSelect : null,
+    screen.options.map(o => [o.index, o.label]),
+  ])
 }

@@ -2,6 +2,7 @@
 import type { AnswerIntent } from '../utils/answerKeys'
 import type { DetectedQuestion } from '../utils/askQuestionScreen'
 import { computed, ref, watch } from 'vue'
+import { screenSignature } from '../utils/askQuestionScreen'
 import AppButton from './ui/AppButton.vue'
 
 const props = defineProps<{
@@ -18,8 +19,13 @@ const detectedCustomOpen = ref(false)
 const detectedChatOpen = ref(false)
 const detectedChatText = ref('')
 
+// Reset on a CONTENT change, never on a mere reference change. The card is fed
+// straight from the SSE agent payload, which is re-deserialized on every scan
+// tick (~3 s) because volatile fields like uptime keep changing — watching the
+// prop object itself would therefore wipe the user's selection every few
+// seconds, mid-answer.
 watch(
-  () => props.detectedQuestion,
+  () => screenSignature(props.detectedQuestion),
   () => {
     detectedSelectedIndices.value = []
     detectedCustomText.value = ''

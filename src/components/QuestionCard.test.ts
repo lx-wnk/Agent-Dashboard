@@ -107,4 +107,32 @@ describe('questionCard', () => {
     await wrapper.setProps({ detectedQuestion: multiQuestion })
     expect(wrapper.find('[data-testid="detected-send-btn"]').attributes('disabled')).toBeDefined()
   })
+
+  // The card is fed from the SSE agent payload, which is re-deserialized on
+  // every scan tick — a fresh object with identical content must NOT count as a
+  // new question, or the user's selection is wiped every few seconds mid-answer.
+  it('keeps local selection state when the same question arrives as a new object', async () => {
+    const wrapper = mount(QuestionCard, {
+      props: { detectedQuestion: singleQuestion },
+    })
+    await wrapper.findAll('input[type="radio"]')[0].trigger('change')
+
+    await wrapper.setProps({ detectedQuestion: structuredClone(singleQuestion) })
+    expect(wrapper.find('[data-testid="detected-send-btn"]').attributes('disabled')).toBeUndefined()
+
+    await wrapper.find('[data-testid="detected-send-btn"]').trigger('click')
+    expect(wrapper.emitted('answer')).toEqual([[{ mode: 'single', index: 0 }]])
+  })
+
+  it('keeps typed custom text when the same question arrives as a new object', async () => {
+    const wrapper = mount(QuestionCard, {
+      props: { detectedQuestion: singleQuestion },
+    })
+    await wrapper.find('[data-testid="detected-custom-toggle"]').trigger('click')
+    await wrapper.find('[data-testid="detected-custom-textarea"]').setValue('Svelte, actually')
+
+    await wrapper.setProps({ detectedQuestion: structuredClone(singleQuestion) })
+    expect((wrapper.find('[data-testid="detected-custom-textarea"]').element as HTMLTextAreaElement).value)
+      .toBe('Svelte, actually')
+  })
 })
