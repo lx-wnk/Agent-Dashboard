@@ -18,14 +18,24 @@ jobs:
     name: Matrix
     runs-on: ubuntu-latest
     outputs:
-      workspace_modules: ${{ steps.derive.outputs.workspace_modules }}
-      plugins: ${{ steps.derive.outputs.plugins }}
-      scan_modules: ${{ steps.derive.outputs.scan_modules }}
-      plugin_binaries: ${{ steps.derive.outputs.plugin_binaries }}
+      workspace_modules: ${{ steps.lists.outputs.workspace_modules }}
+      plugins: ${{ steps.lists.outputs.plugins }}
+      scan_modules: ${{ steps.lists.outputs.scan_modules }}
     steps:
-      - uses: actions/checkout@v7
-      - id: derive
-        run: bash scripts/ci-matrix.sh >> "$GITHUB_OUTPUT"
+      # Single source for every matrix below. These lists live in a job output
+      # rather than a workflow-level `env:` because strategy.matrix cannot read
+      # the env context (allowed there: github, needs, vars, inputs).
+      # desktop/ is absent on purpose: it is //go:build darwin and has its own
+      # macOS job.
+      - id: lists
+        run: |
+          WORKSPACE_MODULES='["server", "sdk"]'
+          PLUGINS='["anthropic-spawner", "github-oauth", "oauthkit", "office365-oauth", "voice-webspeech", "voice-whisper"]'
+          {
+            echo "workspace_modules=$WORKSPACE_MODULES"
+            echo "plugins=$PLUGINS"
+            echo "scan_modules=$(jq -nc --argjson m "$WORKSPACE_MODULES" --argjson p "$PLUGINS" '$m + ($p | map("plugins/" + .))')"
+          } >> "$GITHUB_OUTPUT"
 
   test:
     name: Test (${{ matrix.module }})
@@ -176,10 +186,13 @@ jobs:
         run: go build -o /dev/null ./cmd/serve/...
       - name: Build plugin binaries
         env:
-          PLUGIN_BINARIES: ${{ needs.matrix.outputs.plugin_binaries }}
+          PLUGINS: ${{ needs.matrix.outputs.plugins }}
         run: |
-          for plugin in $(echo "$PLUGIN_BINARIES" | jq -r '.[]'); do
-            echo "=== building $plugin ===" && (cd "$plugin" && GOWORK=off go build -o /dev/null .)
+          for plugin in $(echo "$PLUGINS" | jq -r '.[]'); do
+            dir="plugins/$plugin"
+            # No main package means a shared library (oauthkit) — nothing to build.
+            grep -lq '^package main' "$dir"/*.go || continue
+            echo "=== building $dir ===" && (cd "$dir" && GOWORK=off go build -o /dev/null .)
           done
 
   frontend:

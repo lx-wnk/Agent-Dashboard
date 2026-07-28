@@ -117,13 +117,11 @@ The `wails` CLI (`go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0`) is
 Two single sources feed CI, so neither has to be edited per module:
 
 - **`.go-version`** pins the toolchain for every `setup-go` step in `ci.yml` and `release.yml`. A Go patch bump is a one-line change here. The `go` directives in the individual `go.mod` files are *minimum requirements*, not the build pin — they do not need to move for a toolchain update. `.go-version` is also read by `goenv`/`asdf` if you use one locally.
-- **`scripts/ci-matrix.sh`** derives every job matrix. Run it to see exactly what CI will fan out over:
+- **The `matrix` job** at the top of `ci.yml` holds the module lists — `WORKSPACE_MODULES` and `PLUGINS` — and every other job's matrix derives from its outputs. **Adding a plugin means adding it to `PLUGINS`, and nothing else**: the test, lint, security and build jobs all follow. The security list is computed from the other two, so it can no longer drift out of sync (it once did, and `plugins/oauthkit` went unscanned as a result).
 
-  ```bash
-  bash scripts/ci-matrix.sh
-  ```
+  These lists cannot be workflow-level `env:` variables: GitHub does not expose the `env` context to `strategy.matrix` (allowed there: `github`, `needs`, `vars`, `inputs`), so they have to travel as job outputs.
 
-  It discovers plugins from `plugins/*/go.mod`, so **adding a plugin needs no `ci.yml` change** — it is picked up by the test, lint, security and build jobs automatically. A plugin without a `package main` (a shared library such as `plugins/oauthkit`) is tested, linted and vulnerability-scanned, but has no binary to build, and the script classifies it accordingly.
+  The build job skips any plugin without a `package main` — a shared library such as `plugins/oauthkit` is tested, linted and vulnerability-scanned, but has no binary to build.
 
 ## Pull Request Process
 
