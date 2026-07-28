@@ -2,6 +2,8 @@
 import type { AnswerIntent } from '../utils/answerKeys'
 import type { DetectedQuestion } from '../utils/askQuestionScreen'
 import { computed, ref, watch } from 'vue'
+import { screenSignature } from '../utils/askQuestionScreen'
+import { nextRadioGroupName } from '../utils/radioGroup'
 import AppButton from './ui/AppButton.vue'
 
 const props = defineProps<{
@@ -12,14 +14,24 @@ const emit = defineEmits<{
   answer: [intent: AnswerIntent]
 }>()
 
+// Two cards can be mounted at once (two agents with a question in the triage
+// band, or a band card plus the terminal overlay); a shared radio `name` would
+// make the browser uncheck the other card's radio. See nextRadioGroupName.
+const optionGroupName = nextRadioGroupName('detected-question-option')
+
 const detectedSelectedIndices = ref<number[]>([])
 const detectedCustomText = ref('')
 const detectedCustomOpen = ref(false)
 const detectedChatOpen = ref(false)
 const detectedChatText = ref('')
 
+// Reset on a CONTENT change, never on a mere reference change. The card is fed
+// straight from the SSE agent payload, which is re-deserialized on every scan
+// tick (~3 s) because volatile fields like uptime keep changing — watching the
+// prop object itself would therefore wipe the user's selection every few
+// seconds, mid-answer.
 watch(
-  () => props.detectedQuestion,
+  () => screenSignature(props.detectedQuestion),
   () => {
     detectedSelectedIndices.value = []
     detectedCustomText.value = ''
@@ -28,6 +40,20 @@ watch(
     detectedChatText.value = ''
   },
 )
+
+// Radios bind the option through v-model rather than :checked + @change, so
+// the selected value is declared once instead of being recomputed in a handler.
+// Note this is NOT a safety net: vModelRadio.beforeUpdate also writes el.checked
+// only when the bound value changes, so a DOM state cleared behind Vue's back
+// stays cleared. What prevents that is optionGroupName — nothing outside this
+// card shares its radio group anymore.
+const singleSelected = computed<number | null>({
+  get: () => detectedSelectedIndices.value[0] ?? null,
+  set: (index) => {
+    if (index !== null)
+      toggleDetectedOption(index)
+  },
+})
 
 const detectedAnswered = computed(() =>
   detectedSelectedIndices.value.length > 0 || detectedCustomText.value.trim().length > 0,
@@ -87,16 +113,16 @@ function handleDetectedChatSubmit() {
 <template>
   <div class="flex flex-col gap-3">
     <div class="flex flex-col gap-1.5">
-      <div class="text-[12px] font-semibold text-fg">
-        {{ detectedQuestion.header }}
-      </div>
-      <div class="text-[11px] text-fg-mute leading-snug mb-0.5">
+      <!-- No header row: what the detector puts in `header` is whatever
+           scrolled above the modal (a prompt echo, the welcome box), not a
+           title. The question is the card's heading. -->
+      <div class="text-[12px] font-semibold text-fg leading-snug mb-0.5">
         {{ detectedQuestion.question }}
       </div>
 
       <fieldset class="border-none m-0 p-0 flex flex-col gap-1.5">
         <legend class="sr-only">
-          {{ detectedQuestion.header }}
+          {{ detectedQuestion.question }}
         </legend>
         <label
           v-for="option in detectedQuestion.options"
@@ -112,11 +138,11 @@ function handleDetectedChatSubmit() {
           >
           <input
             v-else
+            v-model="singleSelected"
             type="radio"
-            name="detected-question-option"
-            :checked="detectedSelectedIndices.includes(option.index)"
+            :name="optionGroupName"
+            :value="option.index"
             class="mt-0.5 accent-accent shrink-0"
-            @change="toggleDetectedOption(option.index)"
           >
           <span class="flex flex-col">
             <span class="text-[12px] font-medium text-fg leading-snug">{{ option.label }}</span>

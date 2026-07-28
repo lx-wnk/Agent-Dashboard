@@ -255,16 +255,17 @@ type GetAgentsOpts struct {
 // Merger should exist per process; the composition root builds it and shares it
 // with every read path (broadcast loop, HTTP accessors, search).
 type Merger struct {
-	scan          func(ctx context.Context) ([]scanner.ProcessInfo, error)
-	tracker       *staleTracker
-	registry      *provider.Registry
-	questionProbe QuestionProbeFn
+	scan        func(ctx context.Context) ([]scanner.ProcessInfo, error)
+	tracker     *staleTracker
+	registry    *provider.Registry
+	screenProbe ScreenProbeFn
 }
 
-// QuestionProbeFn resolves the AskUserQuestion modal currently open on an
-// injectable session's live terminal, or nil when none is open. Implementations
-// must be fail-soft: any lookup error yields nil rather than propagating.
-type QuestionProbeFn func(pid int) *sdk.DetectedQuestion
+// ScreenProbeFn resolves whichever AskUserQuestion screen is currently open on
+// an injectable session's live terminal — the modal itself or its review/submit
+// screen — or nil when none is. Implementations must be fail-soft: any lookup
+// error yields nil rather than propagating.
+type ScreenProbeFn func(pid int) *sdk.PendingScreen
 
 // Option configures a Merger.
 type Option func(*Merger)
@@ -280,11 +281,11 @@ func WithRegistry(r *provider.Registry) Option {
 	return func(m *Merger) { m.registry = r }
 }
 
-// WithQuestionProbe injects the probe used to attach a live-detected
-// AskUserQuestion modal to injectable agents. When nil (the default), no agent
-// ever carries PendingQuestion.
-func WithQuestionProbe(fn QuestionProbeFn) Option {
-	return func(m *Merger) { m.questionProbe = fn }
+// WithScreenProbe injects the probe used to attach a live-detected
+// AskUserQuestion screen to injectable agents. When nil (the default), no agent
+// ever carries PendingQuestion or PendingConfirm.
+func WithScreenProbe(fn ScreenProbeFn) Option {
+	return func(m *Merger) { m.screenProbe = fn }
 }
 
 // New builds a Merger. Defaults: the real scanner.ScanProcesses and a fresh
@@ -448,8 +449,11 @@ func (m *Merger) buildAgent(proc scanner.ProcessInfo, session *parser.SessionDat
 	}
 	discovery := readAgentChannelState(proc.PID)
 	var pendingQuestion *sdk.DetectedQuestion
-	if discovery.liveInjectable && m.questionProbe != nil {
-		pendingQuestion = m.questionProbe(proc.PID)
+	var pendingConfirm *sdk.DetectedConfirm
+	if discovery.liveInjectable && m.screenProbe != nil {
+		if screen := m.screenProbe(proc.PID); screen != nil {
+			pendingQuestion, pendingConfirm = screen.Question, screen.Confirm
+		}
 	}
 	health := ComputeHealthScore(session, c.Total, c.Unknown, baselineCost)
 
@@ -467,6 +471,7 @@ func (m *Merger) buildAgent(proc scanner.ProcessInfo, session *parser.SessionDat
 		ChannelAvailable:          discovery.channelAvailable,
 		LiveInjectable:            discovery.liveInjectable,
 		PendingQuestion:           pendingQuestion,
+		PendingConfirm:            pendingConfirm,
 		Uptime:                    proc.Uptime,
 		LastActivity:              session.LastActivity.Format(time.RFC3339),
 		CurrentAction:             strPtr(session.CurrentAction),

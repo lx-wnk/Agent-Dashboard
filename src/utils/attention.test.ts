@@ -78,6 +78,27 @@ describe('attentionFor', () => {
     expect(att?.kind).toBe('question')
   })
 
+  // A session parked on the review/submit screen is just as blocked as one
+  // showing the modal — it waits for a keypress that only a human can give.
+  it('returns question with top priority when pendingConfirm is set', () => {
+    const agent = makeAgent({
+      status: 'active',
+      pendingConfirm: {
+        question: 'Ready to submit your answers?',
+        options: [
+          { index: 1, label: 'Submit answers' },
+          { index: 2, label: 'Cancel' },
+        ],
+      },
+      pendingPermissions: [{ id: 'r1', tool: 'Bash', pattern: 'ls', requestedAt: new Date().toISOString() }],
+    })
+    const att = attentionFor(agent, ACTIVE_SECS)
+    expect(att?.kind).toBe('question')
+    expect(att?.label).toBe('Confirm answers')
+    expect(att?.weight).toBeLessThan(0)
+    expect(needsAttention(agent, ACTIVE_SECS)).toBe(true)
+  })
+
   it('returns permission when pendingToolUse is set', () => {
     const agent = makeAgent({
       status: 'active',

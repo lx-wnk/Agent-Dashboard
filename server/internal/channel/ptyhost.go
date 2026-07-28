@@ -133,6 +133,7 @@ func startPtyHTTPServer(ptmx *ptyWriter, hub *ptyHub, token *rotatingToken) (*ht
 // answer an AskUserQuestion modal with an exact keystroke sequence — no
 // appended CR, no sanitization), GET /health is a liveness probe, GET
 // /question detects an open AskUserQuestion modal in the current scrollback,
+// GET /screen does the same but also reports the modal's review/submit screen,
 // and GET /ws upgrades to a WebSocket that replays scrollback then streams
 // pty output to the client while pumping client input (and resize control
 // messages) back into the pty. All routes except /health require the
@@ -209,6 +210,25 @@ func ptyMux(ptmx *ptyWriter, hub *ptyHub, token *rotatingToken) *http.ServeMux {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(q)
+	})
+
+	// GET /screen supersedes GET /question: it reports whichever AskUserQuestion
+	// screen is open — the modal itself OR its review/submit screen — from one
+	// render. /question is kept as-is (not folded into this envelope) so a broker
+	// still running from before this endpoint existed keeps working: the client
+	// falls back to it on 404 rather than mis-decoding a changed payload shape.
+	mux.HandleFunc("GET /screen", func(w http.ResponseWriter, r *http.Request) {
+		if !token.authorize(r) {
+			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+		screen := askq.DetectScreen(renderRows(hub.Snapshot()))
+		if screen == nil {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(screen)
 	})
 
 	// Frame-type contract (enforced by the browser client): a TEXT frame is a

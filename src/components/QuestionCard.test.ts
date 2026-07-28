@@ -28,11 +28,13 @@ const multiQuestion: DetectedQuestion = {
 }
 
 describe('questionCard', () => {
-  it('renders the question header, prompt, and option labels', () => {
+  // The detector's `header` is scrollback above the modal, not a title, so the
+  // card deliberately does not render it — the question is the heading.
+  it('renders the question prompt and option labels, but not the detected header', () => {
     const wrapper = mount(QuestionCard, {
       props: { detectedQuestion: singleQuestion },
     })
-    expect(wrapper.text()).toContain('Choose framework')
+    expect(wrapper.text()).not.toContain('Choose framework')
     expect(wrapper.text()).toContain('Which frontend framework do you prefer?')
     expect(wrapper.text()).toContain('Vue')
     expect(wrapper.text()).toContain('Progressive framework')
@@ -106,5 +108,81 @@ describe('questionCard', () => {
 
     await wrapper.setProps({ detectedQuestion: multiQuestion })
     expect(wrapper.find('[data-testid="detected-send-btn"]').attributes('disabled')).toBeDefined()
+  })
+
+  // The card is fed from the SSE agent payload, which is re-deserialized on
+  // every scan tick — a fresh object with identical content must NOT count as a
+  // new question, or the user's selection is wiped every few seconds mid-answer.
+  it('keeps local selection state when the same question arrives as a new object', async () => {
+    const wrapper = mount(QuestionCard, {
+      props: { detectedQuestion: singleQuestion },
+    })
+    await wrapper.findAll('input[type="radio"]')[0].trigger('change')
+
+    await wrapper.setProps({ detectedQuestion: structuredClone(singleQuestion) })
+    expect(wrapper.find('[data-testid="detected-send-btn"]').attributes('disabled')).toBeUndefined()
+
+    await wrapper.find('[data-testid="detected-send-btn"]').trigger('click')
+    expect(wrapper.emitted('answer')).toEqual([[{ mode: 'single', index: 0 }]])
+  })
+
+  it('keeps typed custom text when the same question arrives as a new object', async () => {
+    const wrapper = mount(QuestionCard, {
+      props: { detectedQuestion: singleQuestion },
+    })
+    await wrapper.find('[data-testid="detected-custom-toggle"]').trigger('click')
+    await wrapper.find('[data-testid="detected-custom-textarea"]').setValue('Svelte, actually')
+
+    await wrapper.setProps({ detectedQuestion: structuredClone(singleQuestion) })
+    expect((wrapper.find('[data-testid="detected-custom-textarea"]').element as HTMLTextAreaElement).value)
+      .toBe('Svelte, actually')
+  })
+
+  // A radio `name` is a document-wide group. Two cards are routinely mounted at
+  // once — two agents with a question in the triage band, or a band card plus
+  // the terminal overlay — and a shared name makes the browser uncheck the
+  // other card's radio. Vue does not repair that (its bound `:checked` value is
+  // unchanged, so it patches nothing), leaving the selection visually gone
+  // while the component still holds it.
+  it('does not share a radio group with a second card in the same document', async () => {
+    const hostA = document.createElement('div')
+    const hostB = document.createElement('div')
+    document.body.append(hostA, hostB)
+
+    const cardA = mount(QuestionCard, { props: { detectedQuestion: singleQuestion }, attachTo: hostA })
+    const cardB = mount(QuestionCard, {
+      props: { detectedQuestion: { ...singleQuestion, header: 'Second card', question: 'Another question?' } },
+      attachTo: hostB,
+    })
+
+    const radioA = cardA.findAll('input[type="radio"]')[0].element as HTMLInputElement
+    const radioB = cardB.findAll('input[type="radio"]')[0].element as HTMLInputElement
+    expect(radioA.name).not.toBe(radioB.name)
+
+    radioA.click()
+    await cardA.vm.$nextTick()
+    expect(radioA.checked).toBe(true)
+
+    radioB.click()
+    await cardB.vm.$nextTick()
+    expect(radioA.checked).toBe(true)
+
+    cardA.unmount()
+    cardB.unmount()
+    hostA.remove()
+    hostB.remove()
+  })
+
+  it('keeps Send disabled while nothing is selected or typed', async () => {
+    const wrapper = mount(QuestionCard, { props: { detectedQuestion: singleQuestion } })
+    const sendBtn = () => wrapper.find('[data-testid="detected-send-btn"]')
+    expect(sendBtn().attributes('disabled')).toBeDefined()
+
+    await wrapper.find('[data-testid="detected-custom-toggle"]').trigger('click')
+    await wrapper.find('[data-testid="detected-custom-textarea"]').setValue('   ')
+    expect(sendBtn().attributes('disabled')).toBeDefined()
+
+    await wrapper.find('[data-testid="detected-custom-textarea"]').setValue('Svelte')
+    expect(sendBtn().attributes('disabled')).toBeUndefined()
   })
 })

@@ -3,6 +3,7 @@ import type { PermissionItem } from '@/composables/usePendingPermissions'
 import type { Agent, PendingPermission, PermissionRequest } from '@/types'
 import type { AnswerIntent } from '@/utils/answerKeys'
 import { computed, nextTick, ref, watch } from 'vue'
+import ConfirmCard from '@/components/ConfirmCard.vue'
 import QuestionCard from '@/components/QuestionCard.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import { useNow } from '@/composables/useNow'
@@ -107,7 +108,21 @@ const breakdown = computed(() => {
 
 const totalCount = computed(() => props.permissionItems.length + visibleAgentCards.value.length)
 
+// AskUserQuestion is never permission-gated: an unresolved one waits for an
+// ANSWER, not a grant. The parser still reports it as a pendingToolUse so a
+// session whose screen cannot be probed shows something at all, but offering
+// "Allow AskUserQuestion" would write a meaningless standing allow-rule for a
+// tool nobody has to approve — and it is answered in the question card or the
+// terminal, not here.
+const ASK_USER_QUESTION_TOOL = 'AskUserQuestion'
+
+function isGrantableToolUse(agent: Agent): boolean {
+  return !!agent.pendingToolUse && agent.pendingToolUse.tool !== ASK_USER_QUESTION_TOOL
+}
+
 function blockedDetail(agent: Agent): string {
+  if (agent.pendingToolUse?.tool === ASK_USER_QUESTION_TOOL)
+    return 'Waiting for your answer — open the terminal to reply'
   if (agent.pendingToolUse)
     return agent.pendingToolUse.pattern ? `${agent.pendingToolUse.tool}(${agent.pendingToolUse.pattern})` : agent.pendingToolUse.tool
   const entry = agentAttentionMap.value.get(agent.sessionId)
@@ -502,6 +517,16 @@ watch(() => props.focusedSessionId, (id) => {
             </div>
           </template>
 
+          <!-- Review/submit screen closing out a multi-question flow -->
+          <template v-else-if="agent.pendingConfirm">
+            <div :class="answeringQuestion[agent.sessionId] ? 'opacity-60 pointer-events-none' : ''">
+              <ConfirmCard
+                :detected-confirm="agent.pendingConfirm"
+                @answer="(intent) => answerQuestion(agent, intent)"
+              />
+            </div>
+          </template>
+
           <!-- Orchestrated agent with pending permissions (not covered by task items) -->
           <template v-else-if="agent.pipelineTaskId && agent.pendingPermissions?.length">
             <ul class="m-0 p-0 list-none flex flex-col gap-1" :aria-label="`Pending permissions for ${agent.projectName}`">
@@ -525,7 +550,7 @@ watch(() => props.focusedSessionId, (id) => {
           <div class="flex items-center gap-2 flex-wrap">
             <span class="text-[11px] text-fg-faint">{{ formatRelativeActivity(secondsSince(agent.lastActivity, nowMs)) }}</span>
 
-            <template v-if="!agent.pendingQuestion && agent.pipelineTaskId && agent.pendingPermissions?.length">
+            <template v-if="!agent.pendingQuestion && !agent.pendingConfirm && agent.pipelineTaskId && agent.pendingPermissions?.length">
               <AppButton
                 variant="success"
                 size="sm"
@@ -557,22 +582,22 @@ watch(() => props.focusedSessionId, (id) => {
 
             <!-- Free agent: allow the paused tool for future runs -->
             <AppButton
-              v-if="agent.pendingToolUse && !(agent.pipelineTaskId && agent.pendingPermissions?.length)"
+              v-if="isGrantableToolUse(agent) && !(agent.pipelineTaskId && agent.pendingPermissions?.length)"
               variant="success"
               size="sm"
               class="ml-auto"
               :disabled="allowing[agent.sessionId]"
               :title="`Allow ${blockedDetail(agent)} for this project going forward. The paused run still needs your reply in its terminal.`"
-              :aria-label="`Allow ${agent.pendingToolUse.tool} for ${friendlyProjectName(agent.projectName)} going forward`"
+              :aria-label="`Allow ${agent.pendingToolUse?.tool} for ${friendlyProjectName(agent.projectName)} going forward`"
               @click="allowTool(agent)"
             >
-              Allow {{ agent.pendingToolUse.tool }}
+              Allow {{ agent.pendingToolUse?.tool }}
             </AppButton>
 
             <AppButton
               variant="outline"
               size="sm"
-              :class="!(agent.pipelineTaskId && agent.pendingPermissions?.length) && !agent.pendingToolUse ? 'ml-auto' : ''"
+              :class="!(agent.pipelineTaskId && agent.pendingPermissions?.length) && !isGrantableToolUse(agent) ? 'ml-auto' : ''"
               :aria-label="`Open details for ${agent.projectName}`"
               @click="emit('select', agent)"
             >

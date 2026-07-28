@@ -266,6 +266,23 @@ export interface DetectedQuestion {
   chatAboutIndex: number
 }
 /**
+ * DetectedConfirm is the AskUserQuestion review/submit screen detected from a
+ * session's terminal buffer. Mirrors src/utils/askQuestionScreen.ts
+ * DetectedConfirm.
+ */
+export interface DetectedConfirm {
+  question: string
+  options: DetectedOption[]
+}
+/**
+ * PendingScreen is whichever interactive AskUserQuestion screen is currently
+ * open on a session's terminal. At most one field is set.
+ */
+export interface PendingScreen {
+  question?: DetectedQuestion
+  confirm?: DetectedConfirm
+}
+/**
  * HookEvent is one lifecycle-hook event recorded for a session when the opt-in
  * hook receiver is installed (POST /api/hooks/event). It adds per-event
  * granularity on top of the process/JSONL scan. Tool and Summary are truncated,
@@ -343,6 +360,12 @@ export interface Agent {
    * overlay.
    */
   pendingQuestion?: DetectedQuestion
+  /**
+   * PendingConfirm is set when the session's terminal buffer currently shows
+   * the AskUserQuestion review/submit screen. Mutually exclusive with
+   * PendingQuestion: the TUI shows one or the other, never both.
+   */
+  pendingConfirm?: DetectedConfirm
   machine?: string
   lastBtw?: BtwMessage
   /**

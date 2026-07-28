@@ -43,19 +43,38 @@ function agentWithQuestion(multiSelect: boolean) {
   }
 }
 
-async function stubAgents(page: Page, multiSelect: boolean) {
-  const body = JSON.stringify([agentWithQuestion(multiSelect)])
+// The review/submit screen closing out a multi-question flow. It carries no
+// meta-rows, so it reaches the client on its own field rather than as a
+// pendingQuestion.
+function agentWithConfirm() {
+  const agent = agentWithQuestion(false) as Record<string, unknown>
+  delete agent.pendingQuestion
+  agent.pendingConfirm = {
+    question: 'Ready to submit your answers?',
+    options: [
+      { index: 1, label: 'Submit answers' },
+      { index: 2, label: 'Cancel' },
+    ],
+  }
+  return agent
+}
+
+async function stubAgentsWith(page: Page, makeAgent: () => unknown) {
   await page.route('/api/agents', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
-    body,
+    body: JSON.stringify([makeAgent()]),
   }))
   // The SSE stream also feeds the store; one frame carrying the same agent.
   await page.route('/api/agents/stream', route => route.fulfill({
     status: 200,
     contentType: 'text/event-stream',
-    body: `data: ${JSON.stringify({ agents: [agentWithQuestion(multiSelect)] })}\n\n`,
+    body: `data: ${JSON.stringify({ agents: [makeAgent()] })}\n\n`,
   }))
+}
+
+async function stubAgents(page: Page, multiSelect: boolean) {
+  await stubAgentsWith(page, () => agentWithQuestion(multiSelect))
 }
 
 test.describe('AskUserQuestion in the needs-you band', () => {
@@ -109,5 +128,30 @@ test.describe('AskUserQuestion in the needs-you band', () => {
     await page.locator('[data-testid="detected-send-btn"]').first().click()
 
     await expect.poll(() => posted).toEqual({ mode: 'multi', indices: [0, 2] })
+  })
+
+  test('confirm screen: submitting posts {mode:single,index:0}', async ({ page }) => {
+    await stubAuthDisabled(page)
+    await stubAgentsWith(page, agentWithConfirm)
+
+    let posted: unknown = null
+    await page.route('/api/agents/4242/answer-question', async (route: Route) => {
+      posted = route.request().postDataJSON()
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, transport: 'pty' }),
+      })
+    })
+
+    await page.goto('/')
+
+    await expect(page.getByText('Ready to submit your answers?')).toBeVisible()
+    await expect(page.getByText('Submit answers')).toBeVisible()
+
+    // Submit is preselected, so finishing the round is a single click.
+    await page.locator('[data-testid="detected-confirm-send-btn"]').first().click()
+
+    await expect.poll(() => posted).toEqual({ mode: 'single', index: 0 })
   })
 })

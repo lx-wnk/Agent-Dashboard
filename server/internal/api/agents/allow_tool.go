@@ -11,6 +11,12 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 )
 
+// askUserQuestionTool is Claude Code's interactive multiple-choice tool. It
+// reaches the client as a pending tool use (so a session whose screen cannot be
+// probed still shows that a question is open), but it is answered by the human
+// rather than granted, so it is never a valid allow-rule target.
+const askUserQuestionTool = "AskUserQuestion"
+
 // AllowToolHandler handles POST /api/agents/{pid}/allow-tool.
 // It creates a stable allow preset for the given tool+pattern keyed by the
 // running agent's cwd. This affects FUTURE permission checks only — it does
@@ -50,6 +56,13 @@ func (h *AllowToolHandler) AllowTool(w http.ResponseWriter, r *http.Request) err
 	}
 	if body.Tool == "" {
 		return apierr.NewAppError(http.StatusBadRequest, "tool is required")
+	}
+	// AskUserQuestion is not permission-gated: an unresolved one is waiting for
+	// the user's ANSWER, not for a grant, so a standing allow-rule for it would
+	// be meaningless. The dashboard already hides the button; reject it here too
+	// so the endpoint cannot be used to write that rule directly.
+	if body.Tool == askUserQuestionTool {
+		return apierr.NewAppError(http.StatusBadRequest, askUserQuestionTool+" is answered, not granted — it cannot be allowed")
 	}
 
 	agents, err := h.getAgents(r.Context())

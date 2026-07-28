@@ -1,14 +1,28 @@
 <script setup lang="ts">
 import type { AnswerIntent } from '../utils/answerKeys'
-import type { DetectedQuestion } from '../utils/askQuestionScreen'
-import { nextTick, ref, watch } from 'vue'
+import type { DetectedConfirm, DetectedQuestion } from '../utils/askQuestionScreen'
+import { computed, nextTick, ref, watch } from 'vue'
 import { encodeAnswer } from '../utils/answerKeys'
+import { screenSignature } from '../utils/askQuestionScreen'
+import ConfirmCard from './ConfirmCard.vue'
 import QuestionCard from './QuestionCard.vue'
 
 const props = defineProps<{
   question: DetectedQuestion | null
+  // The review/submit screen that closes out a multi-question flow. Mutually
+  // exclusive with `question` — the TUI shows one or the other.
+  confirm?: DetectedConfirm | null
   send: (bytes: Uint8Array) => void
 }>()
+
+const open = computed(() => props.question !== null || (props.confirm ?? null) !== null)
+// Identity of what is on screen, not merely whether anything is. A multi-question
+// flow swaps question → next question → confirm screen while the overlay stays
+// open; keying focus off `open` alone would leave focus on an unmounted radio,
+// dropping it to <body> where the container's Tab trap no longer sees keydowns.
+const screenId = computed(() =>
+  `${screenSignature(props.question)}|${screenSignature(props.confirm ?? null)}`)
+const label = computed(() => props.question?.question ?? 'Review your answers')
 
 const dialogRef = ref<HTMLElement | null>(null)
 
@@ -23,8 +37,8 @@ function focusableElements(): HTMLElement[] {
   return Array.from(dialogRef.value.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
 }
 
-// Overlay hides itself once the caller's `question` goes null (the modal left
-// the terminal screen) — that disappearance doubles as the success confirmation.
+// Overlay hides itself once both `question` and `confirm` go null (the screen
+// left the terminal) — that disappearance doubles as the success confirmation.
 function handleAnswer(intent: AnswerIntent) {
   const encoder = new TextEncoder()
   for (const token of encodeAnswer(intent))
@@ -55,11 +69,11 @@ function onKeydown(event: KeyboardEvent) {
   }
 }
 
-// Move focus into the overlay when a question appears so the underlying
-// terminal (which stops accepting input while the overlay is up) doesn't
-// keep keyboard focus.
-watch(() => props.question, (question) => {
-  if (!question)
+// Move focus into the overlay whenever a screen appears OR is replaced by a
+// different one, so the underlying terminal (which stops accepting input while
+// the overlay is up) never keeps keyboard focus.
+watch(screenId, () => {
+  if (!open.value)
     return
   nextTick(() => {
     focusableElements()[0]?.focus()
@@ -69,17 +83,18 @@ watch(() => props.question, (question) => {
 
 <template>
   <div
-    v-if="question"
+    v-if="open"
     ref="dialogRef"
     data-testid="question-overlay"
     role="dialog"
     aria-modal="true"
-    :aria-label="question.header"
+    :aria-label="label"
     class="absolute inset-0 flex items-center justify-center bg-black/60 p-4 z-10"
     @keydown="onKeydown"
   >
     <div class="max-w-md w-full rounded-lg bg-card border border-line p-4 shadow-lg">
-      <QuestionCard :detected-question="question" @answer="handleAnswer" />
+      <QuestionCard v-if="question" :detected-question="question" @answer="handleAnswer" />
+      <ConfirmCard v-else-if="confirm" :detected-confirm="confirm" @answer="handleAnswer" />
     </div>
   </div>
 </template>

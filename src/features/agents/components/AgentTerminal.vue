@@ -1,28 +1,30 @@
 <script setup lang="ts">
 import type { UseTerminalSocket } from '@/composables/useTerminalSocket'
-import type { DetectedQuestion } from '@/utils/askQuestionScreen'
+import type { DetectedConfirm, DetectedQuestion } from '@/utils/askQuestionScreen'
 import { FitAddon } from '@xterm/addon-fit'
 import { Terminal } from '@xterm/xterm'
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import QuestionOverlay from '@/components/QuestionOverlay.vue'
 import { useTerminalSocket } from '@/composables/useTerminalSocket'
-import { detectQuestion } from '@/utils/askQuestionScreen'
+import { detectScreen, screenSignature } from '@/utils/askQuestionScreen'
 import '@xterm/xterm/css/xterm.css'
 
 const props = defineProps<{
   pid: number
 }>()
 
-// How often the visible screen is re-parsed for an AskUserQuestion modal.
+// How often the visible screen is re-parsed for an AskUserQuestion screen.
 // Throttled rather than reactive to xterm's own render events, since those can
 // fire many times per burst of output.
 const QUESTION_POLL_MS = 200
 
 const containerRef = ref<HTMLElement | null>(null)
 const detectedQuestion = ref<DetectedQuestion | null>(null)
-// Signature of the currently-shown modal. The poll replaces detectedQuestion
-// only when this changes, so an unchanged screen never re-creates the object
-// and QuestionCard's local answer state (selections, typed text) survives.
+const detectedConfirm = ref<DetectedConfirm | null>(null)
+const overlayOpen = computed(() => detectedQuestion.value !== null || detectedConfirm.value !== null)
+// Signature of the currently-shown screen. The poll replaces the refs only when
+// this changes, so an unchanged screen never re-creates the objects and the
+// card's local answer state (selections, typed text) survives.
 let currentSig: string | null = null
 let term: Terminal | null = null
 let socket: UseTerminalSocket | null = null
@@ -39,23 +41,16 @@ function readVisibleRows(t: Terminal): string[] {
   return rows
 }
 
-// detectQuestion is stateless w.r.t. user input, so its output changes only
-// when the SCREEN changes. Identify "the same modal" by structure alone.
-function questionSignature(q: DetectedQuestion | null): string | null {
-  return q === null
-    ? null
-    : JSON.stringify([q.header, q.question, q.multiSelect, q.options.map(o => [o.index, o.label])])
-}
-
-function pollForQuestion() {
+function pollForScreen() {
   if (!term)
     return
-  const detected = detectQuestion(readVisibleRows(term))
-  const sig = questionSignature(detected)
+  const { question, confirm } = detectScreen(readVisibleRows(term))
+  const sig = `${screenSignature(question)}|${screenSignature(confirm)}`
   if (sig === currentSig)
     return
   currentSig = sig
-  detectedQuestion.value = detected
+  detectedQuestion.value = question
+  detectedConfirm.value = confirm
 }
 
 function sendToTerminal(bytes: Uint8Array) {
@@ -64,8 +59,8 @@ function sendToTerminal(bytes: Uint8Array) {
 
 // Keep keyboard focus out of the xterm textarea while the overlay owns
 // input, and return it once the overlay clears.
-watch(detectedQuestion, (question) => {
-  if (question)
+watch(overlayOpen, (open) => {
+  if (open)
     term?.blur()
   else
     term?.focus()
@@ -95,7 +90,7 @@ onMounted(() => {
     // While a question overlay is showing, the user answers through the
     // overlay's controls — raw keystrokes must not race those encoded bytes
     // onto the same pty.
-    if (detectedQuestion.value)
+    if (overlayOpen.value)
       return
     socket?.send(new TextEncoder().encode(data))
   })
@@ -111,7 +106,7 @@ onMounted(() => {
     resizeObserver.observe(container)
   }
 
-  questionPollTimer = setInterval(pollForQuestion, QUESTION_POLL_MS)
+  questionPollTimer = setInterval(pollForScreen, QUESTION_POLL_MS)
 })
 
 onBeforeUnmount(() => {
@@ -126,7 +121,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="agent-terminal-wrapper">
     <div ref="containerRef" class="agent-terminal" />
-    <QuestionOverlay :question="detectedQuestion" :send="sendToTerminal" />
+    <QuestionOverlay :question="detectedQuestion" :confirm="detectedConfirm" :send="sendToTerminal" />
   </div>
 </template>
 
