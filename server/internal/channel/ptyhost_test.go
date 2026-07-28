@@ -35,7 +35,7 @@ func (s *syncBuf) String() string {
 
 func TestPtyHTTPServer_InjectsMessageWithCR(t *testing.T) {
 	w := &syncBuf{}
-	srv, port, err := startPtyHTTPServer(w, newPtyHub(1024), newRotatingToken("secret-token"))
+	srv, port, err := startPtyHTTPServer(newPtyWriter(w), newPtyHub(1024), newRotatingToken("secret-token"))
 	if err != nil {
 		t.Fatalf("start: %v", err)
 	}
@@ -83,7 +83,7 @@ func TestPtyHTTPServer_InjectsMessageWithCR(t *testing.T) {
 // request body to the pty verbatim — unlike /message, no CR is appended.
 func TestPtyHTTPServer_KeysWritesRawBytesNoCR(t *testing.T) {
 	w := &syncBuf{}
-	srv, port, err := startPtyHTTPServer(w, newPtyHub(1024), newRotatingToken("secret-token"))
+	srv, port, err := startPtyHTTPServer(newPtyWriter(w), newPtyHub(1024), newRotatingToken("secret-token"))
 	if err != nil {
 		t.Fatalf("start: %v", err)
 	}

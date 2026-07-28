@@ -172,7 +172,7 @@ func runTerminalE2E(t *testing.T) {
 	}()
 
 	tok := newRotatingToken("e2e-secret")
-	srv, port, err := startPtyHTTPServer(ptmx, hub, tok)
+	srv, port, err := startPtyHTTPServer(newPtyWriter(ptmx), hub, tok)
 	if err != nil {
 		t.Fatalf("startPtyHTTPServer: %v", err)
 	}
