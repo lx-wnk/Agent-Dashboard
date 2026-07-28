@@ -1,6 +1,6 @@
 module github.com/lx-wnk/agent-dashboard-plugin-anthropic-spawner
 
-go 1.26.4
+go 1.26.5
 
 require github.com/anthropics/anthropic-sdk-go v1.51.1
 

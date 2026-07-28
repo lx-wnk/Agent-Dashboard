@@ -165,6 +165,7 @@ Preparing the first public release.
 
 
 ### Fixed
+- Token totals and costs no longer leak between unrelated sessions on Linux. The parser's incremental token-scan cache was keyed solely by inode number, and Linux filesystems (ext4, overlayfs) recycle a freed inode number almost immediately — so a newly created session file that inherited a deleted session's inode resumed that session's cached byte offset and running total, reporting a lifetime token count and cost that belonged to a session that no longer exists. macOS/APFS effectively never recycles inode numbers, which is why this only ever showed up on Linux. The cache is now keyed by path and each entry is pinned to the inode it was seeded from, so a recycled inode at a different path can never be resumed while same-path log rotation is still detected.
 - Agent cards keep their prompt input out of the way until you need it: it is revealed on hover or keyboard focus instead of occupying a row on every card. The slash-command menu opens downward in that compact layout, since the reveal wrapper clips anything above the input.
 - The `waiting` agent status now reads **Quiet** everywhere (card, roster row, detail modal) instead of "Waiting", which collided with the needs-you band's "waiting for you". It means 30 s–5 min without new activity — the process is alive and nothing is blocked on you; the card's badge tooltip spells that out.
 - Status and resource badges carry explanatory tooltips, the card output preview fades out instead of cutting mid-line, and the CPU/MEM/DISK readouts turn amber/red on the same thresholds as the usage bar.
@@ -204,6 +205,8 @@ Preparing the first public release.
 
 ### Security
 
+- Go toolchain raised to 1.26.5 across every module, clearing [GO-2026-5856](https://pkg.go.dev/vuln/GO-2026-5856) / CVE-2026-42505 in the standard library's `crypto/tls`: TLS handshakes using Encrypted Client Hello could be de-anonymized by a passive network observer, because pre-shared-key identities were disclosed in the unencrypted client hello.
+- `golang.org/x/text` raised to v0.39.0, clearing [GO-2026-5970](https://pkg.go.dev/vuln/GO-2026-5970) — an infinite loop on invalid input, reachable from the ent migration path.
 - `PATCH /api/settings/*` now requires admin authorization — previously any authenticated user could change security-sensitive settings such as `auth.mode`, `git.allowPush`, or `worktree.force`.
 - The agent bash allow-list filter now also rejects output redirection (`>`/`>>`/`<`), single-`&` backgrounding, and newline command separators, closing allow-list-widening patterns that could append to shell startup files or chain an extra command past the first-token check.
 - Provider session discovery now skips symbolic links, so a crafted symlink placed under a provider directory can no longer be read as a session file (arbitrary-file-read guard).

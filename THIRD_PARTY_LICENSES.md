@@ -68,14 +68,14 @@ The following third-party packages are used as transitive dependencies.
 | github.com/zclconf/go-cty/cty | MIT | https://github.com/zclconf/go-cty/blob/v1.14.4/LICENSE |
 | go.yaml.in/yaml/v4 | MIT | https://github.com/yaml/go-yaml/blob/v4.0.0-rc.2/LICENSE |
 | golang.org/x/crypto/hkdf | BSD-3-Clause | https://cs.opensource.google/go/x/crypto/+/v0.51.0:LICENSE |
-| golang.org/x/mod/semver | BSD-3-Clause | https://cs.opensource.google/go/x/mod/+/v0.36.0:LICENSE |
+| golang.org/x/mod/semver | BSD-3-Clause | https://cs.opensource.google/go/x/mod/+/v0.37.0:LICENSE |
 | golang.org/x/oauth2 | BSD-3-Clause | https://cs.opensource.google/go/x/oauth2/+/v0.35.0:LICENSE |
 | golang.org/x/sync | BSD-3-Clause | https://cs.opensource.google/go/x/sync/+/v0.21.0:LICENSE |
 | golang.org/x/sync/errgroup | BSD-3-Clause | https://cs.opensource.google/go/x/sync/+/v0.16.0:LICENSE |
 | golang.org/x/sys | BSD-3-Clause | https://cs.opensource.google/go/x/sys/+/v0.46.0:LICENSE |
 | golang.org/x/sys/unix | BSD-3-Clause | https://cs.opensource.google/go/x/sys/+/v0.46.0:LICENSE |
 | golang.org/x/term | BSD-3-Clause | https://cs.opensource.google/go/x/term/+/v0.44.0:LICENSE |
-| golang.org/x/text | BSD-3-Clause | https://cs.opensource.google/go/x/text/+/v0.37.0:LICENSE |
+| golang.org/x/text | BSD-3-Clause | https://cs.opensource.google/go/x/text/+/v0.39.0:LICENSE |
 | golang.org/x/time/rate | BSD-3-Clause | https://cs.opensource.google/go/x/time/+/v0.15.0:LICENSE |
 | gopkg.in/yaml.v3 | MIT | https://github.com/go-yaml/yaml/blob/v3.0.1/LICENSE |
 | modernc.org/libc | BSD-3-Clause | https://gitlab.com/cznic/libc/-/blob/v1.73.4/LICENSE |
