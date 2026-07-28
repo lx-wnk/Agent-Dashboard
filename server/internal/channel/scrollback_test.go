@@ -16,7 +16,14 @@ func TestScrollback_KeepsLastNBytes(t *testing.T) {
 func TestScrollback_ConcurrentWriteSnapshot(t *testing.T) {
 	rb := newScrollback(1024)
 	done := make(chan struct{})
-	go func() { for i := 0; i < 1000; i++ { rb.Write([]byte("x")) }; close(done) }()
-	for i := 0; i < 1000; i++ { _ = rb.Snapshot() }
+	go func() {
+		for i := 0; i < 1000; i++ {
+			rb.Write([]byte("x"))
+		}
+		close(done)
+	}()
+	for i := 0; i < 1000; i++ {
+		_ = rb.Snapshot()
+	}
 	<-done
 }

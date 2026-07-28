@@ -22,6 +22,12 @@ import (
 	"golang.org/x/term"
 )
 
+// injectSubmitDelay is the pause between writing an injected prompt's text and
+// its submitting carriage return. It gives Claude's debounced TUI input time to
+// register the pasted text before the Enter, so the prompt submits instead of
+// being left with a literal newline appended.
+const injectSubmitDelay = 250 * time.Millisecond
+
 // RunPTY launches command under a pseudo-terminal it owns, proxies the current
 // terminal to it (so the user interacts normally, full TUI), and serves a
 // loopback HTTP /message endpoint that injects text as real keyboard input into
@@ -44,6 +50,7 @@ func RunPTY(ctx context.Context, command []string) error {
 	defer func() { _ = ptmx.Close() }()
 
 	hub := newPtyHub(256 * 1024)
+	ptyOut := newPtyWriter(ptmx)
 
 	// Keep the pty sized to the real terminal (initial + on resize).
 	winch := make(chan os.Signal, 1)
@@ -70,7 +77,7 @@ func RunPTY(ctx context.Context, command []string) error {
 		return fmt.Errorf("ptyhost: token: %w", err)
 	}
 	token := newRotatingToken(initialToken)
-	srv, port, err := startPtyHTTPServer(ptmx, hub, token)
+	srv, port, err := startPtyHTTPServer(ptyOut, hub, token)
 	if err != nil {
 		return fmt.Errorf("ptyhost: http: %w", err)
 	}
@@ -96,16 +103,20 @@ func RunPTY(ctx context.Context, command []string) error {
 		_ = srv.Shutdown(shutCtx)
 	}()
 
-	// Proxy: terminal stdin → child, child output → terminal.
-	go func() { _, _ = io.Copy(ptmx, os.Stdin) }()
+	// Proxy: terminal stdin → child, child output → terminal. stdin goes through
+	// the serializing writer too, so a user typing during an injection cannot
+	// land inside the injected prompt.
+	go func() { _, _ = io.Copy(ptyOut, os.Stdin) }()
 	_, _ = io.Copy(io.MultiWriter(os.Stdout, hub), ptmx) // returns when the child exits / pty closes
 
 	return cmd.Wait()
 }
 
 // startPtyHTTPServer serves POST /message: the body's `message` is written to
-// the pty followed by a carriage return, i.e. injected as if typed + Enter.
-func startPtyHTTPServer(ptmx io.Writer, hub *ptyHub, token *rotatingToken) (*http.Server, int, error) {
+// the pty, then — after injectSubmitDelay, as a SEPARATE write — the submitting
+// carriage return, i.e. injected as if typed + Enter. The handler therefore
+// blocks for that delay before responding.
+func startPtyHTTPServer(ptmx *ptyWriter, hub *ptyHub, token *rotatingToken) (*http.Server, int, error) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, 0, err
@@ -126,7 +137,7 @@ func startPtyHTTPServer(ptmx io.Writer, hub *ptyHub, token *rotatingToken) (*htt
 // pty output to the client while pumping client input (and resize control
 // messages) back into the pty. All routes except /health require the
 // rotating bearer token.
-func ptyMux(ptmx io.Writer, hub *ptyHub, token *rotatingToken) *http.ServeMux {
+func ptyMux(ptmx *ptyWriter, hub *ptyHub, token *rotatingToken) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok"})
@@ -148,9 +159,14 @@ func ptyMux(ptmx io.Writer, hub *ptyHub, token *rotatingToken) *http.ServeMux {
 			http.Error(w, `{"error":"missing message"}`, http.StatusBadRequest)
 			return
 		}
-		// Inject the text, then a carriage return to submit it. CR (\r) is what a
-		// real Enter sends on a pty.
-		if _, err := io.WriteString(ptmx, payload.Message+"\r"); err != nil {
+		// Inject the text, then submit with a carriage return written SEPARATELY
+		// after a short delay. Claude's TUI debounces pasted input, so a CR
+		// coalesced into the same write is absorbed as a literal newline in the
+		// prompt (typed-but-not-submitted) instead of triggering submit. Splitting
+		// the write mirrors the tmux path, which sends the text then a separate Enter.
+		// One job: no other writer can slip between the text and the CR and get
+		// its bytes submitted as part of this prompt.
+		if err := ptmx.WriteParts(injectSubmitDelay, []byte(payload.Message), []byte("\r")); err != nil {
 			http.Error(w, `{"error":"write failed"}`, http.StatusInternalServerError)
 			return
 		}
@@ -230,7 +246,7 @@ func ptyMux(ptmx io.Writer, hub *ptyHub, token *rotatingToken) *http.ServeMux {
 					return
 				}
 				if typ == websocket.MessageText && looksLikeResize(data) {
-					applyResize(ptmx, data)
+					applyResize(ptmx.raw, data)
 					continue
 				}
 				if _, err := ptmx.Write(data); err != nil {

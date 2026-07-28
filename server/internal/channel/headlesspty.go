@@ -43,7 +43,7 @@ func RunHeadlessPTY(ctx context.Context, name string, args, env []string, cwd st
 	}
 	token := newRotatingToken(initialToken)
 	hub := newPtyHub(256 * 1024)
-	srv, port, err := startPtyHTTPServer(ptmx, hub, token)
+	srv, port, err := startPtyHTTPServer(newPtyWriter(ptmx), hub, token)
 	if err != nil {
 		return fmt.Errorf("headlesspty: http: %w", err)
 	}

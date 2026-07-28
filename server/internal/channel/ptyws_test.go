@@ -72,7 +72,7 @@ func TestBrokerWS_ReplayAndInput(t *testing.T) {
 	hub := newPtyHub(1024)
 	hub.Write([]byte("SCREEN"))
 	tok := newRotatingToken("secret")
-	srv := httptest.NewServer(ptyMux(fp, hub, tok))
+	srv := httptest.NewServer(ptyMux(newPtyWriter(fp), hub, tok))
 	defer srv.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -106,7 +106,7 @@ func TestBrokerWS_LiveBroadcast(t *testing.T) {
 	fp := newFakePtmx()
 	hub := newPtyHub(1024)
 	tok := newRotatingToken("secret")
-	srv := httptest.NewServer(ptyMux(fp, hub, tok))
+	srv := httptest.NewServer(ptyMux(newPtyWriter(fp), hub, tok))
 	defer srv.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -155,7 +155,7 @@ func TestBrokerWS_UnauthorizedRejected(t *testing.T) {
 	fp := newFakePtmx()
 	hub := newPtyHub(1024)
 	tok := newRotatingToken("secret")
-	srv := httptest.NewServer(ptyMux(fp, hub, tok))
+	srv := httptest.NewServer(ptyMux(newPtyWriter(fp), hub, tok))
 	defer srv.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -173,7 +173,7 @@ func TestBrokerWS_ResizeMessageAppliedNotWrittenToPty(t *testing.T) {
 	fp := newFakePtmx()
 	hub := newPtyHub(1024)
 	tok := newRotatingToken("secret")
-	srv := httptest.NewServer(ptyMux(fp, hub, tok))
+	srv := httptest.NewServer(ptyMux(newPtyWriter(fp), hub, tok))
 	defer srv.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)

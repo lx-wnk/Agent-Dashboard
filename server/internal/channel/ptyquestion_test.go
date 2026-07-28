@@ -21,7 +21,7 @@ func TestGetQuestion_DetectsModalFromScrollback(t *testing.T) {
 	hub := newPtyHub(256 * 1024)
 	hub.Write(fixture)
 	tok := newRotatingToken("secret")
-	srv := httptest.NewServer(ptyMux(io.Discard, hub, tok))
+	srv := httptest.NewServer(ptyMux(newPtyWriter(io.Discard), hub, tok))
 	defer srv.Close()
 
 	req, _ := http.NewRequest("GET", srv.URL+"/question", nil)
@@ -66,7 +66,7 @@ func TestGetQuestion_DetectsModalFromScrollback(t *testing.T) {
 func TestGetQuestion_NoModalReturns204(t *testing.T) {
 	hub := newPtyHub(1024)
 	tok := newRotatingToken("secret")
-	srv := httptest.NewServer(ptyMux(io.Discard, hub, tok))
+	srv := httptest.NewServer(ptyMux(newPtyWriter(io.Discard), hub, tok))
 	defer srv.Close()
 
 	req, _ := http.NewRequest("GET", srv.URL+"/question", nil)
@@ -85,7 +85,7 @@ func TestGetQuestion_NoModalReturns204(t *testing.T) {
 func TestGetQuestion_UnauthorizedRejected(t *testing.T) {
 	hub := newPtyHub(1024)
 	tok := newRotatingToken("secret")
-	srv := httptest.NewServer(ptyMux(io.Discard, hub, tok))
+	srv := httptest.NewServer(ptyMux(newPtyWriter(io.Discard), hub, tok))
 	defer srv.Close()
 
 	// No bearer token at all.
