@@ -54,7 +54,10 @@ export function statusLabel(status: string): string {
   switch (status) {
     case 'active': return 'Active'
     case 'working': return 'Working'
-    case 'waiting': return 'Waiting'
+    // 'waiting' means 30s-5min since last activity (server/internal/merger/
+    // merger.go CalculateStatus) — the agent is alive and recently active. "Waiting"
+    // read as "waiting for you", colliding with the needs-you band's meaning.
+    case 'waiting': return 'Quiet'
     case 'idle': return 'Idle'
     case 'finished': return 'Finished'
     case 'completed': return 'Completed'

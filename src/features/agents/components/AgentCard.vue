@@ -17,12 +17,10 @@ const emit = defineEmits<{ select: [agent: Agent], dismiss: [pid: number] }>()
 
 const isFinished = computed(() => props.agent.status === 'finished')
 
-// Card-local display override: AgentStatus 'waiting' (30s-5min since last
-// activity, see server/internal/merger/merger.go CalculateStatus) collides in
-// meaning with the "needs you" banner's "waiting" (waiting for the user).
-// Relabel for this card only — the underlying status enum/value is unchanged.
+// The 'waiting' relabel lives in statusLabel() (src/utils/statusColors.ts, SSOT),
+// so the card, the roster row and the modal cannot disagree about the same
+// agent. Only the explanatory tooltip is card-local.
 const displayStatus = computed(() => props.agent.working ? 'working' : props.agent.status)
-const statusBadgeLabel = computed(() => displayStatus.value === 'waiting' ? 'Queued' : undefined)
 const statusBadgeTitle = computed(() => displayStatus.value === 'waiting'
   ? 'No new activity for a bit — the agent process is still alive, not waiting on you'
   : undefined)
@@ -85,7 +83,7 @@ const showMetrics = ref(false)
 
     <div class="bg-raised px-3 pt-2 pb-1.5 flex flex-col gap-1">
       <div class="flex items-center gap-2 min-w-0">
-        <AppBadge :variant="displayStatus" :label="statusBadgeLabel" :title="statusBadgeTitle" />
+        <AppBadge :variant="displayStatus" :title="statusBadgeTitle" />
         <span
           v-if="stalled"
           class="text-[10px] font-medium px-1 py-0.5 rounded bg-warning-soft text-warning-text whitespace-nowrap"

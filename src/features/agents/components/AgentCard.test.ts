@@ -157,9 +157,9 @@ describe('agentCard working badge', () => {
     expect(w.text()).not.toContain('Waiting')
   })
 
-  it('shows the card-local "Queued" label (not the ambiguous "Waiting") when not working', () => {
+  it('shows the "Quiet" label (not the ambiguous "Waiting") when not working', () => {
     const w = mount(AgentCard, { props: { agent: { ...baseAgent, status: 'waiting', working: false } }, global: { stubs: badgeStubs } })
-    expect(w.text()).toContain('Queued')
+    expect(w.text()).toContain('Quiet')
     expect(w.text()).not.toContain('Waiting')
   })
 })
