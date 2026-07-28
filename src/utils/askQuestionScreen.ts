@@ -272,6 +272,17 @@ export function detectConfirmScreen(rows: string[]): DetectedConfirm | null {
 }
 
 /**
+ * Runs both detectors over one set of rows and returns whichever AskUserQuestion
+ * screen is open, or `null` when neither is. Mirrors `askq.DetectScreen` on the
+ * Go side; the modal is the more specific match, so the confirm detector only
+ * runs when the question detector found nothing.
+ */
+export function detectScreen(rows: string[]): { question: DetectedQuestion | null, confirm: DetectedConfirm | null } {
+  const question = detectQuestion(rows)
+  return { question, confirm: question ? null : detectConfirmScreen(rows) }
+}
+
+/**
  * Identity of a detected screen by CONTENT, not object reference.
  *
  * Both detectors are stateless w.r.t. user input, so their output changes only

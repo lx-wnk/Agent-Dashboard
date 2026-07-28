@@ -51,10 +51,9 @@ function handleSubmit() {
       </div>
 
       <fieldset class="border-none m-0 p-0 flex flex-col gap-1.5">
-        <!-- Names the option group, mirroring QuestionCard (whose legend is the
-             modal header). The prompt itself is already rendered above, so
-             repeating it here would only duplicate the text for a screen
-             reader. -->
+        <!-- Names the option group. The prompt itself is already rendered above
+             as the card heading, so repeating it here would only duplicate the
+             text for a screen reader. -->
         <legend class="sr-only">
           Review your answers
         </legend>

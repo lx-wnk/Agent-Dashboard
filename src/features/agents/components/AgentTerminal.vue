@@ -6,7 +6,7 @@ import { Terminal } from '@xterm/xterm'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import QuestionOverlay from '@/components/QuestionOverlay.vue'
 import { useTerminalSocket } from '@/composables/useTerminalSocket'
-import { detectConfirmScreen, detectQuestion, screenSignature } from '@/utils/askQuestionScreen'
+import { detectScreen, screenSignature } from '@/utils/askQuestionScreen'
 import '@xterm/xterm/css/xterm.css'
 
 const props = defineProps<{
@@ -41,15 +41,10 @@ function readVisibleRows(t: Terminal): string[] {
   return rows
 }
 
-// A modal and its review/submit screen are never on screen at once, and the
-// modal is the more specific match — so the confirm detector only runs when the
-// question detector found nothing.
 function pollForScreen() {
   if (!term)
     return
-  const rows = readVisibleRows(term)
-  const question = detectQuestion(rows)
-  const confirm = question ? null : detectConfirmScreen(rows)
+  const { question, confirm } = detectScreen(readVisibleRows(term))
   const sig = `${screenSignature(question)}|${screenSignature(confirm)}`
   if (sig === currentSig)
     return

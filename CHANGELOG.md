@@ -159,11 +159,10 @@ Preparing the first public release.
 ### Changed
 - Desktop-shell build tasks renamed to the `build:`/`dev:` prefix used by every other task: `desktop:build` → **`build:desktop`**, plus a new **`dev:desktop`** for wails hot-reload. `build:all` stays server-only — the Playwright suite builds through it and must not start needing Xcode CLT — and the new **`build:everything`** adds the desktop shell on top. `build:frontend` is now `run: once`, so a chained build cannot compile the SPA twice.
 
-- Interactive question answering moved from the JSONL-derived "Needs answer" card in the **Needs you** triage band to the Terminal tab's live overlay (see Added, above). The old flow only worked for tmux-backed sessions and left non-tmux sessions read-only; the new one works for any live-injectable session, driven over the terminal WebSocket instead of parsed JSONL.
+- Interactive question answering no longer reads the JSONL transcript: both the **Needs you** triage band card and the Terminal tab's overlay are driven by the session's live rendered screen (see Added, above). The old flow only worked for tmux-backed sessions and left non-tmux sessions read-only; the new one works for any live-injectable session.
 
 ### Removed
 
-- The triage-band "Needs answer" question card and its `POST /api/agents/{pid}/answer-question` endpoint — superseded by the Terminal tab's question overlay.
 
 ### Fixed
 
