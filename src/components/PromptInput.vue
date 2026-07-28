@@ -246,11 +246,20 @@ defineExpose({ focus })
   <div class="relative" :class="variant">
     <span v-if="variant === 'full'" :id="hintId" class="sr-only">Press Enter to send, Shift+Enter for new line</span>
     <span v-else :id="hintId" class="sr-only">Press Enter to send</span>
+    <!-- The compact variant opens DOWNWARD: on an agent card the input sits in a
+         hover-revealed wrapper (`overflow-hidden`, `max-h-40` = 160px) that clips
+         anything above it, so an upward listbox would be invisible. Downward it
+         must also fit that budget — input (~38px) + max-h-28 (112px) stays inside
+         it — hence the shorter list here; it scrolls. The full variant sits at
+         the bottom of the modal, where upward is the only direction with room. -->
     <div
       v-if="showSuggestions"
       :id="listboxId"
       role="listbox"
-      class="absolute bottom-full left-0 right-0 bg-app border border-line border-b-0 rounded-t-md max-h-60 overflow-y-auto z-10"
+      :class="variant === 'full'
+        ? 'bottom-full border-b-0 rounded-t-md max-h-60'
+        : 'top-full border-t-0 rounded-b-md max-h-28'"
+      class="absolute left-0 right-0 bg-app border border-line overflow-y-auto z-10"
     >
       <button
         v-for="(cmd, i) in slashSuggestions"

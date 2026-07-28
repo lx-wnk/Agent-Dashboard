@@ -53,15 +53,30 @@ const usageConsumptionText = computed<string>(() => {
   return `5h ${formatM(w5h.tokens)} · 7d ${formatM(w7d.tokens)}`
 })
 
+// Resource-pressure thresholds in percent. One definition, so the usage bar and
+// the numeric readout can never disagree about what counts as warning/danger.
+// NOTE: barColor below still uses its own, older pair (85/60) — aligning it is a
+// visual change to an existing element and is left as a deliberate decision.
+const WARN_PCT = 75
+const DANGER_PCT = 90
+
 function barColor(pct: number): string {
   return pct > 85 ? 'bg-danger' : pct > 60 ? 'bg-warning' : 'bg-success'
+}
+
+function metricTextClass(pct: number): string {
+  if (pct >= DANGER_PCT)
+    return 'text-danger-text'
+  if (pct >= WARN_PCT)
+    return 'text-warning-text'
+  return ''
 }
 
 function usageBarColor(): string {
   if (!worst.value || worst.value.pct === null)
     return 'bg-raised'
   const p = worst.value.pct * 100
-  return p >= 90 ? 'bg-danger' : p >= 75 ? 'bg-warning' : 'bg-success'
+  return p >= DANGER_PCT ? 'bg-danger' : p >= WARN_PCT ? 'bg-warning' : 'bg-success'
 }
 
 function formatDelta(d: number | null): string {
@@ -88,9 +103,9 @@ function formatDelta(d: number | null): string {
   <div v-else class="shrink-0 border-t border-line bg-card">
     <div v-if="openSegment === 'system'" data-testid="panel-system" class="px-4 py-3 border-b border-line text-[12px] text-fg-mute">
       <div v-if="systemInfo" class="grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono">
-        <div>CPU {{ Math.round(systemInfo.cpu.usage) }}% · {{ systemInfo.cpu.cores }} cores</div>
-        <div>MEM {{ Math.round(systemInfo.memory.usagePercent) }}%</div>
-        <div>DISK {{ Math.round(systemInfo.disk.usagePercent) }}%</div>
+        <div>CPU <span :class="metricTextClass(systemInfo.cpu.usage)">{{ Math.round(systemInfo.cpu.usage) }}%</span> · {{ systemInfo.cpu.cores }} cores</div>
+        <div>MEM <span data-testid="mem-pct" :class="metricTextClass(systemInfo.memory.usagePercent)">{{ Math.round(systemInfo.memory.usagePercent) }}%</span></div>
+        <div>DISK <span :class="metricTextClass(systemInfo.disk.usagePercent)">{{ Math.round(systemInfo.disk.usagePercent) }}%</span></div>
         <div>LOAD {{ systemInfo.loadAvg.map(l => l.toFixed(2)).join(' ') }}</div>
       </div>
     </div>
@@ -156,9 +171,9 @@ function formatDelta(d: number | null): string {
         <span v-if="systemInfo" class="flex items-center gap-1">CPU
           <span class="inline-block w-10 h-1.5 bg-raised rounded-full overflow-hidden align-middle">
             <span class="block h-full rounded-full" :class="barColor(systemInfo.cpu.usage)" :style="{ width: `${systemInfo.cpu.usage}%` }" /></span>
-          {{ Math.round(systemInfo.cpu.usage) }}%</span>
-        <span v-if="systemInfo">MEM {{ Math.round(systemInfo.memory.usagePercent) }}%</span>
-        <span v-if="systemInfo">DISK {{ Math.round(systemInfo.disk.usagePercent) }}%</span>
+          <span :class="metricTextClass(systemInfo.cpu.usage)">{{ Math.round(systemInfo.cpu.usage) }}%</span></span>
+        <span v-if="systemInfo">MEM <span data-testid="mem-pct-strip" :class="metricTextClass(systemInfo.memory.usagePercent)">{{ Math.round(systemInfo.memory.usagePercent) }}%</span></span>
+        <span v-if="systemInfo">DISK <span :class="metricTextClass(systemInfo.disk.usagePercent)">{{ Math.round(systemInfo.disk.usagePercent) }}%</span></span>
       </button>
       <span class="w-px h-3.5 bg-line" aria-hidden="true" />
       <button

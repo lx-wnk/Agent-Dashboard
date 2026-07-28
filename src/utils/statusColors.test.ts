@@ -4,7 +4,7 @@ import { agentStatusTone, runStatusTone, stageTone, statusLabel } from './status
 describe('statusLabel', () => {
   it('returns human-readable labels for known statuses', () => {
     expect(statusLabel('active')).toBe('Active')
-    expect(statusLabel('waiting')).toBe('Waiting')
+    expect(statusLabel('waiting')).toBe('Quiet')
     expect(statusLabel('idle')).toBe('Idle')
     expect(statusLabel('completed')).toBe('Completed')
     expect(statusLabel('error')).toBe('Error')
