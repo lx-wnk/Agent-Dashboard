@@ -36,6 +36,6 @@ func ScanFullFileTokenUsage(path string) (sdk.TokenUsage, error) {
 // benchmark/test starts from a clean slate.
 func ResetTokenOffsetCache() {
 	tokenOffsetCacheMu.Lock()
-	tokenOffsetCache = make(map[uint64]*tokenOffsetCacheEntry)
+	tokenOffsetCache = make(map[string]*tokenOffsetCacheEntry)
 	tokenOffsetCacheMu.Unlock()
 }

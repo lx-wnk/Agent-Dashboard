@@ -346,10 +346,10 @@ func scanFullFileTokenUsage(path string) (fullScanUsage, error) {
 		if m.Role != "assistant" || m.Usage == nil {
 			return nil
 		}
-		total.TokenUsage.InputTokens += m.Usage.InputTokens
-		total.TokenUsage.OutputTokens += m.Usage.OutputTokens
-		total.TokenUsage.CacheCreationTokens += m.Usage.CacheCreationTokens
-		total.TokenUsage.CacheReadTokens += m.Usage.CacheReadTokens
+		total.InputTokens += m.Usage.InputTokens
+		total.OutputTokens += m.Usage.OutputTokens
+		total.CacheCreationTokens += m.Usage.CacheCreationTokens
+		total.CacheReadTokens += m.Usage.CacheReadTokens
 		return nil
 	})
 	if err != nil {
@@ -359,17 +359,21 @@ func scanFullFileTokenUsage(path string) (fullScanUsage, error) {
 }
 
 // tokenOffsetCacheEntry tracks the incremental token-scan position for one
-// session file, keyed by inode. offset only ever advances for a given inode —
+// session file, keyed by path and pinned to the inode it was seeded from. The
+// inode alone cannot key the cache: the kernel recycles inode numbers, so a
+// deleted session's entry would otherwise be resumed for the unrelated file
+// that inherits its number. offset only ever advances while the inode holds —
 // the JSONL is append-only (CI-4), so a lifetime total is an exact running sum
 // of appended bytes and never needs to re-read history.
 type tokenOffsetCacheEntry struct {
+	inode   uint64
 	offset  int64
 	running sdk.TokenUsage
 }
 
 var (
 	tokenOffsetCacheMu sync.Mutex
-	tokenOffsetCache   = make(map[uint64]*tokenOffsetCacheEntry)
+	tokenOffsetCache   = make(map[string]*tokenOffsetCacheEntry)
 )
 
 // tokenOffsetCacheMaxEntries bounds tokenOffsetCache so idle/rotated session
@@ -396,12 +400,12 @@ func tokenUsageForFile(path string) (fullScanUsage, error) {
 	// during the scan, so it is only safe against double-counting because callers
 	// guarantee one goroutine per inode per tick (the merger partitions scans by
 	// directory group and claims each session file exactly once). The map itself
-	// is fully mutex-guarded; only concurrent scans of the same inode would race.
+	// is fully mutex-guarded; only concurrent scans of the same path would race.
 	tokenOffsetCacheMu.Lock()
-	entry, ok := tokenOffsetCache[inode]
+	entry, ok := tokenOffsetCache[path]
 	tokenOffsetCacheMu.Unlock()
 
-	if ok && size >= entry.offset {
+	if ok && entry.inode == inode && size >= entry.offset {
 		usage, newOffset, scanErr := ScanMessagesFrom(path, entry.offset)
 		if scanErr == nil {
 			tokenOffsetCacheMu.Lock()
@@ -423,9 +427,9 @@ func tokenUsageForFile(path string) (fullScanUsage, error) {
 	}
 	tokenOffsetCacheMu.Lock()
 	if !ok && len(tokenOffsetCache) >= tokenOffsetCacheMaxEntries {
-		tokenOffsetCache = make(map[uint64]*tokenOffsetCacheEntry, tokenOffsetCacheMaxEntries)
+		tokenOffsetCache = make(map[string]*tokenOffsetCacheEntry, tokenOffsetCacheMaxEntries)
 	}
-	tokenOffsetCache[inode] = &tokenOffsetCacheEntry{offset: size, running: full.TokenUsage}
+	tokenOffsetCache[path] = &tokenOffsetCacheEntry{inode: inode, offset: size, running: full.TokenUsage}
 	tokenOffsetCacheMu.Unlock()
 	return full, nil
 }
