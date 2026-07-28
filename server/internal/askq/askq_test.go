@@ -463,3 +463,36 @@ func TestDetectQuestion_KeepsTrailingAsciiHyphen(t *testing.T) {
 		t.Errorf("Options[0].Label = %q, want --dry-run", q.Options[0].Label)
 	}
 }
+
+// Unrelated numbered output can still sit in the viewport above the modal; a
+// strict "exactly two numbered rows" count would silently disable detection.
+func TestDetectConfirmScreen_IgnoresUnrelatedNumberedLinesAbove(t *testing.T) {
+	c := DetectConfirmScreen([]string{
+		"Files changed:",
+		"1. server/main.go",
+		"2. README.md",
+		"Ready to submit your answers?",
+		"❯ 1. Submit answers",
+		"  2. Cancel",
+	})
+	if c == nil {
+		t.Fatal("expected non-nil DetectedConfirm")
+	}
+	if c.Question != "Ready to submit your answers?" {
+		t.Errorf("Question = %q", c.Question)
+	}
+}
+
+// Adjacency is what keeps the pair a real option block — a content line between
+// them means they are not one selector.
+func TestDetectConfirmScreen_RejectsNonAdjacentPair(t *testing.T) {
+	c := DetectConfirmScreen([]string{
+		"Ready to submit your answers?",
+		"1. Submit answers",
+		"some unrelated line",
+		"2. Cancel",
+	})
+	if c != nil {
+		t.Fatalf("matched a non-adjacent pair: %+v", c)
+	}
+}

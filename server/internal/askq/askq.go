@@ -298,8 +298,8 @@ func DetectQuestion(rows []string) *sdk.DetectedQuestion {
 // second detector the dashboard goes blind exactly when the flow needs one last
 // keypress, and a multi-question round can never be completed from the UI.
 //
-// Gate: exactly two numbered rows, numbered 1 and 2, labelled Submit/Cancel,
-// with no meta-row anywhere on screen. The Submit/Cancel label pair is the
+// Gate: the last two numbered rows are adjacent, numbered 1 and 2, labelled
+// Submit/Cancel, with no meta-row anywhere on screen. The Submit/Cancel label pair is the
 // signal - deliberately NOT the surrounding copy ("Review your answers",
 // "Ready to submit your answers?"), which drifts between Claude Code releases
 // and would silently disable detection again the next time it is reworded.
@@ -307,16 +307,24 @@ func DetectConfirmScreen(rows []string) *sdk.DetectedConfirm {
 	contentLines := parseRows(rows)
 	numbered := numberedEntries(contentLines)
 
-	if len(numbered) != 2 {
+	if len(numbered) < 2 {
 		return nil
 	}
+	// A meta-row anywhere means this is a question modal, not the confirm screen.
 	for _, e := range numbered {
 		if metaLabelMatches(e.row.label, typeSomethingLabel) || metaLabelMatches(e.row.label, chatAboutLabel) {
 			return nil
 		}
 	}
 
-	submit, cancel := numbered[0], numbered[1]
+	// Match the LAST two numbered rows rather than requiring exactly two on the
+	// whole screen: unrelated numbered output can still be in the viewport above
+	// the modal, and a strict count would silently disable detection. Adjacency
+	// (no content line between them) is what keeps the pair a real option block.
+	submit, cancel := numbered[len(numbered)-2], numbered[len(numbered)-1]
+	if cancel.idx != submit.idx+1 {
+		return nil
+	}
 	if submit.row.num != 1 || cancel.row.num != 2 {
 		return nil
 	}

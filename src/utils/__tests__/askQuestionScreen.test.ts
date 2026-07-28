@@ -300,3 +300,27 @@ describe('border bleed', () => {
     expect(q.options[0].label).toBe('--dry-run')
   })
 })
+
+describe('confirm screen tolerance', () => {
+  it('ignores unrelated numbered lines above the modal', () => {
+    const c = detectConfirmScreen([
+      'Files changed:',
+      '1. server/main.go',
+      '2. README.md',
+      'Ready to submit your answers?',
+      '❯ 1. Submit answers',
+      '  2. Cancel',
+    ])!
+    expect(c).not.toBeNull()
+    expect(c.question).toBe('Ready to submit your answers?')
+  })
+
+  it('rejects a non-adjacent submit/cancel pair', () => {
+    expect(detectConfirmScreen([
+      'Ready to submit your answers?',
+      '1. Submit answers',
+      'some unrelated line',
+      '2. Cancel',
+    ])).toBeNull()
+  })
+})
