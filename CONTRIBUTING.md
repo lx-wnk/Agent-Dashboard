@@ -112,6 +112,19 @@ Three non-obvious build requirements the `desktop:*` tasks encapsulate — a bar
 
 The `wails` CLI (`go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0`) is needed for `task dev:desktop` (wails hot-reload) and for producing a `.app`/`.dmg` bundle (`task desktop:dist` / `task desktop:dmg`); the plain `task build:desktop` above does not need it. See [docs/desktop-distribution.md](docs/desktop-distribution.md) for packaging plus the full signing and notarization steps.
 
+### CI matrices and the Go toolchain
+
+Two single sources feed CI, so neither has to be edited per module:
+
+- **`.go-version`** pins the toolchain for every `setup-go` step in `ci.yml` and `release.yml`. A Go patch bump is a one-line change here. The `go` directives in the individual `go.mod` files are *minimum requirements*, not the build pin — they do not need to move for a toolchain update. `.go-version` is also read by `goenv`/`asdf` if you use one locally.
+- **`scripts/ci-matrix.sh`** derives every job matrix. Run it to see exactly what CI will fan out over:
+
+  ```bash
+  bash scripts/ci-matrix.sh
+  ```
+
+  It discovers plugins from `plugins/*/go.mod`, so **adding a plugin needs no `ci.yml` change** — it is picked up by the test, lint, security and build jobs automatically. A plugin without a `package main` (a shared library such as `plugins/oauthkit`) is tested, linted and vulnerability-scanned, but has no binary to build, and the script classifies it accordingly.
+
 ## Pull Request Process
 
 1. Branch from `main`.

@@ -157,6 +157,7 @@ Preparing the first public release.
   below it. Addons with no mode remain independent siblings and are unaffected.
 
 ### Changed
+- CI derives its job matrices from `scripts/ci-matrix.sh` instead of six hard-coded module lists across `ci.yml`. The script discovers plugin modules from `plugins/*/go.mod` and classifies each as a binary or a shared library (no `package main`), so adding a plugin no longer requires touching the workflow — it is picked up by the test, lint, security and build jobs automatically. Run the script locally to see exactly what CI will fan out over. Alongside it, the Go toolchain is pinned once in a new **`.go-version`** file that every `setup-go` step reads; the `go` directives in individual `go.mod` files are minimum requirements again rather than the de-facto build pin, so a toolchain bump is a one-line change instead of nine. `dependabot.yml` uses the globbing `directories` key for the same reason.
 - Desktop-shell build tasks renamed to the `build:`/`dev:` prefix used by every other task: `desktop:build` → **`build:desktop`**, plus a new **`dev:desktop`** for wails hot-reload. `build:all` stays server-only — the Playwright suite builds through it and must not start needing Xcode CLT — and the new **`build:everything`** adds the desktop shell on top. `build:frontend` is now `run: once`, so a chained build cannot compile the SPA twice.
 
 - Interactive question answering no longer reads the JSONL transcript: both the **Needs you** triage band card and the Terminal tab's overlay are driven by the session's live rendered screen (see Added, above). The old flow only worked for tmux-backed sessions and left non-tmux sessions read-only; the new one works for any live-injectable session.
@@ -205,6 +206,8 @@ Preparing the first public release.
 
 ### Security
 
+- `plugins/oauthkit` is now vulnerability-scanned. It was present in the test and lint matrices but absent from the security matrix, so `govulncheck` had never run against the module that holds the shared OAuth CSRF and session handling. Deriving all matrices from one source closes the gap and prevents the next one.
+- Dependabot now covers every Go module. It was configured for four (`server`, `sdk`, `github-oauth`, `office365-oauth`) out of eight, leaving `desktop`, `oauthkit`, `voice-whisper`, `voice-webspeech` and `anthropic-spawner` without dependency updates.
 - Go toolchain raised to 1.26.5 across every module, clearing [GO-2026-5856](https://pkg.go.dev/vuln/GO-2026-5856) / CVE-2026-42505 in the standard library's `crypto/tls`: TLS handshakes using Encrypted Client Hello could be de-anonymized by a passive network observer, because pre-shared-key identities were disclosed in the unencrypted client hello.
 - `golang.org/x/text` raised to v0.39.0, clearing [GO-2026-5970](https://pkg.go.dev/vuln/GO-2026-5970) — an infinite loop on invalid input, reachable from the ent migration path.
 - `PATCH /api/settings/*` now requires admin authorization — previously any authenticated user could change security-sensitive settings such as `auth.mode`, `git.allowPush`, or `worktree.force`.
