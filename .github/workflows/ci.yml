@@ -3,8 +3,10 @@ name: CI
 on:
   push:
     branches: [main]
+  # No branch filter: a PR targeting a feature branch (a stacked PR) must be
+  # tested too. With `branches: [main]` those ran no jobs at all, which
+  # renders on the PR as "no checks" rather than as untested.
   pull_request:
-    branches: [main]
 
 permissions:
   contents: read
