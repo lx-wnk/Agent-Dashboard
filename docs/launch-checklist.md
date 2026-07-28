@@ -19,10 +19,6 @@ release with notes generated from Conventional Commits.
   preview, or app screenshots look credible. **OPERATOR / design:** produce a logo,
   then replace the icons (and drop a dedicated padded maskable 512 into
   `public/`, updating the `purpose: 'maskable'` entry in `vite.config.ts`).
-- **GitHub does not detect the LICENSE.** `LICENSE` is present and MIT, but
-  `gh repo view --json licenseInfo` reports `none`. Re-check after the next push;
-  if still undetected, ensure the file is exactly the SPDX MIT text with no
-  leading content so GitHub's licensee classifier picks it up.
 
 ---
 
@@ -31,38 +27,33 @@ release with notes generated from Conventional Commits.
 | Item | Status | Action |
 |---|---|---|
 | Description | ✅ set | "Real-time monitoring and control dashboard for locally running Claude Code agents" |
-| Topics | ✅ set (7) | `agent-monitoring, ai-agents, claude, claude-code, dashboard, developer-tools, mcp` — consider adding `pwa`, `self-hosted`, `sse` |
+| Topics | ✅ set (10) | `agent-monitoring, ai-agents, claude, claude-code, dashboard, developer-tools, mcp, pwa, self-hosted, sse` |
 | Homepage URL | ❌ empty | **OPERATOR:** decide the URL. This is a local-first app with no hosted instance — point it at the docs site if one exists, else leave empty. `gh repo edit lx-wnk/Agent-Dashboard --homepage "https://..."` |
-| License detection | ⚠ see prereq | Verify GitHub shows "MIT" on the repo page after next push |
-
-Add topics:
-```sh
-gh repo edit lx-wnk/Agent-Dashboard \
-  --add-topic pwa --add-topic self-hosted --add-topic sse
-```
+| License detection | ✅ MIT | `gh repo view --json licenseInfo` → `mit` |
 
 ---
 
 ## Tier 1 — Launch-ready
 
 ### First release tag — **OPERATOR (irreversible: publishes a public release)**
-GoReleaser is wired; a `v*` tag triggers the release workflow.
-```sh
-# Pick the version deliberately (0.1.0 = first public preview).
-git checkout upcoming && git pull
-git tag -a v0.1.0 -m "v0.1.0 — first public preview"
-git push origin v0.1.0        # → release.yml runs GoReleaser
-```
-Before tagging: confirm `.goreleaser.yml` targets the intended binaries/artifacts
-and that `CHANGELOG.md [Unreleased]` is curated (GoReleaser generates notes from
-commits, but the human-written Unreleased section is the reference).
+Follow [RELEASING.md](RELEASING.md) — it is the canonical procedure and it
+requires the release commit to be on `main`, not on `upcoming`. Do not tag from a
+feature or integration branch.
+
+Launch-specific decisions to make before running it:
+- Pick the version deliberately (`v0.1.0` = first public preview).
+- Curate `CHANGELOG.md [Unreleased]`: GoReleaser generates notes from commits, but
+  the human-written section is the reference.
+- Confirm `.goreleaser.yml` targets the intended binaries and artifacts.
 
 ### Hero demo GIF in README — **OPERATOR (needs the running app + real branding)**
 - Record a 10–20s loop of the core flow (agent roster → task pipeline board →
   answering an AskUserQuestion inline). Tools: `asciinema`+`agg` for the CLI, or a
   screen recorder → GIF for the UI. Keep < 5 MB, ~1200px wide.
-- Commit to `docs/assets/hero.gif` and embed near the top of `README.md`:
-  `![Agent Dashboard](docs/assets/hero.gif)`
+- Commit to `docs/assets/hero.gif` and REPLACE the existing static hero: `README.md`
+  already embeds `docs/assets/hero.png` in an `<img width="900">` block. Swap the
+  `src` there rather than appending a second image, and update
+  `docs/assets/README.md`, which documents the hero asset.
 - There are static screenshots under `docs/local/Post/` (gitignored) usable as a
   starting point.
 
