@@ -53,14 +53,21 @@ const usageConsumptionText = computed<string>(() => {
   return `5h ${formatM(w5h.tokens)} · 7d ${formatM(w7d.tokens)}`
 })
 
+// Resource-pressure thresholds in percent. One definition, so the usage bar and
+// the numeric readout can never disagree about what counts as warning/danger.
+// NOTE: barColor below still uses its own, older pair (85/60) — aligning it is a
+// visual change to an existing element and is left as a deliberate decision.
+const WARN_PCT = 75
+const DANGER_PCT = 90
+
 function barColor(pct: number): string {
   return pct > 85 ? 'bg-danger' : pct > 60 ? 'bg-warning' : 'bg-success'
 }
 
 function metricTextClass(pct: number): string {
-  if (pct >= 90)
+  if (pct >= DANGER_PCT)
     return 'text-danger-text'
-  if (pct >= 75)
+  if (pct >= WARN_PCT)
     return 'text-warning-text'
   return ''
 }
@@ -69,7 +76,7 @@ function usageBarColor(): string {
   if (!worst.value || worst.value.pct === null)
     return 'bg-raised'
   const p = worst.value.pct * 100
-  return p >= 90 ? 'bg-danger' : p >= 75 ? 'bg-warning' : 'bg-success'
+  return p >= DANGER_PCT ? 'bg-danger' : p >= WARN_PCT ? 'bg-warning' : 'bg-success'
 }
 
 function formatDelta(d: number | null): string {
