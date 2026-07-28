@@ -119,6 +119,10 @@ Two single sources feed CI, so neither has to be edited per module:
 - **`.go-version`** pins the toolchain for every `setup-go` step in `ci.yml` and `release.yml`. A Go patch bump is a one-line change here, and nothing else moves. `.go-version` is also read by `goenv`/`asdf` if you use one locally.
 
   The `go` directives in the individual `go.mod` files stay at a plain `go 1.26`: they are *minimum language requirements*, not the build pin. Raise one only when a module genuinely starts requiring a newer language version — never for a security patch. `govulncheck` evaluates the standard library of the toolchain in use, not the directive, so `.go-version` is what governs stdlib CVEs.
+
+  Do not delete a `go` directive to "clean up": without one the language level falls back to 1.16, the stricter `go.sum` rules no longer apply and the build breaks — and the next `go mod tidy` writes the directive back with the full patch version of whatever toolchain you happen to run.
+
+  Watch for a `toolchain` line appearing in a `go.mod` after a `go get`: the go command adds one whenever it raises the `go` version. That would reintroduce a second, competing toolchain pin next to `.go-version`. Drop it and keep the pin in one place.
 - **The `matrix` job** at the top of `ci.yml` holds the module lists — `WORKSPACE_MODULES` and `PLUGINS` — and every other job's matrix derives from its outputs. **Adding a plugin means adding it to `PLUGINS`, and nothing else**: the test, lint, security and build jobs all follow. The security list is computed from the other two, so it can no longer drift out of sync (it once did, and `plugins/oauthkit` went unscanned as a result).
 
   These lists cannot be workflow-level `env:` variables: GitHub does not expose the `env` context to `strategy.matrix` (allowed there: `github`, `needs`, `vars`, `inputs`), so they have to travel as job outputs.
