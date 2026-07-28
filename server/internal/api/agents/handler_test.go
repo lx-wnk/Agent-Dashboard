@@ -1,10 +1,12 @@
 package agents_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -16,6 +18,44 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/agents"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 )
+
+// syncRecorder is an http.ResponseWriter+http.Flusher safe for concurrent
+// use: the SSE handler writes from its own goroutine while the test polls
+// the buffered body from the main goroutine, which httptest.ResponseRecorder
+// does not support (its embedded bytes.Buffer has no internal locking).
+type syncRecorder struct {
+	mu     sync.Mutex
+	header http.Header
+	body   bytes.Buffer
+}
+
+func newSyncRecorder() *syncRecorder {
+	return &syncRecorder{header: make(http.Header)}
+}
+
+func (r *syncRecorder) Header() http.Header { return r.header }
+
+func (r *syncRecorder) Write(b []byte) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.body.Write(b)
+}
+
+func (r *syncRecorder) WriteHeader(int) {}
+
+func (r *syncRecorder) Flush() {}
+
+func (r *syncRecorder) Len() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.body.Len()
+}
+
+func (r *syncRecorder) String() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.body.String()
+}
 
 func TestAgentHandler_List_ReturnsJSON(t *testing.T) {
 	want := []sdk.Agent{{SessionID: "abc", Status: sdk.AgentStatusActive}}
@@ -116,7 +156,7 @@ func TestAgentHandler_Stream_InitialSend_UsesLastFrame(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	req := httptest.NewRequest(http.MethodGet, "/api/agents/stream", nil).WithContext(ctx)
-	rec := httptest.NewRecorder()
+	rec := newSyncRecorder()
 
 	done := make(chan struct{})
 	go func() {
@@ -125,12 +165,12 @@ func TestAgentHandler_Stream_InitialSend_UsesLastFrame(t *testing.T) {
 	}()
 
 	require.Eventually(t, func() bool {
-		return rec.Body.Len() > 0
+		return rec.Len() > 0
 	}, time.Second, time.Millisecond, "initial frame was not written")
 	cancel()
 	<-done
 
-	assert.Equal(t, "data: "+string(frame)+"\n\n", rec.Body.String())
+	assert.Equal(t, "data: "+string(frame)+"\n\n", rec.String())
 	assert.Equal(t, int32(0), scanCalls.Load(), "getAgents must not be called when a last frame is cached")
 }
 
@@ -148,7 +188,7 @@ func TestAgentHandler_Stream_InitialSend_FallsBackToScan(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	req := httptest.NewRequest(http.MethodGet, "/api/agents/stream", nil).WithContext(ctx)
-	rec := httptest.NewRecorder()
+	rec := newSyncRecorder()
 
 	done := make(chan struct{})
 	go func() {
@@ -157,11 +197,11 @@ func TestAgentHandler_Stream_InitialSend_FallsBackToScan(t *testing.T) {
 	}()
 
 	require.Eventually(t, func() bool {
-		return rec.Body.Len() > 0
+		return rec.Len() > 0
 	}, time.Second, time.Millisecond, "initial frame was not written")
 	cancel()
 	<-done
 
-	assert.Contains(t, rec.Body.String(), "scanned")
+	assert.Contains(t, rec.String(), "scanned")
 	assert.Equal(t, int32(1), scanCalls.Load(), "getAgents must be called as a fallback when no frame is cached yet")
 }
