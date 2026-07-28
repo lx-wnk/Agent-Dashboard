@@ -110,7 +110,9 @@ func RunPTY(ctx context.Context, command []string) error {
 }
 
 // startPtyHTTPServer serves POST /message: the body's `message` is written to
-// the pty followed by a carriage return, i.e. injected as if typed + Enter.
+// the pty, then — after injectSubmitDelay, as a SEPARATE write — the submitting
+// carriage return, i.e. injected as if typed + Enter. The handler therefore
+// blocks for that delay before responding.
 func startPtyHTTPServer(ptmx io.Writer, hub *ptyHub, token *rotatingToken) (*http.Server, int, error) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
