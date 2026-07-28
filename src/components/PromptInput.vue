@@ -22,6 +22,10 @@ const emit = defineEmits<{ messageSent: [msg: OutputMessage] }>()
 const hintId = useId()
 const listboxId = useId()
 
+// Absolute paths of uploaded images, injected into the sent prompt as
+// "@<path>" tokens by useAgentPrompt (full variant only).
+const attachments = ref<string[]>([])
+
 const { promptInput, isSending, sendStatus, sendError, handleSend, resumeConfirm, confirmResume, cancelResume } = useAgentPrompt(
   () => props.agent,
   msg => emit('messageSent', msg),
@@ -29,7 +33,68 @@ const { promptInput, isSending, sendStatus, sendError, handleSend, resumeConfirm
     get taskId() { return props.agent?.pipelineTaskId },
     get cwd() { return props.agent?.cwd },
   },
+  attachments,
 )
+
+const isUploading = ref(false)
+const uploadError = ref('')
+
+async function uploadFiles(files: File[]) {
+  const pid = props.agent?.pid
+  if (files.length === 0 || pid == null)
+    return
+  isUploading.value = true
+  uploadError.value = ''
+  try {
+    for (const file of files) {
+      const form = new FormData()
+      form.append('image', file)
+      const res = await fetch(`/api/agents/${pid}/upload-image`, { method: 'POST', body: form })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || `Upload failed (${res.status})`)
+      }
+      const { path } = await res.json() as { path: string }
+      if (path)
+        attachments.value.push(path)
+    }
+  }
+  catch (err) {
+    uploadError.value = err instanceof Error ? err.message : 'Upload failed'
+  }
+  finally {
+    isUploading.value = false
+  }
+}
+
+async function onFileChange(e: Event) {
+  const input = e.target as HTMLInputElement
+  const files = Array.from(input.files ?? [])
+  input.value = '' // reset so the same file can be re-picked
+  await uploadFiles(files)
+}
+
+// Paste an image straight from the clipboard (Cmd/Ctrl+V) into the prompt.
+// Only intercepts when the clipboard carries image files — plain-text paste
+// falls through to the default handler unchanged.
+function onPaste(e: ClipboardEvent) {
+  const imageFiles = Array.from(e.clipboardData?.items ?? [])
+    .filter(it => it.kind === 'file' && it.type.startsWith('image/'))
+    .map(it => it.getAsFile())
+    .filter((f): f is File => f !== null)
+  if (imageFiles.length === 0)
+    return
+  e.preventDefault()
+  void uploadFiles(imageFiles)
+}
+
+function removeAttachment(path: string) {
+  attachments.value = attachments.value.filter(p => p !== path)
+}
+
+function attachmentName(path: string): string {
+  return path.split('/').pop() || path
+}
 
 const inputEl = ref<HTMLInputElement | HTMLTextAreaElement | null>(null)
 const fileInputEl = ref<HTMLInputElement | null>(null)
@@ -211,7 +276,25 @@ defineExpose({ focus })
       accept="image/*"
       multiple
       class="hidden"
+      @change="onFileChange"
     >
+    <!-- Attached images (full variant): injected as @<path> tokens on send -->
+    <div v-if="variant === 'full' && (attachments.length || uploadError)" class="px-4 pt-2 flex flex-wrap items-center gap-1.5">
+      <span
+        v-for="path in attachments"
+        :key="path"
+        class="inline-flex items-center gap-1 rounded bg-raised border border-line px-2 py-0.5 text-[11px] text-fg-soft font-mono"
+      >
+        🖼 {{ attachmentName(path) }}
+        <button
+          type="button"
+          :aria-label="`Remove ${attachmentName(path)}`"
+          class="inline-flex items-center justify-center min-w-4 min-h-4 text-fg-mute hover:text-danger-text leading-none"
+          @click="removeAttachment(path)"
+        >✕</button>
+      </span>
+      <span v-if="uploadError" class="text-[11px] text-danger-text">{{ uploadError }}</span>
+    </div>
     <TemplatePicker
       v-if="variant === 'full'"
       model-value=""
@@ -225,13 +308,13 @@ defineExpose({ focus })
       <button
         v-if="variant === 'full'"
         type="button"
-        title="Attach"
-        aria-label="Attach file"
+        title="Attach image"
+        aria-label="Attach image"
         class="w-8 h-8 flex-shrink-0 rounded-full border border-line bg-raised text-fg-mute text-base cursor-pointer flex items-center justify-center hover:border-accent hover:text-accent disabled:opacity-35 disabled:cursor-default transition-colors"
-        :disabled="isSending"
+        :disabled="isSending || isUploading"
         @click="fileInputEl?.click()"
       >
-        +
+        {{ isUploading ? '…' : '+' }}
       </button>
       <span
         v-else
@@ -251,6 +334,7 @@ defineExpose({ focus })
         class="flex-1 bg-transparent border-none text-fg text-[13px] font-mono focus-visible:outline-none placeholder:text-fg-faint disabled:opacity-50 resize-none leading-snug min-h-[22px] max-h-36 overflow-y-auto"
         @keydown="onKeydown"
         @input="autoResize"
+        @paste="onPaste"
       />
       <input
         v-else
@@ -285,7 +369,7 @@ defineExpose({ focus })
           variant === 'full' ? 'px-3.5 py-1.5 text-[14px]' : 'px-2.5 py-1 text-[13px]',
           isResumeMode ? 'bg-amber-600' : 'bg-accent',
         ]"
-        :disabled="isSending || promptInput.trim().length === 0"
+        :disabled="isSending || (promptInput.trim().length === 0 && attachments.length === 0)"
         @click="handleSend"
       >
         {{ isSending ? '...' : (isResumeMode ? '⤳' : '↵') }}

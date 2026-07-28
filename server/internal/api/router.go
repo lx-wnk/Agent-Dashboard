@@ -434,6 +434,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 		r.Get("/api/agents/spawn/{pid}/status", spawnHandler.Status)
 		r.Post("/api/agents/{pid}/message", spawnHandler.Message)
 		r.Delete("/api/agents/{pid}/channel", spawnHandler.DismissChannel)
+		uploadImageHandler := agents.NewUploadImageHandler()
+		r.Post("/api/agents/{pid}/upload-image", uploadImageHandler.UploadImage)
 		// WebSocket proxy — registered raw specifically because the upgrade
 		// hijacks the connection: an ErrorMiddleware wrapper that buffers or
 		// writes a response after the handler returns would break the hijacked

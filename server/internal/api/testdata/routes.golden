@@ -102,6 +102,7 @@ POST /*
 POST /api/agents/spawn
 POST /api/agents/{pid}/answer-question
 POST /api/agents/{pid}/message
+POST /api/agents/{pid}/upload-image
 POST /api/analytics/patterns/refresh
 POST /api/auth/logout
 POST /api/auth/session
