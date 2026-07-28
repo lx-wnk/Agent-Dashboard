@@ -35,7 +35,7 @@ func newScreen(cols int) *screen {
 // dropped.
 func renderRows(raw []byte) []string {
 	s := newScreen(defaultScreenCols)
-	s.Write(raw)
+	_, _ = s.Write(raw)
 	return s.Rows()
 }
 
@@ -120,7 +120,7 @@ func (s *screen) handleEscape(seq []byte) int {
 // sequences are consumed and ignored - they don't affect the visible grid.
 func (s *screen) handleCSI(seq []byte) int {
 	j := 2
-	for j < len(seq) && !(seq[j] >= 0x40 && seq[j] <= 0x7e) {
+	for j < len(seq) && (seq[j] < 0x40 || seq[j] > 0x7e) {
 		j++
 	}
 	if j >= len(seq) {
