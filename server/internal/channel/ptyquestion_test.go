@@ -123,7 +123,7 @@ func TestGetScreen_ReportsQuestionModal(t *testing.T) {
 	hub := newPtyHub(256 * 1024)
 	hub.Write(fixture)
 	tok := newRotatingToken("secret")
-	srv := httptest.NewServer(ptyMux(io.Discard, hub, tok))
+	srv := httptest.NewServer(ptyMux(newPtyWriter(io.Discard), hub, tok))
 	defer srv.Close()
 
 	req, _ := http.NewRequest("GET", srv.URL+"/screen", nil)
@@ -160,7 +160,7 @@ func TestGetScreen_ReportsConfirmScreenThatQuestionEndpointMisses(t *testing.T) 
 	hub := newPtyHub(64 * 1024)
 	hub.Write([]byte("Review your answers\r\n\r\nReady to submit your answers?\r\n\r\n❯ 1. Submit answers\r\n  2. Cancel\r\n"))
 	tok := newRotatingToken("secret")
-	srv := httptest.NewServer(ptyMux(io.Discard, hub, tok))
+	srv := httptest.NewServer(ptyMux(newPtyWriter(io.Discard), hub, tok))
 	defer srv.Close()
 
 	get := func(path string) *http.Response {
@@ -205,7 +205,7 @@ func TestGetScreen_ReportsConfirmScreenThatQuestionEndpointMisses(t *testing.T) 
 func TestGetScreen_NoScreenReturns204(t *testing.T) {
 	hub := newPtyHub(1024)
 	tok := newRotatingToken("secret")
-	srv := httptest.NewServer(ptyMux(io.Discard, hub, tok))
+	srv := httptest.NewServer(ptyMux(newPtyWriter(io.Discard), hub, tok))
 	defer srv.Close()
 
 	req, _ := http.NewRequest("GET", srv.URL+"/screen", nil)
@@ -224,7 +224,7 @@ func TestGetScreen_NoScreenReturns204(t *testing.T) {
 func TestGetScreen_UnauthorizedRejected(t *testing.T) {
 	hub := newPtyHub(1024)
 	tok := newRotatingToken("secret")
-	srv := httptest.NewServer(ptyMux(io.Discard, hub, tok))
+	srv := httptest.NewServer(ptyMux(newPtyWriter(io.Discard), hub, tok))
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + "/screen")
