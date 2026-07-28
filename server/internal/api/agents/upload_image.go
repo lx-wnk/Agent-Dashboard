@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -39,8 +40,14 @@ func NewUploadImageHandler() *UploadImageHandler {
 
 // uploadImageBaseDir returns (and creates) the stable base directory uploaded
 // images are stored under.
+//
+// The directory name carries the UID, matching channelconfig's convention: on
+// Linux os.TempDir() is the shared /tmp, so a fixed name lets any local user
+// pre-create the directory with permissive modes — MkdirAll then succeeds on it
+// and the user's screenshots are readable by them. O_EXCL and the random file
+// name protect the file, not the directory it lives in.
 func uploadImageBaseDir() (string, error) {
-	dir := filepath.Join(os.TempDir(), "agent-dashboard-uploads")
+	dir := filepath.Join(os.TempDir(), "agent-dashboard-uploads-"+strconv.Itoa(os.Getuid()))
 	if err := os.MkdirAll(dir, uploadImageDirPerm); err != nil {
 		return "", err
 	}
@@ -148,19 +155,26 @@ func mediaTypeOf(contentType string) string {
 	return mediaType
 }
 
-// extensionFor prefers the extension from the original filename (bounded to
-// avoid a pathological name inflating the stored filename) and falls back to
-// one derived from mediaType.
+// safeExtRe is the only shape accepted from a client-supplied filename. Two
+// concrete failures it prevents: a name like "shot.png (1)" yields the extension
+// ".png (1)", and the stored path then contains a space — the injected `@<path>`
+// token breaks there and the remainder lands in the prompt as literal text; and
+// slicing a non-ASCII extension to a byte length can cut mid-rune, producing a
+// name the filesystem rejects.
+var safeExtRe = regexp.MustCompile(`^\.[A-Za-z0-9]{1,8}$`)
+
+// extensionFor prefers the extension from the original filename and falls back
+// to one derived from mediaType whenever that extension is absent or not a
+// plain, short, alphanumeric one.
 func extensionFor(filename, mediaType string) string {
 	ext := filepath.Ext(filename)
-	if ext == "" {
-		if exts, err := mime.ExtensionsByType(mediaType); err == nil && len(exts) > 0 {
-			ext = exts[0]
+	if safeExtRe.MatchString(ext) {
+		return ext
+	}
+	if exts, err := mime.ExtensionsByType(mediaType); err == nil && len(exts) > 0 {
+		if safeExtRe.MatchString(exts[0]) {
+			return exts[0]
 		}
 	}
-	const maxExtLen = 10
-	if len(ext) > maxExtLen {
-		ext = ext[:maxExtLen]
-	}
-	return ext
+	return ""
 }

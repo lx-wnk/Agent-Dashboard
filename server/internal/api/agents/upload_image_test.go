@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -121,4 +122,51 @@ func TestUploadImage_MissingFileField(t *testing.T) {
 	h.UploadImage(rec, req)
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+// A client-supplied filename is not a trustworthy extension source: a trailing
+// " (1)" would put a space into the stored path, which truncates the injected
+// `@<path>` token, and a multi-byte extension could be cut mid-rune.
+func TestExtensionFor_RejectsUnsafeFilenameExtensions(t *testing.T) {
+	cases := []struct {
+		name      string
+		filename  string
+		mediaType string
+		want      string
+	}{
+		{"plain png", "shot.png", "image/png", ".png"},
+		{"space in ext falls back to media type", "shot.png (1)", "image/png", ".png"},
+		{"no ext falls back to media type", "clipboard", "image/png", ".png"},
+		{"multibyte ext falls back to media type", "shot.pnö", "image/png", ".png"},
+		{"overlong ext falls back to media type", "shot.abcdefghijkl", "image/png", ".png"},
+		{"unknown media type and unusable ext yields none", "shot.png (1)", "application/x-nonsense", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := extensionFor(tc.filename, tc.mediaType)
+			if tc.want == ".png" {
+				// mime.ExtensionsByType may return .png or another registered
+				// alias first depending on the system mime database.
+				if got == "" || strings.ContainsAny(got, " \t") || !safeExtRe.MatchString(got) {
+					t.Fatalf("extensionFor(%q, %q) = %q, want a safe extension", tc.filename, tc.mediaType, got)
+				}
+				return
+			}
+			if got != tc.want {
+				t.Fatalf("extensionFor(%q, %q) = %q, want %q", tc.filename, tc.mediaType, got, tc.want)
+			}
+		})
+	}
+}
+
+// The upload directory must be per-UID: on Linux os.TempDir() is the shared
+// /tmp, where a fixed name can be pre-created by another local user.
+func TestUploadImageBaseDir_IsUIDNamespaced(t *testing.T) {
+	dir, err := uploadImageBaseDir()
+	if err != nil {
+		t.Fatalf("uploadImageBaseDir: %v", err)
+	}
+	if !strings.HasSuffix(filepath.Base(dir), strconv.Itoa(os.Getuid())) {
+		t.Fatalf("base dir %q is not UID-namespaced", dir)
+	}
 }
