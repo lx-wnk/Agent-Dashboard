@@ -1,3 +1,3 @@
 module github.com/lx-wnk/agent-dashboard/sdk
 
-go 1.26.5
+go 1.26

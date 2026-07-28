@@ -1,3 +1,3 @@
 module github.com/lx-wnk/agent-dashboard-plugin-oauthkit
 
-go 1.26.5
+go 1.26
