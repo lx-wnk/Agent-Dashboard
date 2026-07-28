@@ -28,6 +28,8 @@ Reference and guides for Agent Dashboard. Start with the [project README](../REA
 ## Releasing
 
 See [RELEASING.md](RELEASING.md) for the version scheme, one-time setup, and per-release steps.
+For the first public release specifically, [launch-checklist.md](launch-checklist.md)
+tracks the discoverability and polish items around it.
 
 ## Contributing
 
