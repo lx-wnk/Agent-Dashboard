@@ -6,7 +6,6 @@
   "frontend:build": "",
   "frontend:dir": "./bootstrap",
   "wailsjsdir": "./build/wailsjs",
-  "build:tags": "production",
   "author": {
     "name": "lx-wnk",
     "email": ""

@@ -26,7 +26,10 @@ tasks:
       # from the Go embed. This task hot-reloads the Go shell; for frontend HMR
       # use `task dev` (browser on :5173).
       - task: build:frontend
-      - cd desktop && $(go env GOPATH)/bin/wails dev -tags production -ldflags "-extldflags '-framework UniformTypeIdentifiers'"
+      # No -tags production here: `wails dev` always adds its own `dev` tag, and
+      # dev+production together redeclare App.Run/CreateApp in wails' app package.
+      # The two release paths (build:desktop, desktop:dist) pass the tag explicitly.
+      - cd desktop && $(go env GOPATH)/bin/wails dev -ldflags "-extldflags '-framework UniformTypeIdentifiers'"
 
   setup:
     desc: Install the dev toolchain (air, golangci-lint, tygo, govulncheck) + frontend deps
@@ -44,6 +47,9 @@ tasks:
 
   build:frontend:
     desc: Build the Vue SPA into the Go embed dir (server/frontend/dist)
+    # `once`: several tasks depend on this; without it go-task's default
+    # (run: always) rebuilds the SPA for each of them in the same invocation.
+    run: once
     cmd: pnpm build
 
   build:
@@ -55,12 +61,20 @@ tasks:
         sh: git describe --tags --always --dirty 2>/dev/null || echo dev
 
   build:all:
-    desc: Build frontend, embed it into a self-contained server binary, and (on macOS) the desktop shell
+    desc: Build frontend and embed it into a self-contained server binary
+    # Deliberately does NOT build the desktop shell: scripts/e2e-server.sh runs
+    # this, and pulling in the CGO/wails build would make the Playwright suite
+    # require Xcode CLT and blow its 180s server timeout. Use build:everything.
     cmds:
       - task: build:frontend
       - task: build
-      # macOS-only (platforms: [darwin]); Task skips it on other OSes, so build:all
-      # stays cross-platform.
+
+  build:everything:
+    desc: Build the server binary and, on macOS, the desktop shell as well
+    cmds:
+      - task: build:all
+      # macOS-only (platforms: [darwin]); Task skips it on other OSes, so this
+      # task stays cross-platform.
       - task: build:desktop
 
   build:cli:
