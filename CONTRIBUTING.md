@@ -13,7 +13,7 @@ Real-time monitoring dashboard for locally running Claude Code agents. Go 1.26 b
 
 **Platform:** macOS and Linux. Windows is unsupported.
 
-Building the macOS desktop shell (`desktop/`) additionally requires Xcode command-line tools (`xcode-select --install`). The `wails` CLI (`go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0`) is only needed later for `.app`/`.dmg` bundling — not for a dev build. See [Desktop shell (macOS)](#desktop-shell-macos) below.
+Building the macOS desktop shell (`desktop/`) additionally requires Xcode command-line tools (`xcode-select --install`). The `wails` CLI (`go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0`) is needed for `task dev:desktop` (hot-reload) and for `.app`/`.dmg` bundling; a plain `task build:desktop` does not need it. See [Desktop shell (macOS)](#desktop-shell-macos) below.
 
 ## Setup
 
@@ -53,6 +53,9 @@ Build the SPA **before** the binary — `go:embed` bakes the compiled frontend i
 |---------|-------------|
 | `task dev` | Start with air hot-reload |
 | `task build` | Compile production binary → `bin/agent-dashboard` |
+| `task build:all` | Build the SPA and embed it into the server binary |
+| `task build:everything` | `build:all` plus, on macOS, the desktop shell |
+| `task dev:desktop` | macOS desktop shell with wails hot-reload (needs the wails CLI) |
 | `task test` | Run all tests with race detector |
 | `task lint` | Run golangci-lint |
 | `task generate` | Run ent schema + tygo TS code generation |
@@ -98,7 +101,7 @@ IDE-embedded tools (Cursor, Copilot-in-VSCode, Windsurf) don't write file-per-se
 `desktop/` is its own Go module (wails v2) that wraps the dashboard server in a native WKWebView window. It is `//go:build darwin`-gated — the module does not build on other platforms; a `main_other.go` stub keeps `go build ./...` and CI green off macOS. Build and run it for a dev smoke (requires Go 1.26 + Xcode command-line tools, no `wails` CLI needed):
 
 ```bash
-task desktop:run        # or: task desktop:build  (writes bin/agent-dashboard-desktop)
+task desktop:run        # or: task build:desktop  (writes bin/agent-dashboard-desktop)
 ```
 
 Three non-obvious build requirements the `desktop:*` tasks encapsulate — a bare `cd desktop && go build .` runs but produces a broken app:
@@ -107,7 +110,7 @@ Three non-obvious build requirements the `desktop:*` tasks encapsulate — a bar
 - **`-ldflags "-extldflags '-framework UniformTypeIdentifiers'"`** — wails v2 references `UTType` on the macOS 15 SDK; a plain `go build` fails to link it (`Undefined symbols: _OBJC_CLASS_$_UTType`).
 - **the SPA must be built first** (`task build:frontend`) — the shell starts the dashboard server in-process, and that server (not the shell) embeds and serves `server/frontend/dist` via `go:embed`; an empty dist makes the webview hit a `/` → `./` redirect loop instead of the app.
 
-The `wails` CLI (`go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0`) is only needed later, for producing a `.app`/`.dmg` bundle (`task desktop:dist` / `task desktop:dmg`) — not for this dev build. See [docs/desktop-distribution.md](docs/desktop-distribution.md) for packaging plus the full signing and notarization steps.
+The `wails` CLI (`go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0`) is needed for `task dev:desktop` (wails hot-reload) and for producing a `.app`/`.dmg` bundle (`task desktop:dist` / `task desktop:dmg`); the plain `task build:desktop` above does not need it. See [docs/desktop-distribution.md](docs/desktop-distribution.md) for packaging plus the full signing and notarization steps.
 
 ## Pull Request Process
 

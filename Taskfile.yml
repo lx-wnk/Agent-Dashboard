@@ -17,6 +17,20 @@ tasks:
     desc: Start Vite dev server with HMR on :5173
     cmd: pnpm dev
 
+  dev:desktop:
+    desc: Run the macOS desktop shell with wails hot-reload (rebuilds the Go shell on change; requires the wails CLI + Xcode CLT)
+    platforms: [darwin]
+    cmds:
+      # Embed the current SPA first — the webview redirects to the in-process
+      # server on 127.0.0.1:13120, not wails' asset server, so the SPA is served
+      # from the Go embed. This task hot-reloads the Go shell; for frontend HMR
+      # use `task dev` (browser on :5173).
+      - task: build:frontend
+      # No -tags production here: `wails dev` always adds its own `dev` tag, and
+      # dev+production together redeclare App.Run/CreateApp in wails' app package.
+      # The two release paths (build:desktop, desktop:dist) pass the tag explicitly.
+      - cd desktop && $(go env GOPATH)/bin/wails dev -ldflags "-extldflags '-framework UniformTypeIdentifiers'"
+
   setup:
     desc: Install the dev toolchain (air, golangci-lint, tygo, govulncheck) + frontend deps
     cmds:
@@ -33,6 +47,9 @@ tasks:
 
   build:frontend:
     desc: Build the Vue SPA into the Go embed dir (server/frontend/dist)
+    # `once`: several tasks depend on this; without it go-task's default
+    # (run: always) rebuilds the SPA for each of them in the same invocation.
+    run: once
     cmd: pnpm build
 
   build:
@@ -44,17 +61,28 @@ tasks:
         sh: git describe --tags --always --dirty 2>/dev/null || echo dev
 
   build:all:
-    desc: Build frontend then embed it into a self-contained server binary
+    desc: Build frontend and embed it into a self-contained server binary
+    # Deliberately does NOT build the desktop shell: scripts/e2e-server.sh runs
+    # this, and pulling in the CGO/wails build would make the Playwright suite
+    # require Xcode CLT and blow its 180s server timeout. Use build:everything.
     cmds:
       - task: build:frontend
       - task: build
+
+  build:everything:
+    desc: Build the server binary and, on macOS, the desktop shell as well
+    cmds:
+      - task: build:all
+      # macOS-only (platforms: [darwin]); Task skips it on other OSes, so this
+      # task stays cross-platform.
+      - task: build:desktop
 
   build:cli:
     desc: Build dashboard CLI binary
     dir: server
     cmd: go build -o ../bin/dashboard ./cmd/cli/...
 
-  desktop:build:
+  build:desktop:
     desc: Build the macOS desktop shell (embeds the SPA; requires macOS + Xcode CLT)
     platforms: [darwin]
     cmds:
@@ -70,7 +98,7 @@ tasks:
     desc: Build and launch the macOS desktop shell for a smoke test
     platforms: [darwin]
     cmds:
-      - task: desktop:build
+      - task: build:desktop
       - ./bin/agent-dashboard-desktop
 
   desktop:dist:
@@ -84,7 +112,7 @@ tasks:
       # above (runs even on failure), keeping the working tree clean.
       - |
         VERSION="$(git describe --tags --always --dirty)"; sed -i '' "s/\"productVersion\": \"[^\"]*\"/\"productVersion\": \"${VERSION}\"/" desktop/wails.json
-      # Same production tag + UniformTypeIdentifiers ldflag as desktop:build, driven
+      # Same production tag + UniformTypeIdentifiers ldflag as build:desktop, driven
       # through `wails build` so it also renders desktop/wails.json + Info.plist into
       # a real .app bundle instead of a bare Mach-O binary.
       - cd desktop && $(go env GOPATH)/bin/wails build -clean -tags production -ldflags "-extldflags '-framework UniformTypeIdentifiers'"
