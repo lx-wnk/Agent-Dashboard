@@ -123,6 +123,8 @@ Two single sources feed CI, so neither has to be edited per module:
   Do not delete a `go` directive to "clean up": without one the language level falls back to 1.16, the stricter `go.sum` rules no longer apply and the build breaks — and the next `go mod tidy` writes the directive back with the full patch version of whatever toolchain you happen to run.
 
   Watch for a `toolchain` line appearing in a `go.mod` after a `go get`: the go command adds one whenever it raises the `go` version. That would reintroduce a second, competing toolchain pin next to `.go-version`. Drop it and keep the pin in one place.
+
+  Both rules are enforced: the `Matrix` job's **Toolchain consistency** step fails the build if any `go.mod` (or `go.work`) drifts from the minor version in `.go-version`, or if a `toolchain` directive shows up. Go itself offers no way to inherit the directive — `go.work`'s own `go` line only governs how `go.work` is parsed, and a module has to stand alone for consumers who have no workspace — so consistency is checked rather than derived.
 - **The `matrix` job** at the top of `ci.yml` holds the module lists — `WORKSPACE_MODULES` and `PLUGINS` — and every other job's matrix derives from its outputs. **Adding a plugin means adding it to `PLUGINS`, and nothing else**: the test, lint, security and build jobs all follow. The security list is computed from the other two, so it can no longer drift out of sync (it once did, and `plugins/oauthkit` went unscanned as a result).
 
   These lists cannot be workflow-level `env:` variables: GitHub does not expose the `env` context to `strategy.matrix` (allowed there: `github`, `needs`, `vars`, `inputs`), so they have to travel as job outputs.

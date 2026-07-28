@@ -24,6 +24,29 @@ jobs:
       plugins: ${{ steps.lists.outputs.plugins }}
       scan_modules: ${{ steps.lists.outputs.scan_modules }}
     steps:
+      - uses: actions/checkout@v7
+      - name: Toolchain consistency
+        # go has no way to inherit the `go` directive: go.work's own directive
+        # only governs how go.work itself is parsed, and a module must stand
+        # alone for outside consumers. So the directives are checked against
+        # .go-version instead of derived from it.
+        run: |
+          want="go $(cut -d. -f1,2 < .go-version)"
+          rc=0
+          for f in go.work $(git ls-files '*go.mod'); do
+            have="$(grep -m1 -E '^go ' "$f" || echo '<missing>')"
+            if [ "$have" != "$want" ]; then
+              echo "::error file=$f::expected '$want', found '$have'"
+              rc=1
+            fi
+            if grep -q '^toolchain ' "$f"; then
+              echo "::error file=$f::toolchain directive is a second pin next to .go-version — remove it"
+              rc=1
+            fi
+          done
+          if [ "$rc" -eq 0 ]; then echo "all go directives match .go-version"; fi
+          exit "$rc"
+
       # Single source for every matrix below. These lists live in a job output
       # rather than a workflow-level `env:` because strategy.matrix cannot read
       # the env context (allowed there: github, needs, vars, inputs).
