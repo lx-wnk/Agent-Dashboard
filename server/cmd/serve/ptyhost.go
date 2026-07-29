@@ -1,10 +1,10 @@
 package main
 
 import (
-	"fmt"
-
-	"github.com/lx-wnk/agent-dashboard/server/internal/channel"
 	"github.com/spf13/cobra"
+
+	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
+	"github.com/lx-wnk/agent-dashboard/server/serverapp"
 )
 
 // newPtyHostCmd builds `agent-dashboard pty-host -- <binary> <args…>`. It runs
@@ -16,15 +16,8 @@ func newPtyHostCmd() *cobra.Command {
 		Short:              "Run a command on a dashboard-owned pty for headless live injection",
 		DisableFlagParsing: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) > 0 && args[0] == "--" {
-				args = args[1:]
-			}
-			if len(args) == 0 {
-				return fmt.Errorf("pty-host: no command given")
-			}
-			return channel.RunHeadlessPTY(cmd.Context(), args[0], args[1:], nil, "", func(pid int) {
-				fmt.Println(pid)
-			})
+			_, err := serverapp.DispatchHeadless(cmd.Context(), append([]string{channelconfig.SubcommandPtyHost}, args...))
+			return err
 		},
 	}
 }

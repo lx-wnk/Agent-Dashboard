@@ -13,6 +13,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/wailsapp/wails/v2"
@@ -32,6 +33,16 @@ const (
 )
 
 func main() {
+	// A re-executed subcommand (pty-host, channel) must never boot a second
+	// server or contend for port 13120 — dispatch and return before anything
+	// else starts.
+	if handled, err := serverapp.DispatchHeadless(context.Background(), os.Args[1:]); handled {
+		if err != nil {
+			log.Fatalf("%v", err)
+		}
+		return
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Start the dashboard server in-process; it drains when ctx is cancelled.
