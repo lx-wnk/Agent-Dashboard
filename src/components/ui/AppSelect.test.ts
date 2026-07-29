@@ -1,6 +1,13 @@
+import type { VueWrapper } from '@vue/test-utils'
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
+import { axe } from '../../utils/testA11y'
 import AppSelect from './AppSelect.vue'
+
+// AppSelect teleports its panel to <body> (real DOM is required there — the
+// panel anchors to the trigger's getBoundingClientRect() and the codebase
+// pattern for teleported content, documented in SpawnDialog.test.ts, is to
+// query via document.querySelector rather than wrapper.find).
 
 const options = [
   { value: 'a', label: 'Option A' },
@@ -8,74 +15,203 @@ const options = [
   { value: 'c', label: 'Option C' },
 ]
 
+const optionsWithDisabled = [
+  { value: 'a', label: 'Option A' },
+  { value: 'b', label: 'Option B', disabled: true },
+  { value: 'c', label: 'Option C' },
+]
+
+let wrapper: VueWrapper | null = null
+
+function mountSelect(props: Record<string, unknown>) {
+  wrapper = mount(AppSelect, { props: props as any, attachTo: document.body })
+  return wrapper
+}
+
+function panel(): HTMLElement | null {
+  return document.querySelector('[role="listbox"]')
+}
+
+function optionEls(): HTMLElement[] {
+  return Array.from(document.querySelectorAll('[role="option"]'))
+}
+
+afterEach(() => {
+  wrapper?.unmount()
+  wrapper = null
+  document.body.innerHTML = ''
+})
+
 describe('appSelect', () => {
-  it('renders all options', () => {
-    const wrapper = mount(AppSelect, {
-      props: { modelValue: 'a', options },
-    })
-    const optionEls = wrapper.findAll('option')
-    expect(optionEls).toHaveLength(3)
-    expect(optionEls[0].text()).toBe('Option A')
-    expect(optionEls[1].text()).toBe('Option B')
-    expect(optionEls[2].text()).toBe('Option C')
+  it('renders the selected option label on the trigger and no panel until opened', () => {
+    const w = mountSelect({ modelValue: 'b', options })
+    expect(w.get('button').text()).toContain('Option B')
+    expect(panel()).toBeNull()
   })
 
-  it('reflects modelValue as the selected option', () => {
-    const wrapper = mount(AppSelect, {
-      props: { modelValue: 'b', options },
-    })
-    const select = wrapper.find('select')
-    expect((select.element as HTMLSelectElement).value).toBe('b')
+  it('renders an empty trigger label when modelValue matches nothing', () => {
+    const w = mountSelect({ modelValue: 'zzz', options })
+    expect(w.get('button').text()).not.toMatch(/Option/)
   })
 
-  it('emits update:modelValue on change', async () => {
-    const wrapper = mount(AppSelect, {
-      props: { modelValue: 'a', options },
-    })
-    const select = wrapper.find('select')
-    ;(select.element as HTMLSelectElement).value = 'c'
-    await select.trigger('change')
-    expect(wrapper.emitted('update:modelValue')?.[0]).toEqual(['c'])
-  })
-
-  it('forwards id prop to the select element', () => {
-    const wrapper = mount(AppSelect, {
-      props: { modelValue: 'a', options, id: 'my-select' },
-    })
-    expect(wrapper.find('select').attributes('id')).toBe('my-select')
-  })
-
-  it('forwards aria-label prop', () => {
-    const wrapper = mount(AppSelect, {
-      props: { modelValue: 'a', options, ariaLabel: 'Choose option' },
-    })
-    expect(wrapper.find('select').attributes('aria-label')).toBe('Choose option')
-  })
-
-  it('disables the select when disabled prop is true', () => {
-    const wrapper = mount(AppSelect, {
-      props: { modelValue: 'a', options, disabled: true },
-    })
-    expect((wrapper.find('select').element as HTMLSelectElement).disabled).toBe(true)
+  it('forwards id, aria-label and disabled to the trigger button', () => {
+    const w = mountSelect({ modelValue: 'a', options, id: 'my-select', ariaLabel: 'Choose option', disabled: true })
+    const button = w.get('button')
+    expect(button.attributes('id')).toBe('my-select')
+    expect(button.attributes('aria-label')).toBe('Choose option')
+    expect((button.element as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('is not disabled by default', () => {
-    const wrapper = mount(AppSelect, {
-      props: { modelValue: 'a', options },
-    })
-    expect((wrapper.find('select').element as HTMLSelectElement).disabled).toBe(false)
+    const w = mountSelect({ modelValue: 'a', options })
+    expect((w.get('button').element as HTMLButtonElement).disabled).toBe(false)
   })
 
-  it('works with numeric option values', () => {
-    const numOptions = [
-      { value: 1, label: 'One' },
-      { value: 2, label: 'Two' },
+  it('merges fallthrough class with the trigger classes instead of clobbering them', () => {
+    const w = mountSelect({ 'modelValue': 'a', options, 'class': 'w-full', 'data-testid': 'my-select' })
+    const button = w.get('button')
+    expect(button.classes()).toContain('w-full')
+    expect(button.classes()).toContain('bg-card')
+    expect(button.attributes('data-testid')).toBe('my-select')
+  })
+
+  it('clicking an option emits update:modelValue with the string value', async () => {
+    const w = mountSelect({ modelValue: 'a', options })
+    await w.get('button').trigger('click')
+    await optionEls()[2].dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await w.vm.$nextTick()
+    expect(w.emitted('update:modelValue')?.[0]).toEqual(['c'])
+  })
+
+  it('coerces the emitted value to a number when modelValue was a number', async () => {
+    const numOptions = [{ value: 1, label: 'One' }, { value: 2, label: 'Two' }]
+    const w = mountSelect({ modelValue: 1, options: numOptions })
+    await w.get('button').trigger('click')
+    await optionEls()[1].dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await w.vm.$nextTick()
+    const emitted = w.emitted('update:modelValue')?.[0]
+    expect(emitted?.[0]).toBe(2)
+    expect(typeof emitted?.[0]).toBe('number')
+  })
+
+  it('clicking a disabled option emits nothing', async () => {
+    const w = mountSelect({ modelValue: 'a', options: optionsWithDisabled })
+    await w.get('button').trigger('click')
+    await optionEls()[1].dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await w.vm.$nextTick()
+    expect(w.emitted('update:modelValue')).toBeUndefined()
+  })
+
+  it('keyboard navigation skips disabled options', async () => {
+    const w = mountSelect({ modelValue: 'a', options: optionsWithDisabled })
+    const button = w.get('button')
+    await button.trigger('keydown', { key: 'ArrowDown' }) // opens, active = selected ('a', index 0)
+    await button.trigger('keydown', { key: 'ArrowDown' }) // skips disabled 'b' (index 1) -> 'c' (index 2)
+    expect(button.attributes('aria-activedescendant')).toBe(optionEls()[2].id)
+  })
+
+  it('arrowDown opens the panel', async () => {
+    const w = mountSelect({ modelValue: 'a', options })
+    expect(panel()).toBeNull()
+    await w.get('button').trigger('keydown', { key: 'ArrowDown' })
+    expect(panel()).not.toBeNull()
+  })
+
+  it('arrowDown/ArrowUp move the active option', async () => {
+    const w = mountSelect({ modelValue: 'a', options })
+    const button = w.get('button')
+    await button.trigger('keydown', { key: 'ArrowDown' }) // open, active = 'a' (index 0)
+    await button.trigger('keydown', { key: 'ArrowDown' }) // -> 'b' (index 1)
+    expect(button.attributes('aria-activedescendant')).toBe(optionEls()[1].id)
+    await button.trigger('keydown', { key: 'ArrowUp' }) // -> 'a' (index 0)
+    expect(button.attributes('aria-activedescendant')).toBe(optionEls()[0].id)
+  })
+
+  it('enter selects the active option and closes the panel', async () => {
+    const w = mountSelect({ modelValue: 'a', options })
+    const button = w.get('button')
+    await button.trigger('keydown', { key: 'ArrowDown' }) // open, active = 'a'
+    await button.trigger('keydown', { key: 'ArrowDown' }) // active = 'b'
+    await button.trigger('keydown', { key: 'Enter' })
+    expect(w.emitted('update:modelValue')?.[0]).toEqual(['b'])
+    expect(panel()).toBeNull()
+  })
+
+  it('escape closes without emitting and returns focus to the trigger', async () => {
+    const w = mountSelect({ modelValue: 'a', options })
+    const button = w.get('button')
+    ;(button.element as HTMLButtonElement).focus()
+    await button.trigger('keydown', { key: 'ArrowDown' })
+    await button.trigger('keydown', { key: 'ArrowDown' })
+    await button.trigger('keydown', { key: 'Escape' })
+    expect(panel()).toBeNull()
+    expect(w.emitted('update:modelValue')).toBeUndefined()
+    expect(document.activeElement).toBe(button.element)
+  })
+
+  it('tab closes the panel', async () => {
+    const w = mountSelect({ modelValue: 'a', options })
+    const button = w.get('button')
+    await button.trigger('keydown', { key: 'ArrowDown' })
+    expect(panel()).not.toBeNull()
+    await button.trigger('keydown', { key: 'Tab' })
+    expect(panel()).toBeNull()
+  })
+
+  it('mousedown outside the trigger and panel closes it', async () => {
+    const w = mountSelect({ modelValue: 'a', options })
+    await w.get('button').trigger('keydown', { key: 'ArrowDown' })
+    expect(panel()).not.toBeNull()
+    document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+    await w.vm.$nextTick()
+    expect(panel()).toBeNull()
+  })
+
+  it('type-ahead jumps to the first enabled option whose label starts with the typed prefix', async () => {
+    const fruitOptions = [
+      { value: 'a', label: 'Apple' },
+      { value: 'b', label: 'Banana' },
+      { value: 'c', label: 'Cherry' },
     ]
-    const wrapper = mount(AppSelect, {
-      props: { modelValue: 1, options: numOptions },
-    })
-    const optionEls = wrapper.findAll('option')
-    expect(optionEls).toHaveLength(2)
-    expect(optionEls[0].attributes('value')).toBe('1')
+    const w = mountSelect({ modelValue: 'a', options: fruitOptions })
+    const button = w.get('button')
+    await button.trigger('keydown', { key: 'ArrowDown' }) // open
+    await button.trigger('keydown', { key: 'c' })
+    expect(button.attributes('aria-activedescendant')).toBe(optionEls()[2].id)
+  })
+
+  it('has combobox/listbox ARIA wiring: role, aria-expanded, aria-selected, aria-activedescendant', async () => {
+    const w = mountSelect({ modelValue: 'b', options })
+    const button = w.get('button')
+    expect(button.attributes('role')).toBe('combobox')
+    expect(button.attributes('aria-haspopup')).toBe('listbox')
+    expect(button.attributes('aria-expanded')).toBe('false')
+
+    await button.trigger('click')
+    expect(button.attributes('aria-expanded')).toBe('true')
+    expect(panel()?.getAttribute('role')).toBe('listbox')
+
+    const opts = optionEls()
+    expect(opts[1].getAttribute('aria-selected')).toBe('true')
+    expect(opts[0].getAttribute('aria-selected')).toBe('false')
+    expect(button.attributes('aria-activedescendant')).toBe(opts[1].id)
+    expect(button.attributes('aria-controls')).toBe(panel()?.id)
+  })
+
+  it('disabled options carry aria-disabled', async () => {
+    const w = mountSelect({ modelValue: 'a', options: optionsWithDisabled })
+    await w.get('button').trigger('click')
+    expect(optionEls()[1].getAttribute('aria-disabled')).toBe('true')
+  })
+
+  it('has no axe violations on the closed trigger', async () => {
+    const w = mountSelect({ modelValue: 'a', options, ariaLabel: 'Choose option' })
+    expect(await axe(w.get('button').element as HTMLElement)).toHaveNoViolations()
+  })
+
+  it('has no axe violations on the open panel', async () => {
+    const w = mountSelect({ modelValue: 'a', options, ariaLabel: 'Choose option' })
+    await w.get('button').trigger('click')
+    expect(await axe(panel() as HTMLElement)).toHaveNoViolations()
   })
 })
