@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { slugify } from '../../src/utils/validation'
-import { stubAuthDisabled, stubEmptyStream, stubJson } from './helpers'
+import { openListboxOptions, selectListboxOption, stubAuthDisabled, stubEmptyStream, stubJson } from './helpers'
 
 // ---------------------------------------------------------------------------
 // Backlog / "New Task" create form — single-screen flow.
@@ -30,13 +30,14 @@ async function selectPipelineView(page: Page) {
 }
 
 const PROJECT_ID = 'e2e-project-1'
+const PROJECT_NAME = 'E2E Project'
 const TASK_ID = 'e2e-task-1'
 
 function project() {
   return {
     id: PROJECT_ID,
     slug: 'e2e-project',
-    name: 'E2E Project',
+    name: PROJECT_NAME,
     folderCount: 1,
     defaultSpawnerId: null,
     createdAt: '2026-01-01T00:00:00Z',
@@ -109,7 +110,7 @@ test('create & refine with a project auto-fills cwd and opens the refinement cha
 
   // 2. Select the stubbed project — the watch() handler fetches the suggested
   //    folder and fills cwd asynchronously (Playwright auto-retries assertions).
-  await page.getByTestId('backlog-project-select').selectOption(PROJECT_ID)
+  await selectListboxOption(page, page.getByTestId('backlog-project-select'), PROJECT_NAME)
 
   // 3. Fill a unique title (slug auto-derives).
   await page.getByTestId('details-title').fill(title)
@@ -142,13 +143,16 @@ test('no "No project" option — project select starts empty and must be chosen'
   await page.getByRole('button', { name: '+ New Task' }).click()
   await expect(page.getByRole('heading', { name: 'New Task' })).toBeVisible()
 
-  const select = page.getByTestId('backlog-project-select')
-  // The select has no empty/no-project option — its value must not be ''
-  // (it will be the first real project or __create__, never the empty sentinel).
-  const optionValues = await select.evaluate((el: HTMLSelectElement) =>
-    Array.from(el.options).map(o => o.value),
-  )
-  expect(optionValues).not.toContain('')
+  const trigger = page.getByTestId('backlog-project-select')
+  // The option list has no empty/no-project entry — every option is a real
+  // project name or "+ Create new project…", never the empty sentinel.
+  const listbox = await openListboxOptions(page, trigger)
+  const optionLabels = (await listbox.getByRole('option').allTextContents()).map(text => text.trim())
+  expect(optionLabels).not.toContain('')
+
+  // Close the panel again so it can't intercept the next interaction.
+  await trigger.click()
+  await listbox.waitFor({ state: 'detached' })
 
   // Submit button is disabled while no title is entered.
   await expect(page.getByTestId('details-submit-refine')).toBeDisabled()

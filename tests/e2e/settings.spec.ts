@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { stubAuthDisabled, stubEmptyStream, stubJson } from './helpers'
+import { selectListboxOption, stubAuthDisabled, stubEmptyStream, stubJson } from './helpers'
 
 function apiKeyFixture() {
   return {
@@ -95,7 +95,8 @@ test.describe('Settings modal', () => {
     await expect(page.getByRole('heading', { name: 'Create API Key' })).toBeVisible()
 
     await page.locator('#key-name').fill('CI pipeline key')
-    await page.locator('#key-group').selectOption('developer')
+    // Label for value 'developer' — see KEY_GROUP_OPTIONS in ApiKeySettings.vue.
+    await selectListboxOption(page, page.locator('#key-group'), 'Developer — tasks:read, tasks:write, pipeline:control')
     await page.getByRole('button', { name: 'Create Key' }).click()
 
     await expect.poll(() => posted).toEqual({

@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test'
+import type { Locator, Page } from '@playwright/test'
 
 /**
  * Mock /api/me so the app never redirects to the LoginPage — mirrors the
@@ -38,4 +38,35 @@ export async function stubEmptyStream(page: Page, path: string): Promise<void> {
     contentType: 'text/event-stream',
     body: '',
   }))
+}
+
+/**
+ * Opens an AppSelect trigger (role="combobox") and returns its listbox panel
+ * once visible, without selecting anything — for tests that need to inspect
+ * the option list (count, labels) before deciding what to do next. The panel
+ * is teleported to <body>, so it must be located via page.getByRole, not as
+ * a descendant of the trigger.
+ */
+export async function openListboxOptions(page: Page, trigger: Locator): Promise<Locator> {
+  await trigger.click()
+  const listbox = page.getByRole('listbox')
+  await listbox.waitFor({ state: 'visible' })
+  return listbox
+}
+
+/**
+ * Selects an option from an AppSelect listbox by its accessible name. Only
+ * one listbox is open at a time, so page.getByRole('listbox') finds it even
+ * though the panel is teleported outside the trigger's subtree. If the panel
+ * is already open (e.g. after openListboxOptions), it is reused rather than
+ * toggled shut by a redundant click on the trigger.
+ */
+export async function selectListboxOption(page: Page, trigger: Locator, optionName: string | RegExp): Promise<void> {
+  const listbox = page.getByRole('listbox')
+  if (await trigger.getAttribute('aria-expanded') !== 'true') {
+    await trigger.click()
+    await listbox.waitFor({ state: 'visible' })
+  }
+  await listbox.getByRole('option', { name: optionName }).click()
+  await listbox.waitFor({ state: 'detached' })
 }
