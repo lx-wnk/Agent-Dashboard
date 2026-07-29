@@ -4,6 +4,7 @@ import { ref, watch } from 'vue'
 import { createSchedule, previewSchedule, updateSchedule } from '../composables/useSchedules'
 import AppButton from './ui/AppButton.vue'
 import AppInput from './ui/AppInput.vue'
+import AppSelect from './ui/AppSelect.vue'
 
 const props = defineProps<{
   schedule?: ScheduleView | null
@@ -25,6 +26,17 @@ const cwd = ref(props.schedule?.cwd ?? '')
 const priority = ref(props.schedule?.priority ?? 'medium')
 const maxIterations = ref(props.schedule?.maxIterations ?? 20)
 const permissionTemplate = ref(props.schedule?.permissionTemplate ?? '')
+
+const CATCHUP_OPTIONS = [
+  { value: 'none', label: 'None' },
+  { value: 'once', label: 'Once' },
+]
+
+const PRIORITY_OPTIONS = [
+  { value: 'high', label: 'High' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'low', label: 'Low' },
+]
 
 const preview = ref<SchedulePreview | null>(null)
 const previewError = ref<string | null>(null)
@@ -165,17 +177,11 @@ async function onSubmit() {
       />
       <div class="flex flex-col gap-1">
         <label class="text-sm font-medium text-fg-soft">Catchup</label>
-        <select
-          v-model="catchup"
-          class="bg-card border border-line rounded-md px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-accent"
-        >
-          <option value="none">
-            None
-          </option>
-          <option value="once">
-            Once
-          </option>
-        </select>
+        <AppSelect
+          :model-value="catchup"
+          :options="CATCHUP_OPTIONS"
+          @update:model-value="catchup = $event as 'none' | 'once'"
+        />
       </div>
     </div>
 
@@ -205,20 +211,11 @@ async function onSubmit() {
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <div class="flex flex-col gap-1">
         <label class="text-sm font-medium text-fg-soft">Priority</label>
-        <select
-          v-model="priority"
-          class="bg-card border border-line rounded-md px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-accent"
-        >
-          <option value="high">
-            High
-          </option>
-          <option value="medium">
-            Medium
-          </option>
-          <option value="low">
-            Low
-          </option>
-        </select>
+        <AppSelect
+          :model-value="priority"
+          :options="PRIORITY_OPTIONS"
+          @update:model-value="priority = $event as string"
+        />
       </div>
       <div class="flex flex-col gap-1">
         <label class="text-sm font-medium text-fg-soft">Max Iterations</label>

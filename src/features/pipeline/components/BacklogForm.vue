@@ -6,6 +6,7 @@ import QuickCreateProjectPanel from '@/components/QuickCreateProjectPanel.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppFieldLabel from '@/components/ui/AppFieldLabel.vue'
 import AppInput from '@/components/ui/AppInput.vue'
+import AppSelect from '@/components/ui/AppSelect.vue'
 import { suggestFolders } from '@/composables/useProjectFolders'
 import { useProjects } from '@/composables/useProjects'
 import { useSpawners } from '@/composables/useSpawners'
@@ -40,11 +41,31 @@ const importRef = ref('')
 const isImporting = ref(false)
 const { fetchIssue } = useTrackerImport()
 
-const fieldClass = 'w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent'
+const priorityOptions: Array<{ value: string, label: string }> = [
+  { value: 'high', label: 'High' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'low', label: 'Low' },
+]
+
+const autonomyOptions: Array<{ value: string, label: string }> = [
+  { value: 'manual', label: 'Manual — approve every stage' },
+  { value: 'spec_gated', label: 'Spec-gated — approve the spec, then autonomous' },
+  { value: 'full', label: 'Full — fully autonomous' },
+]
 
 const sortedProjects = computed(() =>
   projects.value.slice().sort((a, b) => a.name.localeCompare(b.name)),
 )
+
+const projectOptions = computed(() => [
+  ...sortedProjects.value.map(p => ({ value: p.id, label: p.name })),
+  { value: '__create__', label: '+ Create new project…' },
+])
+
+const spawnerOptions = computed(() => [
+  { value: '', label: projectChoice.value && projectChoice.value !== '__create__' ? 'Project default' : 'Claude default' },
+  ...spawners.value.map(s => ({ value: s.id, label: `${s.name}${s.builtIn ? ' (built-in)' : ''}` })),
+])
 
 const canSubmit = computed(() =>
   !!title.value.trim()
@@ -171,23 +192,14 @@ async function onCreateAndRefine(): Promise<void> {
       <AppFieldLabel for="backlog-project">
         Project
       </AppFieldLabel>
-      <select
+      <AppSelect
         id="backlog-project"
-        v-model="projectChoice"
+        :model-value="projectChoice"
+        :options="projectOptions"
         data-testid="backlog-project-select"
-        :class="fieldClass"
-      >
-        <option
-          v-for="p in sortedProjects"
-          :key="p.id"
-          :value="p.id"
-        >
-          {{ p.name }}
-        </option>
-        <option value="__create__">
-          + Create new project…
-        </option>
-      </select>
+        class="w-full"
+        @update:model-value="projectChoice = $event as string"
+      />
     </div>
 
     <div v-if="showCreate" data-testid="quick-create-panel">
@@ -254,31 +266,26 @@ async function onCreateAndRefine(): Promise<void> {
         <AppFieldLabel for="details-priority">
           Priority
         </AppFieldLabel>
-        <select id="details-priority" v-model="priority" :class="fieldClass">
-          <option value="high">
-            High
-          </option>
-          <option value="medium">
-            Medium
-          </option>
-          <option value="low">
-            Low
-          </option>
-        </select>
+        <AppSelect
+          id="details-priority"
+          :model-value="priority"
+          :options="priorityOptions"
+          class="w-full"
+          @update:model-value="priority = $event as 'high' | 'medium' | 'low'"
+        />
       </div>
 
       <div class="flex flex-col gap-1">
         <AppFieldLabel for="details-spawner">
           Spawner
         </AppFieldLabel>
-        <select id="details-spawner" v-model="selectedSpawnerId" :class="fieldClass">
-          <option value="">
-            {{ projectChoice && projectChoice !== '__create__' ? 'Project default' : 'Claude default' }}
-          </option>
-          <option v-for="s in spawners" :key="s.id" :value="s.id">
-            {{ s.name }}{{ s.builtIn ? ' (built-in)' : '' }}
-          </option>
-        </select>
+        <AppSelect
+          id="details-spawner"
+          :model-value="selectedSpawnerId"
+          :options="spawnerOptions"
+          class="w-full"
+          @update:model-value="selectedSpawnerId = $event as string"
+        />
       </div>
     </div>
 
@@ -286,22 +293,14 @@ async function onCreateAndRefine(): Promise<void> {
       <AppFieldLabel for="details-autonomy">
         Autonomy
       </AppFieldLabel>
-      <select
+      <AppSelect
         id="details-autonomy"
-        v-model="autonomy"
+        :model-value="autonomy"
+        :options="autonomyOptions"
         data-testid="details-autonomy"
-        :class="fieldClass"
-      >
-        <option value="manual">
-          Manual — approve every stage
-        </option>
-        <option value="spec_gated">
-          Spec-gated — approve the spec, then autonomous
-        </option>
-        <option value="full">
-          Full — fully autonomous
-        </option>
-      </select>
+        class="w-full"
+        @update:model-value="autonomy = $event as 'manual' | 'spec_gated' | 'full'"
+      />
     </div>
 
     <PermissionTemplatePicker v-model="selectedTemplate" />

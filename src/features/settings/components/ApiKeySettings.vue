@@ -4,6 +4,7 @@ import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } fr
 import AuditLogTab from '@/components/AuditLogTab.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppModal from '@/components/ui/AppModal.vue'
+import AppSelect from '@/components/ui/AppSelect.vue'
 import { useClipboardCopy } from '@/composables/useCopyId'
 import { useHistoryImport } from '@/composables/useHistoryImport'
 import { useOnboarding } from '@/composables/useOnboarding'
@@ -69,7 +70,8 @@ const isLoading = ref(true)
 // Create key dialog
 const showCreateDialog = ref(false)
 const newKeyName = ref('')
-const newKeyGroup = ref<'viewer' | 'operator' | 'developer' | 'admin'>('viewer')
+type KeyGroup = 'viewer' | 'operator' | 'developer' | 'admin'
+const newKeyGroup = ref<KeyGroup>('viewer')
 const isCreating = ref(false)
 
 // Token reveal modal
@@ -108,6 +110,13 @@ const GROUP_SCOPES: Record<string, McpScope[]> = {
   developer: ['tasks:read', 'tasks:write', 'pipeline:control'],
   admin: ['tasks:read', 'tasks:write', 'pipeline:control', 'keys:manage'],
 }
+
+const KEY_GROUP_OPTIONS: Array<{ value: KeyGroup, label: string }> = [
+  { value: 'viewer', label: 'Viewer — tasks:read' },
+  { value: 'operator', label: 'Operator — tasks:read, pipeline:control' },
+  { value: 'developer', label: 'Developer — tasks:read, tasks:write, pipeline:control' },
+  { value: 'admin', label: 'Admin — all scopes' },
+]
 
 // --- Load keys ---
 async function loadKeys() {
@@ -789,24 +798,13 @@ const { isImporting, importStatus, start: startImport } = useHistoryImport()
           </div>
           <div class="flex flex-col gap-1 mb-3.5">
             <label for="key-group" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">Role / Scope Group</label>
-            <select
+            <AppSelect
               id="key-group"
-              v-model="newKeyGroup"
-              class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
-            >
-              <option value="viewer">
-                Viewer — tasks:read
-              </option>
-              <option value="operator">
-                Operator — tasks:read, pipeline:control
-              </option>
-              <option value="developer">
-                Developer — tasks:read, tasks:write, pipeline:control
-              </option>
-              <option value="admin">
-                Admin — all scopes
-              </option>
-            </select>
+              :model-value="newKeyGroup"
+              :options="KEY_GROUP_OPTIONS"
+              class="w-full"
+              @update:model-value="newKeyGroup = $event as KeyGroup"
+            />
           </div>
         </form>
         <footer class="flex justify-end gap-2 px-5 py-3 border-t border-line">

@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import SpawnDialog from './SpawnDialog.vue'
+import AppSelect from './ui/AppSelect.vue'
 
 // jsdom quirks worked around in this file:
 //   1. AppModal teleports to <body>, so tests use document.querySelector
@@ -11,6 +12,14 @@ import SpawnDialog from './SpawnDialog.vue'
 //      real form element.
 //   3. EventSource is stubbed because useProjects()/useSpawners() open
 //      SSE on mount and jsdom has no built-in EventSource.
+//   4. The project/folder/spawner/permission-mode fields are AppSelect, a
+//      custom listbox, not a native <select> — its panel teleports to
+//      <body> while open, so selections go through the trigger button +
+//      the teleported [role="option"] elements via openListbox()/
+//      optionByLabel()/selectByLabel() rather than select.setValue(). Raw
+//      option `value`s (not just visible labels) are inspected via the
+//      mounted AppSelect component's `options` prop where a test doesn't
+//      drive a selection.
 
 const sampleProject = {
   id: 'prj_a',
@@ -37,14 +46,29 @@ const sampleSpawner = {
   updatedAt: '',
 }
 
-function setSelectValue(el: HTMLSelectElement, value: string) {
-  el.value = value
-  el.dispatchEvent(new Event('change', { bubbles: true }))
-}
-
 function setInputValue(el: HTMLInputElement | HTMLTextAreaElement, value: string) {
   el.value = value
   el.dispatchEvent(new Event('input', { bubbles: true }))
+}
+
+async function openListbox(trigger: Element): Promise<HTMLElement> {
+  trigger.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  await flushPromises()
+  return document.getElementById(trigger.getAttribute('aria-controls')!)!
+}
+
+function optionByLabel(panel: HTMLElement, label: string): HTMLElement {
+  const match = Array.from(panel.querySelectorAll('[role="option"]'))
+    .find(el => el.textContent?.trim() === label)
+  if (!match)
+    throw new Error(`No option with label "${label}" found`)
+  return match as HTMLElement
+}
+
+async function selectByLabel(trigger: Element, label: string): Promise<void> {
+  const panel = await openListbox(trigger)
+  optionByLabel(panel, label).dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  await flushPromises()
 }
 
 beforeEach(() => {
@@ -73,17 +97,23 @@ beforeEach(() => {
     close() {}
   })
 })
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.unstubAllGlobals()
+  // AppSelect teleports its open panel to <body>; a test that throws before
+  // wrapper.unmount() (or leaves a panel open) would otherwise leak stale
+  // nodes that corrupt every document.querySelector() in later tests.
+  document.body.innerHTML = ''
+})
 
 describe('spawnDialog', () => {
   it('does not offer a "None (manual)" option — project is required', async () => {
     const wrapper = mount(SpawnDialog, { props: { open: true }, attachTo: document.body })
     await flushPromises()
 
-    const projectSelect = document.querySelector('#spawn-project') as HTMLSelectElement
-    expect(projectSelect).not.toBeNull()
+    const projectSelect = wrapper.findAllComponents(AppSelect).find(c => c.props('id') === 'spawn-project')
+    expect(projectSelect).toBeTruthy()
 
-    const optionValues = Array.from(projectSelect.options).map(o => o.value)
+    const optionValues = (projectSelect!.props('options') as Array<{ value: string | number }>).map(o => o.value)
     expect(optionValues).not.toContain('')
 
     wrapper.unmount()
@@ -104,9 +134,8 @@ describe('spawnDialog', () => {
     expect(spawnBtn.disabled).toBe(true)
 
     // Select a project — cwd should now be filled from the default folder.
-    const projectSelect = document.querySelector('#spawn-project') as HTMLSelectElement
-    setSelectValue(projectSelect, 'prj_a')
-    await flushPromises()
+    const projectTrigger = document.querySelector('#spawn-project') as HTMLElement
+    await selectByLabel(projectTrigger, 'Alpha')
     await flushPromises()
 
     expect(spawnBtn.disabled).toBe(false)
@@ -128,21 +157,26 @@ describe('spawnDialog', () => {
     const wrapper = mount(SpawnDialog, { props: { open: true }, attachTo: document.body })
     await flushPromises()
 
-    const spawnerSelect = document.querySelector('[data-testid="spawn-spawner"]') as HTMLSelectElement
-    expect(spawnerSelect).not.toBeNull()
+    const spawnerTrigger = document.querySelector('[data-testid="spawn-spawner"]') as HTMLElement
+    expect(spawnerTrigger).not.toBeNull()
 
-    // Before project selection, first option should be "Claude default"
-    expect(spawnerSelect.options[0].text).toContain('Claude default')
+    // Before project selection, the trigger shows the empty-value option's label.
+    expect(spawnerTrigger.textContent).toContain('Claude default')
+    const panelBefore = await openListbox(spawnerTrigger)
+    expect(panelBefore.querySelectorAll('[role="option"]')[0].textContent?.trim()).toContain('Claude default')
+    // Close it — leaving it open would make the next trigger click toggle it closed instead of open.
+    spawnerTrigger.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
 
     // Select a project — spawner should be hydrated from project.defaultSpawnerId
-    const projectSelect = document.querySelector('#spawn-project') as HTMLSelectElement
-    setSelectValue(projectSelect, 'prj_a')
-    await flushPromises()
+    const projectTrigger = document.querySelector('#spawn-project') as HTMLElement
+    await selectByLabel(projectTrigger, 'Alpha')
     await flushPromises()
 
-    expect(spawnerSelect.value).toBe('spwn_a')
+    expect(spawnerTrigger.textContent).toContain('Claude (Opus)')
     // First option label changes to "Project default" when a project is chosen
-    expect(spawnerSelect.options[0].text).toContain('Project default')
+    const panelAfter = await openListbox(spawnerTrigger)
+    expect(panelAfter.querySelectorAll('[role="option"]')[0].textContent?.trim()).toContain('Project default')
 
     wrapper.unmount()
   })
@@ -151,12 +185,13 @@ describe('spawnDialog', () => {
     const wrapper = mount(SpawnDialog, { props: { open: true }, attachTo: document.body })
     await flushPromises()
 
-    const spawnerSelect = document.querySelector('[data-testid="spawn-spawner"]') as HTMLSelectElement
-    expect(spawnerSelect).not.toBeNull()
-    const optionTexts = Array.from(spawnerSelect.options).map(o => o.text)
+    const spawnerTrigger = document.querySelector('[data-testid="spawn-spawner"]') as HTMLElement
+    expect(spawnerTrigger).not.toBeNull()
+    const panel = await openListbox(spawnerTrigger)
+    const optionTexts = Array.from(panel.querySelectorAll('[role="option"]')).map(el => el.textContent?.trim())
     // sampleSpawner.builtIn = false, so no "(built-in)" suffix
-    expect(optionTexts.some(t => t.includes('Claude (Opus)'))).toBe(true)
-    expect(optionTexts.every(t => !t.includes('(built-in)'))).toBe(true)
+    expect(optionTexts.some(t => t?.includes('Claude (Opus)'))).toBe(true)
+    expect(optionTexts.every(t => !t?.includes('(built-in)'))).toBe(true)
 
     wrapper.unmount()
   })
@@ -185,13 +220,15 @@ describe('spawnDialog', () => {
     const wrapper = mount(SpawnDialog, { props: { open: true }, attachTo: document.body })
     await flushPromises()
 
-    const permSelect = document.querySelector('[data-testid="spawn-permission-mode"]') as HTMLSelectElement
-    expect(permSelect).not.toBeNull()
+    const permTrigger = document.querySelector('[data-testid="spawn-permission-mode"]') as HTMLElement
+    expect(permTrigger).not.toBeNull()
 
-    const values = Array.from(permSelect.options).map(o => o.value)
+    const permSelect = wrapper.findAllComponents(AppSelect).find(c => c.props('id') === 'spawn-permission-mode')
+    expect(permSelect).toBeTruthy()
+    const values = (permSelect!.props('options') as Array<{ value: string | number }>).map(o => o.value)
     for (const mode of ['default', 'plan', 'acceptEdits', 'auto', 'bypassPermissions', 'dontAsk'])
       expect(values).toContain(mode)
-    expect(permSelect.value).toBe('default')
+    expect(permTrigger.textContent).toContain('Ask for permission (default)')
 
     wrapper.unmount()
   })
@@ -200,14 +237,12 @@ describe('spawnDialog', () => {
     const wrapper = mount(SpawnDialog, { props: { open: true }, attachTo: document.body })
     await flushPromises()
 
-    const permSelect = document.querySelector('[data-testid="spawn-permission-mode"]') as HTMLSelectElement
-    setSelectValue(permSelect, 'dontAsk')
-    await flushPromises()
+    const permTrigger = document.querySelector('[data-testid="spawn-permission-mode"]') as HTMLElement
+    await selectByLabel(permTrigger, 'Never ask (dangerous)')
     expect(document.querySelector('[data-testid="bypass-warning"]')).not.toBeNull()
 
     // A non-dangerous mode (auto) must NOT show the warning.
-    setSelectValue(permSelect, 'auto')
-    await flushPromises()
+    await selectByLabel(permTrigger, 'Auto (smart approvals)')
     expect(document.querySelector('[data-testid="bypass-warning"]')).toBeNull()
 
     wrapper.unmount()
@@ -221,9 +256,8 @@ describe('spawnDialog', () => {
     const warningBefore = document.querySelector('.bg-yellow-50\\/50, .dark\\:bg-yellow-950\\/20')
     expect(warningBefore).toBeNull()
 
-    const permSelect = document.querySelector('[data-testid="spawn-permission-mode"]') as HTMLSelectElement
-    setSelectValue(permSelect, 'bypassPermissions')
-    await flushPromises()
+    const permTrigger = document.querySelector('[data-testid="spawn-permission-mode"]') as HTMLElement
+    await selectByLabel(permTrigger, 'Bypass all permissions (dangerous)')
 
     // Warning banner should appear
     const warning = document.querySelector('[data-testid="bypass-warning"]')
@@ -237,9 +271,8 @@ describe('spawnDialog', () => {
     await flushPromises()
 
     // Select a project to enable spawn
-    const projectSelect = document.querySelector('#spawn-project') as HTMLSelectElement
-    setSelectValue(projectSelect, 'prj_a')
-    await flushPromises()
+    const projectTrigger = document.querySelector('#spawn-project') as HTMLElement
+    await selectByLabel(projectTrigger, 'Alpha')
     await flushPromises()
 
     const promptInput = document.querySelector('[data-testid="spawn-prompt-wrap"]') as HTMLTextAreaElement
@@ -247,9 +280,8 @@ describe('spawnDialog', () => {
     await flushPromises()
 
     // Select bypassPermissions mode
-    const permSelect = document.querySelector('[data-testid="spawn-permission-mode"]') as HTMLSelectElement
-    setSelectValue(permSelect, 'bypassPermissions')
-    await flushPromises()
+    const permTrigger = document.querySelector('[data-testid="spawn-permission-mode"]') as HTMLElement
+    await selectByLabel(permTrigger, 'Bypass all permissions (dangerous)')
 
     const spawnBtn = document.querySelector('[data-testid="spawn-btn"]') as HTMLButtonElement
 
@@ -278,18 +310,16 @@ describe('spawnDialog', () => {
     const wrapper = mount(SpawnDialog, { props: { open: true }, attachTo: document.body })
     await flushPromises()
 
-    const projectSelect = document.querySelector('#spawn-project') as HTMLSelectElement
-    setSelectValue(projectSelect, 'prj_a')
-    await flushPromises()
+    const projectTrigger = document.querySelector('#spawn-project') as HTMLElement
+    await selectByLabel(projectTrigger, 'Alpha')
     await flushPromises()
 
     const promptInput = document.querySelector('[data-testid="spawn-prompt-wrap"]') as HTMLTextAreaElement
     setInputValue(promptInput, 'risky task')
     await flushPromises()
 
-    const permSelect = document.querySelector('[data-testid="spawn-permission-mode"]') as HTMLSelectElement
-    setSelectValue(permSelect, 'bypassPermissions')
-    await flushPromises()
+    const permTrigger = document.querySelector('[data-testid="spawn-permission-mode"]') as HTMLElement
+    await selectByLabel(permTrigger, 'Bypass all permissions (dangerous)')
 
     // First click — triggers confirm
     const spawnBtn = document.querySelector('[data-testid="spawn-btn"]') as HTMLButtonElement
@@ -300,8 +330,7 @@ describe('spawnDialog', () => {
     expect(confirmMsgBefore).not.toBeNull()
 
     // Change mode — confirm state should reset
-    setSelectValue(permSelect, 'default')
-    await flushPromises()
+    await selectByLabel(permTrigger, 'Ask for permission (default)')
 
     const confirmMsgAfter = document.querySelector('[data-testid="bypass-confirm-msg"]')
     expect(confirmMsgAfter).toBeNull()
@@ -313,9 +342,8 @@ describe('spawnDialog', () => {
     const wrapper = mount(SpawnDialog, { props: { open: true }, attachTo: document.body })
     await flushPromises()
 
-    const projectSelect = document.querySelector('#spawn-project') as HTMLSelectElement
-    setSelectValue(projectSelect, 'prj_a')
-    await flushPromises()
+    const projectTrigger = document.querySelector('#spawn-project') as HTMLElement
+    await selectByLabel(projectTrigger, 'Alpha')
     await flushPromises()
 
     const promptInput = document.querySelector('[data-testid="spawn-prompt-wrap"]') as HTMLTextAreaElement
@@ -362,9 +390,8 @@ describe('spawnDialog', () => {
     const wrapper = mount(SpawnDialog, { props: { open: true }, attachTo: document.body })
     await flushPromises()
 
-    const projectSelect = document.querySelector('#spawn-project') as HTMLSelectElement
-    setSelectValue(projectSelect, 'prj_a')
-    await flushPromises()
+    const projectTrigger = document.querySelector('#spawn-project') as HTMLElement
+    await selectByLabel(projectTrigger, 'Alpha')
     await flushPromises()
 
     const promptInput = document.querySelector('[data-testid="spawn-prompt-wrap"]') as HTMLTextAreaElement
@@ -386,18 +413,16 @@ describe('spawnDialog', () => {
     const wrapper = mount(SpawnDialog, { props: { open: true }, attachTo: document.body })
     await flushPromises()
 
-    const projectSelect = document.querySelector('#spawn-project') as HTMLSelectElement
-    setSelectValue(projectSelect, 'prj_a')
-    await flushPromises()
+    const projectTrigger = document.querySelector('#spawn-project') as HTMLElement
+    await selectByLabel(projectTrigger, 'Alpha')
     await flushPromises()
 
     const promptInput = document.querySelector('[data-testid="spawn-prompt-wrap"]') as HTMLTextAreaElement
     setInputValue(promptInput, 'edit files')
     await flushPromises()
 
-    const permSelect = document.querySelector('[data-testid="spawn-permission-mode"]') as HTMLSelectElement
-    setSelectValue(permSelect, 'acceptEdits')
-    await flushPromises()
+    const permTrigger = document.querySelector('[data-testid="spawn-permission-mode"]') as HTMLElement
+    await selectByLabel(permTrigger, 'Auto-accept edits')
 
     const spawnBtn = document.querySelector('[data-testid="spawn-btn"]') as HTMLButtonElement
     spawnBtn.click()

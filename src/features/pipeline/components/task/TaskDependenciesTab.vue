@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import DependencyGraph from '@/components/DependencyGraph.vue'
 import AppInput from '@/components/ui/AppInput.vue'
+import AppSelect from '@/components/ui/AppSelect.vue'
 import { useInjectedTask } from '@/features/pipeline/composables/taskModalContext'
 import { useTaskDependencies } from '@/features/pipeline/composables/useTaskDependencies'
 
@@ -18,6 +19,17 @@ const {
   handleAddDependency,
   handleRemoveDependency,
 } = useTaskDependencies(task)
+
+const requiredStageOptions: Array<{ value: string, label: string }> = [
+  { value: 'done', label: 'Done' },
+  { value: 'cancelled', label: 'Cancelled' },
+]
+
+const onCancelActionOptions: Array<{ value: string, label: string }> = [
+  { value: 'on_hold', label: 'On Hold (on cancel)' },
+  { value: 'cancel', label: 'Cancel (on cancel)' },
+  { value: 'start', label: 'Start (on cancel)' },
+]
 </script>
 
 <template>
@@ -57,25 +69,20 @@ const {
 
       <form class="flex gap-1.5 items-center flex-wrap mt-2" @submit.prevent="handleAddDependency">
         <AppInput v-model="newDepId" class="flex-1 min-w-0" placeholder="Predecessor Task ID" :disabled="isAddingDep" />
-        <select v-model="newDepStage" aria-label="Required stage" class="px-1.5 py-1 border border-line rounded bg-raised text-fg text-[11px]">
-          <option value="done">
-            Done
-          </option>
-          <option value="cancelled">
-            Cancelled
-          </option>
-        </select>
-        <select v-model="newDepCancelAction" aria-label="On cancel action" class="px-1.5 py-1 border border-line rounded bg-raised text-fg text-[11px]">
-          <option value="on_hold">
-            On Hold (on cancel)
-          </option>
-          <option value="cancel">
-            Cancel (on cancel)
-          </option>
-          <option value="start">
-            Start (on cancel)
-          </option>
-        </select>
+        <AppSelect
+          :model-value="newDepStage"
+          :options="requiredStageOptions"
+          aria-label="Required stage"
+          class="text-[11px]"
+          @update:model-value="newDepStage = $event as 'done' | 'cancelled'"
+        />
+        <AppSelect
+          :model-value="newDepCancelAction"
+          :options="onCancelActionOptions"
+          aria-label="On cancel action"
+          class="text-[11px]"
+          @update:model-value="newDepCancelAction = $event as 'cancel' | 'start' | 'on_hold'"
+        />
         <button type="submit" class="px-2.5 py-1 bg-blue-600 text-white border-none rounded text-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:brightness-110" :disabled="isAddingDep || !newDepId.trim()">
           Add
         </button>

@@ -2,6 +2,7 @@
 import type { PipelineConfig } from '@/features/pipeline'
 import { computed, onMounted, ref, watch } from 'vue'
 import AppButton from '@/components/ui/AppButton.vue'
+import AppSelect from '@/components/ui/AppSelect.vue'
 import { useSpawners } from '@/composables/useSpawners'
 import { toast } from '@/composables/useToast'
 import { usePipelineConfig } from '@/features/pipeline'
@@ -52,6 +53,13 @@ async function handleSave() {
 }
 
 const STAGES = ['implementation', 'self_review', 'finalization'] as const
+
+const stageSpawnerOptions = computed(() => [
+  { value: '', label: 'Auto (Task → Projekt → Default)' },
+  ...spawners.value.map(s => ({ value: s.id, label: `${s.name}${s.builtIn ? ' (built-in)' : ''}` })),
+])
+
+const stageModelOptions = AVAILABLE_MODELS.map(model => ({ value: model, label: model }))
 </script>
 
 <template>
@@ -138,18 +146,13 @@ const STAGES = ['implementation', 'self_review', 'finalization'] as const
               >
                 {{ STAGE_LABELS[stage] }} — Spawner
               </label>
-              <select
+              <AppSelect
                 :id="`pc-spawner-${stage}`"
-                v-model="effectiveConfig.stageSpawners[stage]"
-                class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500"
-              >
-                <option value="">
-                  Auto (Task → Projekt → Default)
-                </option>
-                <option v-for="spawner in spawners" :key="spawner.id" :value="spawner.id">
-                  {{ spawner.name }}{{ spawner.builtIn ? ' (built-in)' : '' }}
-                </option>
-              </select>
+                :model-value="effectiveConfig.stageSpawners[stage]"
+                :options="stageSpawnerOptions"
+                class="w-full"
+                @update:model-value="effectiveConfig.stageSpawners[stage] = $event as string"
+              />
             </div>
             <div>
               <label
@@ -158,15 +161,13 @@ const STAGES = ['implementation', 'self_review', 'finalization'] as const
               >
                 {{ STAGE_LABELS[stage] }} — Model
               </label>
-              <select
+              <AppSelect
                 :id="`pc-model-${stage}`"
-                v-model="effectiveConfig.stageModels[stage]"
-                class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:border-blue-500"
-              >
-                <option v-for="model in AVAILABLE_MODELS" :key="model" :value="model">
-                  {{ model }}
-                </option>
-              </select>
+                :model-value="effectiveConfig.stageModels[stage]"
+                :options="stageModelOptions"
+                class="w-full"
+                @update:model-value="effectiveConfig.stageModels[stage] = $event as string"
+              />
             </div>
           </div>
         </div>

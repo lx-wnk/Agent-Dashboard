@@ -2,6 +2,7 @@
 import type { Spawner, SpawnerAdapterType } from '@/types'
 import { computed, ref, watch } from 'vue'
 import AppButton from '@/components/ui/AppButton.vue'
+import AppSelect from '@/components/ui/AppSelect.vue'
 import { useAdapterCatalog } from '@/composables/useAdapterCatalog'
 import {
   createSpawner,
@@ -83,6 +84,7 @@ const formSaving = ref(false)
 const form = ref<SpawnerFormState>(emptyForm())
 
 const currentAdapterMeta = computed(() => getByType(form.value.adapterType))
+const adapterTypeOptions = computed(() => catalog.value.map(meta => ({ value: meta.name, label: meta.name })))
 const showCommandFields = computed(() => usesCommandFields(form.value.adapterType))
 // Editing a built-in: every field is editable except the slug, which the
 // resolution backstop GetBySlug("claude-default") depends on.
@@ -104,6 +106,11 @@ function emptyForm(): SpawnerFormState {
 
 function defaultCommandFor(type: SpawnerAdapterType): string {
   return type === 'claude' ? 'claude' : ''
+}
+
+function onAdapterTypeSelect(value: string | number): void {
+  form.value.adapterType = value as SpawnerAdapterType
+  onAdapterTypeChange()
 }
 
 function onAdapterTypeChange(): void {
@@ -476,16 +483,13 @@ async function handleSetDefault(id: string) {
           </div>
           <div>
             <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1" for="sp-adapter-type">Adapter Type</label>
-            <select
+            <AppSelect
               id="sp-adapter-type"
-              v-model="form.adapterType"
-              class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
-              @change="onAdapterTypeChange"
-            >
-              <option v-for="meta in catalog" :key="meta.name" :value="meta.name">
-                {{ meta.name }}
-              </option>
-            </select>
+              :model-value="form.adapterType"
+              :options="adapterTypeOptions"
+              class="w-full"
+              @update:model-value="onAdapterTypeSelect"
+            />
             <p v-if="currentAdapterMeta?.description" class="text-[11px] text-fg-mute mt-1 line-clamp-2">
               {{ currentAdapterMeta.description }}
             </p>

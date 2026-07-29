@@ -1,5 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import WorkflowsView from '@/features/workflows/components/WorkflowsView.vue'
 
 function emptySankey() {
@@ -14,6 +14,33 @@ function makeFetchMock(sessions: unknown[] = []) {
     return Promise.resolve({ ok: true, json: async () => emptySankey() })
   })
 }
+
+// AppSelect (used for the session filter) is a custom listbox, not a native
+// <select> — its panel teleports to <body> while open, so option counts and
+// value changes are exercised through the trigger button + the teleported
+// [role="option"] elements instead of select.findAll('option') /
+// select.setValue(), which only work against native <select> internals.
+interface SelectTrigger {
+  trigger: (event: string) => Promise<unknown>
+  attributes: (key: string) => string | undefined
+}
+
+async function openListbox(select: SelectTrigger): Promise<HTMLElement> {
+  await select.trigger('click')
+  return document.getElementById(select.attributes('aria-controls')!)!
+}
+
+function optionByLabel(panel: HTMLElement, label: string): HTMLElement {
+  const match = Array.from(panel.querySelectorAll('[role="option"]'))
+    .find(el => el.textContent?.trim() === label)
+  if (!match)
+    throw new Error(`No option with label "${label}" found`)
+  return match as HTMLElement
+}
+
+afterEach(() => {
+  document.body.innerHTML = ''
+})
 
 describe('workflowsView', () => {
   it('renders the three static tab buttons (no Session DAG initially)', async () => {
@@ -81,26 +108,26 @@ describe('workflowsView', () => {
       },
     ]
     vi.stubGlobal('fetch', makeFetchMock(mockSessions))
-    const wrapper = mount(WorkflowsView)
+    const wrapper = mount(WorkflowsView, { attachTo: document.body })
     await flushPromises()
 
-    const select = wrapper.find('select')
-    expect(select.exists()).toBe(true)
+    const panel = await openListbox(wrapper.get('[role="combobox"]'))
+    const options = panel.querySelectorAll('[role="option"]')
+    expect(options).toHaveLength(3)
 
-    const options = select.findAll('option')
-    // First option is the placeholder
-    expect(options[0].text()).toContain('Select session')
-    expect(options[0].attributes('value')).toBe('')
+    // First option is the placeholder, selected by default (no sessionId)
+    expect(options[0].textContent).toContain('Select session')
+    expect(options[0].getAttribute('aria-selected')).toBe('true')
 
     // Second option: projectName · firstPrompt (no running suffix)
-    expect(options[1].text()).toContain('my-project')
-    expect(options[1].text()).toContain('Build a new feature')
-    expect(options[1].text()).not.toContain('(running)')
+    expect(options[1].textContent).toContain('my-project')
+    expect(options[1].textContent).toContain('Build a new feature')
+    expect(options[1].textContent).not.toContain('(running)')
 
     // Third option: projectName · first 8 chars of sessionId + (running)
-    expect(options[2].text()).toContain('other-project')
-    expect(options[2].text()).toContain('def67890')
-    expect(options[2].text()).toContain('(running)')
+    expect(options[2].textContent).toContain('other-project')
+    expect(options[2].textContent).toContain('def67890')
+    expect(options[2].textContent).toContain('(running)')
   })
 
   it('shows Session DAG tab and makes it active when a session is selected from the dropdown', async () => {
@@ -120,7 +147,7 @@ describe('workflowsView', () => {
       },
     ]
     vi.stubGlobal('fetch', makeFetchMock(mockSessions))
-    const wrapper = mount(WorkflowsView)
+    const wrapper = mount(WorkflowsView, { attachTo: document.body })
     await flushPromises()
 
     // Confirm DAG tab is absent initially (no session)
@@ -128,9 +155,8 @@ describe('workflowsView', () => {
     expect(dagButtonBefore).toBeUndefined()
 
     // Select a session via the dropdown
-    const select = wrapper.find('select')
-    await select.setValue('abc12345-0000-0000-0000-000000000000')
-    await select.trigger('change')
+    const panel = await openListbox(wrapper.get('[role="combobox"]'))
+    optionByLabel(panel, 'my-project · Some prompt').dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await flushPromises()
 
     // DAG tab should now be present
@@ -158,13 +184,12 @@ describe('workflowsView', () => {
       },
     ]
     vi.stubGlobal('fetch', makeFetchMock(mockSessions))
-    const wrapper = mount(WorkflowsView)
+    const wrapper = mount(WorkflowsView, { attachTo: document.body })
     await flushPromises()
 
     // Select a session to show the DAG tab
-    const select = wrapper.find('select')
-    await select.setValue('abc12345-0000-0000-0000-000000000000')
-    await select.trigger('change')
+    const panel = await openListbox(wrapper.get('[role="combobox"]'))
+    optionByLabel(panel, 'my-project · Some prompt').dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await flushPromises()
 
     // Confirm DAG tab is active
@@ -173,7 +198,7 @@ describe('workflowsView', () => {
     expect(dagButtonActive!.classes()).toContain('bg-blue-600')
 
     // Click Reset
-    const resetButton = wrapper.find('button[type="button"]:not([role="tab"])')
+    const resetButton = wrapper.findAll('button').find(b => b.text() === 'Reset')!
     await resetButton.trigger('click')
     await flushPromises()
 

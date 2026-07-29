@@ -7,6 +7,7 @@ import { toast } from '../composables/useToast'
 import { errorMessage } from '../utils/errorMessage'
 import { slugify } from '../utils/validation'
 import AppButton from './ui/AppButton.vue'
+import AppSelect from './ui/AppSelect.vue'
 
 const props = defineProps<{ spawners: Spawner[] }>()
 const emit = defineEmits<{ created: [project: Project], cancel: [] }>()
@@ -41,6 +42,11 @@ function onSlugInput(e: Event): void {
 }
 
 const inputClass = 'w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent'
+
+const spawnerOptions = computed(() => [
+  { value: '', label: '(none)' },
+  ...props.spawners.map(s => ({ value: s.id, label: s.name })),
+])
 
 async function submit(): Promise<void> {
   if (isSubmitting.value)
@@ -124,14 +130,13 @@ async function submit(): Promise<void> {
       </div>
       <div class="mb-2">
         <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1" for="qcp-spawner">Default Spawner</label>
-        <select id="qcp-spawner" v-model="defaultSpawnerId" name="defaultSpawnerId" class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2">
-          <option value="">
-            (none)
-          </option>
-          <option v-for="s in spawners" :key="s.id" :value="s.id">
-            {{ s.name }}
-          </option>
-        </select>
+        <AppSelect
+          id="qcp-spawner"
+          :model-value="defaultSpawnerId"
+          :options="spawnerOptions"
+          class="w-full"
+          @update:model-value="defaultSpawnerId = $event as string"
+        />
       </div>
       <div class="mb-2 flex gap-2">
         <div class="flex-1">

@@ -14,6 +14,7 @@ import AppFieldLabel from './ui/AppFieldLabel.vue'
 import AppInput from './ui/AppInput.vue'
 import AppModal from './ui/AppModal.vue'
 import AppModalHeader from './ui/AppModalHeader.vue'
+import AppSelect from './ui/AppSelect.vue'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: [], spawned: [pid: number] }>()
@@ -46,6 +47,42 @@ let statusPollTimer: ReturnType<typeof setTimeout> | null = null
 let autoCloseTimer: ReturnType<typeof setTimeout> | null = null
 
 const folderPickerVisible = computed(() => dlg.folders.value.length > 1)
+
+const projectOptions = computed(() => [
+  ...sortedProjects.value.map(p => ({
+    value: p.id,
+    label: `${p.name}${p.folderCount === 0 ? ' — no folder, add one in /settings/projects' : ''}`,
+    disabled: p.folderCount === 0,
+  })),
+  { value: '__create__', label: '+ Create new project…' },
+])
+
+const folderOptions = computed(() =>
+  dlg.folders.value.map(f => ({
+    value: f.id,
+    label: `${f.label || f.path}${f.isDefault ? ' (default)' : ''}`,
+  })),
+)
+
+const spawnerOptions = computed(() => [
+  {
+    value: '',
+    label: projectChoice.value && projectChoice.value !== '__create__' ? 'Project default' : 'Claude default',
+  },
+  ...spawners.value.map(s => ({
+    value: s.id,
+    label: `${s.name}${s.builtIn ? ' (built-in)' : ''}`,
+  })),
+])
+
+const permissionModeOptions = [
+  { value: 'default', label: 'Ask for permission (default)' },
+  { value: 'plan', label: 'Plan mode (read-only)' },
+  { value: 'acceptEdits', label: 'Auto-accept edits' },
+  { value: 'auto', label: 'Auto (smart approvals)' },
+  { value: 'bypassPermissions', label: 'Bypass all permissions (dangerous)' },
+  { value: 'dontAsk', label: 'Never ask (dangerous)' },
+]
 
 // Modes that skip every confirmation prompt are gated behind a click-again
 // confirmation. 'auto' and 'plan' are not dangerous and need no gate.
@@ -256,19 +293,13 @@ onUnmounted(() => {
         <AppFieldLabel for="spawn-project">
           Project
         </AppFieldLabel>
-        <select id="spawn-project" v-model="projectChoice" class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent">
-          <option
-            v-for="p in sortedProjects"
-            :key="p.id"
-            :value="p.id"
-            :disabled="p.folderCount === 0"
-          >
-            {{ p.name }}{{ p.folderCount === 0 ? ' — no folder, add one in /settings/projects' : '' }}
-          </option>
-          <option value="__create__">
-            + Create new project…
-          </option>
-        </select>
+        <AppSelect
+          id="spawn-project"
+          :model-value="projectChoice"
+          :options="projectOptions"
+          class="w-full"
+          @update:model-value="projectChoice = $event as string"
+        />
       </div>
 
       <QuickCreateProjectPanel
@@ -282,35 +313,27 @@ onUnmounted(() => {
         <AppFieldLabel for="spawn-folder">
           Folder
         </AppFieldLabel>
-        <select
+        <AppSelect
           id="spawn-folder"
-          :value="dlg.selectedFolderId.value ?? ''"
-          class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent"
-          @change="dlg.selectFolder(($event.target as HTMLSelectElement).value)"
-        >
-          <option v-for="f in dlg.folders.value" :key="f.id" :value="f.id">
-            {{ f.label || f.path }}{{ f.isDefault ? ' (default)' : '' }}
-          </option>
-        </select>
+          :model-value="dlg.selectedFolderId.value ?? ''"
+          :options="folderOptions"
+          class="w-full"
+          @update:model-value="dlg.selectFolder($event as string)"
+        />
       </div>
 
       <div class="mb-4">
         <AppFieldLabel for="spawn-spawner">
           Spawner
         </AppFieldLabel>
-        <select
+        <AppSelect
           id="spawn-spawner"
-          v-model="dlg.spawnerId.value"
+          :model-value="dlg.spawnerId.value ?? ''"
+          :options="spawnerOptions"
           data-testid="spawn-spawner"
-          class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
-        >
-          <option value="">
-            {{ projectChoice && projectChoice !== '__create__' ? 'Project default' : 'Claude default' }}
-          </option>
-          <option v-for="s in spawners" :key="s.id" :value="s.id">
-            {{ s.name }}{{ s.builtIn ? ' (built-in)' : '' }}
-          </option>
-        </select>
+          class="w-full"
+          @update:model-value="dlg.spawnerId.value = $event as string"
+        />
       </div>
 
       <div class="mb-4">
@@ -330,31 +353,14 @@ onUnmounted(() => {
         <AppFieldLabel for="spawn-permission-mode">
           Permissions
         </AppFieldLabel>
-        <select
+        <AppSelect
           id="spawn-permission-mode"
-          v-model="permissionMode"
+          :model-value="permissionMode"
+          :options="permissionModeOptions"
           data-testid="spawn-permission-mode"
-          class="w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
-        >
-          <option value="default">
-            Ask for permission (default)
-          </option>
-          <option value="plan">
-            Plan mode (read-only)
-          </option>
-          <option value="acceptEdits">
-            Auto-accept edits
-          </option>
-          <option value="auto">
-            Auto (smart approvals)
-          </option>
-          <option value="bypassPermissions">
-            Bypass all permissions (dangerous)
-          </option>
-          <option value="dontAsk">
-            Never ask (dangerous)
-          </option>
-        </select>
+          class="w-full"
+          @update:model-value="permissionMode = $event as PermissionMode"
+        />
       </div>
 
       <div

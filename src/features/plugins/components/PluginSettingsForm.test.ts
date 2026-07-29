@@ -16,7 +16,7 @@ it('renders a control per field and masks secrets', async () => {
   const w = mountForm(async () => ({ schema, values: { endpoint: 'http://x', apiKey: '********', mode: 'a' } }))
   await flushPromises()
   expect(w.find('[data-field="endpoint"]').exists()).toBe(true)
-  expect(w.find('select[data-field="mode"]').exists()).toBe(true)
+  expect(w.find('[role="combobox"][data-field="mode"]').exists()).toBe(true)
   expect((w.find('[data-field="apiKey"]').element as HTMLInputElement).value).toBe('********')
 })
 

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { SettingView } from '@/features/settings/composables/useSettings'
 import { computed, onMounted, ref } from 'vue'
+import AppSelect from '@/components/ui/AppSelect.vue'
 import { toast } from '@/composables/useToast'
 import { useSettings } from '@/features/settings/composables/useSettings'
 import { errorMessage } from '@/utils/errorMessage'
@@ -61,6 +62,14 @@ function onValue(item: SettingView, e: Event) {
   apply(item, (e.target as HTMLInputElement | HTMLSelectElement).value)
 }
 
+function enumOptions(item: SettingView) {
+  return (item.enum ?? []).map(opt => ({ value: opt, label: opt }))
+}
+
+function onSelectChange(item: SettingView, value: string | number) {
+  apply(item, String(value))
+}
+
 onMounted(refetch)
 </script>
 
@@ -119,18 +128,15 @@ onMounted(refetch)
               class="h-4 w-4 shrink-0 cursor-pointer accent-accent"
               @change="onCheckbox(item, $event)"
             >
-            <select
+            <AppSelect
               v-else-if="item.type === 'enum'"
-              :value="item.value"
+              :model-value="item.value"
+              :options="enumOptions(item)"
               :aria-label="item.key"
               :disabled="saving === item.key"
-              class="w-44 shrink-0 bg-card border border-line rounded px-2 py-1 text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
-              @change="onValue(item, $event)"
-            >
-              <option v-for="opt in item.enum" :key="opt" :value="opt">
-                {{ opt }}
-              </option>
-            </select>
+              class="w-44 shrink-0"
+              @update:model-value="onSelectChange(item, $event)"
+            />
             <input
               v-else-if="item.type === 'int' || item.type === 'float'"
               type="number"

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { SettingField } from '@/features/plugins/composables/usePluginSettings'
 import { onMounted, reactive, ref } from 'vue'
+import AppSelect from '@/components/ui/AppSelect.vue'
 import { toast } from '@/composables/useToast'
 import { errorMessage } from '@/utils/errorMessage'
 
@@ -15,6 +16,10 @@ const schema = ref<SettingField[]>([])
 const model = reactive<Record<string, string>>({})
 const initial = reactive<Record<string, string>>({})
 const saving = ref(false)
+
+function enumOptions(field: SettingField): Array<{ value: string, label: string }> {
+  return (field.enum ?? []).map(opt => ({ value: opt, label: opt }))
+}
 
 onMounted(async () => {
   try {
@@ -58,11 +63,15 @@ async function save() {
   <form class="plugin-settings-form" @submit.prevent="save">
     <div v-for="f in schema" :key="f.key" class="plugin-settings-form__field">
       <label :for="`pf-${pluginId}-${f.key}`">{{ f.label }}</label>
-      <select v-if="f.type === 'enum'" :id="`pf-${pluginId}-${f.key}`" v-model="model[f.key]" :data-field="f.key">
-        <option v-for="opt in f.enum ?? []" :key="opt" :value="opt">
-          {{ opt }}
-        </option>
-      </select>
+      <AppSelect
+        v-if="f.type === 'enum'"
+        :id="`pf-${pluginId}-${f.key}`"
+        :model-value="model[f.key]"
+        :options="enumOptions(f)"
+        :data-field="f.key"
+        class="w-44"
+        @update:model-value="model[f.key] = $event as string"
+      />
       <input
         v-else-if="f.type === 'bool'"
         :id="`pf-${pluginId}-${f.key}`"
