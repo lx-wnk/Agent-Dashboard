@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"time"
 
@@ -38,6 +39,11 @@ func NewServer(addr string, handler http.Handler, timeout time.Duration) *Server
 // Run starts the HTTP server and blocks until ctx is cancelled or an error occurs.
 // On ctx cancellation, performs graceful shutdown within s.shutdownTimeout.
 func (s *Server) Run(ctx context.Context) error {
+	// Shutdown does not cancel in-flight request contexts, so streaming handlers
+	// derive theirs from BaseContext to observe cancellation instead of blocking Shutdown.
+	runCtx := ctx
+	s.httpSrv.BaseContext = func(net.Listener) context.Context { return runCtx }
+
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {

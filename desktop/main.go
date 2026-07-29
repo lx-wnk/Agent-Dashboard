@@ -28,8 +28,9 @@ import (
 var bootstrapDir embed.FS
 
 const (
-	serverAddr = "127.0.0.1:13120"
-	healthURL  = "http://" + serverAddr + "/api/system/health"
+	serverAddr   = "127.0.0.1:13120"
+	healthURL    = "http://" + serverAddr + "/api/system/health"
+	drainTimeout = 5 * time.Second
 )
 
 func main() {
@@ -71,8 +72,14 @@ func main() {
 		},
 		Mac: &mac.Options{},
 		OnShutdown: func(_ context.Context) {
-			cancel()    // ask the in-process server to drain
-			<-serverErr // wait for graceful shutdown before the process exits
+			cancel() // ask the in-process server to drain
+			// A handler that ignores its context would otherwise make the app
+			// unquittable, so the drain wait is bounded.
+			select {
+			case <-serverErr:
+			case <-time.After(drainTimeout):
+				log.Printf("dashboard server did not drain within %s, exiting anyway", drainTimeout)
+			}
 		},
 	})
 	if err != nil {
