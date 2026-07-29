@@ -1,6 +1,6 @@
 module github.com/lx-wnk/agent-dashboard/desktop
 
-go 1.26.5
+go 1.26
 
 require (
 	github.com/lx-wnk/agent-dashboard/server v0.0.0

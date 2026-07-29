@@ -112,6 +112,25 @@ Three non-obvious build requirements the `desktop:*` tasks encapsulate — a bar
 
 The `wails` CLI (`go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0`) is needed for `task dev:desktop` (wails hot-reload) and for producing a `.app`/`.dmg` bundle (`task desktop:dist` / `task desktop:dmg`); the plain `task build:desktop` above does not need it. See [docs/desktop-distribution.md](docs/desktop-distribution.md) for packaging plus the full signing and notarization steps.
 
+### CI matrices and the Go toolchain
+
+Two single sources feed CI, so neither has to be edited per module:
+
+- **`.go-version`** pins the toolchain for every `setup-go` step in `ci.yml` and `release.yml`. A Go patch bump is a one-line change here, and nothing else moves. `.go-version` is also read by `goenv`/`asdf` if you use one locally.
+
+  The `go` directives in the individual `go.mod` files stay at a plain `go 1.26`: they are *minimum language requirements*, not the build pin. Raise one only when a module genuinely starts requiring a newer language version — never for a security patch. `govulncheck` evaluates the standard library of the toolchain in use, not the directive, so `.go-version` is what governs stdlib CVEs.
+
+  Do not delete a `go` directive to "clean up": without one the language level falls back to 1.16, the stricter `go.sum` rules no longer apply and the build breaks — and the next `go mod tidy` writes the directive back with the full patch version of whatever toolchain you happen to run.
+
+  Watch for a `toolchain` line appearing in a `go.mod` after a `go get`: the go command adds one whenever it raises the `go` version. That would reintroduce a second, competing toolchain pin next to `.go-version`. Drop it and keep the pin in one place.
+
+  Both rules are enforced: the `Matrix` job's **Toolchain consistency** step fails the build if any `go.mod` (or `go.work`) drifts from the minor version in `.go-version`, or if a `toolchain` directive shows up. Go itself offers no way to inherit the directive — `go.work`'s own `go` line only governs how `go.work` is parsed, and a module has to stand alone for consumers who have no workspace — so consistency is checked rather than derived.
+- **The `matrix` job** at the top of `ci.yml` holds the module lists — `WORKSPACE_MODULES` and `PLUGINS` — and every other job's matrix derives from its outputs. **Adding a plugin means adding it to `PLUGINS`, and nothing else**: the test, lint, security and build jobs all follow. The security list is computed from the other two, so it can no longer drift out of sync (it once did, and `plugins/oauthkit` went unscanned as a result).
+
+  These lists cannot be workflow-level `env:` variables: GitHub does not expose the `env` context to `strategy.matrix` (allowed there: `github`, `needs`, `vars`, `inputs`), so they have to travel as job outputs.
+
+  The build job skips any plugin without a `package main` — a shared library such as `plugins/oauthkit` is tested, linted and vulnerability-scanned, but has no binary to build.
+
 ## Pull Request Process
 
 1. Branch from `main`.

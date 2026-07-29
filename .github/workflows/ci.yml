@@ -3,8 +3,10 @@ name: CI
 on:
   push:
     branches: [main]
+  # No branch filter: a PR targeting a feature branch (a stacked PR) must be
+  # tested too. With `branches: [main]` those ran no jobs at all, which
+  # renders on the PR as "no checks" rather than as untested.
   pull_request:
-    branches: [main]
 
 permissions:
   contents: read
@@ -14,18 +16,65 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  matrix:
+    name: Matrix
+    runs-on: ubuntu-latest
+    outputs:
+      workspace_modules: ${{ steps.lists.outputs.workspace_modules }}
+      plugins: ${{ steps.lists.outputs.plugins }}
+      scan_modules: ${{ steps.lists.outputs.scan_modules }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Toolchain consistency
+        # go has no way to inherit the `go` directive: go.work's own directive
+        # only governs how go.work itself is parsed, and a module must stand
+        # alone for outside consumers. So the directives are checked against
+        # .go-version instead of derived from it.
+        run: |
+          want="go $(cut -d. -f1,2 < .go-version)"
+          rc=0
+          for f in go.work $(git ls-files '*go.mod'); do
+            have="$(grep -m1 -E '^go ' "$f" || echo '<missing>')"
+            if [ "$have" != "$want" ]; then
+              echo "::error file=$f::expected '$want', found '$have'"
+              rc=1
+            fi
+            if grep -q '^toolchain ' "$f"; then
+              echo "::error file=$f::toolchain directive is a second pin next to .go-version — remove it"
+              rc=1
+            fi
+          done
+          if [ "$rc" -eq 0 ]; then echo "all go directives match .go-version"; fi
+          exit "$rc"
+
+      # Single source for every matrix below. These lists live in a job output
+      # rather than a workflow-level `env:` because strategy.matrix cannot read
+      # the env context (allowed there: github, needs, vars, inputs).
+      # desktop/ is absent on purpose: it is //go:build darwin and has its own
+      # macOS job.
+      - id: lists
+        run: |
+          WORKSPACE_MODULES='["server", "sdk"]'
+          PLUGINS='["anthropic-spawner", "github-oauth", "oauthkit", "office365-oauth", "voice-webspeech", "voice-whisper"]'
+          {
+            echo "workspace_modules=$WORKSPACE_MODULES"
+            echo "plugins=$PLUGINS"
+            echo "scan_modules=$(jq -nc --argjson m "$WORKSPACE_MODULES" --argjson p "$PLUGINS" '$m + ($p | map("plugins/" + .))')"
+          } >> "$GITHUB_OUTPUT"
+
   test:
     name: Test (${{ matrix.module }})
     runs-on: ubuntu-latest
+    needs: matrix
     strategy:
       fail-fast: false
       matrix:
-        module: [server, sdk]
+        module: ${{ fromJSON(needs.matrix.outputs.workspace_modules) }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
-          go-version-file: ${{ matrix.module }}/go.mod
+          go-version-file: .go-version
           cache-dependency-path: go.work.sum
 
       - name: Test
@@ -55,15 +104,16 @@ jobs:
   test-plugins:
     name: Test (plugins/${{ matrix.plugin }})
     runs-on: ubuntu-latest
+    needs: matrix
     strategy:
       fail-fast: false
       matrix:
-        plugin: [oauthkit, github-oauth, office365-oauth, voice-whisper, voice-webspeech, anthropic-spawner]
+        plugin: ${{ fromJSON(needs.matrix.outputs.plugins) }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
-          go-version-file: plugins/${{ matrix.plugin }}/go.mod
+          go-version-file: .go-version
           cache-dependency-path: plugins/${{ matrix.plugin }}/go.sum
 
       - name: Test
@@ -80,15 +130,16 @@ jobs:
   lint:
     name: Lint (${{ matrix.module }})
     runs-on: ubuntu-latest
+    needs: matrix
     strategy:
       fail-fast: false
       matrix:
-        module: [server, sdk]
+        module: ${{ fromJSON(needs.matrix.outputs.workspace_modules) }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
-          go-version-file: ${{ matrix.module }}/go.mod
+          go-version-file: .go-version
           cache-dependency-path: go.work.sum
       - name: Install golangci-lint
         run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.6
@@ -102,15 +153,16 @@ jobs:
   lint-plugins:
     name: Lint (plugins/${{ matrix.plugin }})
     runs-on: ubuntu-latest
+    needs: matrix
     strategy:
       fail-fast: false
       matrix:
-        plugin: [oauthkit, github-oauth, office365-oauth, voice-whisper, voice-webspeech, anthropic-spawner]
+        plugin: ${{ fromJSON(needs.matrix.outputs.plugins) }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
-          go-version-file: plugins/${{ matrix.plugin }}/go.mod
+          go-version-file: .go-version
           cache-dependency-path: plugins/${{ matrix.plugin }}/go.sum
       - name: Install golangci-lint
         run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.6
@@ -124,22 +176,16 @@ jobs:
   security:
     name: Security (${{ matrix.module }})
     runs-on: ubuntu-latest
+    needs: matrix
     strategy:
       fail-fast: false
       matrix:
-        module:
-          - server
-          - sdk
-          - plugins/github-oauth
-          - plugins/office365-oauth
-          - plugins/voice-whisper
-          - plugins/voice-webspeech
-          - plugins/anthropic-spawner
+        module: ${{ fromJSON(needs.matrix.outputs.scan_modules) }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
-          go-version-file: ${{ matrix.module }}/go.mod
+          go-version-file: .go-version
           # sdk has no go.sum (workspace member, no external deps); go.work.sum
           # guarantees at least one resolvable path so setup-go caching never errors.
           cache-dependency-path: |
@@ -154,19 +200,24 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
-    needs: [test, lint, test-plugins, lint-plugins]
+    needs: [matrix, test, lint, test-plugins, lint-plugins]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
-          go-version: stable
+          go-version-file: .go-version
       - name: Build server binary
         working-directory: server
         run: go build -o /dev/null ./cmd/serve/...
       - name: Build plugin binaries
+        env:
+          PLUGINS: ${{ needs.matrix.outputs.plugins }}
         run: |
-          for plugin in plugins/github-oauth plugins/office365-oauth plugins/voice-whisper plugins/voice-webspeech plugins/anthropic-spawner; do
-            echo "=== building $plugin ===" && (cd "$plugin" && GOWORK=off go build -o /dev/null .)
+          for plugin in $(echo "$PLUGINS" | jq -r '.[]'); do
+            dir="plugins/$plugin"
+            # No main package means a shared library (oauthkit) — nothing to build.
+            grep -lq '^package main' "$dir"/*.go || continue
+            echo "=== building $dir ===" && (cd "$dir" && GOWORK=off go build -o /dev/null .)
           done
 
   frontend:
@@ -224,7 +275,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
-          go-version-file: server/go.mod
+          go-version-file: .go-version
           cache-dependency-path: go.work.sum
       - name: Install go-licenses
         run: go install github.com/google/go-licenses/v2@v2.0.1
@@ -253,7 +304,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
-          go-version-file: desktop/go.mod
+          go-version-file: .go-version
           cache-dependency-path: go.work.sum
       - name: Build desktop shell (real wails link path)
         working-directory: desktop
