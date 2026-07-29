@@ -52,18 +52,21 @@ func runChannel(ctx context.Context) error {
 // injection, printing the child PID as the first stdout line so the spawner
 // can capture it.
 func runPtyHost(ctx context.Context, args []string) error {
+	// pty-host proxies the child via os.Stdout; keep logs off stdout, including
+	// the error this function may return moments from now. slog.SetDefault also
+	// reroutes the stdlib log package, at Info level by default — a GUI host
+	// reporting a failure via log.Fatalf would be silently dropped by this Warn
+	// handler, so the bridge level is pinned to match it.
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+		Level: slog.LevelWarn,
+	})))
+	slog.SetLogLoggerLevel(slog.LevelWarn)
 	if len(args) > 0 && args[0] == "--" {
 		args = args[1:]
 	}
 	if len(args) == 0 {
 		return fmt.Errorf("pty-host: no command given")
 	}
-	// pty-host proxies the child via os.Stdout; keep logs off stdout. This runs
-	// after argument validation because slog.SetDefault also reroutes the stdlib
-	// log package at Info level, which a Warn handler would then swallow.
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
-		Level: slog.LevelWarn,
-	})))
 	return channel.RunHeadlessPTY(ctx, args[0], args[1:], nil, "", func(pid int) {
 		fmt.Println(pid)
 	})

@@ -2,6 +2,8 @@ package serverapp
 
 import (
 	"context"
+	"slices"
+	"sort"
 	"strings"
 	"testing"
 
@@ -56,23 +58,29 @@ func TestDispatchHeadless_PtyHostRecognised(t *testing.T) {
 	}
 }
 
-// TestHeadlessSubcommands_MatchesSpawnerReExecSites guards against a future
-// re-exec site (spawn.go, pipeline/spawner.go) that the desktop binary cannot
-// serve: every subcommand the spawner re-executes must be listed here.
-func TestHeadlessSubcommands_MatchesSpawnerReExecSites(t *testing.T) {
-	got := HeadlessSubcommands()
+// TestHeadlessSubcommands_WireNames pins the names as literals rather than via
+// the constants, because the names are a wire contract: they are baked into
+// MCP configs already written to disk and into the argv the spawner builds, so
+// changing a constant's value silently breaks running sessions. Comparing the
+// full set also means adding a constant without teaching DispatchHeadless
+// about it fails here.
+//
+// It does NOT prove that every re-exec site is covered — that would need a
+// source scan, not a unit test. Reviewing a new `<self> <name>` exec against
+// this list stays a human step.
+func TestHeadlessSubcommands_WireNames(t *testing.T) {
+	got := append([]string(nil), HeadlessSubcommands()...)
+	sort.Strings(got)
 
-	want := []string{channelconfig.SubcommandPtyHost, channelconfig.SubcommandChannel}
-	for _, w := range want {
-		found := false
-		for _, g := range got {
-			if g == w {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("HeadlessSubcommands() = %v, want it to contain %q", got, w)
-		}
+	want := []string{"channel", "pty-host"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("HeadlessSubcommands() = %v, want exactly %v", got, want)
+	}
+
+	if channelconfig.SubcommandChannel != "channel" {
+		t.Errorf("SubcommandChannel = %q, want %q", channelconfig.SubcommandChannel, "channel")
+	}
+	if channelconfig.SubcommandPtyHost != "pty-host" {
+		t.Errorf("SubcommandPtyHost = %q, want %q", channelconfig.SubcommandPtyHost, "pty-host")
 	}
 }
