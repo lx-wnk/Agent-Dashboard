@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, useId, watch } from 'vue'
+import { computed, nextTick, onUnmounted, ref, useId, watch } from 'vue'
 
 interface SelectOption { value: string | number, label: string, disabled?: boolean }
 
@@ -46,13 +46,18 @@ let typeaheadTimer: ReturnType<typeof setTimeout> | null = null
 // One-shot suppression for the click that follows a dismissing outside
 // mousedown, so closing the panel doesn't also activate whatever was under
 // the pointer (a native popup consumed that click too). Cleared on the very
-// next mousedown as well, in case the pointer is dragged away and no click
-// ever follows.
+// next mousedown as well (onAnyMouseDown, added only while armed), in case
+// the pointer is dragged away and no click ever follows, and on a 0ms
+// timeout fallback so it can never outlive the gesture that armed it — a
+// click that belongs to the same gesture is already a pending/dispatching
+// task by the time this timeout is scheduled, so it always runs first (see
+// AppSelect.test.ts for the scenario this guards).
 let suppressNextClick: ((e: MouseEvent) => void) | null = null
 
 function clearClickSuppression() {
   if (suppressNextClick) {
     document.removeEventListener('click', suppressNextClick, true)
+    document.removeEventListener('mousedown', onAnyMouseDown, true)
     suppressNextClick = null
   }
 }
@@ -149,8 +154,10 @@ async function openPanel() {
   activeIndex.value = selectedIndex.value >= 0 ? selectedIndex.value : firstEnabledIndex()
   // WKWebView (the desktop app's webview) does not focus a <button> on
   // click, so without this the trigger's @keydown handler never receives
-  // events after a mouse-opened panel.
-  triggerRef.value?.focus()
+  // events after a mouse-opened panel. `preventScroll` keeps focus from
+  // scrolling the trigger into view before updatePosition() below reads
+  // its (still pre-scroll) getBoundingClientRect().
+  triggerRef.value?.focus({ preventScroll: true })
   updatePosition()
   await nextTick()
   updatePosition()
@@ -292,6 +299,12 @@ function onDocumentMouseDown(e: MouseEvent) {
   if (triggerRef.value?.contains(target) || panelRef.value?.contains(target))
     return
   closePanel()
+  // Only a primary-button mousedown is ever followed by a same-gesture
+  // click. A right- or middle-click has no click event coming — arming here
+  // would leave the suppressor sitting on `document` until it swallows an
+  // unrelated later click (keyboard activation, `element.click()`, ...).
+  if (e.button !== 0)
+    return
   // The mousedown that dismisses the panel is immediately followed by a
   // click on the same element (the modal backdrop, an agent card, ...) — a
   // native popup swallowed that click too. Intercept it once, in the
@@ -303,12 +316,16 @@ function onDocumentMouseDown(e: MouseEvent) {
     clearClickSuppression()
   }
   document.addEventListener('click', suppressNextClick, true)
+  document.addEventListener('mousedown', onAnyMouseDown, true)
+  setTimeout(clearClickSuppression, 0)
 }
 
-// Runs on every mousedown, independent of isOpen, purely to drop a pending
-// click-suppression left over from a previous outside-mousedown whose click
-// never arrived (e.g. the pointer was pressed down and dragged elsewhere) —
-// otherwise it would wrongly swallow an unrelated later click.
+// Added only while a suppression is armed (see onDocumentMouseDown), so it
+// runs on every mousedown that follows, independent of isOpen, purely to
+// drop a pending click-suppression left over from a previous
+// outside-mousedown whose click never arrived (e.g. the pointer was pressed
+// down and dragged elsewhere) — otherwise it would wrongly swallow an
+// unrelated later click. Removed again by clearClickSuppression().
 function onAnyMouseDown() {
   clearClickSuppression()
 }
@@ -330,15 +347,11 @@ watch(isOpen, (open) => {
   }
 })
 
-onMounted(() => {
-  document.addEventListener('mousedown', onAnyMouseDown, true)
-})
-
 onUnmounted(() => {
   window.removeEventListener('scroll', onWindowScrollOrResize, true)
   window.removeEventListener('resize', onWindowScrollOrResize)
   document.removeEventListener('mousedown', onDocumentMouseDown, true)
-  document.removeEventListener('mousedown', onAnyMouseDown, true)
+  // Also removes onAnyMouseDown's listener if a suppression is armed.
   clearClickSuppression()
   resetTypeahead()
 })
@@ -362,7 +375,7 @@ onUnmounted(() => {
     @click="toggle"
     @keydown="onTriggerKeydown"
   >
-    <span class="truncate" :title="selectedLabel">{{ selectedLabel }}</span>
+    <span class="truncate" :title="selectedLabel || undefined">{{ selectedLabel }}</span>
     <span aria-hidden="true" class="text-fg-mute text-xs leading-none flex-shrink-0">▾</span>
   </button>
 
@@ -373,13 +386,16 @@ onUnmounted(() => {
       ref="panelRef"
       role="listbox"
       :aria-label="ariaLabel"
-      class="fixed z-[1100] bg-raised border border-line-strong rounded-md shadow-modal py-1 overflow-y-auto"
+      class="fixed z-[1500] bg-raised border border-line-strong rounded-md shadow-modal py-1 overflow-y-auto"
       :style="{ ...panelPosition, maxHeight: `${PANEL_MAX_HEIGHT}px` }"
     >
       <!--
-        z-[1100] must stay above AppModal's z-index (TaskModal/AgentModal
-        both pass :z-index="1000") — equal z-index left paint order to
-        Teleport DOM insertion order, which only worked by accident.
+        z-[1500] must stay strictly above every AppModal instance (highest
+        is EditGateModal's :z-index="1100"; TaskModal/AgentModal are 1000)
+        and strictly below the always-on-top layer at z-index 2000
+        (SpotlightSearch, ToastHost, App.vue's toast host) — equal z-index
+        left paint order to Teleport DOM insertion order, which only
+        worked by accident.
       -->
       <div
         v-for="(opt, idx) in options"
@@ -388,7 +404,7 @@ onUnmounted(() => {
         role="option"
         :aria-selected="idx === selectedIndex"
         :aria-disabled="opt.disabled ? 'true' : undefined"
-        :title="opt.label"
+        :title="opt.label || undefined"
         class="px-3 py-1.5 text-sm flex items-center justify-between gap-2"
         :class="optionClass(opt, idx)"
         @click="onOptionClick(opt)"

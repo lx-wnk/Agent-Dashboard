@@ -167,6 +167,71 @@ describe('appSelect', () => {
     expect(panel()).toBeNull()
   })
 
+  it('a right-click outside closes the panel without arming the suppressor, so a subsequent bare click (no preceding mousedown, as keyboard activation dispatches) still reaches its handler', async () => {
+    const w = mountSelect({ modelValue: 'a', options })
+    await w.get('button').trigger('keydown', { key: 'ArrowDown' })
+    expect(panel()).not.toBeNull()
+
+    document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 2 }))
+    await w.vm.$nextTick()
+    expect(panel()).toBeNull()
+
+    const target = document.createElement('button')
+    document.body.appendChild(target)
+    const handler = vi.fn()
+    target.addEventListener('click', handler)
+    try {
+      // No mousedown precedes this click, matching Enter/Space activation
+      // or element.click() — exactly what a stray suppressor would eat.
+      target.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      expect(handler).toHaveBeenCalledTimes(1)
+    }
+    finally {
+      target.remove()
+    }
+  })
+
+  it('a primary-button outside mousedown suppresses exactly the click that follows it, and only that one', async () => {
+    const w = mountSelect({ modelValue: 'a', options })
+    await w.get('button').trigger('keydown', { key: 'ArrowDown' })
+    expect(panel()).not.toBeNull()
+
+    const target = document.createElement('button')
+    document.body.appendChild(target)
+    const handler = vi.fn()
+    target.addEventListener('click', handler)
+    try {
+      target.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }))
+      await w.vm.$nextTick()
+      expect(panel()).toBeNull()
+
+      target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+      expect(handler).not.toHaveBeenCalled()
+
+      target.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      expect(handler).toHaveBeenCalledTimes(1)
+    }
+    finally {
+      target.remove()
+    }
+  })
+
+  it('the compact size prop applies the compact trigger classes', () => {
+    const w = mountSelect({ modelValue: 'a', options, size: 'compact' })
+    const button = w.get('button')
+    expect(button.classes()).toContain('px-2')
+    expect(button.classes()).toContain('py-1')
+    expect(button.classes()).toContain('text-xs')
+  })
+
+  it('the default size prop applies the default trigger classes', () => {
+    const w = mountSelect({ modelValue: 'a', options })
+    const button = w.get('button')
+    expect(button.classes()).toContain('px-3')
+    expect(button.classes()).toContain('py-2')
+    expect(button.classes()).toContain('text-sm')
+  })
+
   it('type-ahead jumps to the first enabled option whose label starts with the typed prefix', async () => {
     const fruitOptions = [
       { value: 'a', label: 'Apple' },
