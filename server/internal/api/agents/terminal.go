@@ -98,7 +98,7 @@ func (h *TerminalHandler) Terminal(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	defer browserConn.Close(websocket.StatusInternalError, "")
+	defer func() { _ = browserConn.Close(websocket.StatusInternalError, "") }()
 	// coder/websocket defaults to a 32 KiB read limit; the pty broker replays up
 	// to a 256 KiB scrollback snapshot in one frame and large client pastes can
 	// exceed 32 KiB too. Raise to a finite bound rather than the unbounded -1 so a
@@ -112,10 +112,10 @@ func (h *TerminalHandler) Terminal(w http.ResponseWriter, r *http.Request) {
 		HTTPHeader: http.Header{"Authorization": {"Bearer " + token}},
 	})
 	if err != nil {
-		browserConn.Close(websocket.StatusInternalError, "failed to reach terminal broker")
+		_ = browserConn.Close(websocket.StatusInternalError, "failed to reach terminal broker")
 		return
 	}
-	defer brokerConn.Close(websocket.StatusInternalError, "")
+	defer func() { _ = brokerConn.Close(websocket.StatusInternalError, "") }()
 	brokerConn.SetReadLimit(maxTerminalFrameBytes)
 
 	go func() {

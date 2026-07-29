@@ -27,7 +27,7 @@ type commitFailTx struct {
 }
 
 func (t commitFailTx) Commit() error {
-	_ = t.Tx.Rollback()
+	_ = t.Rollback()
 	return errInjectedCommit
 }
 

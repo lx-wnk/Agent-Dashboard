@@ -26,7 +26,7 @@ func expectedUsage(n int) sdk.TokenUsage {
 func resetTokenOffsetCache(t *testing.T) {
 	t.Helper()
 	tokenOffsetCacheMu.Lock()
-	tokenOffsetCache = make(map[uint64]*tokenOffsetCacheEntry)
+	tokenOffsetCache = make(map[string]*tokenOffsetCacheEntry)
 	tokenOffsetCacheMu.Unlock()
 }
 
@@ -62,13 +62,13 @@ func TestTokenUsageForFile_IncrementalMatchesFullScan(t *testing.T) {
 
 	info, err := os.Stat(path)
 	require.NoError(t, err)
-	inode := inodeOf(info)
 
 	tokenOffsetCacheMu.Lock()
-	entry := tokenOffsetCache[inode]
+	entry := tokenOffsetCache[path]
 	tokenOffsetCacheMu.Unlock()
 	require.NotNil(t, entry, "first call must seed a cache entry")
 	require.Equal(t, info.Size(), entry.offset)
+	require.Equal(t, inodeOf(info), entry.inode, "the entry must be pinned to the inode it was seeded from")
 
 	// Append more lines — same inode, file grew.
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o640)
@@ -130,8 +130,13 @@ func TestTokenUsageForFile_ResetsOnInodeChange(t *testing.T) {
 	_, err = tokenUsageForFile(path)
 	require.NoError(t, err)
 
-	require.NoError(t, os.Remove(path))
-	require.NoError(t, os.WriteFile(path, []byte(strings.Repeat(incrementalLineTemplate, 7)), 0o640))
+	// Rotate rather than delete-then-recreate: writing the replacement while the
+	// original is still linked keeps the old inode allocated, so the kernel
+	// cannot hand the same number back (ext4 recycles freed inodes eagerly,
+	// APFS does not — delete-then-recreate is only a new inode on APFS).
+	replacement := filepath.Join(dir, "session.jsonl.rotated")
+	require.NoError(t, os.WriteFile(replacement, []byte(strings.Repeat(incrementalLineTemplate, 7)), 0o640))
+	require.NoError(t, os.Rename(replacement, path))
 
 	info2, err := os.Stat(path)
 	require.NoError(t, err)
@@ -157,12 +162,11 @@ func TestTokenUsageForFile_FallsBackOnScanError(t *testing.T) {
 
 	info, err := os.Stat(path)
 	require.NoError(t, err)
-	inode := inodeOf(info)
 
 	// Corrupt the cached offset to a negative value — Seek(-1, io.SeekStart)
 	// reliably errors, forcing ScanMessagesFrom to fail.
 	tokenOffsetCacheMu.Lock()
-	tokenOffsetCache[inode].offset = -1
+	tokenOffsetCache[path].offset = -1
 	tokenOffsetCacheMu.Unlock()
 
 	got, err := tokenUsageForFile(path)
@@ -170,7 +174,7 @@ func TestTokenUsageForFile_FallsBackOnScanError(t *testing.T) {
 	require.Equal(t, expectedUsage(20), got.TokenUsage)
 
 	tokenOffsetCacheMu.Lock()
-	fixedOffset := tokenOffsetCache[inode].offset
+	fixedOffset := tokenOffsetCache[path].offset
 	tokenOffsetCacheMu.Unlock()
 	require.Equal(t, info.Size(), fixedOffset, "the fallback must reseed the cache with a valid offset")
 }

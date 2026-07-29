@@ -17,7 +17,7 @@ func newPtyHub(scrollbackBytes int) *ptyHub {
 
 // Write is io.Writer: called from the pty read loop.
 func (h *ptyHub) Write(p []byte) (int, error) {
-	h.sb.Write(p)
+	_, _ = h.sb.Write(p)
 	h.mu.Lock()
 	for ch := range h.subs {
 		b := append([]byte(nil), p...)
