@@ -39,7 +39,7 @@ function apply() {
       :options="templateOptions"
       title="Insert a saved prompt template"
       aria-label="Insert a saved prompt template"
-      class="text-[12px]"
+      size="compact"
       @update:model-value="selectedId = $event as string"
     />
     <template v-if="placeholders.length">

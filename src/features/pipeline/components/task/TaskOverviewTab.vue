@@ -290,7 +290,7 @@ watch(
         :model-value="task.autonomy ?? 'spec_gated'"
         :options="autonomyOptions"
         data-testid="task-autonomy-select"
-        class="text-xs"
+        size="compact"
         @update:model-value="onAutonomyChange"
       />
     </section>
@@ -356,7 +356,8 @@ watch(
               :model-value="task.projectId ?? ''"
               :options="projectAssignOptions"
               :disabled="isAssigningProject"
-              class="flex-1 min-w-0 text-xs"
+              size="compact"
+              class="flex-1 min-w-0"
               @update:model-value="onProjectSelect"
             />
           </div>
@@ -377,7 +378,8 @@ watch(
               :model-value="task.spawnerId ?? ''"
               :options="spawnerAssignOptions"
               :disabled="isAssigningSpawner"
-              class="flex-1 min-w-0 text-xs"
+              size="compact"
+              class="flex-1 min-w-0"
               @update:model-value="onSpawnerSelect"
             />
           </div>

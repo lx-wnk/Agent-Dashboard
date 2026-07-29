@@ -5,15 +5,27 @@ interface SelectOption { value: string | number, label: string, disabled?: boole
 
 defineOptions({ inheritAttrs: false })
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   modelValue: string | number
   options: SelectOption[]
   id?: string
   ariaLabel?: string
   disabled?: boolean
-}>()
+  size?: 'default' | 'compact'
+}>(), {
+  size: 'default',
+})
 
 const emit = defineEmits<{ 'update:modelValue': [value: string | number] }>()
+
+// `compact` matches the pre-migration native `<select>` dimensions restored at
+// the four call sites that sit beside `py-1` siblings (filter-bar inputs, the
+// TaskDependenciesTab stage selects); `default` is the original AppSelect size.
+const SIZE_CLASSES: Record<'default' | 'compact', string> = {
+  default: 'px-3 py-2 text-sm',
+  compact: 'px-2 py-1 text-xs',
+}
+const sizeClass = computed(() => SIZE_CLASSES[props.size])
 
 // Panel is measured by actual rendered height once mounted; this is only the
 // pre-render estimate used to decide flip direction before that measurement
@@ -345,7 +357,8 @@ onUnmounted(() => {
     :aria-activedescendant="activeOptionId"
     :aria-label="ariaLabel"
     :disabled="disabled"
-    class="bg-card border border-line rounded-md px-3 py-2 text-sm text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent disabled:opacity-50 cursor-pointer flex items-center justify-between gap-2 text-left"
+    :class="sizeClass"
+    class="bg-card border border-line rounded-md text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent disabled:opacity-50 cursor-pointer inline-flex items-center justify-between gap-2 text-left"
     @click="toggle"
     @keydown="onTriggerKeydown"
   >

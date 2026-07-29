@@ -225,7 +225,8 @@ const maxToolFreq = computed(() => Math.max(0, ...toolFrequency.value.map(f => f
         <AppSelect
           :model-value="filters.sessionId ?? ''"
           :options="sessionOptions"
-          class="text-[12px] w-[260px] max-w-[260px] truncate"
+          size="compact"
+          class="w-[260px] max-w-[260px] truncate"
           @update:model-value="onSessionSelect($event as string)"
         />
       </label>

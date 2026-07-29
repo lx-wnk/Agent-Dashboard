@@ -69,7 +69,6 @@ async function save() {
         :model-value="model[f.key]"
         :options="enumOptions(f)"
         :data-field="f.key"
-        class="w-44"
         @update:model-value="model[f.key] = $event as string"
       />
       <input

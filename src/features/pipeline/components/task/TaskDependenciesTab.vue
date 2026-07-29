@@ -73,6 +73,7 @@ const onCancelActionOptions: Array<{ value: string, label: string }> = [
           :model-value="newDepStage"
           :options="requiredStageOptions"
           aria-label="Required stage"
+          size="compact"
           class="text-[11px]"
           @update:model-value="newDepStage = $event as 'done' | 'cancelled'"
         />
@@ -80,6 +81,7 @@ const onCancelActionOptions: Array<{ value: string, label: string }> = [
           :model-value="newDepCancelAction"
           :options="onCancelActionOptions"
           aria-label="On cancel action"
+          size="compact"
           class="text-[11px]"
           @update:model-value="newDepCancelAction = $event as 'cancel' | 'start' | 'on_hold'"
         />
