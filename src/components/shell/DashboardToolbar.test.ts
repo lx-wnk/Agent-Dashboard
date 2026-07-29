@@ -1,29 +1,14 @@
 import { mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it } from 'vitest'
+import { openListbox, optionByLabel } from '@/utils/testSelect'
 import DashboardToolbar from './DashboardToolbar.vue'
 
 // AppSelect (used for project/spawner/sort/group filters) is a custom listbox,
 // not a native <select> — its panel teleports to <body> while open, so option
 // counts and value changes are exercised through the trigger button + the
 // teleported [role="option"] elements instead of select.findAll('option') /
-// select.setValue(), which only work against native <select> internals.
-interface SelectTrigger {
-  trigger: (event: string) => Promise<unknown>
-  attributes: (key: string) => string | undefined
-}
-
-async function openListbox(select: SelectTrigger): Promise<HTMLElement> {
-  await select.trigger('click')
-  return document.getElementById(select.attributes('aria-controls')!)!
-}
-
-function optionByLabel(panel: HTMLElement, label: string): HTMLElement {
-  const match = Array.from(panel.querySelectorAll('[role="option"]'))
-    .find(el => el.textContent?.trim() === label)
-  if (!match)
-    throw new Error(`No option with label "${label}" found`)
-  return match as HTMLElement
-}
+// select.setValue(), which only work against native <select> internals. See
+// testSelect.ts for the shared openListbox()/optionByLabel() helpers.
 
 afterEach(() => {
   document.body.innerHTML = ''

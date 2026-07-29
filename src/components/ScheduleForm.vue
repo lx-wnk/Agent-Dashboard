@@ -176,8 +176,9 @@ async function onSubmit() {
         placeholder="UTC"
       />
       <div class="flex flex-col gap-1">
-        <label class="text-sm font-medium text-fg-soft">Catchup</label>
+        <label for="schedule-catchup" class="text-sm font-medium text-fg-soft">Catchup</label>
         <AppSelect
+          id="schedule-catchup"
           :model-value="catchup"
           :options="CATCHUP_OPTIONS"
           @update:model-value="catchup = $event as 'none' | 'once'"
@@ -210,8 +211,9 @@ async function onSubmit() {
 
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <div class="flex flex-col gap-1">
-        <label class="text-sm font-medium text-fg-soft">Priority</label>
+        <label for="schedule-priority" class="text-sm font-medium text-fg-soft">Priority</label>
         <AppSelect
+          id="schedule-priority"
           :model-value="priority"
           :options="PRIORITY_OPTIONS"
           @update:model-value="priority = $event as string"

@@ -48,9 +48,14 @@ export async function stubEmptyStream(page: Page, path: string): Promise<void> {
  * a descendant of the trigger.
  */
 export async function openListboxOptions(page: Page, trigger: Locator): Promise<Locator> {
-  await trigger.click()
   const listbox = page.getByRole('listbox')
-  await listbox.waitFor({ state: 'visible' })
+  // Guard on aria-expanded like selectListboxOption does — clicking
+  // unconditionally would toggle an already-open panel shut and then hang
+  // on the visible-wait below.
+  if (await trigger.getAttribute('aria-expanded') !== 'true') {
+    await trigger.click()
+    await listbox.waitFor({ state: 'visible' })
+  }
   return listbox
 }
 

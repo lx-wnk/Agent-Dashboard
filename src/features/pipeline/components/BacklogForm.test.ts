@@ -4,6 +4,7 @@ import { ref } from 'vue'
 
 import AppSelect from '@/components/ui/AppSelect.vue'
 import BacklogForm from '@/features/pipeline/components/BacklogForm.vue'
+import { openListbox, optionByLabel } from '@/utils/testSelect'
 
 vi.mock('@/composables/useProjects', () => ({
   useProjects: () => ({
@@ -37,24 +38,8 @@ vi.mock('@/composables/useProjectFolders', () => ({
 // <select> — its panel teleports to <body> while open, so option counts and
 // value changes are exercised through the trigger button + the teleported
 // [role="option"] elements instead of select.setValue()/select.options,
-// which only work against native <select> internals (see DashboardToolbar.test.ts).
-interface SelectTrigger {
-  trigger: (event: string) => Promise<unknown>
-  attributes: (key: string) => string | undefined
-}
-
-async function openListbox(select: SelectTrigger): Promise<HTMLElement> {
-  await select.trigger('click')
-  return document.getElementById(select.attributes('aria-controls')!)!
-}
-
-function optionByLabel(panel: HTMLElement, label: string): HTMLElement {
-  const match = Array.from(panel.querySelectorAll('[role="option"]'))
-    .find(el => el.textContent?.trim() === label)
-  if (!match)
-    throw new Error(`No option with label "${label}" found`)
-  return match as HTMLElement
-}
+// which only work against native <select> internals. See testSelect.ts for
+// the shared openListbox()/optionByLabel() helpers.
 
 afterEach(() => {
   document.body.innerHTML = ''

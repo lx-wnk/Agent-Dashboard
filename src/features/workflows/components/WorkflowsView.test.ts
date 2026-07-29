@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import WorkflowsView from '@/features/workflows/components/WorkflowsView.vue'
+import { openListbox, optionByLabel } from '@/utils/testSelect'
 
 function emptySankey() {
   return { nodes: [], links: [], meta: { sessionCount: 0, callCount: 0 } }
@@ -19,24 +20,8 @@ function makeFetchMock(sessions: unknown[] = []) {
 // <select> — its panel teleports to <body> while open, so option counts and
 // value changes are exercised through the trigger button + the teleported
 // [role="option"] elements instead of select.findAll('option') /
-// select.setValue(), which only work against native <select> internals.
-interface SelectTrigger {
-  trigger: (event: string) => Promise<unknown>
-  attributes: (key: string) => string | undefined
-}
-
-async function openListbox(select: SelectTrigger): Promise<HTMLElement> {
-  await select.trigger('click')
-  return document.getElementById(select.attributes('aria-controls')!)!
-}
-
-function optionByLabel(panel: HTMLElement, label: string): HTMLElement {
-  const match = Array.from(panel.querySelectorAll('[role="option"]'))
-    .find(el => el.textContent?.trim() === label)
-  if (!match)
-    throw new Error(`No option with label "${label}" found`)
-  return match as HTMLElement
-}
+// select.setValue(), which only work against native <select> internals. See
+// testSelect.ts for the shared openListbox()/optionByLabel() helpers.
 
 afterEach(() => {
   document.body.innerHTML = ''

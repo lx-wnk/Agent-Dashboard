@@ -1,5 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { openListboxDom as openListbox, selectByLabel } from '@/utils/testSelect'
 import SpawnDialog from './SpawnDialog.vue'
 import AppSelect from './ui/AppSelect.vue'
 
@@ -15,11 +16,11 @@ import AppSelect from './ui/AppSelect.vue'
 //   4. The project/folder/spawner/permission-mode fields are AppSelect, a
 //      custom listbox, not a native <select> — its panel teleports to
 //      <body> while open, so selections go through the trigger button +
-//      the teleported [role="option"] elements via openListbox()/
-//      optionByLabel()/selectByLabel() rather than select.setValue(). Raw
-//      option `value`s (not just visible labels) are inspected via the
-//      mounted AppSelect component's `options` prop where a test doesn't
-//      drive a selection.
+//      the teleported [role="option"] elements via the shared
+//      openListboxDom()/optionByLabel()/selectByLabel() helpers (see
+//      testSelect.ts) rather than select.setValue(). Raw option `value`s
+//      (not just visible labels) are inspected via the mounted AppSelect
+//      component's `options` prop where a test doesn't drive a selection.
 
 const sampleProject = {
   id: 'prj_a',
@@ -49,26 +50,6 @@ const sampleSpawner = {
 function setInputValue(el: HTMLInputElement | HTMLTextAreaElement, value: string) {
   el.value = value
   el.dispatchEvent(new Event('input', { bubbles: true }))
-}
-
-async function openListbox(trigger: Element): Promise<HTMLElement> {
-  trigger.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-  await flushPromises()
-  return document.getElementById(trigger.getAttribute('aria-controls')!)!
-}
-
-function optionByLabel(panel: HTMLElement, label: string): HTMLElement {
-  const match = Array.from(panel.querySelectorAll('[role="option"]'))
-    .find(el => el.textContent?.trim() === label)
-  if (!match)
-    throw new Error(`No option with label "${label}" found`)
-  return match as HTMLElement
-}
-
-async function selectByLabel(trigger: Element, label: string): Promise<void> {
-  const panel = await openListbox(trigger)
-  optionByLabel(panel, label).dispatchEvent(new MouseEvent('click', { bubbles: true }))
-  await flushPromises()
 }
 
 beforeEach(() => {

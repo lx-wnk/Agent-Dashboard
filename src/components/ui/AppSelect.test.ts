@@ -1,6 +1,6 @@
 import type { VueWrapper } from '@vue/test-utils'
 import { mount } from '@vue/test-utils'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { axe } from '../../utils/testA11y'
 import AppSelect from './AppSelect.vue'
 
@@ -213,5 +213,104 @@ describe('appSelect', () => {
     const w = mountSelect({ modelValue: 'a', options, ariaLabel: 'Choose option' })
     await w.get('button').trigger('click')
     expect(await axe(panel() as HTMLElement)).toHaveNoViolations()
+  })
+
+  it('escape with the panel open does not let the event reach a parent handler', async () => {
+    const w = mountSelect({ modelValue: 'a', options })
+    const button = w.get('button')
+    await button.trigger('keydown', { key: 'ArrowDown' }) // opens the panel
+    const parentHandler = vi.fn()
+    document.addEventListener('keydown', parentHandler)
+    try {
+      await button.trigger('keydown', { key: 'Escape' })
+      expect(parentHandler).not.toHaveBeenCalled()
+    }
+    finally {
+      document.removeEventListener('keydown', parentHandler)
+    }
+  })
+
+  it('escape with the panel closed lets the event reach a parent handler', async () => {
+    const w = mountSelect({ modelValue: 'a', options })
+    const button = w.get('button')
+    const parentHandler = vi.fn()
+    document.addEventListener('keydown', parentHandler)
+    try {
+      await button.trigger('keydown', { key: 'Escape' }) // panel is already closed
+      expect(parentHandler).toHaveBeenCalledTimes(1)
+    }
+    finally {
+      document.removeEventListener('keydown', parentHandler)
+    }
+  })
+
+  it('selecting the already-selected option emits nothing', async () => {
+    const w = mountSelect({ modelValue: 'b', options })
+    await w.get('button').trigger('click')
+    await optionEls()[1].dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await w.vm.$nextTick()
+    expect(w.emitted('update:modelValue')).toBeUndefined()
+    expect(panel()).toBeNull()
+  })
+
+  it('opening focuses the trigger', async () => {
+    const w = mountSelect({ modelValue: 'a', options })
+    const button = w.get('button').element as HTMLButtonElement
+    expect(document.activeElement).not.toBe(button)
+    await w.get('button').trigger('click')
+    expect(document.activeElement).toBe(button)
+  })
+
+  it('home/End move the active option', async () => {
+    const w = mountSelect({ modelValue: 'a', options })
+    const button = w.get('button')
+    await button.trigger('keydown', { key: 'ArrowDown' }) // open, active = 'a' (index 0)
+    await button.trigger('keydown', { key: 'End' })
+    expect(button.attributes('aria-activedescendant')).toBe(optionEls()[2].id)
+    await button.trigger('keydown', { key: 'Home' })
+    expect(button.attributes('aria-activedescendant')).toBe(optionEls()[0].id)
+  })
+
+  it('an options array where every option is disabled does not hang or throw', async () => {
+    const allDisabled = [
+      { value: 'a', label: 'Option A', disabled: true },
+      { value: 'b', label: 'Option B', disabled: true },
+    ]
+    const w = mountSelect({ modelValue: 'zzz', options: allDisabled })
+    const button = w.get('button')
+    await expect(button.trigger('keydown', { key: 'ArrowDown' })).resolves.not.toThrow()
+    await expect(button.trigger('keydown', { key: 'ArrowDown' })).resolves.not.toThrow()
+    expect(panel()).not.toBeNull()
+  })
+
+  it('an empty options array opens without throwing', async () => {
+    const w = mountSelect({ modelValue: 'a', options: [] })
+    const button = w.get('button')
+    await expect(button.trigger('keydown', { key: 'ArrowDown' })).resolves.not.toThrow()
+    expect(panel()).not.toBeNull()
+  })
+
+  it('type-ahead buffer resets after its timeout', async () => {
+    vi.useFakeTimers()
+    try {
+      const fruitOptions = [
+        { value: 'a', label: 'Apple' },
+        { value: 'b', label: 'Banana' },
+        { value: 'c', label: 'Cherry' },
+      ]
+      const w = mountSelect({ modelValue: 'a', options: fruitOptions })
+      const button = w.get('button')
+      await button.trigger('keydown', { key: 'ArrowDown' }) // open
+      await button.trigger('keydown', { key: 'b' }) // buffer 'b' -> Banana
+      expect(button.attributes('aria-activedescendant')).toBe(optionEls()[1].id)
+
+      vi.advanceTimersByTime(500) // buffer times out and resets
+
+      await button.trigger('keydown', { key: 'a' }) // fresh buffer 'a' -> Apple
+      expect(button.attributes('aria-activedescendant')).toBe(optionEls()[0].id)
+    }
+    finally {
+      vi.useRealTimers()
+    }
   })
 })
