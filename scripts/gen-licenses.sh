@@ -54,11 +54,14 @@ trap 'rm -f "${TMP_GO_RAW}" "${TMP_GO_FIXED}" "${TMP_FRONTEND_JSON}" "${TMP_OUTP
 export GOOS=linux
 export GOARCH=amd64
 
-# go-licenses exits non-zero when it cannot classify a module; that case is
-# deliberately tolerated here and resolved downstream by LICENSE_OVERRIDES and
-# the ',Unknown,' gate, and bounded upstream by module_tidy_check() and
-# downstream by collect_module()'s per-module row-count guard below. Stderr is
-# left visible so genuine failures surface in CI logs instead of being silently
+# go-licenses' exit status for the module collect_go() last ran. Its stdout is
+# the CSV stream the caller redirects into TMP_GO_RAW, so the status cannot be
+# returned normally — collect_module() reads it from here.
+GO_LICENSES_STATUS=0
+
+# The `|| true` below keeps a failing module from aborting the run before
+# collect_module() can produce a diagnostic; it is not tolerance. Stderr is left
+# visible so genuine failures surface in CI logs instead of being silently
 # swallowed.
 collect_go() {
   local dir="$1"
@@ -67,53 +70,62 @@ collect_go() {
   # //go:build darwin). go-licenses cross-lists via packages.Load, so a fixed
   # non-host GOOS stays deterministic across CI/dev. Defaults to the global pin.
   local goos="${3:-${GOOS}}"
+  local st=0
 
   if [[ "${gowork_off}" == "true" ]]; then
     (cd "${dir}" && GOWORK=off GOOS="${goos}" go build ./... 2>/dev/null || true)
     (cd "${dir}" && GOWORK=off GOOS="${goos}" "${GO_LICENSES}" report ./... \
-      --ignore github.com/lx-wnk/agent-dashboard) || true
+      --ignore github.com/lx-wnk/agent-dashboard) || st=$?
   else
     (cd "${dir}" && GOOS="${goos}" go build ./... 2>/dev/null || true)
     (cd "${dir}" && GOOS="${goos}" "${GO_LICENSES}" report ./... \
-      --ignore github.com/lx-wnk/agent-dashboard) || true
+      --ignore github.com/lx-wnk/agent-dashboard) || st=$?
   fi
+  GO_LICENSES_STATUS=${st}
 }
 
-# A module is expected to contribute at least one row when its go.mod declares
-# at least one require outside our own module family (the same
-# "github.com/lx-wnk/agent-dashboard" prefix passed to --ignore above).
-# sdk currently has zero requires at all, so it falls out of this on its own —
-# no name-based special case needed.
-# The probe must never fail open: a broken go.mod, a missing python3, or a
-# go-licenses-grade toolchain failure would otherwise make it answer "expects
-# nothing" for exactly the module whose collection just failed for the same
-# reason. Anything other than a clean yes/no is a hard error.
+# A module is expected to contribute at least one row when the package graph
+# go-licenses walks — `./...` without tests — reaches a module outside our own
+# module family (the same "github.com/lx-wnk/agent-dashboard" prefix passed to
+# --ignore above). Deriving this from go.mod requires instead would hard-fail a
+# module whose only external require is test-only (testify, go-cmp): go.mod
+# lists it, go-licenses never sees it, and zero rows would be correct.
+# sdk currently reaches nothing external at all, so it falls out of this on its
+# own — no name-based special case needed.
+#
+# The probe must never fail open: a broken module, a missing python3, or a
+# toolchain failure would otherwise make it answer "expects nothing" for exactly
+# the module whose collection just failed for the same reason. Anything other
+# than a clean yes/no is a hard error.
 module_expects_go_rows() {
-  local dir="$1" mod_json expect
+  local dir="$1" gowork_off="$2" goos="$3"
+  local dep_modules
 
-  if ! mod_json="$(go mod edit -json "${dir}/go.mod")"; then
+  if [[ "${gowork_off}" == "true" ]]; then
+    dep_modules="$(cd "${dir}" && GOWORK=off GOOS="${goos}" go list -deps -f '{{if .Module}}{{.Module.Path}}{{end}}' ./...)" || dep_modules="__FAILED__"
+  else
+    dep_modules="$(cd "${dir}" && GOOS="${goos}" go list -deps -f '{{if .Module}}{{.Module.Path}}{{end}}' ./...)" || dep_modules="__FAILED__"
+  fi
+
+  if [[ "${dep_modules}" == "__FAILED__" ]]; then
     echo "" >&2
-    echo "ERROR: could not read ${dir}/go.mod — cannot tell whether that module" >&2
-    echo "should have contributed license rows. Refusing to guess." >&2
+    echo "ERROR: 'go list -deps' failed in ${dir} (see the error above) — cannot tell" >&2
+    echo "whether that module should have contributed license rows. Refusing to guess." >&2
     exit 1
   fi
 
-  if ! expect="$(printf '%s' "${mod_json}" | python3 -c '
-import json, sys
+  grep -qv '^github\.com/lx-wnk/agent-dashboard' <<<"${dep_modules}"
+}
 
-data = json.load(sys.stdin)
-own_prefix = "github.com/lx-wnk/agent-dashboard"
-reqs = data.get("Require") or []
-print("yes" if any(not r["Path"].startswith(own_prefix) for r in reqs) else "no")
-')"; then
-    echo "" >&2
-    echo "ERROR: could not parse the requires of ${dir}/go.mod (see the error" >&2
-    echo "above) — cannot tell whether that module should have contributed" >&2
-    echo "license rows. Refusing to guess." >&2
-    exit 1
+# Prints the hand-runnable go-licenses invocation for one module, so both
+# guards below point at the same reproduction command.
+print_module_repro_cmd() {
+  local dir="$1" gowork_off="$2" goos="$3"
+  if [[ "${gowork_off}" == "true" ]]; then
+    echo "  (cd ${dir} && GOWORK=off GOOS=${goos} ${GO_LICENSES} report ./... --ignore github.com/lx-wnk/agent-dashboard)" >&2
+  else
+    echo "  (cd ${dir} && GOOS=${goos} ${GO_LICENSES} report ./... --ignore github.com/lx-wnk/agent-dashboard)" >&2
   fi
-
-  [[ "${expect}" == "yes" ]]
 }
 
 # Wraps collect_go() with the per-module row-count guard: a module whose
@@ -132,7 +144,21 @@ collect_module() {
   after="$(wc -l < "${TMP_GO_RAW}")"
   row_count=$(( after - before ))
 
-  if (( row_count == 0 )) && module_expects_go_rows "${dir}"; then
+  if (( GO_LICENSES_STATUS != 0 )); then
+    echo "" >&2
+    echo "ERROR: go-licenses exited ${GO_LICENSES_STATUS} for ${label} (${dir}) after emitting" >&2
+    echo "${row_count} row(s). A walk that dies part-way through still streams the rows it" >&2
+    echo "reached, so the row count alone cannot tell a complete collection from a" >&2
+    echo "truncated one — that is the #329 failure mode one increment smaller." >&2
+    echo "" >&2
+    echo "All modules currently exit 0, including the one needing a LICENSE_OVERRIDES" >&2
+    echo "entry, so this status is a real failure and not classification noise. Rerun" >&2
+    echo "the module's collection by hand to see it:" >&2
+    print_module_repro_cmd "${dir}" "${gowork_off}" "${goos}"
+    exit 1
+  fi
+
+  if (( row_count == 0 )) && module_expects_go_rows "${dir}" "${gowork_off}" "${goos}"; then
     echo "" >&2
     echo "ERROR: ${label} (${dir}) produced zero Go dependency rows, but its" >&2
     echo "go.mod declares external requires — its dependencies are missing from" >&2
@@ -140,13 +166,9 @@ collect_module() {
     echo "module made go-licenses die outright, and the '|| true' tolerance in" >&2
     echo "collect_go() silently dropped every row it should have produced." >&2
     echo "" >&2
-    echo "Investigate by rerunning this module's collection by hand, without the" >&2
-    echo "'|| true' tolerance, to see the real go-licenses error:" >&2
-    if [[ "${gowork_off}" == "true" ]]; then
-      echo "  (cd ${dir} && GOWORK=off GOOS=${goos} ${GO_LICENSES} report ./... --ignore github.com/lx-wnk/agent-dashboard)" >&2
-    else
-      echo "  (cd ${dir} && GOOS=${goos} ${GO_LICENSES} report ./... --ignore github.com/lx-wnk/agent-dashboard)" >&2
-    fi
+    echo "Investigate by rerunning this module's collection by hand to see the real" >&2
+    echo "go-licenses error:" >&2
+    print_module_repro_cmd "${dir}" "${gowork_off}" "${goos}"
     exit 1
   fi
 }
