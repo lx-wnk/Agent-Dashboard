@@ -96,7 +96,8 @@ func (s *Server) Run(ctx context.Context) error {
 		// exists for.
 		<-ctx.Done()
 		slog.Info("server shutting down")
-		time.AfterFunc(s.requestGrace, cancelRequests)
+		grace := time.AfterFunc(s.requestGrace, cancelRequests)
+		defer grace.Stop()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), s.shutdownTimeout)
 		defer cancel()
 		return s.httpSrv.Shutdown(shutdownCtx)
