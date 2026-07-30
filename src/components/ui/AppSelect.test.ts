@@ -83,7 +83,7 @@ describe('appSelect', () => {
     expect(w.emitted('update:modelValue')?.[0]).toEqual(['c'])
   })
 
-  it('coerces the emitted value to a number when modelValue was a number', async () => {
+  it('emits a numeric option value unchanged, without string round-tripping', async () => {
     const numOptions = [{ value: 1, label: 'One' }, { value: 2, label: 'Two' }]
     const w = mountSelect({ modelValue: 1, options: numOptions })
     await w.get('button').trigger('click')

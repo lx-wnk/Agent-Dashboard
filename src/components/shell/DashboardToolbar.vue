@@ -52,7 +52,7 @@ defineEmits<{
         <span aria-hidden="true" class="text-[13px] text-fg-faint" title="Sort">⇅</span>
         <AppSelect
           :model-value="sortBy"
-          :options="AGENT_SORT_OPTIONS as unknown as Array<{ value: AgentSort, label: string }>"
+          :options="AGENT_SORT_OPTIONS"
           aria-label="Sort agents"
           data-testid="select-sort"
           @update:model-value="$emit('update:sortBy', $event)"
@@ -60,7 +60,7 @@ defineEmits<{
       </span>
       <AppSelect
         :model-value="groupBy"
-        :options="AGENT_GROUP_OPTIONS as unknown as Array<{ value: AgentGroup, label: string }>"
+        :options="AGENT_GROUP_OPTIONS"
         aria-label="Group agents"
         data-testid="select-group"
         @update:model-value="$emit('update:groupBy', $event)"

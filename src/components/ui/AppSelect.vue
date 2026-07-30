@@ -7,7 +7,7 @@ defineOptions({ name: 'AppSelect', inheritAttrs: false })
 
 const props = withDefaults(defineProps<{
   modelValue: T
-  options: SelectOption<T>[]
+  options: readonly SelectOption<T>[]
   id?: string
   ariaLabel?: string
   disabled?: boolean

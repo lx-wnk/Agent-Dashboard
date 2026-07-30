@@ -27,7 +27,7 @@ const priority = ref(props.schedule?.priority ?? 'medium')
 const maxIterations = ref(props.schedule?.maxIterations ?? 20)
 const permissionTemplate = ref(props.schedule?.permissionTemplate ?? '')
 
-const CATCHUP_OPTIONS = [
+const CATCHUP_OPTIONS: Array<{ value: 'none' | 'once', label: string }> = [
   { value: 'none', label: 'None' },
   { value: 'once', label: 'Once' },
 ]

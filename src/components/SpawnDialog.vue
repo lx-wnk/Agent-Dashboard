@@ -75,7 +75,7 @@ const spawnerOptions = computed(() => [
   })),
 ])
 
-const permissionModeOptions = [
+const permissionModeOptions: Array<{ value: PermissionMode, label: string }> = [
   { value: 'default', label: 'Ask for permission (default)' },
   { value: 'plan', label: 'Plan mode (read-only)' },
   { value: 'acceptEdits', label: 'Auto-accept edits' },

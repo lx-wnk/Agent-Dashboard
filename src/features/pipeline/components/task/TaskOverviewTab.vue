@@ -65,10 +65,9 @@ watch(assignError, (msg) => {
 const runtime = computed(() => (task.value ? taskRuntime(task.value) : '—'))
 const active = computed(() => activeRuntime(stageRuns.value))
 
-async function onAutonomyChange(value: string): Promise<void> {
+async function onAutonomyChange(autonomy: 'manual' | 'spec_gated' | 'full'): Promise<void> {
   if (!task.value)
     return
-  const autonomy = value as 'manual' | 'spec_gated' | 'full'
   try {
     const res = await fetch(`/api/tasks/${task.value.id}`, {
       method: 'PATCH',
@@ -85,7 +84,7 @@ async function onAutonomyChange(value: string): Promise<void> {
   }
 }
 
-const autonomyOptions: Array<{ value: string, label: string }> = [
+const autonomyOptions: Array<{ value: 'manual' | 'spec_gated' | 'full', label: string }> = [
   { value: 'manual', label: 'Manual — approve every stage' },
   { value: 'spec_gated', label: 'Spec-gated — approve the spec, then autonomous' },
   { value: 'full', label: 'Full — fully autonomous' },
