@@ -51,7 +51,7 @@ type Entry struct {
 	// Shutdown waits on this channel instead of calling cmd.Wait() itself,
 	// preventing two goroutines from calling Wait() on the same *exec.Cmd
 	// (which is undefined behavior in Go). On each restart a fresh channel is
-	// installed so gracefulStop waits on the live process, not the original one.
+	// installed so Shutdown waits on the live process, not the original one.
 	cmdDone      chan struct{}
 	BaseURL      string // http://{addr}
 	restartCount int
@@ -397,6 +397,13 @@ func (r *Registry) Shutdown() {
 	r.mu.Lock()
 	plugins := make([]Entry, len(r.plugins))
 	copy(plugins, r.plugins)
+	// Mark every exit as deliberate before signalling: watchPlugin only skips a
+	// restart on ctx.Err() != nil, and serverCtx is still live here whenever
+	// g.Wait() returned because a run-loop member failed rather than because the
+	// server context was cancelled.
+	for i := range r.plugins {
+		r.plugins[i].intentionalStop = true
+	}
 	r.mu.Unlock()
 
 	var pending []pendingStop
@@ -615,7 +622,7 @@ func (r *Registry) watchPlugin(ctx context.Context, pluginDir string, desc Descr
 	current := cmd
 	// currentDone is the channel we close when the current process exits.
 	// Starts as the initial done from startEntry; updated to a fresh channel on
-	// each restart so gracefulStop always waits on the live process (fix P3).
+	// each restart so Shutdown always waits on the live process (fix P3).
 	currentDone := done
 
 	for {
@@ -689,7 +696,7 @@ func (r *Registry) watchPlugin(ctx context.Context, pluginDir string, desc Descr
 		restartCount++
 		slog.Info("plugin: restarted successfully", "id", desc.ID, "restartCount", restartCount)
 
-		// Fresh done channel for the restarted process (fix P3): gracefulStop must
+		// Fresh done channel for the restarted process (fix P3): Shutdown must
 		// wait on the live channel, not the already-closed original one.
 		rawNewDone := make(chan struct{})
 
