@@ -543,6 +543,34 @@ func TestShutdownWaitsForSigtermExit(t *testing.T) {
 		"plugin must have already exited by the time Shutdown returns, not eventually")
 }
 
+// TestContextCancelDoesNotPreemptShutdownStop guards the ordering that makes
+// the SIGTERM-first stop sequence reachable at all. exec.CommandContext's
+// default Cancel is Process.Kill(), so cancelling the server context used to
+// SIGKILL every plugin immediately — and on the ordinary quit path that
+// happens well before cleanup() calls Shutdown, meaning no plugin ever saw a
+// SIGTERM. The plugin must survive the cancellation and be stopped by
+// Shutdown.
+func TestContextCancelDoesNotPreemptShutdownStop(t *testing.T) {
+	dir := t.TempDir()
+	addr := writeRealHealthyPlugin(t, dir, "graceful-ctx")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	r := plugin.New(dir)
+	require.NoError(t, r.Load(ctx, plugin.Hooks{}))
+	_, ok := r.Lookup("graceful-ctx")
+	require.True(t, ok, "plugin must be registered after load")
+
+	cancel()
+	// os/exec's kill goroutine fires as soon as the context is done; this
+	// window is long enough for it to have taken effect if it were still armed.
+	time.Sleep(500 * time.Millisecond)
+	require.True(t, listening(addr),
+		"context cancellation must not kill the plugin — Shutdown owns the stop sequence")
+
+	r.Shutdown()
+	require.False(t, listening(addr), "Shutdown must stop the plugin after the context was cancelled")
+}
+
 // TestShutdownKillsSigtermIgnoringPlugin covers the second consequence of the
 // bug: the SIGKILL escalation lived in a goroutine detached from Shutdown, so
 // it died with the process and a plugin that ignored SIGTERM was never

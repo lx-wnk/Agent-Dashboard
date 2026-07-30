@@ -194,6 +194,7 @@ func (r *Registry) startEntry(serverCtx, startupCtx context.Context, pluginDir s
 	entry := Entry{Descriptor: desc, BaseURL: "http://" + desc.Addr, pluginDir: pluginDir}
 	if len(desc.Command) > 0 {
 		cmd := exec.CommandContext(serverCtx, desc.Command[0], desc.Command[1:]...)
+		deferProcessKillToShutdown(cmd)
 		cmd.Dir = pluginDir
 		cmd.Env = r.appendSettingsEnv(serverCtx, buildPluginEnv(desc.Env), desc.ID)
 		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
@@ -376,6 +377,19 @@ const gracefulStopTimeout = 5 * time.Second
 // straggler's process group, for the OS to actually reap it before returning.
 // SIGKILL cannot be ignored, so this only covers reap latency — it stays short.
 const shutdownKillGrace = 2 * time.Second
+
+// deferProcessKillToShutdown stops os/exec from pre-empting Shutdown's stop
+// sequence. exec.CommandContext's default Cancel is Process.Kill(), which
+// SIGKILLs the group leader the instant the context is done — and on the
+// ordinary quit path the server context is cancelled well before cleanup()
+// calls Shutdown, so the plugin would never see the SIGTERM at all. Cancel is
+// therefore a no-op, and WaitDelay is the backstop: if a path cancels the
+// context without ever calling Shutdown, os/exec still kills the process once
+// the full stop budget has elapsed.
+func deferProcessKillToShutdown(cmd *exec.Cmd) {
+	cmd.Cancel = func() error { return nil }
+	cmd.WaitDelay = gracefulStopTimeout + shutdownKillGrace
+}
 
 // pendingStop pairs a signalled plugin's process-group pid with the channel
 // that closes once its process has exited, so Shutdown can wait on many at once.
@@ -672,6 +686,7 @@ func (r *Registry) watchPlugin(ctx context.Context, pluginDir string, desc Descr
 		}
 
 		newCmd := exec.CommandContext(ctx, desc.Command[0], desc.Command[1:]...)
+		deferProcessKillToShutdown(newCmd)
 		newCmd.Dir = pluginDir
 		newCmd.Env = r.appendSettingsEnv(ctx, buildPluginEnv(desc.Env), desc.ID)
 		newCmd.Stdout = os.Stdout
