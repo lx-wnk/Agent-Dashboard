@@ -1,5 +1,12 @@
 # Server Architecture Review — 2026-05-14
 
+> **Point-in-time review.** The findings below describe the server as it stood on the date in
+> the title and are kept as a record, not as a description of current behaviour. At least P0-1
+> has since been fixed: `SendMessageToChannel` now takes a `context.Context` first parameter
+> (`server/internal/api/agents/spawn.go`), which is exactly the fix that finding prescribed, and
+> `TestSendMessageToChannel_RespectsContextCancellation` guards it. The remaining findings have
+> not been re-checked — verify against the code before acting on any of them.
+
 ## Summary
 
 The Go server (`server/internal/`) is in good structural health: the layer compliance audit found zero upward imports across `db/`, `pipeline/`, and `mcp/`, and the middleware chain is correctly ordered with full security headers. The main problems are (1) one P0 context-propagation bug in the spawn message path, (2) pervasive use of `http.Error()` outside the `apierr` convention in ~15 handlers, and (3) a handful of silently-swallowed errors where failures should be logged.
