@@ -72,7 +72,7 @@ jobs:
         module: ${{ fromJSON(needs.matrix.outputs.workspace_modules) }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version-file: .go-version
           cache-dependency-path: go.work.sum
@@ -111,7 +111,7 @@ jobs:
         plugin: ${{ fromJSON(needs.matrix.outputs.plugins) }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version-file: .go-version
           cache-dependency-path: plugins/${{ matrix.plugin }}/go.sum
@@ -137,7 +137,7 @@ jobs:
         module: ${{ fromJSON(needs.matrix.outputs.workspace_modules) }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version-file: .go-version
           cache-dependency-path: go.work.sum
@@ -160,7 +160,7 @@ jobs:
         plugin: ${{ fromJSON(needs.matrix.outputs.plugins) }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version-file: .go-version
           cache-dependency-path: plugins/${{ matrix.plugin }}/go.sum
@@ -183,7 +183,7 @@ jobs:
         module: ${{ fromJSON(needs.matrix.outputs.scan_modules) }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version-file: .go-version
           # sdk has no go.sum (workspace member, no external deps); go.work.sum
@@ -203,7 +203,7 @@ jobs:
     needs: [matrix, test, lint, test-plugins, lint-plugins]
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version-file: .go-version
       - name: Build server binary
@@ -273,7 +273,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version-file: .go-version
           cache-dependency-path: go.work.sum
@@ -302,7 +302,7 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version-file: .go-version
           cache-dependency-path: go.work.sum
