@@ -1,11 +1,12 @@
 # Server Architecture Review — 2026-05-14
 
 > **Point-in-time review.** The findings below describe the server as it stood on the date in
-> the title and are kept as a record, not as a description of current behaviour. At least P0-1
-> has since been fixed: `SendMessageToChannel` now takes a `context.Context` first parameter
-> (`server/internal/api/agents/spawn.go`), which is exactly the fix that finding prescribed, and
-> `TestSendMessageToChannel_RespectsContextCancellation` guards it. The remaining findings have
-> not been re-checked — verify against the code before acting on any of them.
+> the title and are kept as a record, not as a description of current behaviour. P0-1 was already
+> fixed in the same commit that added this document (`fae69bca`, PR #35): `SendMessageToChannel`
+> takes a `context.Context` first parameter and the `Message` handler passes `r.Context()`
+> (`server/internal/api/agents/spawn.go`), which is exactly the fix that finding prescribed. The
+> remaining findings have not been re-checked — verify against the code before acting on any of
+> them.
 
 ## Summary
 
