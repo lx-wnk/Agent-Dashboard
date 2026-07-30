@@ -56,8 +56,10 @@ export GOARCH=amd64
 
 # go-licenses exits non-zero when it cannot classify a module; that case is
 # deliberately tolerated here and resolved downstream by LICENSE_OVERRIDES and
-# the ',Unknown,' gate. Stderr is left visible so genuine failures surface in
-# CI logs instead of being silently swallowed.
+# the ',Unknown,' gate, and bounded upstream by module_tidy_check() and
+# downstream by collect_module()'s per-module row-count guard below. Stderr is
+# left visible so genuine failures surface in CI logs instead of being silently
+# swallowed.
 collect_go() {
   local dir="$1"
   local gowork_off="${2:-false}"
@@ -82,20 +84,36 @@ collect_go() {
 # "github.com/lx-wnk/agent-dashboard" prefix passed to --ignore above).
 # sdk currently has zero requires at all, so it falls out of this on its own —
 # no name-based special case needed.
+# The probe must never fail open: a broken go.mod, a missing python3, or a
+# go-licenses-grade toolchain failure would otherwise make it answer "expects
+# nothing" for exactly the module whose collection just failed for the same
+# reason. Anything other than a clean yes/no is a hard error.
 module_expects_go_rows() {
-  local dir="$1"
-  go mod edit -json "${dir}/go.mod" 2>/dev/null | python3 -c '
+  local dir="$1" mod_json expect
+
+  if ! mod_json="$(go mod edit -json "${dir}/go.mod")"; then
+    echo "" >&2
+    echo "ERROR: could not read ${dir}/go.mod — cannot tell whether that module" >&2
+    echo "should have contributed license rows. Refusing to guess." >&2
+    exit 1
+  fi
+
+  if ! expect="$(printf '%s' "${mod_json}" | python3 -c '
 import json, sys
 
-try:
-    data = json.load(sys.stdin)
-except ValueError:
-    sys.exit(1)
-
+data = json.load(sys.stdin)
 own_prefix = "github.com/lx-wnk/agent-dashboard"
 reqs = data.get("Require") or []
-sys.exit(0 if any(not r["Path"].startswith(own_prefix) for r in reqs) else 1)
-'
+print("yes" if any(not r["Path"].startswith(own_prefix) for r in reqs) else "no")
+')"; then
+    echo "" >&2
+    echo "ERROR: could not parse the requires of ${dir}/go.mod (see the error" >&2
+    echo "above) — cannot tell whether that module should have contributed" >&2
+    echo "license rows. Refusing to guess." >&2
+    exit 1
+  fi
+
+  [[ "${expect}" == "yes" ]]
 }
 
 # Wraps collect_go() with the per-module row-count guard: a module whose
@@ -198,7 +216,7 @@ module_tidy_check() {
     echo "  ${fix_cmd}" >&2
     echo "" >&2
     echo "go mod tidy -diff output (first 20 lines):" >&2
-    echo "${diff_output}" | head -20 >&2
+    head -20 <<<"${diff_output}" >&2
     local total_lines
     total_lines="$(printf '%s\n' "${diff_output}" | wc -l | tr -d ' ')"
     if (( total_lines > 20 )); then
@@ -285,7 +303,10 @@ FE_COUNT="$(echo "${FRONTEND_TABLE}" | grep -c '^|' || true)"
 # fully broken toolchain — e.g. go-licenses v1.6.0 under Go 1.26, which errors
 # on every stdlib package with "does not have module info. Non go modules
 # projects are no longer supported" — silently produces an empty GO_SORTED
-# instead of a script failure. Catch that here instead of writing the result.
+# instead of a script failure. collect_module() now catches that per module and
+# exits first for any module that declares external requires, so this is a
+# backstop for the remaining case: every module individually passing while the
+# total still comes out implausibly small.
 if (( GO_COUNT < MIN_GO_DEP_ROWS )); then
   echo "" >&2
   echo "ERROR: only ${GO_COUNT} Go dependency rows collected (expected >= ${MIN_GO_DEP_ROWS})." >&2
