@@ -35,12 +35,11 @@ function apply() {
   <div v-if="templates.length > 0" class="flex flex-wrap items-center gap-2 text-[12px]">
     <span class="text-fg-mute text-[11px]">Template:</span>
     <AppSelect
-      :model-value="selectedId"
+      v-model="selectedId"
       :options="templateOptions"
       title="Insert a saved prompt template"
       aria-label="Insert a saved prompt template"
       size="compact"
-      @update:model-value="selectedId = $event as string"
     />
     <template v-if="placeholders.length">
       <input

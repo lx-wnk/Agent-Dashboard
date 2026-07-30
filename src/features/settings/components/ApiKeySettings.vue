@@ -800,10 +800,9 @@ const { isImporting, importStatus, start: startImport } = useHistoryImport()
             <label for="key-group" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">Role / Scope Group</label>
             <AppSelect
               id="key-group"
-              :model-value="newKeyGroup"
+              v-model="newKeyGroup"
               :options="KEY_GROUP_OPTIONS"
               class="w-full"
-              @update:model-value="newKeyGroup = $event as KeyGroup"
             />
           </div>
         </form>

@@ -41,13 +41,13 @@ const importRef = ref('')
 const isImporting = ref(false)
 const { fetchIssue } = useTrackerImport()
 
-const priorityOptions: Array<{ value: string, label: string }> = [
+const priorityOptions: Array<{ value: 'high' | 'medium' | 'low', label: string }> = [
   { value: 'high', label: 'High' },
   { value: 'medium', label: 'Medium' },
   { value: 'low', label: 'Low' },
 ]
 
-const autonomyOptions: Array<{ value: string, label: string }> = [
+const autonomyOptions: Array<{ value: 'manual' | 'spec_gated' | 'full', label: string }> = [
   { value: 'manual', label: 'Manual — approve every stage' },
   { value: 'spec_gated', label: 'Spec-gated — approve the spec, then autonomous' },
   { value: 'full', label: 'Full — fully autonomous' },
@@ -194,11 +194,10 @@ async function onCreateAndRefine(): Promise<void> {
       </AppFieldLabel>
       <AppSelect
         id="backlog-project"
-        :model-value="projectChoice"
+        v-model="projectChoice"
         :options="projectOptions"
         data-testid="backlog-project-select"
         class="w-full"
-        @update:model-value="projectChoice = $event as string"
       />
     </div>
 
@@ -268,10 +267,9 @@ async function onCreateAndRefine(): Promise<void> {
         </AppFieldLabel>
         <AppSelect
           id="details-priority"
-          :model-value="priority"
+          v-model="priority"
           :options="priorityOptions"
           class="w-full"
-          @update:model-value="priority = $event as 'high' | 'medium' | 'low'"
         />
       </div>
 
@@ -281,10 +279,9 @@ async function onCreateAndRefine(): Promise<void> {
         </AppFieldLabel>
         <AppSelect
           id="details-spawner"
-          :model-value="selectedSpawnerId"
+          v-model="selectedSpawnerId"
           :options="spawnerOptions"
           class="w-full"
-          @update:model-value="selectedSpawnerId = $event as string"
         />
       </div>
     </div>
@@ -295,11 +292,10 @@ async function onCreateAndRefine(): Promise<void> {
       </AppFieldLabel>
       <AppSelect
         id="details-autonomy"
-        :model-value="autonomy"
+        v-model="autonomy"
         :options="autonomyOptions"
         data-testid="details-autonomy"
         class="w-full"
-        @update:model-value="autonomy = $event as 'manual' | 'spec_gated' | 'full'"
       />
     </div>
 

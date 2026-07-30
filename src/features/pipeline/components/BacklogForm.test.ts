@@ -2,7 +2,6 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 
-import AppSelect from '@/components/ui/AppSelect.vue'
 import BacklogForm from '@/features/pipeline/components/BacklogForm.vue'
 import { openListbox, optionByLabel } from '@/utils/testSelect'
 
@@ -45,6 +44,9 @@ afterEach(() => {
   document.body.innerHTML = ''
 })
 
+interface SelectOption { value: string, label: string, disabled?: boolean }
+interface OptionsReader { props: (key: 'options') => SelectOption[] }
+
 describe('backlogForm single-screen', () => {
   it('renders the form fields and a project dropdown on one screen', () => {
     const wrapper = mount(BacklogForm)
@@ -62,9 +64,14 @@ describe('backlogForm single-screen', () => {
     // full mount resolves findComponent(...).element to the parent DOM node
     // instead of the button — shallow-stub the tree instead to read props directly.
     const wrapper = mount(BacklogForm, { shallow: true })
-    const projectSelect = wrapper.findAllComponents(AppSelect)
+    const projectSelect = wrapper.findAllComponents({ name: 'AppSelect' })
       .find(c => c.attributes('data-testid') === 'backlog-project-select')!
-    const optionValues = projectSelect.props('options').map(o => o.value)
+    // AppSelect is generic, so Vue Test Utils cannot infer its instance type:
+    // findAllComponents yields WrapperLike, which exposes no props() at all.
+    // This is the one place the generic costs a cast — it buys removing twenty
+    // of them from the call sites.
+    const options = (projectSelect as unknown as OptionsReader).props('options')
+    const optionValues = options.map(o => o.value)
     expect(optionValues).not.toContain('')
   })
 

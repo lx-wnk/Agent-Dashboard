@@ -65,7 +65,7 @@ watch(assignError, (msg) => {
 const runtime = computed(() => (task.value ? taskRuntime(task.value) : '—'))
 const active = computed(() => activeRuntime(stageRuns.value))
 
-async function onAutonomyChange(value: string | number): Promise<void> {
+async function onAutonomyChange(value: string): Promise<void> {
   if (!task.value)
     return
   const autonomy = value as 'manual' | 'spec_gated' | 'full'
@@ -83,14 +83,6 @@ async function onAutonomyChange(value: string | number): Promise<void> {
   catch {
     toast.error('Failed to update autonomy')
   }
-}
-
-function onProjectSelect(value: string | number): void {
-  onProjectChange({ target: { value } } as unknown as Event)
-}
-
-function onSpawnerSelect(value: string | number): void {
-  onSpawnerChange({ target: { value } } as unknown as Event)
 }
 
 const autonomyOptions: Array<{ value: string, label: string }> = [
@@ -358,7 +350,7 @@ watch(
               :disabled="isAssigningProject"
               size="compact"
               class="flex-1 min-w-0"
-              @update:model-value="onProjectSelect"
+              @update:model-value="onProjectChange"
             />
           </div>
         </div>
@@ -380,7 +372,7 @@ watch(
               :disabled="isAssigningSpawner"
               size="compact"
               class="flex-1 min-w-0"
-              @update:model-value="onSpawnerSelect"
+              @update:model-value="onSpawnerChange"
             />
           </div>
         </div>

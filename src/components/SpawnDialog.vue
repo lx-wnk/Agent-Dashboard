@@ -295,10 +295,9 @@ onUnmounted(() => {
         </AppFieldLabel>
         <AppSelect
           id="spawn-project"
-          :model-value="projectChoice"
+          v-model="projectChoice"
           :options="projectOptions"
           class="w-full"
-          @update:model-value="projectChoice = $event as string"
         />
       </div>
 
@@ -318,7 +317,7 @@ onUnmounted(() => {
           :model-value="dlg.selectedFolderId.value ?? ''"
           :options="folderOptions"
           class="w-full"
-          @update:model-value="dlg.selectFolder($event as string)"
+          @update:model-value="dlg.selectFolder($event)"
         />
       </div>
 
@@ -332,7 +331,7 @@ onUnmounted(() => {
           :options="spawnerOptions"
           data-testid="spawn-spawner"
           class="w-full"
-          @update:model-value="dlg.spawnerId.value = $event as string"
+          @update:model-value="dlg.spawnerId.value = $event"
         />
       </div>
 
@@ -355,11 +354,10 @@ onUnmounted(() => {
         </AppFieldLabel>
         <AppSelect
           id="spawn-permission-mode"
-          :model-value="permissionMode"
+          v-model="permissionMode"
           :options="permissionModeOptions"
           data-testid="spawn-permission-mode"
           class="w-full"
-          @update:model-value="permissionMode = $event as PermissionMode"
         />
       </div>
 

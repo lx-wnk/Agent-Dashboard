@@ -57,10 +57,6 @@ function makeTask(overrides: Partial<PipelineTask> = {}): PipelineTask {
   }
 }
 
-function selectEvent(value: string): Event {
-  return { target: { value } } as unknown as Event
-}
-
 beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(useProjects).mockReturnValue({ projects: ref([]) } as unknown as ReturnType<typeof useProjects>)
@@ -138,7 +134,7 @@ describe('useTaskAssignment — onProjectChange / onSpawnerChange', () => {
     const task = ref(makeTask({ id: 'task-1' }))
     const { onProjectChange, isAssigningProject } = useTaskAssignment(task)
 
-    const pending = onProjectChange(selectEvent(''))
+    const pending = onProjectChange('')
     expect(isAssigningProject.value).toBe(true)
     await pending
 
@@ -155,7 +151,7 @@ describe('useTaskAssignment — onProjectChange / onSpawnerChange', () => {
     const task = ref(makeTask({ id: 'task-1' }))
     const { onSpawnerChange, isAssigningSpawner } = useTaskAssignment(task)
 
-    await onSpawnerChange(selectEvent('s-2'))
+    await onSpawnerChange('s-2')
 
     expect(fetch).toHaveBeenCalledWith('/api/tasks/task-1', expect.objectContaining({
       method: 'PATCH',
@@ -169,7 +165,7 @@ describe('useTaskAssignment — onProjectChange / onSpawnerChange', () => {
     const task = ref(makeTask())
     const { onProjectChange, assignError } = useTaskAssignment(task)
 
-    await onProjectChange(selectEvent('p1'))
+    await onProjectChange('p1')
 
     expect(assignError.value).toBe('project archived')
   })
@@ -179,7 +175,7 @@ describe('useTaskAssignment — onProjectChange / onSpawnerChange', () => {
     const task = ref(makeTask())
     const { onProjectChange, assignError } = useTaskAssignment(task)
 
-    await onProjectChange(selectEvent('p1'))
+    await onProjectChange('p1')
 
     expect(assignError.value).toBe('HTTP 500')
   })
@@ -191,10 +187,10 @@ describe('useTaskAssignment — onProjectChange / onSpawnerChange', () => {
     const task = ref(makeTask())
     const { onProjectChange, assignError } = useTaskAssignment(task)
 
-    await onProjectChange(selectEvent('p1'))
+    await onProjectChange('p1')
     expect(assignError.value).toBe('nope')
 
-    await onProjectChange(selectEvent('p2'))
+    await onProjectChange('p2')
     expect(assignError.value).toBeNull()
   })
 
@@ -202,7 +198,7 @@ describe('useTaskAssignment — onProjectChange / onSpawnerChange', () => {
     const task = ref<PipelineTask | null>(null)
     const { onProjectChange } = useTaskAssignment(task)
 
-    await onProjectChange(selectEvent('p1'))
+    await onProjectChange('p1')
 
     expect(fetch).not.toHaveBeenCalled()
   })

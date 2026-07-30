@@ -240,10 +240,9 @@ onMounted(fetchPrompts)
           </label>
           <AppSelect
             id="sp-stage"
-            :model-value="form.stage"
+            v-model="form.stage"
             :options="STAGE_OPTIONS"
             class="w-full"
-            @update:model-value="form.stage = $event as string"
           />
         </div>
         <div class="flex flex-col gap-1">

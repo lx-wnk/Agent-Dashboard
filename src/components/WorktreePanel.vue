@@ -196,12 +196,11 @@ async function handleCreate(): Promise<void> {
           Open
         </a>
         <AppSelect
-          :model-value="editorScheme"
+          v-model="editorScheme"
           :options="editorSchemeOptions"
           class="text-[11px]"
           aria-label="Editor scheme"
           data-testid="worktree-editor-scheme"
-          @update:model-value="editorScheme = $event as string"
         />
 
         <!-- Remove worktree -->

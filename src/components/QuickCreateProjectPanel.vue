@@ -132,10 +132,9 @@ async function submit(): Promise<void> {
         <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1" for="qcp-spawner">Default Spawner</label>
         <AppSelect
           id="qcp-spawner"
-          :model-value="defaultSpawnerId"
+          v-model="defaultSpawnerId"
           :options="spawnerOptions"
           class="w-full"
-          @update:model-value="defaultSpawnerId = $event as string"
         />
       </div>
       <div class="mb-2 flex gap-2">
