@@ -186,6 +186,32 @@ func makeRunningRun(t *testing.T, ctx context.Context, taskRepo repo.TaskRepo, s
 	return sr.ID
 }
 
+// TestSweepOrphanRuns_RunningWithSessionStartedBeforeOrchestrator_Requeued
+// pins case 4 to the same verdict recoverRunningStageRuns reaches for this row
+// state at startup. A run with a resumable session must be re-queued, not
+// failed — deriving liveness here independently is what made the tick-driven
+// sweep and the startup pass disagree about identical rows.
+func TestSweepOrphanRuns_RunningWithSessionStartedBeforeOrchestrator_Requeued(t *testing.T) {
+	ctx := context.Background()
+	orch, taskRepo, srRepo := makeOrchestratorFull(t)
+
+	startedAt := time.Now().Add(-1 * time.Minute)
+	runID := makeRunningRun(t, ctx, taskRepo, srRepo, "running-orphan-case4-session", nil, startedAt)
+
+	sessionID := "sess-abc123"
+	_, err := srRepo.Update(ctx, runID, repo.UpdateStageRunInput{SessionID: &sessionID})
+	require.NoError(t, err)
+
+	running, err := srRepo.ListByStatus(ctx, "running")
+	require.NoError(t, err)
+	require.NoError(t, orch.SweepOrphanRunsForTest(ctx, running))
+
+	updated, err := srRepo.GetByID(ctx, runID)
+	require.NoError(t, err)
+	require.Equal(t, "pending", updated.Status,
+		"a run with a session to resume from must be re-queued, not failed")
+}
+
 func TestSweepOrphanRuns_RunningNilPIDStartedBeforeOrchestrator_Reaped(t *testing.T) {
 	ctx := context.Background()
 	orch, taskRepo, srRepo := makeOrchestratorFull(t)
