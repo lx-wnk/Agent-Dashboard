@@ -72,6 +72,11 @@ type PipelineOrchestrator struct {
 	// F-PERF-008: dedupe inflight tryAttachSessionID goroutines.
 	// Key: stageRunID string; Value: struct{} (presence = goroutine in flight).
 	attachInFlight sync.Map
+
+	// startedAt is when this orchestrator was constructed. Used by sweepOrphanRuns
+	// to distinguish a "running" run left behind by a crashed/killed prior process
+	// (started before us) from one legitimately in flight in this process.
+	startedAt time.Time
 }
 
 // ProgressOpts carries optional parameters for ProgressTask.
@@ -121,6 +126,7 @@ func NewOrchestrator(opts OrchestratorOptions) (*PipelineOrchestrator, error) {
 		scheduler:        newScheduler(cc, opts.TaskRepo, opts.StageRunRepo, opts.DepRepo),
 		httpPoolSem:      make(chan struct{}, poolSize),
 		httpResultCh:     make(chan httpSpawnResult, poolSize*2),
+		startedAt:        time.Now(),
 	}
 	return o, nil
 }

@@ -91,10 +91,12 @@ func (o *PipelineOrchestrator) sweepRequeueableRuns(ctx context.Context) error {
 	return nil
 }
 
-// sweepOrphanRuns reaps three zombie modes:
+// sweepOrphanRuns reaps four zombie modes:
 //  1. Non-terminal stage_run whose parent task is parked (done/cancelled/on_hold).
 //  2. on_hold stage_run with a dead PID.
 //  3. pending stage_run stuck > 5 min without a PID.
+//  4. running stage_run that started before this orchestrator process did and
+//     has no live PID (see case 4 below for why a nil/zero PID alone isn't enough).
 func (o *PipelineOrchestrator) sweepOrphanRuns(ctx context.Context, allRunning []*ent.StageRun) error {
 	pendings, _ := o.opts.StageRunRepo.ListPending(ctx)
 	requeued, _ := o.opts.StageRunRepo.ListByStatus(ctx, "requeued")
@@ -161,6 +163,33 @@ func (o *PipelineOrchestrator) sweepOrphanRuns(ctx context.Context, allRunning [
 					slog.Error("sweepOrphanRuns.case3.applyTransition", "err", err)
 				} else if !locked {
 					slog.Debug("sweepOrphanRuns case3: task locked by progressTask — deferring to next tick", "taskID", task.ID)
+				}
+			}
+			continue
+		}
+		// Case 4: running run that predates this orchestrator process and has no live PID.
+		// A nil/zero PID alone is not evidence of a zombie — HTTP-adapter stages run
+		// legitimately with no local process (stage_handlers.go AsyncRunningTransition{PID: 0}).
+		// Only "started before we did" rules that out: no in-process goroutine of ours is
+		// still feeding it, and a live subprocess PID would mean it survived our restart.
+		if run.Status == "running" && run.StartedAt != nil && run.StartedAt.Before(o.startedAt) {
+			pid := 0
+			if run.Pid != nil {
+				pid = *run.Pid
+			}
+			if !proc.IsPidAlive(pid) {
+				fresh, _ := o.opts.StageRunRepo.GetByID(ctx, run.ID)
+				if fresh == nil || fresh.Status != "running" {
+					continue
+				}
+				slog.Warn("orchestrator: running run predates this orchestrator with no live PID — reaping as failed",
+					"runID", fresh.ID, "stage", fresh.Stage, "pid", pid)
+				if _, locked, err := o.sweepApplyTransition(ctx, task, fresh, FailTransition{
+					Reason: "orphan reaper: run was started by a previous orchestrator process that no longer exists, and no live agent process took it over",
+				}); err != nil {
+					slog.Error("sweepOrphanRuns.case4.applyTransition", "err", err)
+				} else if !locked {
+					slog.Debug("sweepOrphanRuns case4: task locked by progressTask — deferring to next tick", "taskID", task.ID)
 				}
 			}
 		}
