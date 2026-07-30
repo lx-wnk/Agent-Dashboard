@@ -367,49 +367,132 @@ func (r *Registry) isStaleGeneration(id string, myGen int) bool {
 	return true // absent = stale
 }
 
-// Shutdown stops all plugin processes that were started by Load.
-// gracefulStop sends SIGTERM and waits up to 5s before killing. See gracefulStop for details.
+// gracefulStopTimeout bounds how long a SIGTERMed plugin process group is
+// given to exit before SIGKILL is sent. Shared by gracefulStop (per-plugin,
+// fire-and-forget) and Shutdown (all plugins, one deadline for the whole batch).
+const gracefulStopTimeout = 5 * time.Second
+
+// shutdownKillGrace bounds how long Shutdown waits, after SIGKILLing a
+// straggler's process group, for the OS to actually reap it before returning.
+// SIGKILL cannot be ignored, so this only covers reap latency — it stays short.
+const shutdownKillGrace = 2 * time.Second
+
+// pendingStop pairs a signalled plugin's process-group pid with the channel
+// that closes once its process has exited, so Shutdown can wait on many at once.
+type pendingStop struct {
+	pid  int
+	done <-chan struct{}
+}
+
+// Shutdown stops all plugin processes that were started by Load and blocks
+// until they have actually exited, so the caller (serverapp calls this as
+// cleanup after g.Wait()) can safely exit the process right after it returns.
+// Every plugin is signalled first, then all are waited on against one shared
+// deadline — gracefulStopTimeout total for the whole batch, not
+// gracefulStopTimeout per plugin. Stragglers still alive past the deadline are
+// SIGKILLed synchronously and given a short bounded grace period to actually
+// exit before Shutdown returns. This differs from gracefulStop, whose hot-path
+// callers need signal-and-forget, not a guarantee that the process is dead.
 func (r *Registry) Shutdown() {
 	r.mu.Lock()
 	plugins := make([]Entry, len(r.plugins))
 	copy(plugins, r.plugins)
 	r.mu.Unlock()
 
+	var pending []pendingStop
 	for _, p := range plugins {
-		if p.cmd != nil {
-			gracefulStop(p.cmd, p.cmdDone)
+		if p.cmd == nil || p.cmd.Process == nil {
+			continue
 		}
+		pending = append(pending, pendingStop{
+			pid:  p.cmd.Process.Pid,
+			done: beginGracefulStop(p.cmd, p.cmdDone),
+		})
 	}
+	if len(pending) == 0 {
+		return
+	}
+
+	stragglers := waitPendingStops(pending, time.Now().Add(gracefulStopTimeout))
+	if len(stragglers) == 0 {
+		return
+	}
+	for _, s := range stragglers {
+		signalGroup(s.pid, syscall.SIGKILL)
+	}
+	waitPendingStops(stragglers, time.Now().Add(shutdownKillGrace))
 }
 
-// gracefulStop sends SIGTERM to the process group led by cmd's PID and waits
-// for the process to exit. Setpgid on spawn makes the plugin the group leader
-// (pgid == pid), so the negative-pid kill reaches the plugin and all descendants.
-// If the process has not exited within 5 seconds, SIGKILL is sent to the group.
-// If watcherDone is non-nil it is the channel closed by the watchPlugin goroutine
-// that owns cmd.Wait(); gracefulStop waits on it to avoid a double-Wait race.
+// waitPendingStops waits, for each pending stop, until its done channel closes
+// or deadline passes — whichever is first — then returns the ones that missed
+// the deadline. deadline is one shared point in time, not a per-item duration,
+// so len(items) stragglers cost one wait to the deadline, not one each.
+func waitPendingStops(items []pendingStop, deadline time.Time) []pendingStop {
+	var mu sync.Mutex
+	var missed []pendingStop
+	var wg sync.WaitGroup
+	for _, it := range items {
+		wg.Add(1)
+		go func(it pendingStop) {
+			defer wg.Done()
+			select {
+			case <-it.done:
+			case <-time.After(time.Until(deadline)):
+				mu.Lock()
+				missed = append(missed, it)
+				mu.Unlock()
+			}
+		}(it)
+	}
+	wg.Wait()
+	return missed
+}
+
+// beginGracefulStop sends SIGTERM to the process group led by cmd's PID —
+// Setpgid on spawn makes the plugin the group leader (pgid == pid), so the
+// negative-pid kill reaches the plugin and all its descendants — and returns
+// the channel that closes once the process has exited. Caller must ensure
+// cmd.Process is non-nil.
+// If watcherDone is non-nil it is the channel closed by the watchPlugin
+// goroutine that owns cmd.Wait(); it is returned as-is rather than calling
+// cmd.Wait() again, because calling Wait() from two goroutines on the same
+// *exec.Cmd is undefined behavior.
+func beginGracefulStop(cmd *exec.Cmd, watcherDone <-chan struct{}) <-chan struct{} {
+	signalGroup(cmd.Process.Pid, syscall.SIGTERM)
+	if watcherDone != nil {
+		return watcherDone
+	}
+	done := make(chan struct{})
+	go func() {
+		_ = cmd.Wait()
+		close(done)
+	}()
+	return done
+}
+
+// gracefulStop signals cmd's process group to stop and returns immediately —
+// it does not wait for the process to exit. This is deliberate: its call
+// sites (plugin disable, and rollback inside the reload/health-check flow)
+// are hot paths, one of which is reachable from an HTTP handler, and waiting
+// up to gracefulStopTimeout there would be a much larger latency change than
+// this function is meant to make. Escalation to SIGKILL after
+// gracefulStopTimeout runs in a goroutine detached from the caller, so it is
+// best-effort: it does not survive the dashboard process exiting first.
+// Callers that must know the process is actually dead before proceeding
+// (server shutdown) need Shutdown instead, which drives the same signal step
+// but waits on it. See beginGracefulStop for the watcherDone contract.
 func gracefulStop(cmd *exec.Cmd, watcherDone <-chan struct{}) {
 	if cmd.Process == nil {
 		return
 	}
-	signalGroup(cmd.Process.Pid, syscall.SIGTERM)
-
-	done := watcherDone
-	if done == nil {
-		ownDone := make(chan struct{})
-		go func() {
-			_ = cmd.Wait()
-			close(ownDone)
-		}()
-		done = ownDone
-	}
-
+	done := beginGracefulStop(cmd, watcherDone)
+	pid := cmd.Process.Pid
 	go func() {
 		select {
 		case <-done:
 			// process exited — nothing to do
-		case <-time.After(5 * time.Second):
-			signalGroup(cmd.Process.Pid, syscall.SIGKILL)
+		case <-time.After(gracefulStopTimeout):
+			signalGroup(pid, syscall.SIGKILL)
 		}
 	}()
 }
