@@ -156,5 +156,7 @@ PUT /api/plugins/{id}/proxy/*
 PUT /api/plugins/{id}/settings
 PUT /api/projects/{id}/pipeline-config
 PUT /api/settings/system-prompts/{id}
+QUERY /*
+QUERY /api/plugins/{id}/proxy/*
 TRACE /*
 TRACE /api/plugins/{id}/proxy/*

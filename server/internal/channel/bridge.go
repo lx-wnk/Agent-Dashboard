@@ -246,11 +246,16 @@ func startHTTPServer(
 			return
 		}
 
-		// Forward as MCP log notification (best-effort).
+		// Forward as MCP log notification (best-effort). SEP-2577 deprecates the
+		// logging feature outright as of protocol 2026-07-28 — there is no
+		// replacement transport for a server-initiated message, so delivering
+		// dashboard messages to a connected agent another way is a redesign, not
+		// a rename. The SDK keeps this functional for at least twelve months.
 		if ss := sess.Load(); ss != nil {
 			msgJSON, _ := json.Marshal(payload.Message)
 			notifyCtx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 			defer cancel()
+			//nolint:staticcheck // SA1019: see the SEP-2577 note above
 			_ = ss.Log(notifyCtx, &mcp.LoggingMessageParams{
 				Level:  "info",
 				Logger: "dashboard",
