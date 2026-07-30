@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import type { Project, ProjectFolder } from '@/types'
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import AppButton from '@/components/ui/AppButton.vue'
+import AppSelect from '@/components/ui/AppSelect.vue'
 import {
   createFolder,
   deleteFolder,
@@ -43,6 +44,21 @@ watch(pipelineError, (msg) => {
 })
 
 const PIPELINE_STAGES = ['implementation', 'self_review', 'finalization'] as const
+
+const spawnerOptions = computed(() => [
+  { value: '', label: 'None (use deployment default)' },
+  ...spawners.value.map(s => ({ value: s.id, label: `${s.name}${s.builtIn ? ' (built-in)' : ''}` })),
+])
+
+const stageSpawnerOptions = computed(() => [
+  { value: '', label: 'Inherit global' },
+  ...spawners.value.map(s => ({ value: s.id, label: `${s.name}${s.builtIn ? ' (built-in)' : ''}` })),
+])
+
+const stageModelOptions = computed(() => [
+  { value: '', label: 'Inherit global' },
+  ...AVAILABLE_MODELS.map(model => ({ value: model, label: model })),
+])
 
 // Draft for per-project pipeline settings
 const pipelineDraft = ref<{ stageModels: Record<string, string>, stageSpawners: Record<string, string> } | null>(null)
@@ -450,18 +466,13 @@ function setDefault(targetRow: FolderRow) {
         </div>
         <div>
           <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1" for="proj-spawner">Default Spawner (optional)</label>
-          <select
+          <AppSelect
             id="proj-spawner"
-            v-model="form.defaultSpawnerId"
-            class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
-          >
-            <option value="">
-              None (use deployment default)
-            </option>
-            <option v-for="s in spawners" :key="s.id" :value="s.id">
-              {{ s.name }}{{ s.builtIn ? ' (built-in)' : '' }}
-            </option>
-          </select>
+            :model-value="form.defaultSpawnerId"
+            :options="spawnerOptions"
+            class="w-full"
+            @update:model-value="form.defaultSpawnerId = $event as string"
+          />
         </div>
       </div>
 
@@ -499,18 +510,13 @@ function setDefault(targetRow: FolderRow) {
                 >
                   {{ STAGE_LABELS[stage] }} — Spawner
                 </label>
-                <select
+                <AppSelect
                   :id="`pp-spawner-${stage}-${editingProject.id}`"
-                  v-model="pipelineDraft.stageSpawners[stage]"
-                  class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
-                >
-                  <option value="">
-                    Inherit global
-                  </option>
-                  <option v-for="s in spawners" :key="s.id" :value="s.id">
-                    {{ s.name }}{{ s.builtIn ? ' (built-in)' : '' }}
-                  </option>
-                </select>
+                  :model-value="pipelineDraft.stageSpawners[stage]"
+                  :options="stageSpawnerOptions"
+                  class="w-full"
+                  @update:model-value="pipelineDraft.stageSpawners[stage] = $event as string"
+                />
               </div>
               <div>
                 <label
@@ -519,18 +525,13 @@ function setDefault(targetRow: FolderRow) {
                 >
                   {{ STAGE_LABELS[stage] }} — Model
                 </label>
-                <select
+                <AppSelect
                   :id="`pp-model-${stage}-${editingProject.id}`"
-                  v-model="pipelineDraft.stageModels[stage]"
-                  class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
-                >
-                  <option value="">
-                    Inherit global
-                  </option>
-                  <option v-for="model in AVAILABLE_MODELS" :key="model" :value="model">
-                    {{ model }}
-                  </option>
-                </select>
+                  :model-value="pipelineDraft.stageModels[stage]"
+                  :options="stageModelOptions"
+                  class="w-full"
+                  @update:model-value="pipelineDraft.stageModels[stage] = $event as string"
+                />
               </div>
             </div>
           </div>

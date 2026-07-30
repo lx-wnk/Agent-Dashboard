@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { openListboxOptions, selectListboxOption } from './helpers'
 
 // ---------------------------------------------------------------------------
 // Helpers — mirrored from shell.spec.ts
@@ -92,11 +93,16 @@ test.describe('dashboard view', () => {
     await page.reload()
     await page.waitForSelector('[aria-label="Primary"]', { timeout: 10000 })
 
-    const select = page.getByTestId('select-spawner')
-    await expect(select).toHaveValue('all')
-    await expect(select.locator('option')).toHaveCount(2)
-    await select.selectOption('claude-code')
-    await expect(select).toHaveValue('claude-code')
+    const trigger = page.getByTestId('select-spawner')
+    // AppSelect is a <button>, not a <select> — there is no `value`, so assert
+    // the visible label of the currently selected option instead (aria-label
+    // is a static "Filter by spawner" here, so accessible-name doesn't track
+    // the selection; toContainText reads the rendered label text directly).
+    await expect(trigger).toContainText('All spawners')
+    const listbox = await openListboxOptions(page, trigger)
+    await expect(listbox.getByRole('option')).toHaveCount(2)
+    await selectListboxOption(page, trigger, 'Claude Code')
+    await expect(trigger).toContainText('Claude Code')
   })
 
   // -------------------------------------------------------------------------

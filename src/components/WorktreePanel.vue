@@ -4,6 +4,7 @@ import { useClipboardCopy } from '../composables/useCopyId'
 import { toast } from '../composables/useToast'
 import { useWorktreeStatus } from '../composables/useWorktreeStatus'
 import { EDITOR_SCHEMES, editorHref, loadEditorScheme, saveEditorScheme } from '../utils/worktree'
+import AppSelect from './ui/AppSelect.vue'
 
 const props = defineProps<{
   taskId: string
@@ -33,6 +34,8 @@ watch(error, (msg) => {
 
 const editorScheme = ref(loadEditorScheme())
 watch(editorScheme, v => saveEditorScheme(v))
+
+const editorSchemeOptions = computed(() => EDITOR_SCHEMES.map(s => ({ value: s.id, label: s.label })))
 
 const editorHrefComputed = computed(() => editorHref(props.worktreePath, editorScheme.value))
 
@@ -192,16 +195,14 @@ async function handleCreate(): Promise<void> {
         >
           Open
         </a>
-        <select
-          v-model="editorScheme"
-          class="text-[11px] bg-app border border-line rounded px-1 py-0.5 text-fg-soft focus:outline-none focus:border-blue-500"
+        <AppSelect
+          :model-value="editorScheme"
+          :options="editorSchemeOptions"
+          class="text-[11px]"
           aria-label="Editor scheme"
           data-testid="worktree-editor-scheme"
-        >
-          <option v-for="s in EDITOR_SCHEMES" :key="s.id" :value="s.id">
-            {{ s.label }}
-          </option>
-        </select>
+          @update:model-value="editorScheme = $event as string"
+        />
 
         <!-- Remove worktree -->
         <template v-if="!confirmingRemove">

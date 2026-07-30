@@ -4,6 +4,7 @@ import { computed, ref, watch } from 'vue'
 import GitStatusPanel from '@/components/GitStatusPanel.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppChip from '@/components/ui/AppChip.vue'
+import AppSelect from '@/components/ui/AppSelect.vue'
 import WorktreeCommandRunner from '@/components/WorktreeCommandRunner.vue'
 import WorktreePanel from '@/components/WorktreePanel.vue'
 import { runAction } from '@/composables/useRunAction'
@@ -64,15 +65,15 @@ watch(assignError, (msg) => {
 const runtime = computed(() => (task.value ? taskRuntime(task.value) : '—'))
 const active = computed(() => activeRuntime(stageRuns.value))
 
-async function onAutonomyChange(e: Event): Promise<void> {
+async function onAutonomyChange(value: string | number): Promise<void> {
   if (!task.value)
     return
-  const value = (e.target as HTMLSelectElement).value as 'manual' | 'spec_gated' | 'full'
+  const autonomy = value as 'manual' | 'spec_gated' | 'full'
   try {
     const res = await fetch(`/api/tasks/${task.value.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ autonomy: value }),
+      body: JSON.stringify({ autonomy }),
     })
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
@@ -83,6 +84,30 @@ async function onAutonomyChange(e: Event): Promise<void> {
     toast.error('Failed to update autonomy')
   }
 }
+
+function onProjectSelect(value: string | number): void {
+  onProjectChange({ target: { value } } as unknown as Event)
+}
+
+function onSpawnerSelect(value: string | number): void {
+  onSpawnerChange({ target: { value } } as unknown as Event)
+}
+
+const autonomyOptions: Array<{ value: string, label: string }> = [
+  { value: 'manual', label: 'Manual — approve every stage' },
+  { value: 'spec_gated', label: 'Spec-gated — approve the spec, then autonomous' },
+  { value: 'full', label: 'Full — fully autonomous' },
+]
+
+const projectAssignOptions = computed(() => [
+  { value: '', label: 'None' },
+  ...projects.value.map(p => ({ value: p.id, label: p.name })),
+])
+
+const spawnerAssignOptions = computed(() => [
+  { value: '', label: currentProject.value?.defaultSpawnerId ? 'Project default' : 'Default' },
+  ...spawners.value.map(s => ({ value: s.id, label: `${s.name}${s.builtIn ? ' (built-in)' : ''}` })),
+])
 
 const conceptSpec = computed(() =>
   typeof task.value?.metadata?.spec === 'string' ? task.value.metadata.spec : null,
@@ -260,23 +285,14 @@ watch(
       <label class="text-[11px] uppercase tracking-[0.5px] text-fg-mute font-semibold" :for="`task-modal-autonomy-${task.id}`">
         Autonomy
       </label>
-      <select
+      <AppSelect
         :id="`task-modal-autonomy-${task.id}`"
-        :value="task.autonomy ?? 'spec_gated'"
+        :model-value="task.autonomy ?? 'spec_gated'"
+        :options="autonomyOptions"
         data-testid="task-autonomy-select"
-        class="bg-raised border border-line rounded px-2 py-1 text-fg text-xs focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
-        @change="onAutonomyChange"
-      >
-        <option value="manual">
-          Manual — approve every stage
-        </option>
-        <option value="spec_gated">
-          Spec-gated — approve the spec, then autonomous
-        </option>
-        <option value="full">
-          Full — fully autonomous
-        </option>
-      </select>
+        size="compact"
+        @update:model-value="onAutonomyChange"
+      />
     </section>
 
     <section v-if="hasConcept" class="border-t border-line pt-3 flex flex-col gap-2" data-testid="concept-viewer">
@@ -335,20 +351,15 @@ watch(
             >
               <span aria-hidden="true">◫</span>{{ currentProject.name }}
             </span>
-            <select
+            <AppSelect
               :id="`task-modal-project-${task.id}`"
-              :value="task.projectId ?? ''"
+              :model-value="task.projectId ?? ''"
+              :options="projectAssignOptions"
               :disabled="isAssigningProject"
-              class="flex-1 min-w-0 bg-raised border border-line rounded px-2 py-1 text-fg text-xs focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent disabled:opacity-50"
-              @change="onProjectChange"
-            >
-              <option value="">
-                None
-              </option>
-              <option v-for="p in projects" :key="p.id" :value="p.id">
-                {{ p.name }}
-              </option>
-            </select>
+              size="compact"
+              class="flex-1 min-w-0"
+              @update:model-value="onProjectSelect"
+            />
           </div>
         </div>
         <div>
@@ -362,20 +373,15 @@ watch(
               :title="effectiveSpawner.description"
             >{{ effectiveSpawner.name }}</span>
             <span v-else-if="!task.spawnerId && currentProject?.defaultSpawnerId" class="text-[10px] text-fg-mute italic flex-shrink-0">from project</span>
-            <select
+            <AppSelect
               :id="`task-modal-spawner-${task.id}`"
-              :value="task.spawnerId ?? ''"
+              :model-value="task.spawnerId ?? ''"
+              :options="spawnerAssignOptions"
               :disabled="isAssigningSpawner"
-              class="flex-1 min-w-0 bg-raised border border-line rounded px-2 py-1 text-fg text-xs focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent disabled:opacity-50"
-              @change="onSpawnerChange"
-            >
-              <option value="">
-                {{ currentProject?.defaultSpawnerId ? 'Project default' : 'Default' }}
-              </option>
-              <option v-for="s in spawners" :key="s.id" :value="s.id">
-                {{ s.name }}{{ s.builtIn ? ' (built-in)' : '' }}
-              </option>
-            </select>
+              size="compact"
+              class="flex-1 min-w-0"
+              @update:model-value="onSpawnerSelect"
+            />
           </div>
         </div>
       </div>

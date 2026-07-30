@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test'
+import type { Locator, Page } from '@playwright/test'
 
 /**
  * Mock /api/me so the app never redirects to the LoginPage — mirrors the
@@ -38,4 +38,62 @@ export async function stubEmptyStream(page: Page, path: string): Promise<void> {
     contentType: 'text/event-stream',
     body: '',
   }))
+}
+
+/**
+ * Closes a listbox panel that belongs to a different trigger than the one
+ * about to be interacted with. AppSelect's outside-click suppressor arms
+ * itself on the mousedown that dismisses a panel and eats the very next
+ * click — so clicking straight into a second trigger while another select's
+ * panel is still open swallows that click, leaving the second panel closed
+ * and the caller's visible-wait timing out with a misleading error. Closing
+ * via Escape (rather than an outside click) targets the open panel's own
+ * trigger, which holds focus, and never arms the suppressor.
+ */
+async function closeOtherOpenListbox(page: Page, trigger: Locator): Promise<void> {
+  if (await trigger.getAttribute('aria-expanded') === 'true')
+    return
+  const listbox = page.getByRole('listbox')
+  if (await listbox.isVisible().catch(() => false)) {
+    await page.keyboard.press('Escape')
+    await listbox.waitFor({ state: 'detached' })
+  }
+}
+
+/**
+ * Opens an AppSelect trigger (role="combobox") and returns its listbox panel
+ * once visible, without selecting anything — for tests that need to inspect
+ * the option list (count, labels) before deciding what to do next. The panel
+ * is teleported to <body>, so it must be located via page.getByRole, not as
+ * a descendant of the trigger.
+ */
+export async function openListboxOptions(page: Page, trigger: Locator): Promise<Locator> {
+  const listbox = page.getByRole('listbox')
+  await closeOtherOpenListbox(page, trigger)
+  // Guard on aria-expanded like selectListboxOption does — clicking
+  // unconditionally would toggle an already-open panel shut and then hang
+  // on the visible-wait below.
+  if (await trigger.getAttribute('aria-expanded') !== 'true') {
+    await trigger.click()
+    await listbox.waitFor({ state: 'visible' })
+  }
+  return listbox
+}
+
+/**
+ * Selects an option from an AppSelect listbox by its accessible name. Only
+ * one listbox is open at a time, so page.getByRole('listbox') finds it even
+ * though the panel is teleported outside the trigger's subtree. If the panel
+ * is already open (e.g. after openListboxOptions), it is reused rather than
+ * toggled shut by a redundant click on the trigger.
+ */
+export async function selectListboxOption(page: Page, trigger: Locator, optionName: string | RegExp): Promise<void> {
+  const listbox = page.getByRole('listbox')
+  await closeOtherOpenListbox(page, trigger)
+  if (await trigger.getAttribute('aria-expanded') !== 'true') {
+    await trigger.click()
+    await listbox.waitFor({ state: 'visible' })
+  }
+  await listbox.getByRole('option', { name: optionName }).click()
+  await listbox.waitFor({ state: 'detached' })
 }

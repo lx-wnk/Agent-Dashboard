@@ -1,8 +1,10 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 
+import AppSelect from '@/components/ui/AppSelect.vue'
 import BacklogForm from '@/features/pipeline/components/BacklogForm.vue'
+import { openListbox, optionByLabel } from '@/utils/testSelect'
 
 vi.mock('@/composables/useProjects', () => ({
   useProjects: () => ({
@@ -32,6 +34,17 @@ vi.mock('@/composables/useProjectFolders', () => ({
   createFolder: vi.fn(),
 }))
 
+// AppSelect (project/autonomy dropdowns) is a custom listbox, not a native
+// <select> — its panel teleports to <body> while open, so option counts and
+// value changes are exercised through the trigger button + the teleported
+// [role="option"] elements instead of select.setValue()/select.options,
+// which only work against native <select> internals. See testSelect.ts for
+// the shared openListbox()/optionByLabel() helpers.
+
+afterEach(() => {
+  document.body.innerHTML = ''
+})
+
 describe('backlogForm single-screen', () => {
   it('renders the form fields and a project dropdown on one screen', () => {
     const wrapper = mount(BacklogForm)
@@ -45,9 +58,13 @@ describe('backlogForm single-screen', () => {
   })
 
   it('has no "No project" option — project is mandatory', () => {
-    const wrapper = mount(BacklogForm)
-    const select = wrapper.get('[data-testid="backlog-project-select"]').element as HTMLSelectElement
-    const optionValues = Array.from(select.options).map(o => o.value)
+    // AppSelect is a multi-root (button + teleported panel) component, so a
+    // full mount resolves findComponent(...).element to the parent DOM node
+    // instead of the button — shallow-stub the tree instead to read props directly.
+    const wrapper = mount(BacklogForm, { shallow: true })
+    const projectSelect = wrapper.findAllComponents(AppSelect)
+      .find(c => c.attributes('data-testid') === 'backlog-project-select')!
+    const optionValues = projectSelect.props('options').map(o => o.value)
     expect(optionValues).not.toContain('')
   })
 
@@ -59,8 +76,9 @@ describe('backlogForm single-screen', () => {
   })
 
   it('auto-fills cwd from the default folder when a project is selected', async () => {
-    const wrapper = mount(BacklogForm)
-    await wrapper.get('[data-testid="backlog-project-select"]').setValue('p1')
+    const wrapper = mount(BacklogForm, { attachTo: document.body })
+    const panel = await openListbox(wrapper.get('[data-testid="backlog-project-select"]'))
+    optionByLabel(panel, 'Web').dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await flushPromises()
     // cwd is internal state — verify it flows through to createTask on submit
     // (no visible field, but canSubmit becomes true once project+title+slug are set)
@@ -72,7 +90,7 @@ describe('backlogForm single-screen', () => {
   })
 
   it('disables submit until title, slug, and project are all provided', async () => {
-    const wrapper = mount(BacklogForm)
+    const wrapper = mount(BacklogForm, { attachTo: document.body })
     // Initially disabled — no title, no project
     expect(wrapper.get('[data-testid="details-submit-refine"]').attributes('disabled')).toBeDefined()
 
@@ -81,31 +99,35 @@ describe('backlogForm single-screen', () => {
     expect(wrapper.get('[data-testid="details-submit-refine"]').attributes('disabled')).toBeDefined()
 
     // Selecting a project triggers folder fetch → fills cwd → enables submit
-    await wrapper.get('[data-testid="backlog-project-select"]').setValue('p1')
+    const panel = await openListbox(wrapper.get('[data-testid="backlog-project-select"]'))
+    optionByLabel(panel, 'Web').dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await flushPromises()
     expect(wrapper.get('[data-testid="details-submit-refine"]').attributes('disabled')).toBeUndefined()
   })
 
   it('expands QuickCreateProjectPanel when "+ Create new project" is selected', async () => {
-    const wrapper = mount(BacklogForm)
-    await wrapper.get('[data-testid="backlog-project-select"]').setValue('__create__')
+    const wrapper = mount(BacklogForm, { attachTo: document.body })
+    const panel = await openListbox(wrapper.get('[data-testid="backlog-project-select"]'))
+    optionByLabel(panel, '+ Create new project…').dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await wrapper.vm.$nextTick()
     expect(wrapper.findComponent({ name: 'QuickCreateProjectPanel' }).exists()).toBe(true)
   })
 
   it('renders the autonomy selector with spec_gated as default', () => {
     const wrapper = mount(BacklogForm)
-    const select = wrapper.find('[data-testid="details-autonomy"]').element as HTMLSelectElement
-    expect(select).toBeTruthy()
-    expect(select.value).toBe('spec_gated')
+    expect(wrapper.get('[data-testid="details-autonomy"]').text()).toContain('Spec-gated')
   })
 
   it('includes the selected autonomy in the create payload', async () => {
     createTaskMock.mockClear()
-    const wrapper = mount(BacklogForm)
-    await wrapper.get('[data-testid="backlog-project-select"]').setValue('p1')
+    const wrapper = mount(BacklogForm, { attachTo: document.body })
+    let panel = await openListbox(wrapper.get('[data-testid="backlog-project-select"]'))
+    optionByLabel(panel, 'Web').dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await flushPromises()
     await wrapper.get('[data-testid="details-title"]').setValue('Demo task')
-    await wrapper.get('[data-testid="details-autonomy"]').setValue('full')
+    panel = await openListbox(wrapper.get('[data-testid="details-autonomy"]'))
+    optionByLabel(panel, 'Full — fully autonomous').dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
     await wrapper.get('[data-testid="details-submit-refine"]').trigger('click')
     await flushPromises()
     expect(createTaskMock).toHaveBeenCalledWith(expect.objectContaining({ autonomy: 'full' }))
@@ -113,8 +135,9 @@ describe('backlogForm single-screen', () => {
 
   it('emits createdAndRefine with the new task via Create & Refine', async () => {
     createTaskMock.mockClear()
-    const wrapper = mount(BacklogForm)
-    await wrapper.get('[data-testid="backlog-project-select"]').setValue('p1')
+    const wrapper = mount(BacklogForm, { attachTo: document.body })
+    const panel = await openListbox(wrapper.get('[data-testid="backlog-project-select"]'))
+    optionByLabel(panel, 'Web').dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await flushPromises()
     await wrapper.get('[data-testid="details-title"]').setValue('Demo task')
     await wrapper.get('[data-testid="details-submit-refine"]').trigger('click')
@@ -133,8 +156,9 @@ describe('backlogForm single-screen', () => {
 
   it('form submit also triggers createdAndRefine (form @submit.prevent calls onCreateAndRefine)', async () => {
     createTaskMock.mockClear()
-    const wrapper = mount(BacklogForm)
-    await wrapper.get('[data-testid="backlog-project-select"]').setValue('p1')
+    const wrapper = mount(BacklogForm, { attachTo: document.body })
+    const panel = await openListbox(wrapper.get('[data-testid="backlog-project-select"]'))
+    optionByLabel(panel, 'Web').dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await flushPromises()
     await wrapper.get('[data-testid="details-title"]').setValue('Form submit task')
     await wrapper.get('[data-testid="backlog-form"]').trigger('submit')

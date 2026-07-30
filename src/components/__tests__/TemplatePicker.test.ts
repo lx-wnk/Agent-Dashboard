@@ -1,6 +1,7 @@
 import { mount } from '@vue/test-utils'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { nextTick, ref } from 'vue'
+import { openListbox, optionByLabel } from '@/utils/testSelect'
 import TemplatePicker from '../TemplatePicker.vue'
 
 const templates = [
@@ -16,25 +17,38 @@ vi.mock('../../composables/usePromptTemplates', () => ({
   }),
 }))
 
+// AppSelect (used for the template selector) is a custom listbox, not a
+// native <select> — its panel teleports to <body> while open, so options are
+// read through the trigger button + teleported [role="option"] elements
+// instead of wrapper.findAll('option') / select.setValue(). See
+// testSelect.ts for the shared openListbox()/optionByLabel() helpers.
+
+afterEach(() => {
+  document.body.innerHTML = ''
+})
+
 describe('templatePicker', () => {
-  it('renders template names in the selector', () => {
-    const wrapper = mount(TemplatePicker, { props: { modelValue: '' } })
-    const options = wrapper.findAll('option')
-    expect(options.some(o => o.text() === 'greet')).toBe(true)
-    expect(options.some(o => o.text() === 'simple')).toBe(true)
+  it('renders template names in the selector', async () => {
+    const wrapper = mount(TemplatePicker, { props: { modelValue: '' }, attachTo: document.body })
+    const panel = await openListbox(wrapper.get('[role="combobox"]'))
+    const labels = Array.from(panel.querySelectorAll('[role="option"]')).map(el => el.textContent?.trim())
+    expect(labels).toContain('greet')
+    expect(labels).toContain('simple')
   })
 
   it('emits placeholder inputs when a template with tokens is selected', async () => {
-    const wrapper = mount(TemplatePicker, { props: { modelValue: '' } })
-    await wrapper.find('select').setValue('1')
+    const wrapper = mount(TemplatePicker, { props: { modelValue: '' }, attachTo: document.body })
+    const panel = await openListbox(wrapper.get('[role="combobox"]'))
+    optionByLabel(panel, 'greet').dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await nextTick()
     // Two placeholder inputs: name and place
     expect(wrapper.findAll('input[data-placeholder]')).toHaveLength(2)
   })
 
   it('emits resolved text when placeholders are filled', async () => {
-    const wrapper = mount(TemplatePicker, { props: { modelValue: '' } })
-    await wrapper.find('select').setValue('1')
+    const wrapper = mount(TemplatePicker, { props: { modelValue: '' }, attachTo: document.body })
+    const panel = await openListbox(wrapper.get('[role="combobox"]'))
+    optionByLabel(panel, 'greet').dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await nextTick()
 
     const inputs = wrapper.findAll('input[data-placeholder]')
@@ -48,8 +62,9 @@ describe('templatePicker', () => {
   })
 
   it('emits template body directly when no placeholders', async () => {
-    const wrapper = mount(TemplatePicker, { props: { modelValue: '' } })
-    await wrapper.find('select').setValue('2')
+    const wrapper = mount(TemplatePicker, { props: { modelValue: '' }, attachTo: document.body })
+    const panel = await openListbox(wrapper.get('[role="combobox"]'))
+    optionByLabel(panel, 'simple').dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await nextTick()
 
     await wrapper.find('[data-apply]').trigger('click')

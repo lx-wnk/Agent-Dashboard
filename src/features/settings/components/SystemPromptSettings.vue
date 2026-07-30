@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppModal from '@/components/ui/AppModal.vue'
+import AppSelect from '@/components/ui/AppSelect.vue'
 import { toast } from '@/composables/useToast'
 import { errorMessage } from '@/utils/errorMessage'
 import { STAGE_LABELS } from '@/utils/stageLabels'
@@ -24,6 +25,7 @@ interface PromptForm {
 }
 
 const STAGES = ['', 'implementation', 'self_review', 'finalization'] as const
+const STAGE_OPTIONS = STAGES.map(s => ({ value: s, label: s === '' ? 'All stages' : s.replace(/_/g, ' ') }))
 
 const prompts = ref<SystemPrompt[]>([])
 const loading = ref(true)
@@ -236,15 +238,13 @@ onMounted(fetchPrompts)
           <label for="sp-stage" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">
             Stage (blank = all stages)
           </label>
-          <select
+          <AppSelect
             id="sp-stage"
-            v-model="form.stage"
-            class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
-          >
-            <option v-for="s in STAGES" :key="s" :value="s">
-              {{ s === '' ? 'All stages' : s.replace(/_/g, ' ') }}
-            </option>
-          </select>
+            :model-value="form.stage"
+            :options="STAGE_OPTIONS"
+            class="w-full"
+            @update:model-value="form.stage = $event as string"
+          />
         </div>
         <div class="flex flex-col gap-1">
           <label for="sp-priority" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">

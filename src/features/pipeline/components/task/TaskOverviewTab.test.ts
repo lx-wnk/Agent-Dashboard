@@ -109,17 +109,19 @@ function mountTab(taskOverrides: Record<string, unknown> = {}) {
 }
 
 describe('taskOverviewTab — autonomy selector', () => {
+  // AppSelect is a custom listbox (button trigger + teleported panel), not a
+  // native <select> — the selected value is asserted via the trigger's
+  // rendered label instead of select.value (see DashboardToolbar.test.ts).
   it('renders the autonomy select with spec_gated when autonomy is undefined', () => {
     const wrapper = mountTab()
-    const select = wrapper.find('[data-testid="task-autonomy-select"]').element as HTMLSelectElement
-    expect(select).toBeTruthy()
-    expect(select.value).toBe('spec_gated')
+    const select = wrapper.find('[data-testid="task-autonomy-select"]')
+    expect(select.exists()).toBe(true)
+    expect(select.text()).toContain('Spec-gated')
   })
 
   it('reflects the task autonomy value', () => {
     const wrapper = mountTab({ autonomy: 'manual' })
-    const select = wrapper.find('[data-testid="task-autonomy-select"]').element as HTMLSelectElement
-    expect(select.value).toBe('manual')
+    expect(wrapper.find('[data-testid="task-autonomy-select"]').text()).toContain('Manual')
   })
 })
 

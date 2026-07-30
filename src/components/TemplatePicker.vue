@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { usePromptTemplates } from '../composables/usePromptTemplates'
 import { fillPlaceholders, parsePlaceholders } from '../utils/promptTemplate'
+import AppSelect from './ui/AppSelect.vue'
 
 defineProps<{ modelValue: string }>()
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
@@ -12,6 +13,10 @@ const fills = ref<Record<string, string>>({})
 
 const selected = computed(() => templates.value.find(t => t.id === selectedId.value) ?? null)
 const placeholders = computed(() => selected.value ? parsePlaceholders(selected.value.body) : [])
+const templateOptions = computed(() => [
+  { value: '', label: 'Choose…' },
+  ...templates.value.map(t => ({ value: t.id, label: t.name })),
+])
 
 watch(selectedId, () => {
   fills.value = {}
@@ -29,19 +34,14 @@ function apply() {
 <template>
   <div v-if="templates.length > 0" class="flex flex-wrap items-center gap-2 text-[12px]">
     <span class="text-fg-mute text-[11px]">Template:</span>
-    <select
-      v-model="selectedId"
+    <AppSelect
+      :model-value="selectedId"
+      :options="templateOptions"
       title="Insert a saved prompt template"
       aria-label="Insert a saved prompt template"
-      class="bg-raised border border-line rounded px-2 py-1 text-fg-soft text-[12px] focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-accent"
-    >
-      <option value="">
-        Choose…
-      </option>
-      <option v-for="t in templates" :key="t.id" :value="t.id">
-        {{ t.name }}
-      </option>
-    </select>
+      size="compact"
+      @update:model-value="selectedId = $event as string"
+    />
     <template v-if="placeholders.length">
       <input
         v-for="ph in placeholders"

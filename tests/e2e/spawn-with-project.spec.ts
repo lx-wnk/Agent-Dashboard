@@ -1,5 +1,6 @@
 import process from 'node:process'
 import { expect, test } from '@playwright/test'
+import { openListboxOptions, selectListboxOption } from './helpers'
 
 // Allow the dev environment to override the dashboard URL — e.g. point at the
 // Vite dev server (`http://localhost:5173`) when the Go backend on 13120 has
@@ -58,8 +59,11 @@ test('spawn dialog shows project picker and hydrates cwd from default folder', a
 
     // 6. Select the pre-seeded project. The composable's selectProject() is
     //    async (it may fetch folders) so we rely on Playwright auto-retry
-    //    in the next assertion.
-    await page.locator('#spawn-project').selectOption(project.id)
+    //    in the next assertion. Label is the project name (see
+    //    projectOptions in SpawnDialog.vue); a substring match tolerates the
+    //    " — no folder, add one in /settings/projects" suffix that would be
+    //    appended for a project without a default folder.
+    await selectListboxOption(page, page.locator('#spawn-project'), `E2E ${slug}`)
 
     // 7. Assert cwd is NOT a free-text field — the manual working directory
     //    input was removed. cwd now flows exclusively from the selected
@@ -78,12 +82,19 @@ test('spawn dialog shows project picker and hydrates cwd from default folder', a
     // 10. Assert channel checkbox is NOT present.
     await expect(page.locator('#spawn-channel')).toHaveCount(0)
 
-    // 11. Assert permission-mode select is present with three options.
+    // 11. Assert permission-mode select is present and offers (among others)
+    //    the three modes this suite cares about — options carry no `value`
+    //    attribute any more, so match by their accessible name instead (see
+    //    permissionModeOptions in SpawnDialog.vue for the value→label map).
     const permSelect = page.locator('[data-testid="spawn-permission-mode"]')
     await expect(permSelect).toBeVisible()
-    await expect(permSelect.locator('option[value="default"]')).toHaveCount(1)
-    await expect(permSelect.locator('option[value="acceptEdits"]')).toHaveCount(1)
-    await expect(permSelect.locator('option[value="bypassPermissions"]')).toHaveCount(1)
+    const permissionListbox = await openListboxOptions(page, permSelect)
+    await expect(permissionListbox.getByRole('option', { name: 'Ask for permission (default)', exact: true })).toHaveCount(1)
+    await expect(permissionListbox.getByRole('option', { name: 'Auto-accept edits', exact: true })).toHaveCount(1)
+    await expect(permissionListbox.getByRole('option', { name: 'Bypass all permissions (dangerous)', exact: true })).toHaveCount(1)
+    // Close the panel again — it must not intercept the Cancel click below.
+    await permSelect.click()
+    await permissionListbox.waitFor({ state: 'detached' })
 
     // 12. Cancel — we don't want to actually spawn a Claude process. Scope to
     //    the modal (AppModal renders role="dialog") so we don't accidentally
@@ -132,11 +143,12 @@ test('spawn dialog submits payload with project cwd, permission mode, and prompt
 
     await page.getByRole('button', { name: '+ New Agent' }).click()
     await expect(page.locator('#spawn-project')).toBeVisible()
-    await page.locator('#spawn-project').selectOption(project.id)
+    await selectListboxOption(page, page.locator('#spawn-project'), `E2E ${slug}`)
     await expect(page.locator('[data-testid="spawn-spawner"]')).toBeVisible()
 
     await page.locator('#spawn-prompt').fill('Do the thing')
-    await page.locator('[data-testid="spawn-permission-mode"]').selectOption('acceptEdits')
+    // 'acceptEdits' → label 'Auto-accept edits' (permissionModeOptions in SpawnDialog.vue).
+    await selectListboxOption(page, page.locator('[data-testid="spawn-permission-mode"]'), 'Auto-accept edits')
 
     // Register the interception BEFORE the submit click so the real request
     // never leaves the browser — route.fulfill answers with the { pid }

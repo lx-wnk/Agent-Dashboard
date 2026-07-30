@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, useId } from 'vue'
+import AppSelect from './ui/AppSelect.vue'
 
 const props = defineProps<{
   taskId: string
@@ -19,6 +20,8 @@ const COMMANDS = [
   'git diff',
   'git status',
 ]
+
+const COMMAND_OPTIONS = COMMANDS.map(cmd => ({ value: cmd, label: cmd }))
 
 const panelId = useId()
 const selectedCommand = ref(COMMANDS[0])
@@ -70,14 +73,12 @@ function abort() {
     <div v-show="expanded" :id="panelId" :inert="!expanded" class="p-4 space-y-3">
       <span v-if="cwd" class="block text-xs text-fg-mute font-mono truncate">{{ cwd }}</span>
       <div class="flex gap-2">
-        <select
-          v-model="selectedCommand"
-          class="flex-1 text-sm border border-line-strong rounded px-2 py-1 bg-card text-fg"
-        >
-          <option v-for="cmd in COMMANDS" :key="cmd" :value="cmd">
-            {{ cmd }}
-          </option>
-        </select>
+        <AppSelect
+          :model-value="selectedCommand"
+          :options="COMMAND_OPTIONS"
+          class="flex-1 text-sm"
+          @update:model-value="selectedCommand = $event as string"
+        />
         <button
           type="button"
           class="px-3 py-1.5 text-sm rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"

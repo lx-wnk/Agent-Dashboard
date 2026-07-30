@@ -2,6 +2,7 @@
 import type { WorkflowsFilters, WorkflowTab } from '@/features/workflows/composables/useWorkflows'
 import { computed, onMounted, ref, watch } from 'vue'
 import AppCard from '@/components/ui/AppCard.vue'
+import AppSelect from '@/components/ui/AppSelect.vue'
 import { usePatterns } from '@/composables/usePatterns'
 import { useSessions } from '@/composables/useSessions'
 import CoOccurrenceMatrix from '@/features/workflows/components/visualizations/CoOccurrenceMatrix.vue'
@@ -38,12 +39,17 @@ function sessionLabel(s: { projectName: string, firstPrompt: string | null, sess
   return s.isRunning ? `${base} (running)` : base
 }
 
-function onSessionSelect(event: Event) {
-  const value = (event.target as HTMLSelectElement).value
+function onSessionSelect(value: string) {
+  filters.value.sessionId = value
   if (value) {
     setActiveTab('dag')
   }
 }
+
+const sessionOptions = computed(() => [
+  { value: '', label: '— Select session —' },
+  ...sessions.value.map(s => ({ value: s.sessionId, label: sessionLabel(s) })),
+])
 
 function openSessionDag(id: string) {
   filters.value.sessionId = id
@@ -216,22 +222,13 @@ const maxToolFreq = computed(() => Math.max(0, ...toolFrequency.value.map(f => f
     <div class="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-line bg-card">
       <label class="text-xs text-fg-mute flex items-center gap-1">
         Session
-        <select
-          v-model="filters.sessionId"
-          class="bg-raised border border-line rounded-md px-2 py-1 text-[12px] text-fg w-[260px] max-w-[260px] truncate focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent"
-          @change="onSessionSelect"
-        >
-          <option value="">
-            — Select session —
-          </option>
-          <option
-            v-for="s in sessions"
-            :key="s.sessionId"
-            :value="s.sessionId"
-          >
-            {{ sessionLabel(s) }}
-          </option>
-        </select>
+        <AppSelect
+          :model-value="filters.sessionId ?? ''"
+          :options="sessionOptions"
+          size="compact"
+          class="w-[260px] max-w-[260px] truncate"
+          @update:model-value="onSessionSelect($event as string)"
+        />
       </label>
       <label class="text-xs text-fg-mute flex items-center gap-1">
         or paste ID
