@@ -77,23 +77,145 @@ collect_go() {
   fi
 }
 
-echo "Collecting Go deps: server + sdk (workspace)..."
-collect_go "${REPO_ROOT}/server" false >> "${TMP_GO_RAW}"
+# A module is expected to contribute at least one row when its go.mod declares
+# at least one require outside our own module family (the same
+# "github.com/lx-wnk/agent-dashboard" prefix passed to --ignore above).
+# sdk currently has zero requires at all, so it falls out of this on its own —
+# no name-based special case needed.
+module_expects_go_rows() {
+  local dir="$1"
+  go mod edit -json "${dir}/go.mod" 2>/dev/null | python3 -c '
+import json, sys
 
+try:
+    data = json.load(sys.stdin)
+except ValueError:
+    sys.exit(1)
+
+own_prefix = "github.com/lx-wnk/agent-dashboard"
+reqs = data.get("Require") or []
+sys.exit(0 if any(not r["Path"].startswith(own_prefix) for r in reqs) else 1)
+'
+}
+
+# Wraps collect_go() with the per-module row-count guard: a module whose
+# go.mod declares external deps (per module_expects_go_rows above) but whose
+# collection produced zero rows means the collection silently failed for that
+# module alone — the exact way #329 dropped the Go dependency count from 72 to
+# 63 without the script noticing. MIN_GO_DEP_ROWS below only catches a total
+# collapse; this catches one module vanishing.
+collect_module() {
+  local dir="$1" gowork_off="$2" goos="$3" label="$4"
+  echo "Collecting Go deps: ${label}..."
+
+  local before after row_count
+  before="$(wc -l < "${TMP_GO_RAW}")"
+  collect_go "${dir}" "${gowork_off}" "${goos}" >> "${TMP_GO_RAW}"
+  after="$(wc -l < "${TMP_GO_RAW}")"
+  row_count=$(( after - before ))
+
+  if (( row_count == 0 )) && module_expects_go_rows "${dir}"; then
+    echo "" >&2
+    echo "ERROR: ${label} (${dir}) produced zero Go dependency rows, but its" >&2
+    echo "go.mod declares external requires — its dependencies are missing from" >&2
+    echo "the license attribution. This is the #329 failure mode: an untidy" >&2
+    echo "module made go-licenses die outright, and the '|| true' tolerance in" >&2
+    echo "collect_go() silently dropped every row it should have produced." >&2
+    echo "" >&2
+    echo "Investigate by rerunning this module's collection by hand, without the" >&2
+    echo "'|| true' tolerance, to see the real go-licenses error:" >&2
+    if [[ "${gowork_off}" == "true" ]]; then
+      echo "  (cd ${dir} && GOWORK=off GOOS=${goos} ${GO_LICENSES} report ./... --ignore github.com/lx-wnk/agent-dashboard)" >&2
+    else
+      echo "  (cd ${dir} && GOOS=${goos} ${GO_LICENSES} report ./... --ignore github.com/lx-wnk/agent-dashboard)" >&2
+    fi
+    exit 1
+  fi
+}
+
+# ── Module registry ─────────────────────────────────────────────────────────────
+# Every Go module this script scans, with the GOWORK/GOOS handling each one
+# needs (plugins run GOWORK=off; desktop only resolves under GOOS=darwin).
+# Shared by the pre-flight tidy check and the collection loop below so the
+# two lists can never drift apart.
+MODULE_DIRS=()
+MODULE_GOWORK_OFF=()
+MODULE_GOOS=()
+MODULE_LABELS=()
+
+register_module() {
+  MODULE_DIRS+=("$1")
+  MODULE_GOWORK_OFF+=("$2")
+  MODULE_GOOS+=("$3")
+  MODULE_LABELS+=("$4")
+}
+
+register_module "${REPO_ROOT}/server" false "${GOOS}" "server"
 # sdk has no external deps currently; included so future additions are captured
-echo "Collecting Go deps: sdk..."
-collect_go "${REPO_ROOT}/sdk" false >> "${TMP_GO_RAW}" || true
-
-echo "Collecting Go deps: plugins (GOWORK=off)..."
+register_module "${REPO_ROOT}/sdk" false "${GOOS}" "sdk"
 for plugin_dir in "${REPO_ROOT}"/plugins/*/; do
   [[ -f "${plugin_dir}go.mod" ]] || continue
-  collect_go "${plugin_dir}" true >> "${TMP_GO_RAW}" || true
+  register_module "${plugin_dir%/}" true "${GOOS}" "plugins/$(basename "${plugin_dir}")"
 done
-
 # desktop/ is a macOS-only wails app (//go:build darwin); its real dependency
 # graph only exists under GOOS=darwin. go-licenses cross-lists it from any host.
-echo "Collecting Go deps: desktop/wails (GOWORK=off, GOOS=darwin)..."
-collect_go "${REPO_ROOT}/desktop" true darwin >> "${TMP_GO_RAW}" || true
+register_module "${REPO_ROOT}/desktop" true darwin "desktop"
+
+# ── Pre-flight: refuse to scan an untidy module ───────────────────────────────
+# This is the actual root cause behind #329: Dependabot bumped desktop/go.mod
+# without running `go mod tidy`, so the graph go.mod/go.sum describe no longer
+# matched what actually builds. go-licenses died outright on that module, and
+# collect_go()'s `|| true` tolerance — there for benign classification
+# failures, not this — silently dropped every row it should have produced.
+# Check every module before collecting anything, so a bad module fails loud
+# instead of quietly shrinking the output.
+module_tidy_check() {
+  local dir="$1" gowork_off="$2" goos="$3" label="$4"
+  local diff_output status=0
+
+  if [[ "${gowork_off}" == "true" ]]; then
+    diff_output="$(cd "${dir}" && GOWORK=off GOOS="${goos}" go mod tidy -diff 2>&1)" || status=$?
+  else
+    diff_output="$(cd "${dir}" && GOOS="${goos}" go mod tidy -diff 2>&1)" || status=$?
+  fi
+
+  if (( status != 0 )); then
+    local fix_cmd
+    if [[ "${gowork_off}" == "true" ]]; then
+      fix_cmd="(cd ${dir} && GOWORK=off GOOS=${goos} go mod tidy)"
+    else
+      fix_cmd="(cd ${dir} && GOOS=${goos} go mod tidy)"
+    fi
+
+    echo "" >&2
+    echo "ERROR: ${label} (${dir}) failed 'go mod tidy -diff' — go.mod/go.sum" >&2
+    echo "don't match its import graph (or the command itself errored; see the" >&2
+    echo "output below). This is the #329 root cause: a module bumped without" >&2
+    echo "tidying makes its entire dependency attribution unreliable, not just" >&2
+    echo "the one dependency that moved." >&2
+    echo "" >&2
+    echo "Fix it with:" >&2
+    echo "  ${fix_cmd}" >&2
+    echo "" >&2
+    echo "go mod tidy -diff output (first 20 lines):" >&2
+    echo "${diff_output}" | head -20 >&2
+    local total_lines
+    total_lines="$(printf '%s\n' "${diff_output}" | wc -l | tr -d ' ')"
+    if (( total_lines > 20 )); then
+      echo "  ... ${dir}: $(( total_lines - 20 )) more line(s) not shown, see the full diff via the fix command above" >&2
+    fi
+    exit 1
+  fi
+}
+
+echo "Checking Go module tidiness (go mod tidy -diff)..."
+for i in "${!MODULE_DIRS[@]}"; do
+  module_tidy_check "${MODULE_DIRS[$i]}" "${MODULE_GOWORK_OFF[$i]}" "${MODULE_GOOS[$i]}" "${MODULE_LABELS[$i]}"
+done
+
+for i in "${!MODULE_DIRS[@]}"; do
+  collect_module "${MODULE_DIRS[$i]}" "${MODULE_GOWORK_OFF[$i]}" "${MODULE_GOOS[$i]}" "${MODULE_LABELS[$i]}"
+done
 
 # ── Apply license overrides ────────────────────────────────────────────────────
 
