@@ -26,6 +26,13 @@ type mcpConfig struct {
 // the channel bridge binary to avoid duplicating the path.
 const DiscoveryDir = ".claude/dashboard-channel"
 
+// Subcommand names the spawner re-executes on the dashboard binary. Every
+// binary that can be re-executed must implement these.
+const (
+	SubcommandChannel = "channel"
+	SubcommandPtyHost = "pty-host"
+)
+
 // DiscoveryFile returns the channel-bridge discovery file path for a pid:
 // <home>/.claude/dashboard-channel/<pid>.json
 func DiscoveryFile(home string, pid int) string {
@@ -45,7 +52,7 @@ func buildConfig(binaryPath string) mcpConfig {
 		MCPServers: map[string]mcpServerEntry{
 			"dashboard-channel": {
 				Command: binaryPath,
-				Args:    []string{"channel"},
+				Args:    []string{SubcommandChannel},
 			},
 		},
 	}

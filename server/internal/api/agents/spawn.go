@@ -440,7 +440,7 @@ func (m *SpawnManager) launchInteractive(binary string, args, env []string, cwd,
 		if serr != nil {
 			return 0, nil, serr
 		}
-		hostArgs := append([]string{"pty-host", "--", binary}, args...)
+		hostArgs := append([]string{channelconfig.SubcommandPtyHost, "--", binary}, args...)
 		cmd := exec.Command(self, hostArgs...)
 		cmd.Dir = cwd
 		cmd.Env = env

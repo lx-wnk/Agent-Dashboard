@@ -73,7 +73,6 @@ The following third-party packages are used as transitive dependencies.
 | golang.org/x/sync | BSD-3-Clause | https://cs.opensource.google/go/x/sync/+/v0.21.0:LICENSE |
 | golang.org/x/sync/errgroup | BSD-3-Clause | https://cs.opensource.google/go/x/sync/+/v0.16.0:LICENSE |
 | golang.org/x/sys | BSD-3-Clause | https://cs.opensource.google/go/x/sys/+/v0.46.0:LICENSE |
-| golang.org/x/sys/unix | BSD-3-Clause | https://cs.opensource.google/go/x/sys/+/v0.46.0:LICENSE |
 | golang.org/x/term | BSD-3-Clause | https://cs.opensource.google/go/x/term/+/v0.44.0:LICENSE |
 | golang.org/x/text | BSD-3-Clause | https://cs.opensource.google/go/x/text/+/v0.39.0:LICENSE |
 | golang.org/x/time/rate | BSD-3-Clause | https://cs.opensource.google/go/x/time/+/v0.15.0:LICENSE |
