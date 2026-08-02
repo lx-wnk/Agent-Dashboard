@@ -14,11 +14,20 @@ type RecoveryDecision struct {
 	Reason string
 }
 
-func DecideRecovery(sr *ent.StageRun) RecoveryDecision {
-	pid := 0
-	if sr.Pid != nil {
-		pid = *sr.Pid
+// stageRunPid returns the PID recorded on the stage_run, or 0 when none was.
+// proc.IsPidAlive(0) is false, so an absent PID reads as "not alive" — correct
+// only where a PID-less run really is a zombie. It is not correct for an
+// HTTP-adapter stage, which runs with no local process at all; see the
+// process-lifetime guard in sweepOrphanRuns case 4.
+func stageRunPid(sr *ent.StageRun) int {
+	if sr.Pid == nil {
+		return 0
 	}
+	return *sr.Pid
+}
+
+func DecideRecovery(sr *ent.StageRun) RecoveryDecision {
+	pid := stageRunPid(sr)
 	if proc.IsPidAlive(pid) {
 		return RecoveryDecision{Kind: "alive", Reason: fmt.Sprintf("PID %d still running", pid)}
 	}

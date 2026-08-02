@@ -40,10 +40,7 @@ func (o *PipelineOrchestrator) runProgressTaskLocked(ctx context.Context, taskID
 	if handler.RequiresAgent() {
 		latest, _ = o.opts.StageRunRepo.GetLatestByTaskAndStage(ctx, task.ID, task.CurrentStage)
 		if latest != nil {
-			pid := 0
-			if latest.Pid != nil {
-				pid = *latest.Pid
-			}
+			pid := stageRunPid(latest)
 			isTerminal := latest.Status == "failed" || latest.Status == "done"
 			isZombieAwait := latest.Status == "awaiting_user" && !proc.IsPidAlive(pid)
 			if isTerminal || isZombieAwait {
@@ -97,10 +94,7 @@ func (o *PipelineOrchestrator) runProgressTaskLocked(ctx context.Context, taskID
 
 	// Re-entry guard: if the run is already running with a live PID, return without spawning.
 	if handler.RequiresAgent() {
-		pid := 0
-		if stageRun.Pid != nil {
-			pid = *stageRun.Pid
-		}
+		pid := stageRunPid(stageRun)
 		if (stageRun.Status == "running" || stageRun.Status == "awaiting_user") && proc.IsPidAlive(pid) {
 			slog.Info("orchestrator: re-entry skipped — live PID already running",
 				"stage", stageRun.Stage, "runID", stageRun.ID, "pid", pid)

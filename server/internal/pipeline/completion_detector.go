@@ -106,10 +106,7 @@ func DetectCompletion(sr *ent.StageRun, cwd string, deps CompletionDeps) (Comple
 		validateFn = ValidateStageOutput
 	}
 
-	pid := 0
-	if sr.Pid != nil {
-		pid = *sr.Pid
-	}
+	pid := stageRunPid(sr)
 	if isPidAliveFn(pid) {
 		return CompletionResult{Kind: "still_running"}, nil
 	}

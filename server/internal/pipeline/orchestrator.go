@@ -76,6 +76,10 @@ type PipelineOrchestrator struct {
 	// startedAt is when this orchestrator was constructed. Used by sweepOrphanRuns
 	// to distinguish a "running" run left behind by a crashed/killed prior process
 	// (started before us) from one legitimately in flight in this process.
+	// Assumes a single orchestrator per database: with two instances sharing one
+	// SQLite file, the newer instance's startedAt is later than every in-flight
+	// run of the older one, so it would reap the older instance's live,
+	// PID-less HTTP-adapter runs on every tick.
 	startedAt time.Time
 }
 
