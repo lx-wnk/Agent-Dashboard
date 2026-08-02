@@ -1,7 +1,6 @@
 <script setup lang="ts" generic="T extends string | number">
+import type { SelectOption } from './selectOption'
 import { computed, nextTick, onUnmounted, ref, useId, watch } from 'vue'
-
-interface SelectOption<T> { value: T, label: string, disabled?: boolean }
 
 defineOptions({ name: 'AppSelect', inheritAttrs: false })
 

@@ -2,6 +2,7 @@
 import type { CreateScheduleBody, SchedulePreview, ScheduleView, UpdateScheduleBody } from '../composables/useSchedules'
 import { ref, watch } from 'vue'
 import { createSchedule, previewSchedule, updateSchedule } from '../composables/useSchedules'
+import { TASK_PRIORITY_OPTIONS } from '../utils/taskOptions'
 import AppButton from './ui/AppButton.vue'
 import AppInput from './ui/AppInput.vue'
 import AppSelect from './ui/AppSelect.vue'
@@ -30,12 +31,6 @@ const permissionTemplate = ref(props.schedule?.permissionTemplate ?? '')
 const CATCHUP_OPTIONS: Array<{ value: 'none' | 'once', label: string }> = [
   { value: 'none', label: 'None' },
   { value: 'once', label: 'Once' },
-]
-
-const PRIORITY_OPTIONS = [
-  { value: 'high', label: 'High' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'low', label: 'Low' },
 ]
 
 const preview = ref<SchedulePreview | null>(null)
@@ -214,7 +209,7 @@ async function onSubmit() {
         <AppSelect
           id="schedule-priority"
           v-model="priority"
-          :options="PRIORITY_OPTIONS"
+          :options="TASK_PRIORITY_OPTIONS"
         />
       </div>
       <div class="flex flex-col gap-1">
