@@ -179,12 +179,15 @@ func (o *PipelineOrchestrator) sweepOrphanRuns(ctx context.Context, allRunning [
 		// failed. This sweep covers what the startup pass structurally cannot — a run whose
 		// process was still alive when we recovered and died afterwards.
 		if run.Status == "running" && run.StartedAt != nil && run.StartedAt.Before(o.startedAt) {
-			decision := DecideRecovery(run)
-			if decision.Kind == "alive" {
-				continue
-			}
 			fresh, _ := o.opts.StageRunRepo.GetByID(ctx, run.ID)
 			if fresh == nil || fresh.Status != "running" {
+				continue
+			}
+			// Decide on the re-fetched row: session_id is attached asynchronously
+			// after spawn, so a run that became resumable since the tick snapshot
+			// would otherwise be judged unresumable and failed.
+			decision := DecideRecovery(fresh)
+			if decision.Kind == "alive" {
 				continue
 			}
 			if decision.Kind == "resume" {

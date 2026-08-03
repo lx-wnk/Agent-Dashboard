@@ -212,6 +212,48 @@ func TestSweepOrphanRuns_RunningWithSessionStartedBeforeOrchestrator_Requeued(t 
 		"a run with a session to resume from must be re-queued, not failed")
 }
 
+// TestSweepOrphanRuns_RequeuedRunSurvivesTheNextTick is the regression guard
+// for the interaction between case 4's re-queue and case 3's stale-pending
+// reaper. Case 4 only fires for a run whose started_at predates this
+// orchestrator, so once the process has been up longer than
+// pendingStaleDuration that timestamp is always older than the case 3 window.
+// Re-queueing without refreshing started_at therefore hands the run straight
+// to case 3 on the following tick, which fails it under the misleading reason
+// "pending stage_run never promoted to running" — the resume never happens.
+func TestSweepOrphanRuns_RequeuedRunSurvivesTheNextTick(t *testing.T) {
+	ctx := context.Background()
+	orch, taskRepo, srRepo := makeOrchestratorFull(t)
+
+	// Older than pendingStaleDuration (5m), which is the normal case: any run
+	// predating a long-lived orchestrator qualifies.
+	startedAt := time.Now().Add(-30 * time.Minute)
+	runID := makeRunningRun(t, ctx, taskRepo, srRepo, "running-orphan-requeue-survives", nil, startedAt)
+
+	sessionID := "sess-survives"
+	_, err := srRepo.Update(ctx, runID, repo.UpdateStageRunInput{SessionID: &sessionID})
+	require.NoError(t, err)
+
+	running, err := srRepo.ListByStatus(ctx, "running")
+	require.NoError(t, err)
+	require.NoError(t, orch.SweepOrphanRunsForTest(ctx, running))
+
+	afterFirst, err := srRepo.GetByID(ctx, runID)
+	require.NoError(t, err)
+	require.Equal(t, "pending", afterFirst.Status, "case 4 must re-queue a resumable run")
+
+	// Second tick with nothing having picked the run up in between — exactly
+	// what happens when the picker skipped it because the tick snapshot still
+	// showed it as running.
+	stillRunning, err := srRepo.ListByStatus(ctx, "running")
+	require.NoError(t, err)
+	require.NoError(t, orch.SweepOrphanRunsForTest(ctx, stillRunning))
+
+	afterSecond, err := srRepo.GetByID(ctx, runID)
+	require.NoError(t, err)
+	require.Equal(t, "pending", afterSecond.Status,
+		"re-queued run must survive the next tick's stale-pending reaper, not be failed by it")
+}
+
 func TestSweepOrphanRuns_RunningNilPIDStartedBeforeOrchestrator_Reaped(t *testing.T) {
 	ctx := context.Background()
 	orch, taskRepo, srRepo := makeOrchestratorFull(t)
