@@ -56,9 +56,16 @@ func (s *stageRunService) SumCompletedTokens(ctx context.Context, taskID string)
 }
 
 // MarkPending resets a recovered stage_run to pending with its PID cleared,
-// so the tick-loop picker respawns it.
+// so the tick-loop picker respawns it. started_at is moved to now: the row it
+// recovers carries the dead process's timestamp, and sweepOrphanRuns case 3
+// fails any pending run whose started_at is older than pendingStaleDuration —
+// so leaving the old value re-queues the run straight into the stale-pending
+// reaper. Clearing started_at instead is not an option: RequeueForUser
+// documents that a pending run with a nil started_at never spawns and is never
+// reaped, which trades a premature kill for a permanent zombie.
 func (s *stageRunService) MarkPending(ctx context.Context, id string) (*ent.StageRun, error) {
-	return s.repo.Update(ctx, id, repo.UpdateStageRunInput{Status: strPtr("pending"), PIDClear: true})
+	now := time.Now()
+	return s.repo.Update(ctx, id, repo.UpdateStageRunInput{Status: strPtr("pending"), PIDClear: true, StartedAt: &now})
 }
 
 // MarkFailed marks a stage_run failed with an end timestamp and the given output.

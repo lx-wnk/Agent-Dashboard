@@ -239,3 +239,23 @@ func (o *PipelineOrchestrator) sweepApplyTransition(ctx context.Context, task *e
 	result, err := o.applyTransition(ctx, task, run, t)
 	return result, true, err
 }
+
+// sweepMarkPending re-queues a stage_run under the task mutex. It mirrors
+// sweepApplyTransition's TryLock contract — never block the tick, defer to
+// progressTask instead — and reports locked=false when the task is busy.
+// The status is re-read inside the lock: the caller's check ran before the
+// TryLock, and a handler holding the mutex in that window can have moved the
+// run to a terminal status, which this must not resurrect to pending.
+func (o *PipelineOrchestrator) sweepMarkPending(ctx context.Context, taskID, runID string) (bool, error) {
+	mu := o.getTaskMutex(taskID)
+	if !mu.TryLock() {
+		return false, nil
+	}
+	defer mu.Unlock()
+	fresh, err := o.opts.StageRunRepo.GetByID(ctx, runID)
+	if err != nil || fresh == nil || fresh.Status != "running" {
+		return true, err
+	}
+	_, err = o.stageRuns.MarkPending(ctx, runID)
+	return true, err
+}

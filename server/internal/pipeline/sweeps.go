@@ -91,10 +91,12 @@ func (o *PipelineOrchestrator) sweepRequeueableRuns(ctx context.Context) error {
 	return nil
 }
 
-// sweepOrphanRuns reaps three zombie modes:
+// sweepOrphanRuns reaps four zombie modes:
 //  1. Non-terminal stage_run whose parent task is parked (done/cancelled/on_hold).
 //  2. on_hold stage_run with a dead PID.
 //  3. pending stage_run stuck > 5 min without a PID.
+//  4. running stage_run that started before this orchestrator process did and
+//     has no live PID (see case 4 below for why a nil/zero PID alone isn't enough).
 func (o *PipelineOrchestrator) sweepOrphanRuns(ctx context.Context, allRunning []*ent.StageRun) error {
 	pendings, _ := o.opts.StageRunRepo.ListPending(ctx)
 	requeued, _ := o.opts.StageRunRepo.ListByStatus(ctx, "requeued")
@@ -162,6 +164,50 @@ func (o *PipelineOrchestrator) sweepOrphanRuns(ctx context.Context, allRunning [
 				} else if !locked {
 					slog.Debug("sweepOrphanRuns case3: task locked by progressTask — deferring to next tick", "taskID", task.ID)
 				}
+			}
+			continue
+		}
+		// Case 4: running run that predates this orchestrator process.
+		// A nil/zero PID alone is not evidence of a zombie — HTTP-adapter stages run
+		// legitimately with no local process (stage_handlers.go AsyncRunningTransition{PID: 0}).
+		// Only "started before we did" rules that out: no in-process goroutine of ours is
+		// still feeding it, and a live subprocess PID would mean it survived our restart.
+		//
+		// The verdict comes from DecideRecovery, the same authority recoverRunningStageRuns
+		// uses for this exact row state at startup: a run with a session is re-queued so it
+		// can be respawned with --resume, and only a run with nothing to resume from is
+		// failed. This sweep covers what the startup pass structurally cannot — a run whose
+		// process was still alive when we recovered and died afterwards.
+		if run.Status == "running" && run.StartedAt != nil && run.StartedAt.Before(o.startedAt) {
+			fresh, _ := o.opts.StageRunRepo.GetByID(ctx, run.ID)
+			if fresh == nil || fresh.Status != "running" {
+				continue
+			}
+			// Decide on the re-fetched row: session_id is attached asynchronously
+			// after spawn, so a run that became resumable since the tick snapshot
+			// would otherwise be judged unresumable and failed.
+			decision := DecideRecovery(fresh)
+			if decision.Kind == "alive" {
+				continue
+			}
+			if decision.Kind == "resume" {
+				slog.Warn("orchestrator: running run predates this orchestrator — re-queueing for resume",
+					"runID", fresh.ID, "stage", fresh.Stage, "reason", decision.Reason)
+				if locked, err := o.sweepMarkPending(ctx, task.ID, fresh.ID); err != nil {
+					slog.Error("sweepOrphanRuns.case4.markPending", "err", err)
+				} else if !locked {
+					slog.Debug("sweepOrphanRuns case4: task locked by progressTask — deferring to next tick", "taskID", task.ID)
+				}
+				continue
+			}
+			slog.Warn("orchestrator: running run predates this orchestrator with nothing to resume — reaping as failed",
+				"runID", fresh.ID, "stage", fresh.Stage, "reason", decision.Reason)
+			if _, locked, err := o.sweepApplyTransition(ctx, task, fresh, FailTransition{
+				Reason: "orphan reaper: run was started by a previous orchestrator process that no longer exists, and no live agent process took it over",
+			}); err != nil {
+				slog.Error("sweepOrphanRuns.case4.applyTransition", "err", err)
+			} else if !locked {
+				slog.Debug("sweepOrphanRuns case4: task locked by progressTask — deferring to next tick", "taskID", task.ID)
 			}
 		}
 	}
