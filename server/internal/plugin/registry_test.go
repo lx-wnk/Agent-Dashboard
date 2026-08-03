@@ -3,6 +3,7 @@ package plugin_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -453,6 +454,206 @@ func TestGroupKillReapsChildren(t *testing.T) {
 	require.Eventually(t, func() bool {
 		return !processAlive(childPid)
 	}, 10*time.Second, 100*time.Millisecond, "group-kill must reap the plugin's child process")
+}
+
+// writeSigtermIgnoringPlugin builds a real plugin binary under dir/{id}/ that
+// serves GET /health → 200 and explicitly ignores SIGTERM (signal.Ignore), so
+// it only dies to SIGKILL. Used to exercise Shutdown's escalation path.
+func writeSigtermIgnoringPlugin(t *testing.T, dir, id string) string {
+	t.Helper()
+	pluginDir := filepath.Join(dir, id)
+	require.NoError(t, os.MkdirAll(pluginDir, 0o755))
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	addr := ln.Addr().String()
+	require.NoError(t, ln.Close())
+
+	mainGo := `package main
+
+import (
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+)
+
+func main() {
+	addr := os.Args[1]
+	signal.Ignore(syscall.SIGTERM)
+	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	_ = http.ListenAndServe(addr, nil)
+}
+`
+	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "main.go"), []byte(mainGo), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "go.mod"),
+		[]byte("module sigterm-ignoring-plugin\n\ngo 1.21\n"), 0o644))
+
+	binPath := filepath.Join(pluginDir, "plugin-bin")
+	build := exec.Command("go", "build", "-o", binPath, ".")
+	build.Dir = pluginDir
+	build.Env = append(os.Environ(), "CGO_ENABLED=0")
+	out, buildErr := build.CombinedOutput()
+	require.NoError(t, buildErr, "go build failed:\n%s", out)
+
+	desc := plugin.Descriptor{
+		ID:           id,
+		Version:      "1.0.0",
+		Capabilities: []string{plugin.CapRouteExtension},
+		Addr:         addr,
+		Command:      []string{"./plugin-bin", addr},
+	}
+	data, _ := json.Marshal(desc)
+	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "plugin.json"), data, 0o644))
+	return addr
+}
+
+// listening reports whether something is accepting TCP connections on addr —
+// used here to tell whether a plugin process is still alive, since it closes
+// its listening socket the instant it exits (normally or via SIGKILL).
+func listening(addr string) bool {
+	conn, err := net.DialTimeout("tcp", addr, 200*time.Millisecond)
+	if err != nil {
+		return false
+	}
+	conn.Close()
+	return true
+}
+
+// TestShutdownWaitsForSigtermExit is the direct regression test for the bug:
+// gracefulStop used to run its wait-then-escalate step in a detached
+// goroutine, so Shutdown returned before the process had actually exited.
+// Because a process closes its listening socket the moment it exits, checking
+// the socket immediately after Shutdown returns — with no polling/Eventually
+// — proves Shutdown itself blocked until the process was gone.
+func TestShutdownWaitsForSigtermExit(t *testing.T) {
+	dir := t.TempDir()
+	addr := writeRealHealthyPlugin(t, dir, "graceful")
+
+	r := plugin.New(dir)
+	require.NoError(t, r.Load(context.Background(), plugin.Hooks{}))
+	_, ok := r.Lookup("graceful")
+	require.True(t, ok, "plugin must be registered after load")
+
+	r.Shutdown()
+
+	require.False(t, listening(addr),
+		"plugin must have already exited by the time Shutdown returns, not eventually")
+}
+
+// TestContextCancelDoesNotPreemptShutdownStop guards the ordering that makes
+// the SIGTERM-first stop sequence reachable at all. exec.CommandContext's
+// default Cancel is Process.Kill(), so cancelling the server context used to
+// SIGKILL every plugin immediately — and on the ordinary quit path that
+// happens well before cleanup() calls Shutdown, meaning no plugin ever saw a
+// SIGTERM. The plugin must survive the cancellation and be stopped by
+// Shutdown.
+func TestContextCancelDoesNotPreemptShutdownStop(t *testing.T) {
+	dir := t.TempDir()
+	addr := writeRealHealthyPlugin(t, dir, "graceful-ctx")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	r := plugin.New(dir)
+	require.NoError(t, r.Load(ctx, plugin.Hooks{}))
+	_, ok := r.Lookup("graceful-ctx")
+	require.True(t, ok, "plugin must be registered after load")
+
+	cancel()
+	// os/exec's kill goroutine fires as soon as the context is done; this
+	// window is long enough for it to have taken effect if it were still armed.
+	time.Sleep(500 * time.Millisecond)
+	require.True(t, listening(addr),
+		"context cancellation must not kill the plugin — Shutdown owns the stop sequence")
+
+	r.Shutdown()
+	require.False(t, listening(addr), "Shutdown must stop the plugin after the context was cancelled")
+}
+
+// TestContextCancelBackstopOutlastsShutdownBudget pins the ordering between the
+// two clocks. The backstop is armed at context cancellation, but Shutdown does
+// not start until the run loop has drained — the HTTP server alone may spend
+// shutdown.timeoutSeconds (default 10s) first. A backstop sized to Shutdown's
+// own budget (gracefulStopTimeout + shutdownKillGrace = 7s) therefore fires
+// before Shutdown is ever called, SIGKILLing a plugin that was never asked to
+// stop. The plugin must still be alive well past that 7s mark.
+func TestContextCancelBackstopOutlastsShutdownBudget(t *testing.T) {
+	dir := t.TempDir()
+	addr := writeRealHealthyPlugin(t, dir, "graceful-backstop")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	r := plugin.New(dir)
+	require.NoError(t, r.Load(ctx, plugin.Hooks{}))
+	_, ok := r.Lookup("graceful-backstop")
+	require.True(t, ok, "plugin must be registered after load")
+
+	cancel()
+	// Past gracefulStopTimeout + shutdownKillGrace, and past the 2s request
+	// grace the HTTP drain needs before it can even return.
+	time.Sleep(8 * time.Second)
+	require.True(t, listening(addr),
+		"plugin must outlive Shutdown's own budget — the drain can delay Shutdown past it")
+
+	r.Shutdown()
+	require.False(t, listening(addr), "Shutdown must still stop the plugin afterwards")
+}
+
+// TestShutdownKillsSigtermIgnoringPlugin covers the second consequence of the
+// bug: the SIGKILL escalation lived in a goroutine detached from Shutdown, so
+// it died with the process and a plugin that ignored SIGTERM was never
+// reaped. Shutdown must still SIGKILL it and return within a bounded time.
+func TestShutdownKillsSigtermIgnoringPlugin(t *testing.T) {
+	dir := t.TempDir()
+	addr := writeSigtermIgnoringPlugin(t, dir, "stubborn")
+
+	r := plugin.New(dir)
+	require.NoError(t, r.Load(context.Background(), plugin.Hooks{}))
+	_, ok := r.Lookup("stubborn")
+	require.True(t, ok, "plugin must be registered after load")
+
+	start := time.Now()
+	r.Shutdown()
+	elapsed := time.Since(start)
+	t.Logf("Shutdown for one SIGTERM-ignoring plugin took %s", elapsed)
+
+	require.Less(t, elapsed, 9*time.Second,
+		"Shutdown must not hang: it must escalate to SIGKILL and return, bounded")
+	require.False(t, listening(addr), "SIGTERM-ignoring plugin must be SIGKILLed by Shutdown")
+}
+
+// TestShutdownSharesDeadlineAcrossStragglers is the regression guard for the
+// shared-deadline requirement: several plugins that all ignore SIGTERM must
+// cost one gracefulStopTimeout in total, not one per plugin. Without the
+// shared deadline this would take roughly numStragglers*5s (here ~15s); with
+// it, it stays near a single 5s wait plus the bounded post-SIGKILL grace.
+func TestShutdownSharesDeadlineAcrossStragglers(t *testing.T) {
+	dir := t.TempDir()
+	const numStragglers = 3
+	addrs := make([]string, numStragglers)
+	for i := range addrs {
+		addrs[i] = writeSigtermIgnoringPlugin(t, dir, fmt.Sprintf("stubborn-%d", i))
+	}
+
+	r := plugin.New(dir)
+	require.NoError(t, r.Load(context.Background(), plugin.Hooks{}))
+	for i := range addrs {
+		_, ok := r.Lookup(fmt.Sprintf("stubborn-%d", i))
+		require.True(t, ok, "plugin %d must be registered after load", i)
+	}
+
+	start := time.Now()
+	r.Shutdown()
+	elapsed := time.Since(start)
+	t.Logf("Shutdown for %d SIGTERM-ignoring plugins took %s (would be ~%s per-plugin timeouts without a shared deadline)",
+		numStragglers, elapsed, numStragglers*5*time.Second)
+
+	require.Less(t, elapsed, 9*time.Second,
+		"stragglers must share one deadline: %d plugins must not cost %d*5s", numStragglers, numStragglers)
+
+	for i, addr := range addrs {
+		require.False(t, listening(addr), "stubborn-%d must be SIGKILLed by Shutdown", i)
+	}
 }
 
 // writeCrashingPlugin builds a real plugin binary under dir/{id}/ that serves

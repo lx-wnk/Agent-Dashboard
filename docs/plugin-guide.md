@@ -415,7 +415,7 @@ the plugin unhealthy and skips it.
 ## Security
 
 - Plugins **must** bind to `127.0.0.1` only — never a public address.
-- The dashboard kills any plugin process it started on shutdown (`Registry.Shutdown()`).
+- The dashboard waits for every plugin process it started to exit before shutting down (`Registry.Shutdown()`): SIGTERM to the process group, escalating to SIGKILL after a shared 5s deadline for any plugin that ignores it.
 - Only a fixed base set of env vars (PATH, HOME, TMPDIR, TEMP, USER, LANG, LC_ALL) plus
   names listed in the `env` array in `plugin.json` are forwarded to the plugin process.
 - `DASHBOARD_AUTH_PLUGIN_SECRET` must be at least 32 characters. Store it in a `.env`

@@ -197,6 +197,7 @@ Preparing the first public release.
 - The Anthropic spawner plugin now fails a stream on accumulation errors instead of continuing with incomplete state that could defeat its refusal / max-token detection.
 - History import now shares one implementation across the API-key settings and cost-analytics views, so the API-key view gains the "already running" (409) and malformed-frame handling it previously lacked.
 - The parser session-cache TTL now tracks a configured non-default SSE interval, so idle-agent caching is not silently defeated when the scan loop is slowed down.
+- `Registry.Shutdown()` now actually waits for plugin processes to exit before returning, and SIGKILLs any straggler that ignores SIGTERM instead of leaving the escalation in a goroutine that died with the process. Previously the wait-then-escalate step ran detached, so `Shutdown` returned immediately — the server process could exit right after, and a plugin that ignored SIGTERM was never killed. All plugins are signalled and waited on against one shared 5s deadline (not 5s per plugin), so stopping several unresponsive plugins costs one timeout, not a multiple of it.
 
 ### Accessibility
 
