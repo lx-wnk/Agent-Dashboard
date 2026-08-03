@@ -114,6 +114,9 @@ module_expects_go_rows() {
     exit 1
   fi
 
+  # No trailing '/': the plugin modules are named agent-dashboard-plugin-*, and
+  # go-licenses' --ignore is a bare HasPrefix too. Adding one would reclassify
+  # every plugin as third-party and hard-fail the five that have no deps.
   grep -qv '^github\.com/lx-wnk/agent-dashboard' <<<"${dep_modules}"
 }
 
@@ -129,7 +132,7 @@ print_module_repro_cmd() {
 }
 
 # Wraps collect_go() with the per-module row-count guard: a module whose
-# go.mod declares external deps (per module_expects_go_rows above) but whose
+# package graph reaches external modules (per module_expects_go_rows above) but whose
 # collection produced zero rows means the collection silently failed for that
 # module alone — the exact way #329 dropped the Go dependency count from 72 to
 # 63 without the script noticing. MIN_GO_DEP_ROWS below only catches a total
@@ -147,13 +150,14 @@ collect_module() {
   if (( GO_LICENSES_STATUS != 0 )); then
     echo "" >&2
     echo "ERROR: go-licenses exited ${GO_LICENSES_STATUS} for ${label} (${dir}) after emitting" >&2
-    echo "${row_count} row(s). A walk that dies part-way through still streams the rows it" >&2
-    echo "reached, so the row count alone cannot tell a complete collection from a" >&2
-    echo "truncated one — that is the #329 failure mode one increment smaller." >&2
+    echo "${row_count} row(s). go-licenses v2 writes its CSV only once the whole walk has" >&2
+    echo "succeeded, so a non-zero status means this module's rows are missing outright —" >&2
+    echo "the #329 failure mode, caught per module instead of only in the total." >&2
     echo "" >&2
-    echo "All modules currently exit 0, including the one needing a LICENSE_OVERRIDES" >&2
-    echo "entry, so this status is a real failure and not classification noise. Rerun" >&2
-    echo "the module's collection by hand to see it:" >&2
+    echo "An unclassifiable license does NOT land here: v2 logs it, emits an 'Unknown'" >&2
+    echo "row and still exits 0, which the ',Unknown,' gate below catches and which" >&2
+    echo "LICENSE_OVERRIDES resolves. A non-zero status is a real failure. Rerun the" >&2
+    echo "module's collection by hand to see it:" >&2
     print_module_repro_cmd "${dir}" "${gowork_off}" "${goos}"
     exit 1
   fi
@@ -161,7 +165,8 @@ collect_module() {
   if (( row_count == 0 )) && module_expects_go_rows "${dir}" "${gowork_off}" "${goos}"; then
     echo "" >&2
     echo "ERROR: ${label} (${dir}) produced zero Go dependency rows, but its" >&2
-    echo "go.mod declares external requires — its dependencies are missing from" >&2
+    echo "package graph ('./...', no tests) reaches at least one external module —" >&2
+    echo "its dependencies are missing from" >&2
     echo "the license attribution. This is the #329 failure mode: an untidy" >&2
     echo "module made go-licenses die outright, and the '|| true' tolerance in" >&2
     echo "collect_go() silently dropped every row it should have produced." >&2
