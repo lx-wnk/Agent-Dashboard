@@ -27,15 +27,14 @@ if [[ ! -x "${GO_LICENSES}" ]]; then
 fi
 
 # ── Known license overrides ────────────────────────────────────────────────────
-# go-licenses cannot classify these modules automatically; licenses verified
-# manually against the module source.
-#
-# modernc.org/mathutil: BSD-3-Clause (file: LICENSE in module root, standard
-#   3-clause BSD header; go-licenses fails because it uses a non-standard
-#   copyright header format that the classifier does not recognise).
-declare -A LICENSE_OVERRIDES=(
-  ["modernc.org/mathutil"]="BSD-3-Clause"
-)
+# Manual classifications for modules go-licenses cannot identify itself, keyed
+# by module path. Empty on purpose: go-licenses v2.0.1 classifies every module
+# in the current graph, so nothing needs overriding. The v1.6.0-era entry for
+# modernc.org/mathutil was removed once v2 started reporting it correctly as
+# BSD-3-Clause on its own — an override that no longer overrides anything would
+# silently mask a future regression instead of letting the ',Unknown,' gate
+# below report it.
+declare -A LICENSE_OVERRIDES=()
 
 # ── Temp files ─────────────────────────────────────────────────────────────────
 

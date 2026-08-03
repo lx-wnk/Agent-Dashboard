@@ -145,7 +145,19 @@ jobs:
         run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.6
       - name: Verify golangci config
         working-directory: ${{ matrix.module }}
-        run: golangci-lint config verify
+        # The schema is fetched from golangci-lint.run at runtime and there is no
+        # offline flag, so a transient network failure fails the job. With eight
+        # lint jobs per run, a ~1% per-fetch failure rate turns ~8% of runs red.
+        # Retrying beats dropping the step: `golangci-lint run` does NOT validate
+        # config structure — an unknown key or a mistyped section is silently
+        # ignored there, so this is the only check that catches it.
+        run: |
+          for attempt in 1 2 3; do
+            golangci-lint config verify && exit 0
+            echo "config verify failed (attempt ${attempt}/3) — retrying" >&2
+            sleep 5
+          done
+          exit 1
       - name: Lint
         working-directory: ${{ matrix.module }}
         run: golangci-lint run ./...
@@ -168,7 +180,19 @@ jobs:
         run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.6
       - name: Verify golangci config
         working-directory: plugins/${{ matrix.plugin }}
-        run: GOWORK=off golangci-lint config verify
+        # The schema is fetched from golangci-lint.run at runtime and there is no
+        # offline flag, so a transient network failure fails the job. With eight
+        # lint jobs per run, a ~1% per-fetch failure rate turns ~8% of runs red.
+        # Retrying beats dropping the step: `golangci-lint run` does NOT validate
+        # config structure — an unknown key or a mistyped section is silently
+        # ignored there, so this is the only check that catches it.
+        run: |
+          for attempt in 1 2 3; do
+            GOWORK=off golangci-lint config verify && exit 0
+            echo "config verify failed (attempt ${attempt}/3) — retrying" >&2
+            sleep 5
+          done
+          exit 1
       - name: Lint
         working-directory: plugins/${{ matrix.plugin }}
         run: GOWORK=off golangci-lint run ./...
