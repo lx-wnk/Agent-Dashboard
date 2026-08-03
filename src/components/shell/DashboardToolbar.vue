@@ -32,14 +32,14 @@ defineEmits<{
         :options="projectOptions"
         aria-label="Filter by project"
         data-testid="select-project"
-        @update:model-value="$emit('update:project', $event as string)"
+        @update:model-value="$emit('update:project', $event)"
       />
       <AppSelect
         :model-value="spawner"
         :options="spawnerOptions"
         aria-label="Filter by spawner"
         data-testid="select-spawner"
-        @update:model-value="$emit('update:spawner', $event as string)"
+        @update:model-value="$emit('update:spawner', $event)"
       />
     </div>
 
@@ -52,18 +52,18 @@ defineEmits<{
         <span aria-hidden="true" class="text-[13px] text-fg-faint" title="Sort">⇅</span>
         <AppSelect
           :model-value="sortBy"
-          :options="AGENT_SORT_OPTIONS as unknown as Array<{ value: string; label: string }>"
+          :options="AGENT_SORT_OPTIONS"
           aria-label="Sort agents"
           data-testid="select-sort"
-          @update:model-value="$emit('update:sortBy', $event as AgentSort)"
+          @update:model-value="$emit('update:sortBy', $event)"
         />
       </span>
       <AppSelect
         :model-value="groupBy"
-        :options="AGENT_GROUP_OPTIONS as unknown as Array<{ value: string; label: string }>"
+        :options="AGENT_GROUP_OPTIONS"
         aria-label="Group agents"
         data-testid="select-group"
-        @update:model-value="$emit('update:groupBy', $event as AgentGroup)"
+        @update:model-value="$emit('update:groupBy', $event)"
       />
     </div>
 

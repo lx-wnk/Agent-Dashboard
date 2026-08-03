@@ -1,13 +1,13 @@
-<script setup lang="ts">
+<script setup lang="ts" generic="T extends string | number">
 import { computed, nextTick, onUnmounted, ref, useId, watch } from 'vue'
 
-interface SelectOption { value: string | number, label: string, disabled?: boolean }
+interface SelectOption<T> { value: T, label: string, disabled?: boolean }
 
-defineOptions({ inheritAttrs: false })
+defineOptions({ name: 'AppSelect', inheritAttrs: false })
 
 const props = withDefaults(defineProps<{
-  modelValue: string | number
-  options: SelectOption[]
+  modelValue: T
+  options: readonly SelectOption<T>[]
   id?: string
   ariaLabel?: string
   disabled?: boolean
@@ -16,7 +16,7 @@ const props = withDefaults(defineProps<{
   size: 'default',
 })
 
-const emit = defineEmits<{ 'update:modelValue': [value: string | number] }>()
+const emit = defineEmits<{ 'update:modelValue': [value: T] }>()
 
 // `compact` matches the pre-migration native `<select>` dimensions restored at
 // the four call sites that sit beside `py-1` siblings (filter-bar inputs, the
@@ -76,7 +76,7 @@ function optionId(idx: number): string {
 // the 3:1 WCAG 2.2 non-text minimum and visually indistinguishable from the
 // panel. Selected-only rows keep the lighter text-accent + checkmark cue so
 // active and selected stay visually distinct even when combined.
-function optionClass(opt: SelectOption, idx: number) {
+function optionClass(opt: SelectOption<T>, idx: number) {
   if (opt.disabled)
     return 'opacity-50 cursor-not-allowed text-fg-faint'
   if (idx === activeIndex.value) {
@@ -180,15 +180,14 @@ function toggle() {
     openPanel()
 }
 
-function selectOption(opt: SelectOption) {
+function selectOption(opt: SelectOption<T>) {
   if (opt.disabled)
     return
-  const value = typeof props.modelValue === 'number' ? Number(opt.value) : opt.value
   // A native `change` never fired when the value was unchanged — re-picking
   // the current selection must not trigger downstream side effects (PATCH
   // requests, folder re-resolution, tab switches, ...).
-  if (value !== props.modelValue)
-    emit('update:modelValue', value)
+  if (opt.value !== props.modelValue)
+    emit('update:modelValue', opt.value)
   closePanel()
 }
 
@@ -199,11 +198,11 @@ function commitActive() {
   selectOption(opt)
 }
 
-function onOptionClick(opt: SelectOption) {
+function onOptionClick(opt: SelectOption<T>) {
   selectOption(opt)
 }
 
-function onOptionMouseMove(idx: number, opt: SelectOption) {
+function onOptionMouseMove(idx: number, opt: SelectOption<T>) {
   if (opt.disabled || activeIndex.value === idx)
     return
   activeIndex.value = idx

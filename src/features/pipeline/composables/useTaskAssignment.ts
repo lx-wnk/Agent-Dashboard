@@ -41,8 +41,7 @@ export function useTaskAssignment(task: Ref<PipelineTask | null>) {
     }
   }
 
-  async function onProjectChange(e: Event): Promise<void> {
-    const value = (e.target as HTMLSelectElement).value
+  async function onProjectChange(value: string): Promise<void> {
     isAssigningProject.value = true
     try {
       await patchTask({ projectId: value || null })
@@ -52,8 +51,7 @@ export function useTaskAssignment(task: Ref<PipelineTask | null>) {
     }
   }
 
-  async function onSpawnerChange(e: Event): Promise<void> {
-    const value = (e.target as HTMLSelectElement).value
+  async function onSpawnerChange(value: string): Promise<void> {
     isAssigningSpawner.value = true
     try {
       await patchTask({ spawnerId: value || null })

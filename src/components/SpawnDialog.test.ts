@@ -2,7 +2,6 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { openListboxDom as openListbox, selectByLabel } from '@/utils/testSelect'
 import SpawnDialog from './SpawnDialog.vue'
-import AppSelect from './ui/AppSelect.vue'
 
 // jsdom quirks worked around in this file:
 //   1. AppModal teleports to <body>, so tests use document.querySelector
@@ -91,7 +90,8 @@ describe('spawnDialog', () => {
     const wrapper = mount(SpawnDialog, { props: { open: true }, attachTo: document.body })
     await flushPromises()
 
-    const projectSelect = wrapper.findAllComponents(AppSelect).find(c => c.props('id') === 'spawn-project')
+    // Generic SFCs can't be passed to findAllComponents as a value; match by name.
+    const projectSelect = wrapper.findAllComponents({ name: 'AppSelect' }).find((c: any) => c.props('id') === 'spawn-project')
     expect(projectSelect).toBeTruthy()
 
     const optionValues = (projectSelect!.props('options') as Array<{ value: string | number }>).map(o => o.value)
@@ -204,7 +204,8 @@ describe('spawnDialog', () => {
     const permTrigger = document.querySelector('[data-testid="spawn-permission-mode"]') as HTMLElement
     expect(permTrigger).not.toBeNull()
 
-    const permSelect = wrapper.findAllComponents(AppSelect).find(c => c.props('id') === 'spawn-permission-mode')
+    // Generic SFCs can't be passed to findAllComponents as a value; match by name.
+    const permSelect = wrapper.findAllComponents({ name: 'AppSelect' }).find((c: any) => c.props('id') === 'spawn-permission-mode')
     expect(permSelect).toBeTruthy()
     const values = (permSelect!.props('options') as Array<{ value: string | number }>).map(o => o.value)
     for (const mode of ['default', 'plan', 'acceptEdits', 'auto', 'bypassPermissions', 'dontAsk'])

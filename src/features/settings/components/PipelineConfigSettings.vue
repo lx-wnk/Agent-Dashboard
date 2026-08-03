@@ -148,10 +148,9 @@ const stageModelOptions = AVAILABLE_MODELS.map(model => ({ value: model, label: 
               </label>
               <AppSelect
                 :id="`pc-spawner-${stage}`"
-                :model-value="effectiveConfig.stageSpawners[stage]"
+                v-model="effectiveConfig.stageSpawners[stage]"
                 :options="stageSpawnerOptions"
                 class="w-full"
-                @update:model-value="effectiveConfig.stageSpawners[stage] = $event as string"
               />
             </div>
             <div>
@@ -163,10 +162,9 @@ const stageModelOptions = AVAILABLE_MODELS.map(model => ({ value: model, label: 
               </label>
               <AppSelect
                 :id="`pc-model-${stage}`"
-                :model-value="effectiveConfig.stageModels[stage]"
+                v-model="effectiveConfig.stageModels[stage]"
                 :options="stageModelOptions"
                 class="w-full"
-                @update:model-value="effectiveConfig.stageModels[stage] = $event as string"
               />
             </div>
           </div>

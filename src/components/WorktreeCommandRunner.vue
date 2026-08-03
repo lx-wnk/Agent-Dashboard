@@ -74,10 +74,9 @@ function abort() {
       <span v-if="cwd" class="block text-xs text-fg-mute font-mono truncate">{{ cwd }}</span>
       <div class="flex gap-2">
         <AppSelect
-          :model-value="selectedCommand"
+          v-model="selectedCommand"
           :options="COMMAND_OPTIONS"
           class="flex-1 text-sm"
-          @update:model-value="selectedCommand = $event as string"
         />
         <button
           type="button"

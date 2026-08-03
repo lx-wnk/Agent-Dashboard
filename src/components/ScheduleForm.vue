@@ -27,7 +27,7 @@ const priority = ref(props.schedule?.priority ?? 'medium')
 const maxIterations = ref(props.schedule?.maxIterations ?? 20)
 const permissionTemplate = ref(props.schedule?.permissionTemplate ?? '')
 
-const CATCHUP_OPTIONS = [
+const CATCHUP_OPTIONS: Array<{ value: 'none' | 'once', label: string }> = [
   { value: 'none', label: 'None' },
   { value: 'once', label: 'Once' },
 ]
@@ -179,9 +179,8 @@ async function onSubmit() {
         <label for="schedule-catchup" class="text-sm font-medium text-fg-soft">Catchup</label>
         <AppSelect
           id="schedule-catchup"
-          :model-value="catchup"
+          v-model="catchup"
           :options="CATCHUP_OPTIONS"
-          @update:model-value="catchup = $event as 'none' | 'once'"
         />
       </div>
     </div>
@@ -214,9 +213,8 @@ async function onSubmit() {
         <label for="schedule-priority" class="text-sm font-medium text-fg-soft">Priority</label>
         <AppSelect
           id="schedule-priority"
-          :model-value="priority"
+          v-model="priority"
           :options="PRIORITY_OPTIONS"
-          @update:model-value="priority = $event as string"
         />
       </div>
       <div class="flex flex-col gap-1">

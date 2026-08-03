@@ -108,7 +108,7 @@ function defaultCommandFor(type: SpawnerAdapterType): string {
   return type === 'claude' ? 'claude' : ''
 }
 
-function onAdapterTypeSelect(value: string | number): void {
+function onAdapterTypeSelect(value: string): void {
   form.value.adapterType = value as SpawnerAdapterType
   onAdapterTypeChange()
 }

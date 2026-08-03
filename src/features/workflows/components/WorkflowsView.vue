@@ -227,7 +227,7 @@ const maxToolFreq = computed(() => Math.max(0, ...toolFrequency.value.map(f => f
           :options="sessionOptions"
           size="compact"
           class="w-[260px] max-w-[260px] truncate"
-          @update:model-value="onSessionSelect($event as string)"
+          @update:model-value="onSessionSelect($event)"
         />
       </label>
       <label class="text-xs text-fg-mute flex items-center gap-1">

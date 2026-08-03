@@ -468,10 +468,9 @@ function setDefault(targetRow: FolderRow) {
           <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1" for="proj-spawner">Default Spawner (optional)</label>
           <AppSelect
             id="proj-spawner"
-            :model-value="form.defaultSpawnerId"
+            v-model="form.defaultSpawnerId"
             :options="spawnerOptions"
             class="w-full"
-            @update:model-value="form.defaultSpawnerId = $event as string"
           />
         </div>
       </div>
@@ -512,10 +511,9 @@ function setDefault(targetRow: FolderRow) {
                 </label>
                 <AppSelect
                   :id="`pp-spawner-${stage}-${editingProject.id}`"
-                  :model-value="pipelineDraft.stageSpawners[stage]"
+                  v-model="pipelineDraft.stageSpawners[stage]"
                   :options="stageSpawnerOptions"
                   class="w-full"
-                  @update:model-value="pipelineDraft.stageSpawners[stage] = $event as string"
                 />
               </div>
               <div>
@@ -527,10 +525,9 @@ function setDefault(targetRow: FolderRow) {
                 </label>
                 <AppSelect
                   :id="`pp-model-${stage}-${editingProject.id}`"
-                  :model-value="pipelineDraft.stageModels[stage]"
+                  v-model="pipelineDraft.stageModels[stage]"
                   :options="stageModelOptions"
                   class="w-full"
-                  @update:model-value="pipelineDraft.stageModels[stage] = $event as string"
                 />
               </div>
             </div>

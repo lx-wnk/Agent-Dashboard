@@ -20,12 +20,12 @@ const {
   handleRemoveDependency,
 } = useTaskDependencies(task)
 
-const requiredStageOptions: Array<{ value: string, label: string }> = [
+const requiredStageOptions: Array<{ value: 'done' | 'cancelled', label: string }> = [
   { value: 'done', label: 'Done' },
   { value: 'cancelled', label: 'Cancelled' },
 ]
 
-const onCancelActionOptions: Array<{ value: string, label: string }> = [
+const onCancelActionOptions: Array<{ value: 'cancel' | 'start' | 'on_hold', label: string }> = [
   { value: 'on_hold', label: 'On Hold (on cancel)' },
   { value: 'cancel', label: 'Cancel (on cancel)' },
   { value: 'start', label: 'Start (on cancel)' },
@@ -70,20 +70,18 @@ const onCancelActionOptions: Array<{ value: string, label: string }> = [
       <form class="flex gap-1.5 items-center flex-wrap mt-2" @submit.prevent="handleAddDependency">
         <AppInput v-model="newDepId" class="flex-1 min-w-0" placeholder="Predecessor Task ID" :disabled="isAddingDep" />
         <AppSelect
-          :model-value="newDepStage"
+          v-model="newDepStage"
           :options="requiredStageOptions"
           aria-label="Required stage"
           size="compact"
           class="text-[11px]"
-          @update:model-value="newDepStage = $event as 'done' | 'cancelled'"
         />
         <AppSelect
-          :model-value="newDepCancelAction"
+          v-model="newDepCancelAction"
           :options="onCancelActionOptions"
           aria-label="On cancel action"
           size="compact"
           class="text-[11px]"
-          @update:model-value="newDepCancelAction = $event as 'cancel' | 'start' | 'on_hold'"
         />
         <button type="submit" class="px-2.5 py-1 bg-blue-600 text-white border-none rounded text-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:brightness-110" :disabled="isAddingDep || !newDepId.trim()">
           Add

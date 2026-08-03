@@ -66,8 +66,8 @@ function enumOptions(item: SettingView) {
   return (item.enum ?? []).map(opt => ({ value: opt, label: opt }))
 }
 
-function onSelectChange(item: SettingView, value: string | number) {
-  apply(item, String(value))
+function onSelectChange(item: SettingView, value: string) {
+  apply(item, value)
 }
 
 onMounted(refetch)

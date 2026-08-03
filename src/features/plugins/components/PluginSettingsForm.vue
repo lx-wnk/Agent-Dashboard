@@ -66,10 +66,9 @@ async function save() {
       <AppSelect
         v-if="f.type === 'enum'"
         :id="`pf-${pluginId}-${f.key}`"
-        :model-value="model[f.key]"
+        v-model="model[f.key]"
         :options="enumOptions(f)"
         :data-field="f.key"
-        @update:model-value="model[f.key] = $event as string"
       />
       <input
         v-else-if="f.type === 'bool'"
