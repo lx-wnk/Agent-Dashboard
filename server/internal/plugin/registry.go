@@ -194,7 +194,7 @@ func (r *Registry) startEntry(serverCtx, startupCtx context.Context, pluginDir s
 	entry := Entry{Descriptor: desc, BaseURL: "http://" + desc.Addr, pluginDir: pluginDir}
 	if len(desc.Command) > 0 {
 		cmd := exec.CommandContext(serverCtx, desc.Command[0], desc.Command[1:]...)
-		deferProcessKillToShutdown(cmd)
+		disableContextKill(cmd)
 		cmd.Dir = pluginDir
 		cmd.Env = r.appendSettingsEnv(serverCtx, buildPluginEnv(desc.Env), desc.ID)
 		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
@@ -225,6 +225,7 @@ func (r *Registry) startEntry(serverCtx, startupCtx context.Context, pluginDir s
 		// cmd.Wait). Exponential backoff: 1s → 5s → 30s, max 3 retries.
 		done := make(chan struct{})
 		entry.cmdDone = done
+		armKillBackstop(serverCtx, entry.cmd, done)
 		go r.watchPlugin(serverCtx, entry.pluginDir, desc, entry.cmd, done, gen)
 	}
 	entry.healthy = true
@@ -378,17 +379,44 @@ const gracefulStopTimeout = 5 * time.Second
 // SIGKILL cannot be ignored, so this only covers reap latency — it stays short.
 const shutdownKillGrace = 2 * time.Second
 
-// deferProcessKillToShutdown stops os/exec from pre-empting Shutdown's stop
-// sequence. exec.CommandContext's default Cancel is Process.Kill(), which
-// SIGKILLs the group leader the instant the context is done — and on the
-// ordinary quit path the server context is cancelled well before cleanup()
-// calls Shutdown, so the plugin would never see the SIGTERM at all. Cancel is
-// therefore a no-op, and WaitDelay is the backstop: if a path cancels the
-// context without ever calling Shutdown, os/exec still kills the process once
-// the full stop budget has elapsed.
-func deferProcessKillToShutdown(cmd *exec.Cmd) {
+// killBackstopDelay bounds how long a plugin may outlive a cancelled server
+// context on a path that never reaches Shutdown. It has to clear Shutdown's
+// own worst case, which does not even begin until the run loop has drained:
+// the HTTP server alone may spend shutdown.timeoutSeconds (a user-configurable
+// setting, default 10s) before cleanup() runs, and Shutdown then spends up to
+// gracefulStopTimeout + shutdownKillGrace on top. A backstop sized to
+// Shutdown's budget alone would fire first and SIGKILL a plugin that had not
+// yet been asked to stop — the exact failure this file exists to prevent.
+const killBackstopDelay = 60 * time.Second
+
+// disableContextKill stops os/exec from killing the plugin the moment the
+// server context is done. exec.CommandContext's default Cancel is
+// Process.Kill(), and on the ordinary quit path the context is cancelled well
+// before cleanup() calls Shutdown, so the plugin would never see a SIGTERM.
+// Shutdown owns the stop sequence; armKillBackstop covers what never reaches it.
+func disableContextKill(cmd *exec.Cmd) {
 	cmd.Cancel = func() error { return nil }
-	cmd.WaitDelay = gracefulStopTimeout + shutdownKillGrace
+}
+
+// armKillBackstop SIGKILLs the plugin's process group if the server context is
+// cancelled and the process is still alive killBackstopDelay later. os/exec's
+// own WaitDelay backstop is deliberately not used for this: it kills the leader
+// pid only, orphaning exactly the descendants Setpgid exists to catch, and its
+// clock starts at cancellation rather than at the stop sequence.
+// Like any in-process backstop this one dies with the dashboard: a caller that
+// cancels and exits immediately orphans the plugin regardless.
+func armKillBackstop(ctx context.Context, cmd *exec.Cmd, done <-chan struct{}) {
+	context.AfterFunc(ctx, func() {
+		timer := time.NewTimer(killBackstopDelay)
+		defer timer.Stop()
+		select {
+		case <-done:
+		case <-timer.C:
+			if cmd.Process != nil {
+				signalGroup(cmd.Process.Pid, syscall.SIGKILL)
+			}
+		}
+	})
 }
 
 // pendingStop pairs a signalled plugin's process-group pid with the channel
@@ -686,7 +714,7 @@ func (r *Registry) watchPlugin(ctx context.Context, pluginDir string, desc Descr
 		}
 
 		newCmd := exec.CommandContext(ctx, desc.Command[0], desc.Command[1:]...)
-		deferProcessKillToShutdown(newCmd)
+		disableContextKill(newCmd)
 		newCmd.Dir = pluginDir
 		newCmd.Env = r.appendSettingsEnv(ctx, buildPluginEnv(desc.Env), desc.ID)
 		newCmd.Stdout = os.Stdout
@@ -742,6 +770,7 @@ func (r *Registry) watchPlugin(ctx context.Context, pluginDir string, desc Descr
 			return
 		}
 
+		armKillBackstop(ctx, newCmd, rawNewDone)
 		current = newCmd
 		currentDone = rawNewDone
 	}

@@ -571,6 +571,34 @@ func TestContextCancelDoesNotPreemptShutdownStop(t *testing.T) {
 	require.False(t, listening(addr), "Shutdown must stop the plugin after the context was cancelled")
 }
 
+// TestContextCancelBackstopOutlastsShutdownBudget pins the ordering between the
+// two clocks. The backstop is armed at context cancellation, but Shutdown does
+// not start until the run loop has drained — the HTTP server alone may spend
+// shutdown.timeoutSeconds (default 10s) first. A backstop sized to Shutdown's
+// own budget (gracefulStopTimeout + shutdownKillGrace = 7s) therefore fires
+// before Shutdown is ever called, SIGKILLing a plugin that was never asked to
+// stop. The plugin must still be alive well past that 7s mark.
+func TestContextCancelBackstopOutlastsShutdownBudget(t *testing.T) {
+	dir := t.TempDir()
+	addr := writeRealHealthyPlugin(t, dir, "graceful-backstop")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	r := plugin.New(dir)
+	require.NoError(t, r.Load(ctx, plugin.Hooks{}))
+	_, ok := r.Lookup("graceful-backstop")
+	require.True(t, ok, "plugin must be registered after load")
+
+	cancel()
+	// Past gracefulStopTimeout + shutdownKillGrace, and past the 2s request
+	// grace the HTTP drain needs before it can even return.
+	time.Sleep(8 * time.Second)
+	require.True(t, listening(addr),
+		"plugin must outlive Shutdown's own budget — the drain can delay Shutdown past it")
+
+	r.Shutdown()
+	require.False(t, listening(addr), "Shutdown must still stop the plugin afterwards")
+}
+
 // TestShutdownKillsSigtermIgnoringPlugin covers the second consequence of the
 // bug: the SIGKILL escalation lived in a goroutine detached from Shutdown, so
 // it died with the process and a plugin that ignored SIGTERM was never
