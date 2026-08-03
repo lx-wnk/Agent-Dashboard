@@ -9,7 +9,6 @@ import type {
   TokenUsage,
 } from './sdk.generated'
 import type { MetricKey } from './utils/evalMetrics'
-import type { TaskAutonomy, TaskPriority } from './utils/taskOptions'
 // Types generated from sdk/types.go via tygo — do not edit these directly.
 // Run `task generate` to regenerate after changing sdk/types.go.
 import {
@@ -108,7 +107,15 @@ export type StageRunStatus
     | 'failed'
     | 'requeued'
 
-export type { TaskAutonomy, TaskPriority }
+// Mirrors of server-side contracts, kept in parity by hand (Go cannot import TS):
+// autonomy is server/internal/taskcontrol/autonomy.go's ValidAutonomyValues,
+// priority is the set the task write path and scheduler accept. The dropdown
+// lists in utils/taskOptions.ts are checked against these with `satisfies`, so
+// no list can offer a value the server would reject. The reverse is deliberately
+// not enforced: a list may cover fewer values than the union, which is what
+// retiring an option from the UI looks like while the server still accepts it.
+export type TaskPriority = 'high' | 'medium' | 'low'
+export type TaskAutonomy = 'manual' | 'spec_gated' | 'full'
 
 export interface TaskDependency {
   id: string

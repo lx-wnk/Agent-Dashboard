@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import type { PipelineStage, PipelineTask } from '@/types'
-import type { TaskAutonomy } from '@/utils/taskOptions'
+import type { PipelineStage, PipelineTask, TaskAutonomy } from '@/types'
 import { computed, ref, watch } from 'vue'
 import GitStatusPanel from '@/components/GitStatusPanel.vue'
 import AppButton from '@/components/ui/AppButton.vue'
