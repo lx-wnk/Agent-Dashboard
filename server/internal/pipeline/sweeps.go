@@ -115,10 +115,7 @@ func (o *PipelineOrchestrator) sweepOrphanRuns(ctx context.Context, allRunning [
 			if fresh == nil || fresh.Status == "done" || fresh.Status == "failed" {
 				continue
 			}
-			pid := 0
-			if fresh.Pid != nil {
-				pid = *fresh.Pid
-			}
+			pid := stageRunPid(fresh)
 			if proc.IsPidAlive(pid) {
 				_ = syscallKill(pid)
 			}
