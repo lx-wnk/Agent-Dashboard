@@ -1,6 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { openListboxDom as openListbox, selectByLabel } from '@/utils/testSelect'
+import { openListboxDom as openListbox, selectByLabel, selectOptionsById } from '@/utils/testSelect'
 import SpawnDialog from './SpawnDialog.vue'
 
 // jsdom quirks worked around in this file:
@@ -18,8 +18,8 @@ import SpawnDialog from './SpawnDialog.vue'
 //      the teleported [role="option"] elements via the shared
 //      openListboxDom()/optionByLabel()/selectByLabel() helpers (see
 //      testSelect.ts) rather than select.setValue(). Raw option `value`s
-//      (not just visible labels) are inspected via the mounted AppSelect
-//      component's `options` prop where a test doesn't drive a selection.
+//      (not just visible labels) are inspected via selectOptionsById()
+//      where a test doesn't drive a selection.
 
 const sampleProject = {
   id: 'prj_a',
@@ -90,11 +90,7 @@ describe('spawnDialog', () => {
     const wrapper = mount(SpawnDialog, { props: { open: true }, attachTo: document.body })
     await flushPromises()
 
-    // Generic SFCs can't be passed to findAllComponents as a value; match by name.
-    const projectSelect = wrapper.findAllComponents({ name: 'AppSelect' }).find((c: any) => c.props('id') === 'spawn-project')
-    expect(projectSelect).toBeTruthy()
-
-    const optionValues = (projectSelect!.props('options') as Array<{ value: string | number }>).map(o => o.value)
+    const optionValues = selectOptionsById(wrapper, 'spawn-project').map(o => o.value)
     expect(optionValues).not.toContain('')
 
     wrapper.unmount()
@@ -204,10 +200,7 @@ describe('spawnDialog', () => {
     const permTrigger = document.querySelector('[data-testid="spawn-permission-mode"]') as HTMLElement
     expect(permTrigger).not.toBeNull()
 
-    // Generic SFCs can't be passed to findAllComponents as a value; match by name.
-    const permSelect = wrapper.findAllComponents({ name: 'AppSelect' }).find((c: any) => c.props('id') === 'spawn-permission-mode')
-    expect(permSelect).toBeTruthy()
-    const values = (permSelect!.props('options') as Array<{ value: string | number }>).map(o => o.value)
+    const values = selectOptionsById(wrapper, 'spawn-permission-mode').map(o => o.value)
     for (const mode of ['default', 'plan', 'acceptEdits', 'auto', 'bypassPermissions', 'dontAsk'])
       expect(values).toContain(mode)
     expect(permTrigger.textContent).toContain('Ask for permission (default)')

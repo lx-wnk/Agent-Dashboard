@@ -14,6 +14,7 @@ import { toast } from '@/composables/useToast'
 import { useTrackerImport } from '@/composables/useTrackerImport'
 import { createTask } from '@/features/pipeline/composables/useTasks'
 import { errorMessage } from '@/utils/errorMessage'
+import { TASK_AUTONOMY_OPTIONS, TASK_PRIORITY_OPTIONS } from '@/utils/taskOptions'
 import { slugify } from '@/utils/validation'
 
 const emit = defineEmits<{
@@ -40,18 +41,6 @@ const isSubmitting = ref(false)
 const importRef = ref('')
 const isImporting = ref(false)
 const { fetchIssue } = useTrackerImport()
-
-const priorityOptions: Array<{ value: 'high' | 'medium' | 'low', label: string }> = [
-  { value: 'high', label: 'High' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'low', label: 'Low' },
-]
-
-const autonomyOptions: Array<{ value: 'manual' | 'spec_gated' | 'full', label: string }> = [
-  { value: 'manual', label: 'Manual — approve every stage' },
-  { value: 'spec_gated', label: 'Spec-gated — approve the spec, then autonomous' },
-  { value: 'full', label: 'Full — fully autonomous' },
-]
 
 const sortedProjects = computed(() =>
   projects.value.slice().sort((a, b) => a.name.localeCompare(b.name)),
@@ -268,7 +257,7 @@ async function onCreateAndRefine(): Promise<void> {
         <AppSelect
           id="details-priority"
           v-model="priority"
-          :options="priorityOptions"
+          :options="TASK_PRIORITY_OPTIONS"
           class="w-full"
         />
       </div>
@@ -293,7 +282,7 @@ async function onCreateAndRefine(): Promise<void> {
       <AppSelect
         id="details-autonomy"
         v-model="autonomy"
-        :options="autonomyOptions"
+        :options="TASK_AUTONOMY_OPTIONS"
         data-testid="details-autonomy"
         class="w-full"
       />

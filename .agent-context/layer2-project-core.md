@@ -29,6 +29,8 @@
 | Server validation (Go) | `server/internal/validation/slug.go` | `SlugPattern`, `SlugPatternMessage` |
 | Server status thresholds (Go) | `server/internal/merger/merger.go` | `activeThreshold`, `waitingThreshold` |
 | Pipeline stage labels (client) | `src/utils/stageLabels.ts` | `STAGE_LABELS`, `STAGE_DESCRIPTIONS` |
+| Shared task option lists (client) | `src/utils/taskOptions.ts` | `TASK_PRIORITY_OPTIONS`, `TASK_AUTONOMY_OPTIONS`, `TaskPriority`, `TaskAutonomy` |
+| Shared UI component types (client) | `src/components/ui/selectOption.ts` | `SelectOption<T>` |
 
 **Client and server are different languages — no cross-import.** The Vue client (TypeScript) and the Go server each keep their own copy of a shared rule; Go cannot import TS. Where a rule must agree on both sides (e.g. the task-slug pattern), keep `server/internal/validation/slug.go` and `src/utils/validation.ts` in parity by hand — there is no shared module.
 

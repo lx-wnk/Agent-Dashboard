@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { PipelineStage, PipelineTask } from '@/types'
+import type { TaskAutonomy } from '@/utils/taskOptions'
 import { computed, ref, watch } from 'vue'
 import GitStatusPanel from '@/components/GitStatusPanel.vue'
 import AppButton from '@/components/ui/AppButton.vue'
@@ -20,6 +21,7 @@ import { refreshTask } from '@/features/pipeline/composables/useTasks'
 import { STAGE_LABELS } from '@/utils/stageLabels'
 import { runStatusLabel, runStatusTone } from '@/utils/statusColors'
 import { activeRuntime, formatCents, formatTaskDate, taskRuntime } from '@/utils/taskFormat'
+import { TASK_AUTONOMY_OPTIONS } from '@/utils/taskOptions'
 
 const emit = defineEmits<{ openChat: [task: PipelineTask] }>()
 
@@ -65,7 +67,7 @@ watch(assignError, (msg) => {
 const runtime = computed(() => (task.value ? taskRuntime(task.value) : '—'))
 const active = computed(() => activeRuntime(stageRuns.value))
 
-async function onAutonomyChange(autonomy: 'manual' | 'spec_gated' | 'full'): Promise<void> {
+async function onAutonomyChange(autonomy: TaskAutonomy): Promise<void> {
   if (!task.value)
     return
   try {
@@ -83,12 +85,6 @@ async function onAutonomyChange(autonomy: 'manual' | 'spec_gated' | 'full'): Pro
     toast.error('Failed to update autonomy')
   }
 }
-
-const autonomyOptions: Array<{ value: 'manual' | 'spec_gated' | 'full', label: string }> = [
-  { value: 'manual', label: 'Manual — approve every stage' },
-  { value: 'spec_gated', label: 'Spec-gated — approve the spec, then autonomous' },
-  { value: 'full', label: 'Full — fully autonomous' },
-]
 
 const projectAssignOptions = computed(() => [
   { value: '', label: 'None' },
@@ -279,7 +275,7 @@ watch(
       <AppSelect
         :id="`task-modal-autonomy-${task.id}`"
         :model-value="task.autonomy ?? 'spec_gated'"
-        :options="autonomyOptions"
+        :options="TASK_AUTONOMY_OPTIONS"
         data-testid="task-autonomy-select"
         size="compact"
         @update:model-value="onAutonomyChange"

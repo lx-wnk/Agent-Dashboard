@@ -9,6 +9,7 @@ import type {
   TokenUsage,
 } from './sdk.generated'
 import type { MetricKey } from './utils/evalMetrics'
+import type { TaskAutonomy, TaskPriority } from './utils/taskOptions'
 // Types generated from sdk/types.go via tygo — do not edit these directly.
 // Run `task generate` to regenerate after changing sdk/types.go.
 import {
@@ -107,7 +108,7 @@ export type StageRunStatus
     | 'failed'
     | 'requeued'
 
-export type TaskPriority = 'high' | 'medium' | 'low'
+export type { TaskAutonomy, TaskPriority }
 
 export interface TaskDependency {
   id: string
@@ -186,7 +187,7 @@ export interface PipelineTask {
   // Project and spawner associations (Projects/Folders/Spawners feature).
   projectId?: string | null
   spawnerId?: string | null
-  autonomy?: 'manual' | 'spec_gated' | 'full'
+  autonomy?: TaskAutonomy
   availableActions?: AvailableAction[]
   childCount?: number
   activeChildCount?: number
