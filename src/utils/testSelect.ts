@@ -59,10 +59,12 @@ interface PropsReader { props: (key: string) => unknown }
  * by import — this is the one place that costs a cast, buying its removal
  * from every call site.
  */
-export function selectOptionsById<T extends string | number = string>(wrapper: VueWrapper, id: string): SelectOption<T>[] {
-  const match = wrapper.findAllComponents({ name: 'AppSelect' })
-    .find(c => (c as unknown as PropsReader).props('id') === id)
-  if (!match)
-    throw new Error(`No AppSelect with id "${id}" found`)
-  return (match as unknown as PropsReader).props('options') as SelectOption<T>[]
+export function selectOptionsById<T extends string | number = string>(wrapper: VueWrapper, id: string): readonly SelectOption<T>[] {
+  const all = wrapper.findAllComponents({ name: 'AppSelect' })
+  const match = all.find(c => (c as unknown as PropsReader).props('id') === id)
+  if (!match) {
+    const found = all.map(c => String((c as unknown as PropsReader).props('id'))).join(', ')
+    throw new Error(`No AppSelect with id "${id}". Rendered AppSelect ids: [${found}]`)
+  }
+  return (match as unknown as PropsReader).props('options') as readonly SelectOption<T>[]
 }

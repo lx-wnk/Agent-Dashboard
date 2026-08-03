@@ -9,7 +9,7 @@ import type {
   TokenUsage,
 } from './sdk.generated'
 import type { MetricKey } from './utils/evalMetrics'
-import type { TaskAutonomy } from './utils/taskOptions'
+import type { TaskAutonomy, TaskPriority } from './utils/taskOptions'
 // Types generated from sdk/types.go via tygo — do not edit these directly.
 // Run `task generate` to regenerate after changing sdk/types.go.
 import {
@@ -108,7 +108,7 @@ export type StageRunStatus
     | 'failed'
     | 'requeued'
 
-export type TaskPriority = 'high' | 'medium' | 'low'
+export type { TaskAutonomy, TaskPriority }
 
 export interface TaskDependency {
   id: string
