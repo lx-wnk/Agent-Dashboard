@@ -73,3 +73,6 @@ test-results/
 /desktop/build/wailsjs/
 /desktop/build/appicon.png
 /desktop/build/darwin/Info.dev.plist
+
+# Local git worktrees for parallel branch work — never part of a commit.
+dashboard-worktrees/
