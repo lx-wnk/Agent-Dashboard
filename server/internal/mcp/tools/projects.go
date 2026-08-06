@@ -127,7 +127,9 @@ func registerCreateProject(registry mcp.ToolRegistry, d WriteDeps) {
 				}
 				return nil, mcp.Fail("create_project: " + err.Error())
 			}
-			return mcp.OK(createdProjectView(p))
+			view := createdProjectView(p)
+			safeBroadcastProject(d.ProjectBroadcaster, "project_created", p.ID, view)
+			return mcp.OK(view)
 		},
 	})
 }

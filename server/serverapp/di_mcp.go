@@ -19,6 +19,7 @@ func provideMCPHandler(
 	orch *pipeline.PipelineOrchestrator,
 	sched *scheduler.Scheduler,
 	tb *sse.TaskBroadcaster,
+	pb *sse.ProjectBroadcaster,
 	refineRunner *refine.Runner,
 ) http.Handler {
 	if client == nil || orch == nil {
@@ -62,6 +63,9 @@ func provideMCPHandler(
 		SpawnerRepo:      spawnerRepo,
 		Broadcast:        broadcast,
 		BroadcastDeleted: broadcastDeleted,
+		// Same broadcaster the projects HTTP handler writes to, so an
+		// agent-created project reaches the SPA without a reload.
+		ProjectBroadcaster: pb,
 	})
 	mcptools.RegisterControlTools(registry, mcptools.ControlDeps{
 		TaskRepo:     taskRepo,

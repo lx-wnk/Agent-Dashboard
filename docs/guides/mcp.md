@@ -50,6 +50,9 @@ restricts it to admins; a `tasks:write` token is not an admin credential. Set it
 (a boolean) rather than the command itself — those strings routinely carry registry tokens, and
 `tasks:read` is enough to call the tool.
 
+A successful `create_project` publishes a `project_created` event on `/api/projects/stream`, the
+same channel `POST /api/projects` uses, so the dashboard picks the new project up without a reload.
+
 Each tool checks its required scope at call time and returns an MCP error if the token's scope is insufficient.
 
 ## Connect the dashboard to Claude

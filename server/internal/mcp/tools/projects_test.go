@@ -1,14 +1,17 @@
 package tools
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
 	mcp "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
+	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 )
 
 func invokeCreateProject(t *testing.T, registry mcp.ToolRegistry, args map[string]any) (map[string]any, error) {
@@ -192,6 +195,46 @@ func TestCreateTask_RejectsBothProjectIdentifiers(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "not both")
+}
+
+// The SPA stops polling while /api/projects/stream is healthy, so a project
+// created over MCP stays invisible until a reload unless it is broadcast.
+func TestCreateProject_BroadcastsProjectCreated(t *testing.T) {
+	deps := newWriteDepsForTest(t)
+	bc := sse.NewProjectBroadcaster(sse.NewBroadcaster())
+	deps.ProjectBroadcaster = bc
+	registry := mcp.ToolRegistry{}
+	RegisterWriteTools(registry, deps)
+
+	ch := bc.Subscribe()
+	defer bc.Unsubscribe(ch)
+
+	out, err := invokeCreateProject(t, registry, map[string]any{"slug": "web", "name": "Web"})
+	require.NoError(t, err)
+
+	select {
+	case raw := <-ch:
+		frame := bytes.TrimSuffix(bytes.TrimPrefix(raw, []byte("data: ")), []byte("\n\n"))
+		var ev map[string]any
+		require.NoError(t, json.Unmarshal(frame, &ev))
+		require.Equal(t, "project_created", ev["type"])
+		require.Equal(t, out["id"], ev["projectId"])
+		payload, ok := ev["payload"].(map[string]any)
+		require.True(t, ok, "project_created must carry the project payload")
+		require.Equal(t, "web", payload["slug"])
+	case <-time.After(time.Second):
+		t.Fatal("no project_created event broadcast")
+	}
+}
+
+// Every other test in this package leaves ProjectBroadcaster nil; this pins the
+// nil-safety so a future refactor cannot make it a panic.
+func TestCreateProject_NilBroadcasterIsHarmless(t *testing.T) {
+	registry, deps := newProjectRegistry(t)
+	require.Nil(t, deps.ProjectBroadcaster)
+
+	_, err := invokeCreateProject(t, registry, map[string]any{"slug": "web", "name": "Web"})
+	require.NoError(t, err)
 }
 
 func TestCreateProject_RequiresTasksWriteScope(t *testing.T) {

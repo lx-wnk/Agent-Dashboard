@@ -8,6 +8,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	mcp "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
 	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
+	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 	"github.com/lx-wnk/agent-dashboard/server/internal/taskcontrol"
 	"github.com/lx-wnk/agent-dashboard/server/internal/validation"
 )
@@ -22,6 +23,9 @@ type WriteDeps struct {
 	SpawnerRepo      repo.SpawnerRepo
 	Broadcast        func(taskID string)
 	BroadcastDeleted func(taskID string)
+	// ProjectBroadcaster feeds the /api/projects/stream SSE channel the SPA
+	// relies on instead of polling. May be nil (tests) — see safeBroadcastProject.
+	ProjectBroadcaster *sse.ProjectBroadcaster
 }
 
 // permissionTemplates is derived from permissions.TemplateTools — the single source of truth
@@ -137,6 +141,15 @@ func safeBroadcast(fn func(string), id string) {
 	if fn != nil {
 		fn(id)
 	}
+}
+
+// safeBroadcastProject publishes a project event, tolerating a nil broadcaster
+// the same way safeBroadcast tolerates a nil func.
+func safeBroadcastProject(b *sse.ProjectBroadcaster, eventType, projectID string, payload any) {
+	if b == nil {
+		return
+	}
+	b.Broadcast(sse.ProjectEvent{Type: eventType, ProjectID: projectID, Payload: payload})
 }
 
 // registerCreateTask registers the create_task tool.
