@@ -3,27 +3,7 @@
     "allow": [
       "Bash(git log *)",
       "Bash(git diff *)",
-      "Bash(git checkout *)",
-      "Read(server/mcp/mcpAuth.ts)",
-      "Read(server/mcp/mcpServer.ts)",
-      "Read(server/mcp/mcpRouter.ts)",
-      "Read(server/db/apiKeysRepo.ts)",
-      "Read(server/routes/apiKeyRoutes.ts)",
-      "Read(server/pipeline/agentSpawner.ts)",
-      "Read(server/pipeline/orchestrator.ts)",
-      "Read(server/routes/taskRoutes.ts)",
-      "Read(src/components/ApiKeySettings.vue)",
-      "Read(src/App.vue)",
-      "Read(CLAUDE.md)",
-      "Glob(server/mcp/**/*.test.ts)",
-      "Glob(server/db/**/*.test.ts)",
-      "Glob(server/routes/**/*.test.ts)",
-      "Grep(requireScope)",
-      "Grep(createHash|sha256|SHA.?256)",
-      "Grep(revokeApiKey)",
-      "Grep(broadcast\\()",
-      "Grep(^import)",
-      "Grep(active)"
+      "Bash(git checkout *)"
     ]
   }
 }
