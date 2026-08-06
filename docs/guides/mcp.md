@@ -17,14 +17,31 @@ Scopes are hierarchical — a higher scope implies all lower ones.
 
 | Scope | Access |
 |---|---|
-| `tasks:read` | List and read tasks, stage runs, audit log, permission requests |
-| `tasks:write` | Create, update, delete tasks (implies `tasks:read`) |
-| `pipeline:control` | Progress, approve, cancel, retry tasks; manage permissions (implies `tasks:read`) |
+| `tasks:read` | List and read tasks, stage runs, audit log, permission requests, projects, spawners, schedules |
+| `tasks:write` | Create, update, delete tasks; create projects (implies `tasks:read`) |
+| `agent:coord` | Scratchpads, lease locks, and port waits shared between agents |
+| `pipeline:control` | Progress, approve, cancel, retry tasks; manage permissions; refine and plan gates (implies `tasks:read` and `agent:coord`) |
 | `keys:manage` | Full access including API key management |
 
-## Tools (21)
+## Tools (41)
 
-`list_tasks`, `get_task`, `list_stage_runs`, `list_audit`, `list_permission_requests`, `create_task`, `update_task`, `delete_task`, `manage_task`, `progress_task`, `cancel_task`, `retry_task`, `grant_permission`, `resolve_permission_request`, `add_dependency`, `remove_dependency`, `list_schedules`, `manage_schedule`, `list_api_keys`, `create_api_key`, `revoke_api_key`
+**`tasks:read`** — `list_tasks`, `get_task`, `list_stage_runs`, `list_audit`, `list_permission_requests`, `list_projects`, `list_spawners`, `list_schedules`
+
+**`tasks:write`** — `create_task`, `update_task`, `delete_task`, `manage_task`, `add_dependency`, `remove_dependency`, `create_project`, `manage_schedule`
+
+**`agent:coord`** — `write_scratchpad`, `read_scratchpad`, `list_scratchpad`, `acquire_lock`, `release_lock`, `wait_for_port`
+
+**`pipeline:control`** — `advance_task`, `hold_task`, `resume_task`, `progress_task`, `cancel_task`, `retry_task`, `grant_permission`, `resolve_permission_request`, `approve_all_pending`, `get_refine_status`, `approve_spec`, `refine_task`, `inject_concept`, `approve_plan`, `reject_plan`, `get_plan_status`
+
+**`keys:manage`** — `list_api_keys`, `create_api_key`, `revoke_api_key`
+
+### Attaching a task to a project
+
+`create_task` takes either a `projectId` or a `projectSlug` — never both. The slug is resolved to
+its project and the call fails if no project carries it, so a typo cannot silently produce an
+unattached task. When no project matches, create one with `create_project` (slug and name required)
+and use the returned id or slug. A project created this way has no folders yet, so the new-task form
+in the UI cannot pre-fill a working directory for it until one is added under **Settings → Projects**.
 
 Each tool checks its required scope at call time and returns an MCP error if the token's scope is insufficient.
 

@@ -42,9 +42,10 @@ func init() {
 	}
 }
 
-// RegisterWriteTools registers all 6 write tools into the given registry.
+// RegisterWriteTools registers all write tools into the given registry.
 func RegisterWriteTools(registry mcp.ToolRegistry, d WriteDeps) {
 	registerCreateTask(registry, d)
+	registerCreateProject(registry, d)
 	registerUpdateTask(registry, d)
 	registerDeleteTask(registry, d)
 	registerManageTask(registry, d)
@@ -165,6 +166,7 @@ func registerCreateTask(registry mcp.ToolRegistry, d WriteDeps) {
 				"inheritPermissions": map[string]any{"type": "boolean"},
 				"autonomy":           map[string]any{"type": "string", "enum": []string{"manual", "spec_gated", "full"}, "description": "Permission gate level: manual=human-gated, spec_gated=auto-approve all requests (human gates the spec), full=allow-all"},
 				"projectId":          map[string]any{"type": "string", "description": "Optional project ID to associate the task with"},
+				"projectSlug":        map[string]any{"type": "string", "description": "Optional project slug, resolved to its ID. Mutually exclusive with projectId; the project must already exist — create one with create_project."},
 				"spawnerId":          map[string]any{"type": "string", "description": "Optional spawner ID overriding the project default"},
 			},
 			"required": []string{"slug", "title", "cwd"},
@@ -251,11 +253,22 @@ func registerCreateTask(registry mcp.ToolRegistry, d WriteDeps) {
 				}
 			}
 
-			if projectID := mcp.OptionalString(args, "projectId"); projectID != "" {
+			projectID := mcp.OptionalString(args, "projectId")
+			projectSlug := mcp.OptionalString(args, "projectSlug")
+			if projectID != "" && projectSlug != "" {
+				return nil, mcp.Fail("create_task: pass either projectId or projectSlug, not both")
+			}
+			if projectID != "" || projectSlug != "" {
 				if d.ProjectRepo == nil {
 					return nil, mcp.Fail("create_task: project repository not configured")
 				}
-				if _, err := d.ProjectRepo.GetByID(ctx, projectID); err != nil {
+				if projectSlug != "" {
+					p, err := d.ProjectRepo.GetBySlug(ctx, projectSlug)
+					if err != nil {
+						return nil, mcp.Fail("create_task: project not found: " + projectSlug + " (create it with create_project)")
+					}
+					projectID = p.ID
+				} else if _, err := d.ProjectRepo.GetByID(ctx, projectID); err != nil {
 					return nil, mcp.Fail("create_task: project not found")
 				}
 				in.ProjectID = &projectID

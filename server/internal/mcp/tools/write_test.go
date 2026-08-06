@@ -22,6 +22,7 @@ func TestRegisterWriteTools_AllToolsPresent(t *testing.T) {
 		"manage_task",
 		"add_dependency",
 		"remove_dependency",
+		"create_project",
 	} {
 		if _, ok := registry[name]; !ok {
 			t.Errorf("expected tool %q to be registered, but it was not", name)
@@ -128,9 +129,11 @@ func newWriteDepsForTest(t *testing.T) WriteDeps {
 	t.Cleanup(func() { _ = bundle.Client.Close() })
 	client := bundle.Client
 	return WriteDeps{
-		TaskRepo:  repo.NewTaskRepo(client),
-		PermRepo:  repo.NewPermissionRepo(client),
-		AuditRepo: repo.NewAuditEventRepo(client),
+		TaskRepo:    repo.NewTaskRepo(client),
+		PermRepo:    repo.NewPermissionRepo(client),
+		AuditRepo:   repo.NewAuditEventRepo(client),
+		ProjectRepo: repo.NewProjectRepo(client),
+		SpawnerRepo: repo.NewSpawnerRepo(client),
 	}
 }
 

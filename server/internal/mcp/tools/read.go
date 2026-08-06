@@ -34,20 +34,6 @@ const readIsoFormat = "2006-01-02T15:04:05Z"
 
 func readTsFmt(t time.Time) string { return t.UTC().Format(readIsoFormat) }
 
-// projectView is the JSON shape returned by the list_projects MCP tool.
-// Mirrors the camelCase wire shape used by the projects HTTP handler.
-type projectView struct {
-	ID               string  `json:"id"`
-	Slug             string  `json:"slug"`
-	Name             string  `json:"name"`
-	Description      *string `json:"description,omitempty"`
-	Color            *string `json:"color,omitempty"`
-	DefaultSpawnerID *string `json:"defaultSpawnerId,omitempty"`
-	FolderCount      int     `json:"folderCount"`
-	CreatedAt        string  `json:"createdAt"`
-	UpdatedAt        string  `json:"updatedAt"`
-}
-
 // spawnerView is the JSON shape returned by the list_spawners MCP tool.
 // Mirrors the camelCase wire shape used by the spawners HTTP handler.
 type spawnerView struct {
@@ -92,6 +78,7 @@ func registerListProjects(registry mcp.ToolRegistry, d ReadDeps) {
 					Description:      r.Description,
 					Color:            r.Color,
 					DefaultSpawnerID: r.DefaultSpawnerID,
+					SetupCommand:     r.SetupCommand,
 					FolderCount:      r.FolderCount,
 					CreatedAt:        readTsFmt(r.CreatedAt),
 					UpdatedAt:        readTsFmt(r.UpdatedAt),
