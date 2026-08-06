@@ -165,7 +165,7 @@ func registerCreateTask(registry mcp.ToolRegistry, d WriteDeps) {
 				"permissions":        map[string]any{"type": "array"},
 				"inheritPermissions": map[string]any{"type": "boolean"},
 				"autonomy":           map[string]any{"type": "string", "enum": []string{"manual", "spec_gated", "full"}, "description": "Permission gate level: manual=human-gated, spec_gated=auto-approve all requests (human gates the spec), full=allow-all"},
-				"projectId":          map[string]any{"type": "string", "description": "Optional project ID to associate the task with"},
+				"projectId":          map[string]any{"type": "string", "description": "Optional project ID to associate the task with. Mutually exclusive with projectSlug."},
 				"projectSlug":        map[string]any{"type": "string", "description": "Optional project slug, resolved to its ID. Mutually exclusive with projectId; the project must already exist — create one with create_project."},
 				"spawnerId":          map[string]any{"type": "string", "description": "Optional spawner ID overriding the project default"},
 			},
@@ -253,8 +253,16 @@ func registerCreateTask(registry mcp.ToolRegistry, d WriteDeps) {
 				}
 			}
 
-			projectID := mcp.OptionalString(args, "projectId")
-			projectSlug := mcp.OptionalString(args, "projectSlug")
+			// A non-string value must not read as absent here: that would defeat the
+			// projectId/projectSlug exclusion below instead of rejecting the call.
+			projectID, err := optionalStringArg(args, "projectId")
+			if err != nil {
+				return nil, err
+			}
+			projectSlug, err := optionalStringArg(args, "projectSlug")
+			if err != nil {
+				return nil, err
+			}
 			if projectID != "" && projectSlug != "" {
 				return nil, mcp.Fail("create_task: pass either projectId or projectSlug, not both")
 			}
@@ -269,7 +277,7 @@ func registerCreateTask(registry mcp.ToolRegistry, d WriteDeps) {
 					}
 					projectID = p.ID
 				} else if _, err := d.ProjectRepo.GetByID(ctx, projectID); err != nil {
-					return nil, mcp.Fail("create_task: project not found")
+					return nil, mcp.Fail("create_task: project not found: " + projectID)
 				}
 				in.ProjectID = &projectID
 			}
@@ -733,6 +741,22 @@ func parseAssocArg(args map[string]any, key string) (id string, clear bool, ok b
 		return "", true, true, nil
 	}
 	return s, false, true, nil
+}
+
+// optionalStringArg returns the named string argument, or "" when the key is
+// absent or explicitly null. A present value of any other type is an error
+// rather than a silent "", so a rule keyed on emptiness cannot be bypassed by
+// sending the wrong type.
+func optionalStringArg(args map[string]any, key string) (string, error) {
+	raw, present := args[key]
+	if !present || raw == nil {
+		return "", nil
+	}
+	s, isStr := raw.(string)
+	if !isStr {
+		return "", mcp.Fail(key + " must be a string")
+	}
+	return s, nil
 }
 
 func handleSetProject(ctx context.Context, d WriteDeps, task *ent.Task, args map[string]any) (*mcp.ToolResult, error) {

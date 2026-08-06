@@ -155,3 +155,46 @@ func TestCreateTask_RejectsBothProjectIdentifiers(t *testing.T) {
 func TestCreateProject_RequiresTasksWriteScope(t *testing.T) {
 	require.Equal(t, "tasks:write", mcp.ToolScopeMap["create_project"])
 }
+
+func TestCreateProject_RejectsBlankName(t *testing.T) {
+	registry, _ := newProjectRegistry(t)
+
+	for _, name := range []string{"", "   "} {
+		_, err := invokeCreateProject(t, registry, map[string]any{"slug": "blank", "name": name})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "name is required")
+	}
+}
+
+func TestCreateProject_RejectsInvalidColor(t *testing.T) {
+	registry, _ := newProjectRegistry(t)
+
+	for _, color := range []string{"not-a-color", "#12", "3b82f6"} {
+		_, err := invokeCreateProject(t, registry, map[string]any{
+			"slug":  "coloured",
+			"name":  "Coloured",
+			"color": color,
+		})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "#rgb or #rrggbb")
+	}
+}
+
+// float64 is what encoding/json produces for a JSON number, so this is the
+// shape a real JSON-RPC call delivers.
+func TestCreateTask_RejectsNonStringProjectIdentifier(t *testing.T) {
+	registry, _ := newProjectRegistry(t)
+
+	_, err := invokeCreateProject(t, registry, map[string]any{"slug": "web", "name": "Web"})
+	require.NoError(t, err)
+
+	_, err = invokeCreateTask(t, registry, map[string]any{
+		"slug":        "add-login",
+		"title":       "Add login",
+		"cwd":         "/repos/web",
+		"projectId":   float64(123),
+		"projectSlug": "web",
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "projectId must be a string")
+}

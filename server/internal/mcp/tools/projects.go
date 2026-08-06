@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"strings"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	mcp "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
@@ -24,10 +25,11 @@ type projectView struct {
 	UpdatedAt        string  `json:"updatedAt"`
 }
 
-// newProjectView renders a freshly created project. A project has no folders
+// createdProjectView renders a freshly created project. A project has no folders
 // until one is added through the UI or the folders API, so folderCount is zero
-// by construction here rather than queried.
-func newProjectView(p *ent.Project) projectView {
+// by construction here rather than queried — do not reuse for a project loaded
+// from the database.
+func createdProjectView(p *ent.Project) projectView {
 	return projectView{
 		ID:               p.ID,
 		Slug:             p.Slug,
@@ -45,7 +47,8 @@ func newProjectView(p *ent.Project) projectView {
 // registerCreateProject registers the create_project tool, so an agent that
 // finds no matching project in list_projects can create one instead of needing
 // a human to open the settings UI.
-// Scope: tasks:write.
+// Scope: tasks:write. Field rules mirror POST /api/projects — both writers must
+// accept the same set of valid projects.
 func registerCreateProject(registry mcp.ToolRegistry, d WriteDeps) {
 	registry.Register(&mcp.ToolDef{
 		Name:        "create_project",
@@ -77,8 +80,18 @@ func registerCreateProject(registry mcp.ToolRegistry, d WriteDeps) {
 			if err != nil {
 				return nil, err
 			}
+			name = strings.TrimSpace(name)
+			if name == "" {
+				return nil, mcp.Fail("create_project: name is required")
+			}
+			color := optionalPtr(args, "color")
+			if color != nil && !validation.IsValidColor(*color) {
+				return nil, mcp.Fail("create_project: " + validation.ColorPatternMessage)
+			}
 			if _, err := d.ProjectRepo.GetBySlug(ctx, slug); err == nil {
 				return nil, mcp.Fail("create_project: project already exists: " + slug)
+			} else if !ent.IsNotFound(err) {
+				return nil, mcp.Fail("create_project: " + err.Error())
 			}
 
 			spawnerID := optionalPtr(args, "defaultSpawnerId")
@@ -96,23 +109,30 @@ func registerCreateProject(registry mcp.ToolRegistry, d WriteDeps) {
 				name,
 				slug,
 				optionalPtr(args, "description"),
-				optionalPtr(args, "color"),
+				color,
 				spawnerID,
 				optionalPtr(args, "setupCommand"),
 			)
 			if err != nil {
+				// Lost race against a concurrent create: the unique index, not the
+				// pre-check above, is the authoritative duplicate guard.
+				if ent.IsConstraintError(err) {
+					return nil, mcp.Fail("create_project: project already exists: " + slug)
+				}
 				return nil, mcp.Fail("create_project: " + err.Error())
 			}
-			return mcp.OK(newProjectView(p))
+			return mcp.OK(createdProjectView(p))
 		},
 	})
 }
 
 // optionalPtr returns a pointer to the named string argument, or nil when it is
-// absent or empty — the repo layer distinguishes "leave unset" (nil) from "set
-// to empty string", so an omitted optional must not become a pointer to "".
+// absent, blank, or not a string — the repo layer distinguishes "leave unset"
+// (nil) from "set to empty string", so an omitted optional must not become a
+// pointer to "". Create-only: an update path needs the absent/null/value
+// distinction instead (cf. api/projects.parseNullableString).
 func optionalPtr(args map[string]any, key string) *string {
-	if v := mcp.OptionalString(args, key); v != "" {
+	if v := strings.TrimSpace(mcp.OptionalString(args, key)); v != "" {
 		return &v
 	}
 	return nil
