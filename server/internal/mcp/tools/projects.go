@@ -19,10 +19,12 @@ type projectView struct {
 	Description      *string `json:"description,omitempty"`
 	Color            *string `json:"color,omitempty"`
 	DefaultSpawnerID *string `json:"defaultSpawnerId,omitempty"`
-	SetupCommand     *string `json:"setupCommand,omitempty"`
-	FolderCount      int     `json:"folderCount"`
-	CreatedAt        string  `json:"createdAt"`
-	UpdatedAt        string  `json:"updatedAt"`
+	// HasSetupCommand reports presence, never the text: a setup command
+	// routinely embeds registry tokens and list_projects only costs tasks:read.
+	HasSetupCommand bool   `json:"hasSetupCommand"`
+	FolderCount     int    `json:"folderCount"`
+	CreatedAt       string `json:"createdAt"`
+	UpdatedAt       string `json:"updatedAt"`
 }
 
 // createdProjectView renders a freshly created project. A project has no folders
@@ -37,7 +39,7 @@ func createdProjectView(p *ent.Project) projectView {
 		Description:      p.Description,
 		Color:            p.Color,
 		DefaultSpawnerID: p.DefaultSpawnerID,
-		SetupCommand:     p.SetupCommand,
+		HasSetupCommand:  p.SetupCommand != nil && *p.SetupCommand != "",
 		FolderCount:      0,
 		CreatedAt:        readTsFmt(p.CreatedAt),
 		UpdatedAt:        readTsFmt(p.UpdatedAt),

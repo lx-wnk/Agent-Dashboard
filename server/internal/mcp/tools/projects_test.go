@@ -2,6 +2,8 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -63,8 +65,33 @@ func TestCreateProject_OmittedOptionalsStayUnset(t *testing.T) {
 	// omitempty on a nil pointer — an omitted optional must not persist as "".
 	require.NotContains(t, out, "description")
 	require.NotContains(t, out, "color")
-	require.NotContains(t, out, "setupCommand")
 	require.NotContains(t, out, "defaultSpawnerId")
+	require.Equal(t, false, out["hasSetupCommand"])
+}
+
+// list_projects only costs tasks:read, and a setup command routinely embeds a
+// registry token — the view must report presence and nothing more.
+func TestListProjects_ReportsSetupCommandPresenceWithoutTheText(t *testing.T) {
+	_, deps := newProjectRegistry(t)
+	secret := "npm config set //registry.example/:_authToken=s3cr3t"
+	_, err := deps.ProjectRepo.Create(context.Background(), "Web", "web", nil, nil, nil, &secret)
+	require.NoError(t, err)
+
+	readRegistry := mcp.ToolRegistry{}
+	RegisterReadTools(readRegistry, ReadDeps{ProjectRepo: deps.ProjectRepo})
+	tool, ok := readRegistry["list_projects"]
+	require.True(t, ok, "list_projects not registered")
+	result, err := tool.Handler(context.Background(), map[string]any{})
+	require.NoError(t, err)
+
+	raw := result.Content[0].Text
+	require.NotContains(t, raw, "s3cr3t")
+	require.False(t, strings.Contains(raw, "setupCommand"), "the literal command must not be on the wire")
+
+	var views []map[string]any
+	require.NoError(t, json.Unmarshal([]byte(raw), &views))
+	require.Len(t, views, 1)
+	require.Equal(t, true, views[0]["hasSetupCommand"])
 }
 
 // setup_command is an RCE-equivalent sink the HTTP writer gates behind an admin

@@ -78,7 +78,7 @@ func registerListProjects(registry mcp.ToolRegistry, d ReadDeps) {
 					Description:      r.Description,
 					Color:            r.Color,
 					DefaultSpawnerID: r.DefaultSpawnerID,
-					SetupCommand:     r.SetupCommand,
+					HasSetupCommand:  r.SetupCommand != nil && *r.SetupCommand != "",
 					FolderCount:      r.FolderCount,
 					CreatedAt:        readTsFmt(r.CreatedAt),
 					UpdatedAt:        readTsFmt(r.UpdatedAt),

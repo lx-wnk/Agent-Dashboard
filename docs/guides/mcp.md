@@ -46,7 +46,9 @@ in the UI cannot pre-fill a working directory for it until one is added under **
 `create_project` accepts `description`, `color`, and `defaultSpawnerId`, but **not** `setupCommand`.
 That command is executed as `sh -c` in every worktree the project creates, so `POST /api/projects`
 restricts it to admins; a `tasks:write` token is not an admin credential. Set it in the UI under
-**Settings → Projects** instead.
+**Settings → Projects** instead. For the same reason `list_projects` returns `hasSetupCommand`
+(a boolean) rather than the command itself — those strings routinely carry registry tokens, and
+`tasks:read` is enough to call the tool.
 
 Each tool checks its required scope at call time and returns an MCP error if the token's scope is insufficient.
 
