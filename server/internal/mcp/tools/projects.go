@@ -41,9 +41,48 @@ func createdProjectView(p *ent.Project) projectView {
 		DefaultSpawnerID: p.DefaultSpawnerID,
 		HasSetupCommand:  p.SetupCommand != nil && *p.SetupCommand != "",
 		FolderCount:      0,
-		CreatedAt:        readTsFmt(p.CreatedAt),
-		UpdatedAt:        readTsFmt(p.UpdatedAt),
+		CreatedAt:        tsFmt(p.CreatedAt),
+		UpdatedAt:        tsFmt(p.UpdatedAt),
 	}
+}
+
+// registerListProjects registers the list_projects tool.
+// Returns an array of project views, each with a `folderCount` field.
+// Scope: tasks:read.
+func registerListProjects(registry mcp.ToolRegistry, d ReadDeps) {
+	registry.Register(&mcp.ToolDef{
+		Name:        "list_projects",
+		Description: "List all projects with folder counts.",
+		InputSchema: map[string]any{
+			"type":       "object",
+			"properties": map[string]any{},
+		},
+		Handler: func(ctx context.Context, _ map[string]any) (*mcp.ToolResult, error) {
+			if d.ProjectRepo == nil {
+				return nil, mcp.Fail("list_projects: project repository not configured")
+			}
+			rows, err := d.ProjectRepo.ListWithFolderCount(ctx)
+			if err != nil {
+				return nil, mcp.Fail("list_projects: " + err.Error())
+			}
+			result := make([]projectView, len(rows))
+			for i, r := range rows {
+				result[i] = projectView{
+					ID:               r.ID,
+					Slug:             r.Slug,
+					Name:             r.Name,
+					Description:      r.Description,
+					Color:            r.Color,
+					DefaultSpawnerID: r.DefaultSpawnerID,
+					HasSetupCommand:  r.SetupCommand != nil && *r.SetupCommand != "",
+					FolderCount:      r.FolderCount,
+					CreatedAt:        tsFmt(r.CreatedAt),
+					UpdatedAt:        tsFmt(r.UpdatedAt),
+				}
+			}
+			return mcp.OK(result)
+		},
+	})
 }
 
 // registerCreateProject registers the create_project tool.
