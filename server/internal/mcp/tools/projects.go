@@ -44,9 +44,7 @@ func createdProjectView(p *ent.Project) projectView {
 	}
 }
 
-// registerCreateProject registers the create_project tool, so an agent that
-// finds no matching project in list_projects can create one instead of needing
-// a human to open the settings UI.
+// registerCreateProject registers the create_project tool.
 // Scope: tasks:write. Field rules mirror POST /api/projects — both writers must
 // accept the same set of valid projects.
 func registerCreateProject(registry mcp.ToolRegistry, d WriteDeps) {
@@ -84,7 +82,10 @@ func registerCreateProject(registry mcp.ToolRegistry, d WriteDeps) {
 			if name == "" {
 				return nil, mcp.Fail("create_project: name is required")
 			}
-			color := optionalPtr(args, "color")
+			color, err := optionalPtr(args, "color")
+			if err != nil {
+				return nil, err
+			}
 			if color != nil && !validation.IsValidColor(*color) {
 				return nil, mcp.Fail("create_project: " + validation.ColorPatternMessage)
 			}
@@ -94,7 +95,10 @@ func registerCreateProject(registry mcp.ToolRegistry, d WriteDeps) {
 				return nil, mcp.Fail("create_project: " + err.Error())
 			}
 
-			spawnerID := optionalPtr(args, "defaultSpawnerId")
+			spawnerID, err := optionalPtr(args, "defaultSpawnerId")
+			if err != nil {
+				return nil, err
+			}
 			if spawnerID != nil {
 				if d.SpawnerRepo == nil {
 					return nil, mcp.Fail("create_project: spawner repository not configured")
@@ -104,15 +108,15 @@ func registerCreateProject(registry mcp.ToolRegistry, d WriteDeps) {
 				}
 			}
 
-			p, err := d.ProjectRepo.Create(
-				ctx,
-				name,
-				slug,
-				optionalPtr(args, "description"),
-				color,
-				spawnerID,
-				optionalPtr(args, "setupCommand"),
-			)
+			description, err := optionalPtr(args, "description")
+			if err != nil {
+				return nil, err
+			}
+			setupCommand, err := optionalPtr(args, "setupCommand")
+			if err != nil {
+				return nil, err
+			}
+			p, err := d.ProjectRepo.Create(ctx, name, slug, description, color, spawnerID, setupCommand)
 			if err != nil {
 				// Lost race against a concurrent create: the unique index, not the
 				// pre-check above, is the authoritative duplicate guard.
@@ -127,13 +131,17 @@ func registerCreateProject(registry mcp.ToolRegistry, d WriteDeps) {
 }
 
 // optionalPtr returns a pointer to the named string argument, or nil when it is
-// absent, blank, or not a string — the repo layer distinguishes "leave unset"
-// (nil) from "set to empty string", so an omitted optional must not become a
-// pointer to "". Create-only: an update path needs the absent/null/value
-// distinction instead (cf. api/projects.parseNullableString).
-func optionalPtr(args map[string]any, key string) *string {
-	if v := strings.TrimSpace(mcp.OptionalString(args, key)); v != "" {
-		return &v
+// absent or blank — the repo layer distinguishes "leave unset" (nil) from "set
+// to empty string", so an omitted optional must not become a pointer to "".
+// Create-only: an update path needs the absent/null/value distinction instead
+// (cf. api/projects.parseNullableString).
+func optionalPtr(args map[string]any, key string) (*string, error) {
+	raw, err := mcp.OptionalStringArg(args, key)
+	if err != nil {
+		return nil, err
 	}
-	return nil
+	if v := strings.TrimSpace(raw); v != "" {
+		return &v, nil
+	}
+	return nil, nil
 }

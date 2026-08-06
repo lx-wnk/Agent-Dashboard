@@ -74,6 +74,22 @@ func StringArg(args map[string]any, key string) (string, error) {
 }
 
 // OptionalString extracts an optional string; returns "" if absent.
+// OptionalStringArg returns the named string argument, or "" when the key is
+// absent or explicitly null. A present value of any other type is an error
+// rather than a silent "", so a rule keyed on emptiness cannot be bypassed by
+// sending the wrong type.
+func OptionalStringArg(args map[string]any, key string) (string, error) {
+	raw, present := args[key]
+	if !present || raw == nil {
+		return "", nil
+	}
+	s, isStr := raw.(string)
+	if !isStr {
+		return "", Fail(key + " must be a string")
+	}
+	return s, nil
+}
+
 func OptionalString(args map[string]any, key string) string {
 	v, _ := args[key].(string)
 	return v

@@ -255,11 +255,11 @@ func registerCreateTask(registry mcp.ToolRegistry, d WriteDeps) {
 
 			// A non-string value must not read as absent here: that would defeat the
 			// projectId/projectSlug exclusion below instead of rejecting the call.
-			projectID, err := optionalStringArg(args, "projectId")
+			projectID, err := mcp.OptionalStringArg(args, "projectId")
 			if err != nil {
 				return nil, err
 			}
-			projectSlug, err := optionalStringArg(args, "projectSlug")
+			projectSlug, err := mcp.OptionalStringArg(args, "projectSlug")
 			if err != nil {
 				return nil, err
 			}
@@ -741,22 +741,6 @@ func parseAssocArg(args map[string]any, key string) (id string, clear bool, ok b
 		return "", true, true, nil
 	}
 	return s, false, true, nil
-}
-
-// optionalStringArg returns the named string argument, or "" when the key is
-// absent or explicitly null. A present value of any other type is an error
-// rather than a silent "", so a rule keyed on emptiness cannot be bypassed by
-// sending the wrong type.
-func optionalStringArg(args map[string]any, key string) (string, error) {
-	raw, present := args[key]
-	if !present || raw == nil {
-		return "", nil
-	}
-	s, isStr := raw.(string)
-	if !isStr {
-		return "", mcp.Fail(key + " must be a string")
-	}
-	return s, nil
 }
 
 func handleSetProject(ctx context.Context, d WriteDeps, task *ent.Task, args map[string]any) (*mcp.ToolResult, error) {
