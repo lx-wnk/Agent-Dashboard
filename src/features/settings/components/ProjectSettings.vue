@@ -387,7 +387,7 @@ function setDefault(targetRow: FolderRow) {
               <button
                 type="button"
                 class="bg-transparent border-none text-fg-mute cursor-pointer text-sm px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-950/30 hover:text-blue-600 dark:hover:text-blue-400 mr-1"
-                data-testid="proj-edit"
+                :data-testid="`proj-edit-${project.slug}`"
                 @click="openEdit(project)"
               >
                 Edit

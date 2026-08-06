@@ -78,7 +78,7 @@ describe('projectSettings slug', () => {
 
   it('never re-keys an existing project when its name is edited', async () => {
     const wrapper = mount(ProjectSettings)
-    await wrapper.get('[data-testid="proj-edit"]').trigger('click')
+    await wrapper.get('[data-testid="proj-edit-web"]').trigger('click')
     await flushPromises()
 
     await wrapper.get('[data-testid="proj-name"]').setValue('Web Renamed')
