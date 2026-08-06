@@ -59,7 +59,6 @@ func registerCreateProject(registry mcp.ToolRegistry, d WriteDeps) {
 				"description":      map[string]any{"type": "string"},
 				"color":            map[string]any{"type": "string", "description": "Hex colour for the dashboard, e.g. #3b82f6"},
 				"defaultSpawnerId": map[string]any{"type": "string", "description": "Optional spawner ID used by this project's tasks by default"},
-				"setupCommand":     map[string]any{"type": "string", "description": "Run once in the worktree after it is created"},
 			},
 			"required": []string{"slug", "name"},
 		},
@@ -112,11 +111,12 @@ func registerCreateProject(registry mcp.ToolRegistry, d WriteDeps) {
 			if err != nil {
 				return nil, err
 			}
-			setupCommand, err := optionalPtr(args, "setupCommand")
-			if err != nil {
-				return nil, err
-			}
-			p, err := d.ProjectRepo.Create(ctx, name, slug, description, color, spawnerID, setupCommand)
+			// setupCommand is deliberately absent from this tool: it is an
+			// RCE-equivalent sink (`sh -c` in the worktree, see
+			// serverapp/di_pipeline.go) that the HTTP writer gates behind an
+			// admin check. tasks:write is not admin, so the MCP path always
+			// creates a project without one — do not add it back for parity.
+			p, err := d.ProjectRepo.Create(ctx, name, slug, description, color, spawnerID, nil)
 			if err != nil {
 				// Lost race against a concurrent create: the unique index, not the
 				// pre-check above, is the authoritative duplicate guard.

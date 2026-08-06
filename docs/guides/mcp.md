@@ -43,6 +43,11 @@ unattached task. When no project matches, create one with `create_project` (slug
 and use the returned id or slug. A project created this way has no folders yet, so the new-task form
 in the UI cannot pre-fill a working directory for it until one is added under **Settings → Projects**.
 
+`create_project` accepts `description`, `color`, and `defaultSpawnerId`, but **not** `setupCommand`.
+That command is executed as `sh -c` in every worktree the project creates, so `POST /api/projects`
+restricts it to admins; a `tasks:write` token is not an admin credential. Set it in the UI under
+**Settings → Projects** instead.
+
 Each tool checks its required scope at call time and returns an MCP error if the token's scope is insufficient.
 
 ## Connect the dashboard to Claude
