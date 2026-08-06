@@ -140,6 +140,15 @@ describe('projectSettings slug', () => {
     expect(slugInput(wrapper).value).toBe('second-name')
   })
 
+  it('tells the user the slug is derived and what it has to look like', async () => {
+    const wrapper = mount(ProjectSettings)
+    await wrapper.get('[data-testid="proj-new"]').trigger('click')
+
+    const hint = wrapper.get('[data-testid="proj-slug-hint"]')
+    expect(slugInput(wrapper).getAttribute('aria-describedby')).toBe(hint.attributes('id'))
+    expect(hint.text()).toContain('64 characters')
+  })
+
   it('hands the slug back to the name once the slug field is cleared', async () => {
     const wrapper = mount(ProjectSettings)
     await wrapper.get('[data-testid="proj-new"]').trigger('click')

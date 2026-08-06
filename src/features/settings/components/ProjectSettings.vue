@@ -444,10 +444,14 @@ function setDefault(targetRow: FolderRow) {
             data-testid="proj-slug"
             type="text"
             required
+            aria-describedby="proj-slug-hint"
             class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg font-mono focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
             placeholder="my-project"
             @input="onSlugInput"
           >
+          <p id="proj-slug-hint" data-testid="proj-slug-hint" class="text-[11px] text-fg-faint mt-0.5">
+            Filled in from the name; type here to take it over, clear it to hand it back. Starts with a lowercase letter or digit, then lowercase letters, digits and hyphens, up to 64 characters.
+          </p>
         </div>
         <div class="col-span-2">
           <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1" for="proj-desc">Description (optional)</label>
