@@ -155,6 +155,39 @@ describe('fetchDynamicCommands', () => {
     vi.unstubAllGlobals()
   })
 
+  it('maps argumentHint onto usage so the menu can show the template', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        commands: [{
+          name: '/branch-review',
+          description: 'Review a branch',
+          source: 'plugin:skills',
+          argumentHint: '[base-branch] [--apply-fixes]',
+        }],
+      }),
+    }))
+
+    const cmds = await fetchDynamicCommands({ sessionId: 'sess-hint' })
+
+    expect(cmds[0].usage).toBe('[base-branch] [--apply-fixes]')
+    vi.unstubAllGlobals()
+  })
+
+  it('leaves usage unset when the command declares an empty hint', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        commands: [{ name: '/noargs', description: 'No args', source: 'user', argumentHint: '' }],
+      }),
+    }))
+
+    const cmds = await fetchDynamicCommands({ sessionId: 'sess-empty-hint' })
+
+    expect(cmds[0].usage).toBeUndefined()
+    vi.unstubAllGlobals()
+  })
+
   it('returns [] on non-ok response', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500 }))
     expect(await fetchDynamicCommands({ sessionId: 'sess-err' })).toEqual([])

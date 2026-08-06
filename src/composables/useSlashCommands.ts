@@ -197,6 +197,8 @@ interface DynamicCommand {
   name: string
   description: string
   source: string
+  /** `argument-hint:` frontmatter, e.g. "[base-branch] [--apply-fixes]". */
+  argumentHint?: string
 }
 
 interface DynamicCommandsResponse {
@@ -253,6 +255,7 @@ export async function fetchDynamicCommands(scope: DynamicCommandScope): Promise<
     const cmds: SlashCommandDef[] = (data.commands ?? []).map(c => ({
       name: c.name,
       description: c.description,
+      usage: c.argumentHint || undefined,
     }))
     dynamicCommandCache.set(key, cmds)
     return cmds

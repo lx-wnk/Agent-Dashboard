@@ -34,7 +34,29 @@ Spawned agents run **detached** — they survive dashboard restarts and appear i
 
 ## Slash commands
 
-`/spawn`, `/grant`, `/cancel`, `/status`, `/session` are available from the command palette.
+Typing `/` in the prompt input opens a menu with two kinds of command.
+
+**Dashboard commands** are executed by the dashboard itself against its own API — the agent never
+sees them:
+
+| Command | Arguments | Needs a linked task |
+| --- | --- | --- |
+| `/spawn` | `<slug> <description>` | no |
+| `/grant` | `<toolName>` | yes |
+| `/cancel` | — | yes |
+| `/retry` | — | yes |
+| `/promote` | — | yes |
+| `/help` | — | no |
+
+**Session commands** are everything the connected Claude session itself knows — its built-ins, your
+`~/.claude/commands`, project commands, plugin commands, and every installed skill (each skill is
+typeable as `/<name>`). They are discovered per session via `GET /api/slash-commands` and forwarded
+to the agent verbatim, so what works is whatever that session supports.
+
+Each entry shows its argument template next to the name, read from the command file's
+`argument-hint:` frontmatter — `/branch-review` displays `[base-branch] [--apply-fixes]`, for
+example. Commands without that key show no template; built-ins never carry one, since they have no
+file on disk to read it from.
 
 ## Permissions
 
