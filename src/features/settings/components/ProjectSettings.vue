@@ -129,13 +129,14 @@ function openEdit(project: Project) {
 }
 
 // An existing project's slug is a lookup key (repo.GetBySlug) that other records
-// already point at, so only a new project's slug follows the name.
-function onNameInput(e: Event): void {
-  const value = (e.target as HTMLInputElement).value
+// already point at, so only a new project's slug follows the name. openEdit()
+// clears isCreating before this watcher runs, so opening a project never
+// re-derives its slug; openCreate() empties both fields, which derives an empty
+// slug from an empty name.
+watch(() => form.value.name, (name) => {
   if (isCreating.value)
-    form.value.slug = slugFollowingName(value, form.value.slug, slugTouched.value)
-  form.value.name = value
-}
+    form.value.slug = slugFollowingName(name, form.value.slug, slugTouched.value)
+})
 
 function onSlugInput(e: Event): void {
   slugTouched.value = (e.target as HTMLInputElement).value.length > 0
@@ -427,13 +428,12 @@ function setDefault(targetRow: FolderRow) {
           <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1" for="proj-name">Name</label>
           <input
             id="proj-name"
+            v-model="form.name"
             data-testid="proj-name"
-            :value="form.name"
             type="text"
             required
             class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
             placeholder="My Project"
-            @input="onNameInput"
           >
         </div>
         <div>
