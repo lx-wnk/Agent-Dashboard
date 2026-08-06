@@ -14,15 +14,13 @@ export function slugify(value: string): string {
 }
 
 /**
- * Slug to display after a name field changed from `previousName` to `nextName`.
- * The slug keeps tracking the name until it stops matching what the name would
- * have produced — that mismatch is the only evidence available that the user
- * typed the slug themselves, so an edited slug is never overwritten.
+ * Slug to display for `name`, given whether the user has taken the slug over.
+ * `slugTouched` is set by the slug field's own input handler, so an edited slug
+ * is never overwritten. Clearing that field unsets the flag and hands the slug
+ * back to the name.
  */
-export function slugFollowingName(previousName: string, nextName: string, currentSlug: string): string {
-  if (!currentSlug || currentSlug === slugify(previousName))
-    return slugify(nextName)
-  return currentSlug
+export function slugFollowingName(name: string, currentSlug: string, slugTouched: boolean): string {
+  return slugTouched ? currentSlug : slugify(name)
 }
 
 /** Maximum characters allowed in a task description. */

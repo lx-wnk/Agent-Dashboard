@@ -30,6 +30,7 @@ const projectChoice = ref<string>('')
 const showCreate = ref(false)
 const title = ref('')
 const slug = ref('')
+const slugTouched = ref(false)
 const description = ref('')
 const cwd = ref('')
 const priority = ref<'high' | 'medium' | 'low'>('medium')
@@ -87,14 +88,12 @@ watch(projectChoice, async (v) => {
   }
 })
 
-function onTitleInput(e: Event): void {
-  const value = (e.target as HTMLInputElement).value
-  slug.value = slugFollowingName(title.value, value, slug.value)
-  title.value = value
-}
+watch(title, (v) => {
+  slug.value = slugFollowingName(v, slug.value, slugTouched.value)
+})
 
 function onSlugInput(e: Event): void {
-  slug.value = (e.target as HTMLInputElement).value
+  slugTouched.value = (e.target as HTMLInputElement).value.length > 0
 }
 
 async function importFromIssue(): Promise<void> {
@@ -224,10 +223,9 @@ async function onCreateAndRefine(): Promise<void> {
       </AppFieldLabel>
       <AppInput
         id="details-title"
+        v-model="title"
         data-testid="details-title"
-        :model-value="title"
         placeholder="What should the agent do?"
-        @input="onTitleInput"
       />
     </div>
 
@@ -237,8 +235,8 @@ async function onCreateAndRefine(): Promise<void> {
       </AppFieldLabel>
       <AppInput
         id="details-slug"
+        v-model="slug"
         data-testid="details-slug"
-        :model-value="slug"
         placeholder="task-slug"
         class="font-mono"
         @input="onSlugInput"

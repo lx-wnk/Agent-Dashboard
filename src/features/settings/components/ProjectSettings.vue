@@ -100,11 +100,13 @@ const isCreating = ref(false)
 const formVisible = ref(false)
 const formSaving = ref(false)
 const form = ref<ProjectFormState>({ slug: '', name: '', description: '', color: '#3b82f6', defaultSpawnerId: '', setupCommand: '' })
+const slugTouched = ref(false)
 const folderRows = ref<FolderRow[]>([])
 
 function openCreate() {
   editingProject.value = null
   form.value = { slug: '', name: '', description: '', color: '#3b82f6', defaultSpawnerId: '', setupCommand: '' }
+  slugTouched.value = false
   formVisible.value = true
   isCreating.value = true
 }
@@ -131,8 +133,12 @@ function openEdit(project: Project) {
 function onNameInput(e: Event): void {
   const value = (e.target as HTMLInputElement).value
   if (isCreating.value)
-    form.value.slug = slugFollowingName(form.value.name, value, form.value.slug)
+    form.value.slug = slugFollowingName(value, form.value.slug, slugTouched.value)
   form.value.name = value
+}
+
+function onSlugInput(e: Event): void {
+  slugTouched.value = (e.target as HTMLInputElement).value.length > 0
 }
 
 function closeForm() {
@@ -440,6 +446,7 @@ function setDefault(targetRow: FolderRow) {
             required
             class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg font-mono focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
             placeholder="my-project"
+            @input="onSlugInput"
           >
         </div>
         <div class="col-span-2">

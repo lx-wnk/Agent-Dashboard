@@ -56,6 +56,17 @@ describe('quickCreateProjectPanel', () => {
     expect(emitted![0][0]).toMatchObject({ id: 'prj_new' })
   })
 
+  it('derives the slug from the name until the slug is edited by hand', async () => {
+    const wrapper = mount(QuickCreateProjectPanel, { props: { spawners: [] } })
+    await wrapper.find('input[name="name"]').setValue('New Thing')
+    expect((wrapper.find('input[name="slug"]').element as HTMLInputElement).value).toBe('new-thing')
+
+    await wrapper.find('input[name="slug"]').setValue('my-own-slug')
+    await wrapper.find('input[name="name"]').setValue('Renamed Thing')
+
+    expect((wrapper.find('input[name="slug"]').element as HTMLInputElement).value).toBe('my-own-slug')
+  })
+
   it('rolls back project create when folder create fails', async () => {
     const errorSpy = vi.spyOn(toast, 'error')
     fetchMock

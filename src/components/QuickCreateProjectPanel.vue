@@ -5,7 +5,7 @@ import { createFolder } from '../composables/useProjectFolders'
 import { createProject, deleteProject } from '../composables/useProjects'
 import { toast } from '../composables/useToast'
 import { errorMessage } from '../utils/errorMessage'
-import { slugify } from '../utils/validation'
+import { slugFollowingName, slugify } from '../utils/validation'
 import AppButton from './ui/AppButton.vue'
 import AppSelect from './ui/AppSelect.vue'
 
@@ -15,7 +15,7 @@ const emit = defineEmits<{ created: [project: Project], cancel: [] }>()
 const name = ref('')
 const path = ref('')
 const slug = ref('')
-const slugDirty = ref(false)
+const slugTouched = ref(false)
 const description = ref('')
 const color = ref('')
 const defaultSpawnerId = ref<string>('')
@@ -27,8 +27,7 @@ const defaultClaudeSpawner = computed(() =>
 )
 
 watch(name, (v) => {
-  if (!slugDirty.value)
-    slug.value = slugify(v)
+  slug.value = slugFollowingName(v, slug.value, slugTouched.value)
 })
 watch(defaultClaudeSpawner, (v) => {
   if (v && !defaultSpawnerId.value)
@@ -36,9 +35,7 @@ watch(defaultClaudeSpawner, (v) => {
 }, { immediate: true })
 
 function onSlugInput(e: Event): void {
-  const v = (e.target as HTMLInputElement).value
-  slug.value = v
-  slugDirty.value = v.length > 0
+  slugTouched.value = (e.target as HTMLInputElement).value.length > 0
 }
 
 const inputClass = 'w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent'
@@ -121,7 +118,7 @@ async function submit(): Promise<void> {
         <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1" for="qcp-slug">Slug</label>
         <input
           id="qcp-slug"
-          :value="slug"
+          v-model="slug"
           name="slug"
           :class="inputClass"
           placeholder="auto from name"

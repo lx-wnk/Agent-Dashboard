@@ -73,6 +73,29 @@ describe('backlogForm single-screen', () => {
     expect(slug.value).toBe('my-new-task')
   })
 
+  it('stops deriving the slug once the user has edited it', async () => {
+    const wrapper = mount(BacklogForm)
+    await wrapper.get('[data-testid="details-title"]').setValue('My New Task')
+    await wrapper.get('[data-testid="details-slug"]').setValue('my-own-slug')
+
+    await wrapper.get('[data-testid="details-title"]').setValue('A Different Task')
+
+    const slug = wrapper.get('[data-testid="details-slug"]').element as HTMLInputElement
+    expect(slug.value).toBe('my-own-slug')
+  })
+
+  it('derives the slug again once the slug field is cleared', async () => {
+    const wrapper = mount(BacklogForm)
+    await wrapper.get('[data-testid="details-title"]').setValue('My New Task')
+    await wrapper.get('[data-testid="details-slug"]').setValue('my-own-slug')
+    await wrapper.get('[data-testid="details-slug"]').setValue('')
+
+    await wrapper.get('[data-testid="details-title"]').setValue('A Different Task')
+
+    const slug = wrapper.get('[data-testid="details-slug"]').element as HTMLInputElement
+    expect(slug.value).toBe('a-different-task')
+  })
+
   it('auto-fills cwd from the default folder when a project is selected', async () => {
     const wrapper = mount(BacklogForm, { attachTo: document.body })
     const panel = await openListbox(wrapper.get('[data-testid="backlog-project-select"]'))

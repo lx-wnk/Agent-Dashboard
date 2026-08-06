@@ -54,32 +54,39 @@ describe('sLUG_PATTERN_MESSAGE', () => {
 })
 
 describe('slugFollowingName', () => {
-  it('derives the slug while it is still empty', () => {
-    expect(slugFollowingName('', 'DIW-ReviewApps', '')).toBe('diw-reviewapps')
+  it('derives the slug from the name while the slug field is untouched', () => {
+    expect(slugFollowingName('DIW-ReviewApps', '', false)).toBe('diw-reviewapps')
+    expect(slugFollowingName('DIW-ReviewApps', 'diw', false)).toBe('diw-reviewapps')
   })
 
-  it('keeps following the name once derived', () => {
-    expect(slugFollowingName('DIW', 'DIW-ReviewApps', 'diw')).toBe('diw-reviewapps')
+  it('stops deriving once the user has touched the slug', () => {
+    expect(slugFollowingName('DIW-ReviewApps', 'my-own-slug', true)).toBe('my-own-slug')
   })
 
-  it('leaves a hand-edited slug alone', () => {
-    expect(slugFollowingName('DIW', 'DIW-ReviewApps', 'my-own-slug')).toBe('my-own-slug')
+  it('keeps a touched slug that happens to equal what the name would derive', () => {
+    // "Beta" derives "beta" — the value a user editing the slug by hand can also
+    // land on, which is why the flag is asked for instead of compared to.
+    expect(slugFollowingName('Beta Gamma', 'beta', true)).toBe('beta')
   })
 
   it('produces a slug that satisfies the shared pattern', () => {
-    expect(slugFollowingName('', 'DIW-ReviewApps', '')).toMatch(SLUG_RE)
-    expect(slugFollowingName('', '  Ünicode & Symbols!  ', '')).toMatch(SLUG_RE)
+    expect(slugFollowingName('DIW-ReviewApps', '', false)).toMatch(SLUG_RE)
+    expect(slugFollowingName('  Ünicode & Symbols!  ', '', false)).toMatch(SLUG_RE)
   })
 
-  it('produces a slug that satisfies the shared pattern for a name past the length cap', () => {
+  it('caps a derived slug at the 64 characters the pattern allows', () => {
+    const slug = slugFollowingName('a'.repeat(200), '', false)
+    expect(slug).toHaveLength(64)
+    expect(slug).toMatch(SLUG_RE)
+
     const longName = 'Dashboard Rewrite Realtime Agent Telemetry And Cost Attribution Across Providers'
     expect(longName.length).toBeGreaterThan(64)
-    expect(slugFollowingName('', longName, '')).toMatch(SLUG_RE)
+    expect(slugFollowingName(longName, '', false)).toMatch(SLUG_RE)
   })
 
   it('empties the slug when the name is cleared, so it can pick up the next name', () => {
-    expect(slugFollowingName('Web', '', 'web')).toBe('')
-    expect(slugFollowingName('', 'API', '')).toBe('api')
+    expect(slugFollowingName('', 'web', false)).toBe('')
+    expect(slugFollowingName('API', '', false)).toBe('api')
   })
 })
 
