@@ -1,3 +1,6 @@
+import { enableAutoUnmount } from '@vue/test-utils'
+import { afterEach } from 'vitest'
+
 // Global Vitest setup.
 //
 // Several composables persist state or reconnect via fire-and-forget macrotasks
@@ -7,6 +10,14 @@
 // ReferenceError that fails an unrelated, later test and makes the suite order-
 // dependent. Providing inert fallbacks lets such an orphaned callback no-op
 // instead of throwing. Individual tests still install their own richer stubs.
+
+// A mounted component keeps its own timers and observers running, and Vue Test
+// Utils never tears wrappers down on its own. A test that forgets unmount()
+// therefore leaves a live poller behind that keeps writing to the module-level
+// mocks the following tests share, inflating their call counts once enough real
+// time passes for a tick to land (#327). Unmounting after every test keeps a
+// missing unmount() from crossing a test boundary.
+enableAutoUnmount(afterEach)
 
 class InertEventSource {
   static readonly CONNECTING = 0
