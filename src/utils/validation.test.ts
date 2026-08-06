@@ -71,6 +71,12 @@ describe('slugFollowingName', () => {
     expect(slugFollowingName('', '  Ünicode & Symbols!  ', '')).toMatch(SLUG_RE)
   })
 
+  it('produces a slug that satisfies the shared pattern for a name past the length cap', () => {
+    const longName = 'Dashboard Rewrite Realtime Agent Telemetry And Cost Attribution Across Providers'
+    expect(longName.length).toBeGreaterThan(64)
+    expect(slugFollowingName('', longName, '')).toMatch(SLUG_RE)
+  })
+
   it('empties the slug when the name is cleared, so it can pick up the next name', () => {
     expect(slugFollowingName('Web', '', 'web')).toBe('')
     expect(slugFollowingName('', 'API', '')).toBe('api')
@@ -107,6 +113,19 @@ describe('slugify', () => {
   it('handles string with only special chars', () => {
     expect(slugify('---')).toBe('')
     expect(slugify('...')).toBe('')
+  })
+
+  it('caps the slug at the 64 characters SLUG_RE allows', () => {
+    const slug = slugify('a'.repeat(200))
+    expect(slug).toHaveLength(64)
+    expect(slug).toMatch(SLUG_RE)
+  })
+
+  it('never leaves a trailing hyphen when the cap lands on a separator', () => {
+    // 63 chars, then a space: the cut falls exactly on the derived hyphen.
+    const slug = slugify(`${'a'.repeat(63)} tail`)
+    expect(slug).toBe('a'.repeat(63))
+    expect(slug).toMatch(SLUG_RE)
   })
 
   it('produces a slug that satisfies SLUG_RE for common inputs', () => {

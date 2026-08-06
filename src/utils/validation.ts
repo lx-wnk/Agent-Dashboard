@@ -1,11 +1,15 @@
 export const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/
 export const SLUG_PATTERN_MESSAGE = 'slug must match [a-z0-9][a-z0-9-]{0,63}'
 
+/** Character budget SLUG_RE allows: one leading char plus up to 63 more. */
+const SLUG_MAX_CHARS = 64
+
 export function slugify(value: string): string {
   return value
     .toLowerCase()
     .trim()
     .replace(/[^a-z0-9]+/g, '-')
+    .slice(0, SLUG_MAX_CHARS)
     .replace(/^-+|-+$/g, '')
 }
 
