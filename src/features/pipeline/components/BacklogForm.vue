@@ -15,7 +15,7 @@ import { useTrackerImport } from '@/composables/useTrackerImport'
 import { createTask } from '@/features/pipeline/composables/useTasks'
 import { errorMessage } from '@/utils/errorMessage'
 import { TASK_AUTONOMY_OPTIONS, TASK_PRIORITY_OPTIONS } from '@/utils/taskOptions'
-import { slugify } from '@/utils/validation'
+import { slugFollowingName, slugify } from '@/utils/validation'
 
 const emit = defineEmits<{
   createdAndRefine: [task: PipelineTask]
@@ -89,10 +89,8 @@ watch(projectChoice, async (v) => {
 
 function onTitleInput(e: Event): void {
   const value = (e.target as HTMLInputElement).value
-  const previousSlug = slugify(title.value)
+  slug.value = slugFollowingName(title.value, value, slug.value)
   title.value = value
-  if (!slug.value || slug.value === previousSlug)
-    slug.value = slugify(value)
 }
 
 function onSlugInput(e: Event): void {

@@ -21,7 +21,7 @@ import { useProjectPipelineConfig } from '@/features/pipeline'
 import { errorMessage } from '@/utils/errorMessage'
 import { AVAILABLE_MODELS } from '@/utils/models'
 import { STAGE_LABELS } from '@/utils/stageLabels'
-import { isAbsolutePath } from '@/utils/validation'
+import { isAbsolutePath, slugFollowingName } from '@/utils/validation'
 
 withDefaults(defineProps<{ hideTitle?: boolean }>(), { hideTitle: false })
 
@@ -124,6 +124,15 @@ function openEdit(project: Project) {
   void loadFolders(project.id)
   pipelineDraft.value = null
   void fetchProjectPipeline(project.id)
+}
+
+// An existing project's slug is a lookup key (repo.GetBySlug) that other records
+// already point at, so only a new project's slug follows the name.
+function onNameInput(e: Event): void {
+  const value = (e.target as HTMLInputElement).value
+  if (isCreating.value)
+    form.value.slug = slugFollowingName(form.value.name, value, form.value.slug)
+  form.value.name = value
 }
 
 function closeForm() {
@@ -310,7 +319,7 @@ function setDefault(targetRow: FolderRow) {
           Group tasks under named projects. Each project can have default folders (working directories) and a spawner override.
         </p>
       </div>
-      <AppButton variant="info" class="ml-auto" @click="openCreate">
+      <AppButton variant="info" class="ml-auto" data-testid="proj-new" @click="openCreate">
         + New Project
       </AppButton>
     </div>
@@ -378,6 +387,7 @@ function setDefault(targetRow: FolderRow) {
               <button
                 type="button"
                 class="bg-transparent border-none text-fg-mute cursor-pointer text-sm px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-950/30 hover:text-blue-600 dark:hover:text-blue-400 mr-1"
+                data-testid="proj-edit"
                 @click="openEdit(project)"
               >
                 Edit
@@ -411,11 +421,13 @@ function setDefault(targetRow: FolderRow) {
           <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1" for="proj-name">Name</label>
           <input
             id="proj-name"
-            v-model="form.name"
+            data-testid="proj-name"
+            :value="form.name"
             type="text"
             required
             class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
             placeholder="My Project"
+            @input="onNameInput"
           >
         </div>
         <div>
@@ -423,6 +435,7 @@ function setDefault(targetRow: FolderRow) {
           <input
             id="proj-slug"
             v-model="form.slug"
+            data-testid="proj-slug"
             type="text"
             required
             class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg font-mono focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"

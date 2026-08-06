@@ -9,6 +9,18 @@ export function slugify(value: string): string {
     .replace(/^-+|-+$/g, '')
 }
 
+/**
+ * Slug to display after a name field changed from `previousName` to `nextName`.
+ * The slug keeps tracking the name until it stops matching what the name would
+ * have produced — that mismatch is the only evidence available that the user
+ * typed the slug themselves, so an edited slug is never overwritten.
+ */
+export function slugFollowingName(previousName: string, nextName: string, currentSlug: string): string {
+  if (!currentSlug || currentSlug === slugify(previousName))
+    return slugify(nextName)
+  return currentSlug
+}
+
 /** Maximum characters allowed in a task description. */
 export const MAX_DESCRIPTION_CHARS = 10_000
 

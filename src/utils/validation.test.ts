@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { MAX_DESCRIPTION_CHARS, SLUG_PATTERN_MESSAGE, SLUG_RE, slugify } from './validation'
+import { MAX_DESCRIPTION_CHARS, SLUG_PATTERN_MESSAGE, SLUG_RE, slugFollowingName, slugify } from './validation'
 
 describe('sLUG_RE', () => {
   it('accepts valid lowercase slugs', () => {
@@ -50,6 +50,30 @@ describe('sLUG_PATTERN_MESSAGE', () => {
   it('is a non-empty string', () => {
     expect(typeof SLUG_PATTERN_MESSAGE).toBe('string')
     expect(SLUG_PATTERN_MESSAGE.length).toBeGreaterThan(0)
+  })
+})
+
+describe('slugFollowingName', () => {
+  it('derives the slug while it is still empty', () => {
+    expect(slugFollowingName('', 'DIW-ReviewApps', '')).toBe('diw-reviewapps')
+  })
+
+  it('keeps following the name once derived', () => {
+    expect(slugFollowingName('DIW', 'DIW-ReviewApps', 'diw')).toBe('diw-reviewapps')
+  })
+
+  it('leaves a hand-edited slug alone', () => {
+    expect(slugFollowingName('DIW', 'DIW-ReviewApps', 'my-own-slug')).toBe('my-own-slug')
+  })
+
+  it('produces a slug that satisfies the shared pattern', () => {
+    expect(slugFollowingName('', 'DIW-ReviewApps', '')).toMatch(SLUG_RE)
+    expect(slugFollowingName('', '  Ünicode & Symbols!  ', '')).toMatch(SLUG_RE)
+  })
+
+  it('empties the slug when the name is cleared, so it can pick up the next name', () => {
+    expect(slugFollowingName('Web', '', 'web')).toBe('')
+    expect(slugFollowingName('', 'API', '')).toBe('api')
   })
 })
 
