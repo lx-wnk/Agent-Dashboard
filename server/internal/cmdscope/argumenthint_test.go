@@ -171,3 +171,18 @@ func TestArgumentHint_AfterBlockScalarDescription(t *testing.T) {
 	require.Equal(t, "Folded description text", descOf(got, "/block"))
 	require.Equal(t, "[z]", hintOf(got, "/block"))
 }
+
+// A value that is nothing but an opening quote is an empty scalar, not the
+// quote character itself. Leaking the quote makes a skill listed as `/"`,
+// because the empty-name guard that would fall back to the directory name
+// never fires.
+func TestScalarValue_LoneQuoteIsEmpty(t *testing.T) {
+	cfg := t.TempDir()
+	writeFile(t, filepath.Join(cfg, "skills", "lonely", "SKILL.md"),
+		"---\nname: \"\ndescription: Lone quote\nargument-hint: '\n---\n")
+
+	got := Scope{Supported: true, ConfigDir: cfg}.SlashCommands()
+
+	require.Equal(t, "<not found>", hintOf(got, `/"`), "a lone quote must not become the command name")
+	require.Empty(t, hintOf(got, "/lonely"), "a lone quote must not become the argument hint")
+}

@@ -563,7 +563,7 @@ func parseFrontmatter(r io.Reader) frontmatter {
 // would truncate the value at the escape.
 func scalarValue(raw string) string {
 	v := strings.TrimSpace(raw)
-	if len(v) > 1 {
+	if len(v) > 0 {
 		switch v[0] {
 		case '\'':
 			return unquoteSingle(v)
