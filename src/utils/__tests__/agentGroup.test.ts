@@ -122,33 +122,34 @@ describe('groupAgents', () => {
     expect(groups[0].label).toBe('opus 4')
   })
 
-  it('spawner: buckets by resolved spawner id and labels with its name', () => {
-    const a1 = makeAgent({ pid: 1, pipelineTaskId: 't1' })
-    const a2 = makeAgent({ pid: 2, pipelineTaskId: 't2' })
-    const a3 = makeAgent({ pid: 3, pipelineTaskId: 't3' })
-    const spawners: Record<string, { id: string, name: string }> = {
-      t1: { id: 's1', name: 'Local Claude' },
-      t2: { id: 's2', name: 'Remote' },
-      t3: { id: 's1', name: 'Local Claude' },
-    }
-    const groups = groupAgents([a1, a2, a3], 'spawner', a => spawners[a.pipelineTaskId!] ?? null)
-    expect(groups.map(g => [g.key, g.label])).toEqual([['s1', 'Local Claude'], ['s2', 'Remote']])
+  it('spawner: buckets by the spawner the server attributed, labelled with its name', () => {
+    const a1 = makeAgent({ pid: 1, spawnerId: 's1', spawnerName: 'Claude (default)' })
+    const a2 = makeAgent({ pid: 2, spawnerId: 's2', spawnerName: 'Claude Work' })
+    const a3 = makeAgent({ pid: 3, spawnerId: 's1', spawnerName: 'Claude (default)' })
+    const groups = groupAgents([a1, a2, a3], 'spawner')
+    expect(groups.map(g => [g.key, g.label])).toEqual([['s1', 'Claude (default)'], ['s2', 'Claude Work']])
     expect(groups[0].agents.map(a => a.pid)).toEqual([1, 3])
   })
 
-  it('spawner: collects unresolved agents in a trailing "No spawner" group', () => {
-    const free = makeAgent({ pid: 1, pipelineTaskId: undefined })
-    const owned = makeAgent({ pid: 2, pipelineTaskId: 't1' })
-    const groups = groupAgents([free, owned], 'spawner', a =>
-      a.pipelineTaskId ? { id: 's1', name: 'Local Claude' } : null)
-    expect(groups.map(g => g.label)).toEqual(['Local Claude', 'No spawner'])
+  it('spawner: collects unattributed agents in a trailing "Unassigned" group', () => {
+    const free = makeAgent({ pid: 1, spawnerId: undefined })
+    const owned = makeAgent({ pid: 2, spawnerId: 's1', spawnerName: 'Claude Work' })
+    const groups = groupAgents([free, owned], 'spawner')
+    expect(groups.map(g => g.label)).toEqual(['Claude Work', 'Unassigned'])
     expect(groups[1].agents.map(a => a.pid)).toEqual([1])
   })
 
-  it('spawner: without a resolver every agent lands in "No spawner"', () => {
-    const groups = groupAgents([makeAgent({ pipelineTaskId: 't1' })], 'spawner')
-    expect(groups).toHaveLength(1)
-    expect(groups[0].label).toBe('No spawner')
+  it('spawner: falls back to the id when the server sent no name', () => {
+    const groups = groupAgents([makeAgent({ spawnerId: 's1' })], 'spawner')
+    expect(groups[0].label).toBe('s1')
+  })
+
+  it('spawner: marks a group the server derived rather than recorded', () => {
+    const derived = makeAgent({ pid: 1, spawnerId: 's1', spawnerName: 'Claude Work', spawnerSource: 'env' })
+    const recorded = makeAgent({ pid: 2, spawnerId: 's2', spawnerName: 'Pipeline', spawnerSource: 'task' })
+    const groups = groupAgents([derived, recorded], 'spawner')
+    expect(groups[0].derivedFrom).toContain('config directory')
+    expect(groups[1].derivedFrom).toBeUndefined()
   })
 })
 

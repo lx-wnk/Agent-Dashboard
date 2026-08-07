@@ -563,9 +563,17 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	// back onto each agent. Always constructed — hooks work without a database.
 	hookStore := hookstore.New(settingsSvc.Int("hooks.eventsPerSession"), hookstore.DefaultTTL)
 
+	// Spawner attribution. Runs after the pipeline enricher because it reads the
+	// PipelineTaskID that one sets; sessions without a task are placed from the
+	// config dir their process carries.
+	var spawnerEnricher merger.Enricher
+	if spawnerRepo != nil {
+		spawnerEnricher = agentbroadcast.NewSpawnerEnricher(spawnerRepo, taskRepoForResolver)
+	}
+
 	// Combine the read-only crossings into one enricher applied at every GetAgents
 	// call site. A nil pipelineEnricher (no DB) composes away.
-	agentEnricher := merger.ChainEnrichers(pipelineEnricher, agentbroadcast.NewHookEventEnricher(hookStore))
+	agentEnricher := merger.ChainEnrichers(pipelineEnricher, spawnerEnricher, agentbroadcast.NewHookEventEnricher(hookStore))
 
 	// Built here (not earlier) so it captures agentEnricher — admin agent search
 	// results carry the same pipeline-task and hook-event annotations as /api/agents.

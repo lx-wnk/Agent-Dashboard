@@ -7,6 +7,7 @@ const props = defineProps<{
   label: string
   agents: Agent[]
   collapsed?: boolean
+  derivedFrom?: string
 }>()
 
 const emit = defineEmits<{ toggle: [] }>()
@@ -26,6 +27,12 @@ const chevron = computed(() => props.collapsed ? '▶' : '▼')
   >
     <span class="text-fg-soft text-xs leading-none w-4 inline-block text-center" aria-hidden="true">{{ chevron }}</span>
     <span class="font-mono text-[11px] font-semibold text-fg-soft">{{ label }}</span>
+    <span
+      v-if="derivedFrom"
+      class="text-[11px] text-fg-faint cursor-help"
+      :title="derivedFrom"
+      data-testid="group-derived-marker"
+    >~</span>
     <span class="text-[11px] text-fg-faint">{{ agents.length }} {{ agents.length === 1 ? 'agent' : 'agents' }}</span>
     <span class="flex-1 h-px bg-line" />
     <span class="font-mono text-[11px] text-fg-faint">{{ formatCost(totalCost) }} today</span>

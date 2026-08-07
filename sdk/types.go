@@ -294,6 +294,14 @@ type PendingScreen struct {
 	Confirm  *DetectedConfirm  `json:"confirm,omitempty"`
 }
 
+// How an agent's spawner attribution was established: recorded from the pipeline
+// task the agent runs, or read back from the live process, which is how sessions
+// started outside the dashboard are placed.
+const (
+	SpawnerSourceTask = "task"
+	SpawnerSourceEnv  = "env"
+)
+
 // Agent is the unified view of a running Claude Code process.
 type Agent struct {
 	PID         int      `json:"pid"`
@@ -345,17 +353,23 @@ type Agent struct {
 	// detected on this session's live terminal, or nil. Mutually exclusive with
 	// PendingQuestion: the TUI shows one or the other, never both. Only ever set
 	// on injectable sessions.
-	PendingConfirm      *DetectedConfirm    `json:"pendingConfirm,omitempty"`
-	LastOutput          *string             `json:"lastOutput"`
-	ConvergenceAlert    bool                `json:"convergenceAlert"`
-	ConvergenceToolName *string             `json:"convergenceToolName"`
-	ErrorState          *ErrorState         `json:"errorState"`
-	PipelineTaskID      string              `json:"pipelineTaskId,omitempty"`
-	PipelineTaskTitle   string              `json:"pipelineTaskTitle,omitempty"`
-	PendingPermissions  []PendingPermission `json:"pendingPermissions,omitempty"`
-	PendingToolUse      *PendingToolUse     `json:"pendingToolUse,omitempty"`
-	Machine             string              `json:"machine,omitempty"`
-	LastBtw             *BtwMessage         `json:"lastBtw"`
+	PendingConfirm      *DetectedConfirm `json:"pendingConfirm,omitempty"`
+	LastOutput          *string          `json:"lastOutput"`
+	ConvergenceAlert    bool             `json:"convergenceAlert"`
+	ConvergenceToolName *string          `json:"convergenceToolName"`
+	ErrorState          *ErrorState      `json:"errorState"`
+	PipelineTaskID      string           `json:"pipelineTaskId,omitempty"`
+	PipelineTaskTitle   string           `json:"pipelineTaskTitle,omitempty"`
+	// SpawnerID/SpawnerName name the configured spawner this session belongs to,
+	// and SpawnerSource says how that was established (see SpawnerSource*).
+	// Empty when no spawner could be attributed.
+	SpawnerID          string              `json:"spawnerId,omitempty"`
+	SpawnerName        string              `json:"spawnerName,omitempty"`
+	SpawnerSource      string              `json:"spawnerSource,omitempty"`
+	PendingPermissions []PendingPermission `json:"pendingPermissions,omitempty"`
+	PendingToolUse     *PendingToolUse     `json:"pendingToolUse,omitempty"`
+	Machine            string              `json:"machine,omitempty"`
+	LastBtw            *BtwMessage         `json:"lastBtw"`
 	// CostUnknown is true when the provider does not expose token counts and
 	// cost cannot be estimated. CostEstimate will be 0 in this case.
 	CostUnknown bool `json:"costUnknown,omitempty"`

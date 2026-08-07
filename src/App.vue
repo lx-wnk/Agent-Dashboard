@@ -137,19 +137,6 @@ const { nowMs } = useNow()
 
 const { spawners } = useSpawners()
 
-// Agents have no direct spawner link; they reach a configured spawner through
-// the task they were spawned for (task.spawnerId). Map taskId → spawnerId so the
-// roster spawner filter can match. Free (un-orchestrated) agents have no task,
-// so they only appear under "All spawners".
-const taskSpawnerById = computed(() => {
-  const m = new Map<string, string>()
-  for (const t of tasks.value) {
-    if (t.spawnerId)
-      m.set(t.id, t.spawnerId)
-  }
-  return m
-})
-
 // Dashboard roster: project + spawner filter → sort → optional grouping. Project
 // options list every known project (pre-filter) so the dropdown stays stable.
 const rosterAgents = computed(() => {
@@ -157,17 +144,11 @@ const rosterAgents = computed(() => {
   if (dashboardProject.value !== 'all')
     base = base.filter(a => a.projectName === dashboardProject.value)
   if (dashboardSpawner.value !== 'all')
-    base = base.filter(a => a.pipelineTaskId != null && taskSpawnerById.value.get(a.pipelineTaskId) === dashboardSpawner.value)
+    base = base.filter(a => a.spawnerId === dashboardSpawner.value)
   return sortAgents(base, dashboardSort.value, nowMs.value)
 })
 const activeGroup = computed(() => resolveGroup(dashboardGroup.value, dashboardSpawner.value))
-const spawnerNameById = computed(() => new Map(spawners.value.map(s => [s.id, s.name])))
-const rosterGroups = computed(() => groupAgents(rosterAgents.value, activeGroup.value, (agent) => {
-  const spawnerId = agent.pipelineTaskId ? taskSpawnerById.value.get(agent.pipelineTaskId) : undefined
-  if (!spawnerId)
-    return null
-  return { id: spawnerId, name: spawnerNameById.value.get(spawnerId) ?? spawnerId }
-}))
+const rosterGroups = computed(() => groupAgents(rosterAgents.value, activeGroup.value))
 const projectOptions = computed(() => [
   { value: 'all', label: 'All projects' },
   ...[...new Set(agents.value.map(a => a.projectName))].sort().map(n => ({ value: n, label: friendlyProjectName(n) })),
