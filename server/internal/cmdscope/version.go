@@ -13,7 +13,7 @@ import (
 // enumerate.go was curated against. The CLI exposes no machine-readable command
 // listing, so when a spawner's engine reports a different version the built-in
 // list may be stale — surfaced via BuiltinsMayBeStale and logged once.
-const CuratedBuiltinsVersion = "2.1.161"
+const CuratedBuiltinsVersion = "2.1.224"
 
 // versionProbeTimeout bounds a single `<command> --version` invocation.
 const versionProbeTimeout = 2 * time.Second

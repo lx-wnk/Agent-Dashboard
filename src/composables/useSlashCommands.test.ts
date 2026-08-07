@@ -138,9 +138,10 @@ describe('fetchDynamicCommands', () => {
     })
     vi.stubGlobal('fetch', mockFetch)
 
-    const cmds = await fetchDynamicCommands({ sessionId: 'sess-A' })
+    const set = await fetchDynamicCommands({ sessionId: 'sess-A' })
     expect(mockFetch).toHaveBeenCalledWith('/api/slash-commands?sessionId=sess-A')
-    expect(cmds).toEqual([{ name: '/ship', description: 'Ship it' }])
+    expect(set.commands).toEqual([{ name: '/ship', description: 'Ship it' }])
+    expect(set.builtinsMayBeStale).toBe(false)
     vi.unstubAllGlobals()
   })
 
@@ -168,9 +169,9 @@ describe('fetchDynamicCommands', () => {
       }),
     }))
 
-    const cmds = await fetchDynamicCommands({ sessionId: 'sess-hint' })
+    const set = await fetchDynamicCommands({ sessionId: 'sess-hint' })
 
-    expect(cmds[0].usage).toBe('[base-branch] [--apply-fixes]')
+    expect(set.commands[0].usage).toBe('[base-branch] [--apply-fixes]')
     vi.unstubAllGlobals()
   })
 
@@ -182,15 +183,32 @@ describe('fetchDynamicCommands', () => {
       }),
     }))
 
-    const cmds = await fetchDynamicCommands({ sessionId: 'sess-empty-hint' })
+    const set = await fetchDynamicCommands({ sessionId: 'sess-empty-hint' })
 
-    expect(cmds[0].usage).toBeUndefined()
+    expect(set.commands[0].usage).toBeUndefined()
     vi.unstubAllGlobals()
   })
 
   it('returns [] on non-ok response', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500 }))
-    expect(await fetchDynamicCommands({ sessionId: 'sess-err' })).toEqual([])
+    expect(await fetchDynamicCommands({ sessionId: 'sess-err' })).toEqual({ commands: [], builtinsMayBeStale: false })
+    vi.unstubAllGlobals()
+  })
+
+  it('carries the stale-builtins flag so the menu can warn about missing commands', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        commands: [{ name: '/ship', description: 'Ship it', source: 'user' }],
+        engineVersion: '2.1.224',
+        builtinsMayBeStale: true,
+      }),
+    }))
+
+    const set = await fetchDynamicCommands({ sessionId: 'sess-stale' })
+
+    expect(set.builtinsMayBeStale).toBe(true)
+    expect(set.engineVersion).toBe('2.1.224')
     vi.unstubAllGlobals()
   })
 })

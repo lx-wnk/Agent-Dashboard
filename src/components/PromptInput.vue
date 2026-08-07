@@ -100,6 +100,11 @@ const inputEl = ref<HTMLInputElement | HTMLTextAreaElement | null>(null)
 const fileInputEl = ref<HTMLInputElement | null>(null)
 const selectedIndex = ref(0)
 const dynamicCommands = ref<SlashCommandDef[]>([])
+// The built-in command list is curated per Claude Code version. When the session
+// runs a different one it may know commands this menu cannot list, so say so
+// here rather than letting a missing command look like a broken one.
+const builtinsMayBeStale = ref(false)
+const engineVersion = ref<string | undefined>()
 
 const hasPendingApproval = computed(() =>
   !!props.approveHandler
@@ -110,8 +115,12 @@ const hasPendingApproval = computed(() =>
 // Prefer sessionId so suggestions reflect the running session's actual
 // CLAUDE_CONFIG_DIR (spawner-dependent); fall back to cwd for project-local commands.
 watch(() => [props.agent?.sessionId, props.agent?.cwd] as const, async ([sessionId, cwd]) => {
-  if (sessionId || cwd)
-    dynamicCommands.value = await fetchDynamicCommands({ sessionId: sessionId || undefined, cwd: cwd || undefined })
+  if (sessionId || cwd) {
+    const set = await fetchDynamicCommands({ sessionId: sessionId || undefined, cwd: cwd || undefined })
+    dynamicCommands.value = set.commands
+    builtinsMayBeStale.value = set.builtinsMayBeStale
+    engineVersion.value = set.engineVersion
+  }
 }, { immediate: true })
 
 const slashSuggestions = computed(() => {
@@ -277,6 +286,13 @@ defineExpose({ focus })
         <span v-if="cmd.usage" class="text-fg-faint text-[10px] ml-1">{{ cmd.usage }}</span>
         <span v-if="cmd.requiresTask && cmd.disabled" class="text-warning-text text-[10px] ml-auto">requires linked task</span>
       </button>
+      <p
+        v-if="builtinsMayBeStale"
+        data-testid="builtins-stale-note"
+        class="m-0 px-4 py-1.5 text-[10px] text-fg-faint border-t border-line"
+      >
+        Built-in commands are listed for a different Claude Code version{{ engineVersion ? ` (session runs ${engineVersion})` : '' }} — a command missing here may still work if you type it.
+      </p>
     </div>
     <input
       v-if="variant === 'full'"

@@ -61,6 +61,14 @@ const maxCommandBodyBytes = 1 * 1024 * 1024 // 1 MB
 // builtinCommands are the Claude Code commands baked into the CLI binary. The
 // CLI exposes no machine-readable listing, so they are curated here against
 // CuratedBuiltinsVersion; the version probe surfaces drift (see version.go).
+//
+// The list goes stale in both directions, so re-curating means checking both.
+// The CLI binary ships a "Recently changed surfaces" document naming commands
+// that were removed or renamed — `strings <claude-binary> | grep -A20 "Removed
+// slash commands"` reads it. Additions have no such record and have to come
+// from the release notes or from using the CLI. Drift found at 2.1.224:
+// /fork had been added, and /pr-comments and /vim had been removed since the
+// list was last curated at 2.1.161.
 var builtinCommands = []SlashCommand{
 	{Name: "/add-dir", Description: "Add a working directory", Source: "builtin"},
 	{Name: "/agents", Description: "Manage agents", Source: "builtin"},
@@ -72,6 +80,7 @@ var builtinCommands = []SlashCommand{
 	{Name: "/cost", Description: "Show token cost of the session", Source: "builtin"},
 	{Name: "/doctor", Description: "Diagnose Claude Code health", Source: "builtin"},
 	{Name: "/export", Description: "Export the conversation", Source: "builtin"},
+	{Name: "/fork", Description: "Fork the session into a parallel conversation", Source: "builtin"},
 	{Name: "/help", Description: "Show available commands", Source: "builtin"},
 	{Name: "/init", Description: "Initialize a CLAUDE.md", Source: "builtin"},
 	{Name: "/login", Description: "Log in to an account", Source: "builtin"},
@@ -79,7 +88,6 @@ var builtinCommands = []SlashCommand{
 	{Name: "/mcp", Description: "Manage MCP servers", Source: "builtin"},
 	{Name: "/memory", Description: "Edit memory files", Source: "builtin"},
 	{Name: "/model", Description: "Switch model", Source: "builtin"},
-	{Name: "/pr-comments", Description: "Show pull request comments", Source: "builtin"},
 	{Name: "/release-notes", Description: "Show release notes", Source: "builtin"},
 	{Name: "/resume", Description: "Resume a previous conversation", Source: "builtin"},
 	{Name: "/review", Description: "Review a pull request", Source: "builtin"},
@@ -89,7 +97,6 @@ var builtinCommands = []SlashCommand{
 	{Name: "/status", Description: "Show session status", Source: "builtin"},
 	{Name: "/terminal-setup", Description: "Configure terminal key bindings", Source: "builtin"},
 	{Name: "/verify", Description: "Verify a change does what it should", Source: "builtin"},
-	{Name: "/vim", Description: "Toggle vim keybindings", Source: "builtin"},
 }
 
 // sourceRank orders sources for dedup precedence (lower wins) and for the final

@@ -24,6 +24,22 @@ func descOf(cmds []SlashCommand, name string) string {
 	return fieldOf(cmds, name, func(c SlashCommand) string { return c.Description })
 }
 
+// Pins the 2.1.224 curation. The built-in list has no machine-readable source,
+// so a silent revert would otherwise only surface as a command missing from the
+// menu — which is how the drift was found in the first place.
+func TestBuiltins_CuratedAgainstEngineVersion(t *testing.T) {
+	got := Scope{Supported: true, ConfigDir: t.TempDir()}.SlashCommands()
+	listed := map[string]bool{}
+	for _, c := range got {
+		listed[c.Name] = true
+	}
+
+	require.True(t, listed["/fork"], "/fork was added to Claude Code and must be listed")
+	require.False(t, listed["/pr-comments"], "/pr-comments was removed from Claude Code")
+	require.False(t, listed["/vim"], "/vim was removed from Claude Code (now /config → Editor mode)")
+	require.Equal(t, "2.1.224", CuratedBuiltinsVersion)
+}
+
 func TestArgumentHint_FromCommandFile(t *testing.T) {
 	cfg := t.TempDir()
 	writeFile(t, filepath.Join(cfg, "commands", "deploy.md"),

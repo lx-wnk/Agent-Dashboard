@@ -220,7 +220,20 @@ export interface DynamicCommandScope {
   cwd?: string
 }
 
-const dynamicCommandCache = new Map<string, SlashCommandDef[]>()
+/**
+ * A session's commands plus how much to trust the list. The built-in commands
+ * are curated per Claude Code version, so a session running a different version
+ * may know commands the dashboard cannot list — `builtinsMayBeStale` says so.
+ */
+export interface DynamicCommandSet {
+  commands: SlashCommandDef[]
+  builtinsMayBeStale: boolean
+  engineVersion?: string
+}
+
+const EMPTY_COMMAND_SET: DynamicCommandSet = { commands: [], builtinsMayBeStale: false }
+
+const dynamicCommandCache = new Map<string, DynamicCommandSet>()
 
 function scopeKey(scope: DynamicCommandScope): string {
   // Prefix per identifier kind so distinct namespaces (a session id, a spawner
@@ -234,7 +247,7 @@ function scopeKey(scope: DynamicCommandScope): string {
   return 'default'
 }
 
-export async function fetchDynamicCommands(scope: DynamicCommandScope): Promise<SlashCommandDef[]> {
+export async function fetchDynamicCommands(scope: DynamicCommandScope): Promise<DynamicCommandSet> {
   const key = scopeKey(scope)
   if (dynamicCommandCache.has(key))
     return dynamicCommandCache.get(key)!
@@ -250,17 +263,21 @@ export async function fetchDynamicCommands(scope: DynamicCommandScope): Promise<
   try {
     const res = await fetch(`/api/slash-commands?${params.toString()}`)
     if (!res.ok)
-      return []
+      return EMPTY_COMMAND_SET
     const data = await res.json() as DynamicCommandsResponse
-    const cmds: SlashCommandDef[] = (data.commands ?? []).map(c => ({
-      name: c.name,
-      description: c.description,
-      usage: c.argumentHint || undefined,
-    }))
-    dynamicCommandCache.set(key, cmds)
-    return cmds
+    const set: DynamicCommandSet = {
+      commands: (data.commands ?? []).map(c => ({
+        name: c.name,
+        description: c.description,
+        usage: c.argumentHint || undefined,
+      })),
+      builtinsMayBeStale: !!data.builtinsMayBeStale,
+      engineVersion: data.engineVersion,
+    }
+    dynamicCommandCache.set(key, set)
+    return set
   }
   catch {
-    return []
+    return EMPTY_COMMAND_SET
   }
 }
