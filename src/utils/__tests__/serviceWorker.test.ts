@@ -35,6 +35,9 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals()
+  // vitest.config.ts sets no unstubEnvs, so stubEnv('PROD') would otherwise
+  // survive into whatever runs next.
+  vi.unstubAllEnvs()
 })
 
 describe('isDesktopShell', () => {
