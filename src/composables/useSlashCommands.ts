@@ -233,7 +233,7 @@ export interface DynamicCommandSet {
 
 // A fresh object per call: callers assign `.commands` straight into a ref, so a
 // shared instance would let one component's mutation reach every other.
-function emptyCommandSet(): DynamicCommandSet {
+export function emptyCommandSet(): DynamicCommandSet {
   return { commands: [], builtinsMayBeStale: false }
 }
 

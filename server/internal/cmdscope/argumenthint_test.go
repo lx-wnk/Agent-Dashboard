@@ -7,21 +7,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func fieldOf(cmds []SlashCommand, name string, pick func(SlashCommand) string) string {
+func cmdOf(cmds []SlashCommand, name string) (SlashCommand, bool) {
 	for _, c := range cmds {
 		if c.Name == name {
-			return pick(c)
+			return c, true
 		}
 	}
-	return "<not found>"
+	return SlashCommand{}, false
 }
 
 func hintOf(cmds []SlashCommand, name string) string {
-	return fieldOf(cmds, name, func(c SlashCommand) string { return c.ArgumentHint })
+	c, _ := cmdOf(cmds, name)
+	return c.ArgumentHint
 }
 
 func descOf(cmds []SlashCommand, name string) string {
-	return fieldOf(cmds, name, func(c SlashCommand) string { return c.Description })
+	c, _ := cmdOf(cmds, name)
+	return c.Description
 }
 
 // Pins the 2.1.224 curation. The built-in list has no machine-readable source,
@@ -183,6 +185,7 @@ func TestScalarValue_LoneQuoteIsEmpty(t *testing.T) {
 
 	got := Scope{Supported: true, ConfigDir: cfg}.SlashCommands()
 
-	require.Equal(t, "<not found>", hintOf(got, `/"`), "a lone quote must not become the command name")
+	_, listed := cmdOf(got, `/"`)
+	require.False(t, listed, "a lone quote must not become the command name")
 	require.Empty(t, hintOf(got, "/lonely"), "a lone quote must not become the argument hint")
 }

@@ -123,9 +123,13 @@ func (s Scope) Commands() []SlashCommand {
 	details := s.commandDetails(false)
 	out := make([]SlashCommand, len(details))
 	for i, d := range details {
-		out[i] = SlashCommand{Name: d.Name, Description: d.Description, Source: d.Source, ArgumentHint: d.ArgumentHint}
+		out[i] = d.slashCommand()
 	}
 	return out
+}
+
+func (d CommandDetail) slashCommand() SlashCommand {
+	return SlashCommand{Name: d.Name, Description: d.Description, Source: d.Source, ArgumentHint: d.ArgumentHint}
 }
 
 // CommandDetails returns the same commands as Commands, each with its on-disk
@@ -191,7 +195,7 @@ func (s Scope) SlashCommands() []SlashCommand {
 	details = dedupAndSortCommands(details)
 	out := make([]SlashCommand, len(details))
 	for i, d := range details {
-		out[i] = SlashCommand{Name: d.Name, Description: d.Description, Source: d.Source, ArgumentHint: d.ArgumentHint}
+		out[i] = d.slashCommand()
 	}
 	return out
 }
@@ -237,10 +241,11 @@ func skillsInDir(dir, source string) []SkillEntry {
 	for _, entry := range listSkillDirs(dir) {
 		skillPath := filepath.Join(dir, entry, "SKILL.md")
 		fm := parseFrontmatterFile(skillPath)
-		if fm.Name == "" {
-			fm.Name = entry
+		name := fm.Name
+		if name == "" {
+			name = entry
 		}
-		out = append(out, SkillEntry{Name: fm.Name, Description: fm.Description, ArgumentHint: fm.ArgumentHint, Source: source, Path: skillPath, Editable: IsEditableSource(source)})
+		out = append(out, SkillEntry{Name: name, Description: fm.Description, ArgumentHint: fm.ArgumentHint, Source: source, Path: skillPath, Editable: IsEditableSource(source)})
 	}
 	return out
 }

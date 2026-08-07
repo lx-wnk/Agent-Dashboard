@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import type { SlashCommandDef } from '../composables/useSlashCommands'
+import type { DynamicCommandSet } from '../composables/useSlashCommands'
 import type { Agent, OutputMessage } from '../types'
 import { computed, nextTick, ref, useId, watch } from 'vue'
 import { useAgentPrompt } from '@/features/agents/composables/useAgentPrompt'
-import { fetchDynamicCommands, SLASH_COMMAND_DEFS } from '../composables/useSlashCommands'
+import { emptyCommandSet, fetchDynamicCommands, SLASH_COMMAND_DEFS } from '../composables/useSlashCommands'
 import TemplatePicker from './TemplatePicker.vue'
 
 const props = withDefaults(defineProps<{
@@ -99,12 +99,7 @@ function attachmentName(path: string): string {
 const inputEl = ref<HTMLInputElement | HTMLTextAreaElement | null>(null)
 const fileInputEl = ref<HTMLInputElement | null>(null)
 const selectedIndex = ref(0)
-const dynamicCommands = ref<SlashCommandDef[]>([])
-// The built-in command list is curated per Claude Code version. When the session
-// runs a different one it may know commands this menu cannot list, so say so
-// here rather than letting a missing command look like a broken one.
-const builtinsMayBeStale = ref(false)
-const engineVersion = ref<string | undefined>()
+const commandSet = ref<DynamicCommandSet>(emptyCommandSet())
 
 const hasPendingApproval = computed(() =>
   !!props.approveHandler
@@ -115,16 +110,9 @@ const hasPendingApproval = computed(() =>
 // Prefer sessionId so suggestions reflect the running session's actual
 // CLAUDE_CONFIG_DIR (spawner-dependent); fall back to cwd for project-local commands.
 watch(() => [props.agent?.sessionId, props.agent?.cwd] as const, async ([sessionId, cwd]) => {
-  if (!sessionId && !cwd) {
-    dynamicCommands.value = []
-    builtinsMayBeStale.value = false
-    engineVersion.value = undefined
-    return
-  }
-  const set = await fetchDynamicCommands({ sessionId: sessionId || undefined, cwd: cwd || undefined })
-  dynamicCommands.value = set.commands
-  builtinsMayBeStale.value = set.builtinsMayBeStale
-  engineVersion.value = set.engineVersion
+  commandSet.value = (sessionId || cwd)
+    ? await fetchDynamicCommands({ sessionId: sessionId || undefined, cwd: cwd || undefined })
+    : emptyCommandSet()
 }, { immediate: true })
 
 const slashSuggestions = computed(() => {
@@ -152,7 +140,7 @@ const slashSuggestions = computed(() => {
     }))
 
   const seen = new Set(dashboardCmds.map(c => c.name))
-  const sessionCmds = dynamicCommands.value
+  const sessionCmds = commandSet.value.commands
     .filter(c => matches(c.name) && !seen.has(c.name))
     .map(c => ({ ...c, disabled: false }))
 
@@ -291,11 +279,11 @@ defineExpose({ focus })
         <span v-if="cmd.requiresTask && cmd.disabled" class="text-warning-text text-[10px] ml-auto">requires linked task</span>
       </button>
       <p
-        v-if="builtinsMayBeStale"
+        v-if="commandSet.builtinsMayBeStale"
         data-testid="builtins-stale-note"
         class="m-0 px-4 py-1.5 text-[10px] text-fg-faint border-t border-line"
       >
-        Built-in commands are listed for a different Claude Code version{{ engineVersion ? ` (session runs ${engineVersion})` : '' }} — a command missing here may still work if you type it.
+        Built-in commands are listed for a different Claude Code version{{ commandSet.engineVersion ? ` (session runs ${commandSet.engineVersion})` : '' }} — a command missing here may still work if you type it.
       </p>
     </div>
     <input
