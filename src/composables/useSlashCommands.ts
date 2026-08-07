@@ -231,7 +231,11 @@ export interface DynamicCommandSet {
   engineVersion?: string
 }
 
-const EMPTY_COMMAND_SET: DynamicCommandSet = { commands: [], builtinsMayBeStale: false }
+// A fresh object per call: callers assign `.commands` straight into a ref, so a
+// shared instance would let one component's mutation reach every other.
+function emptyCommandSet(): DynamicCommandSet {
+  return { commands: [], builtinsMayBeStale: false }
+}
 
 const dynamicCommandCache = new Map<string, DynamicCommandSet>()
 
@@ -263,7 +267,7 @@ export async function fetchDynamicCommands(scope: DynamicCommandScope): Promise<
   try {
     const res = await fetch(`/api/slash-commands?${params.toString()}`)
     if (!res.ok)
-      return EMPTY_COMMAND_SET
+      return emptyCommandSet()
     const data = await res.json() as DynamicCommandsResponse
     const set: DynamicCommandSet = {
       commands: (data.commands ?? []).map(c => ({
@@ -278,6 +282,6 @@ export async function fetchDynamicCommands(scope: DynamicCommandScope): Promise<
     return set
   }
   catch {
-    return EMPTY_COMMAND_SET
+    return emptyCommandSet()
   }
 }
