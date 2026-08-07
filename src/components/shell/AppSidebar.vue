@@ -38,79 +38,106 @@ function badgeFor(view: ActiveView): number | null {
 function badgeDanger(view: ActiveView): boolean {
   return view === 'dashboard' && props.attentionCount > 0
 }
+
+// Unpinned expansion floats above the content instead of widening the rail, so
+// hovering the nav never reflows the page behind it.
+const floating = computed(() => expanded.value && !pinned.value)
+
+function onFocusOut(event: FocusEvent): void {
+  const next = event.relatedTarget as Node | null
+  if (!next || !(event.currentTarget as HTMLElement).contains(next))
+    setHovering(false)
+}
 </script>
 
 <template>
-  <nav
-    aria-label="Primary"
-    class="h-full bg-card border-r border-line flex flex-col py-3 transition-[width] duration-200"
-    :class="expanded ? 'w-[220px] px-2' : 'w-[56px] px-1.5'"
-    @mouseenter="setHovering(true)"
-    @mouseleave="setHovering(false)"
+  <div
+    class="relative shrink-0 h-full transition-[width] duration-200"
+    :class="pinned ? 'w-[220px]' : 'w-[56px]'"
+    data-testid="sidebar-rail"
   >
-    <div class="flex items-center gap-2 px-1.5 pb-3 mb-2 border-b border-line">
-      <div class="w-7 h-7 rounded-lg bg-accent shrink-0" aria-hidden="true" />
-      <div v-if="expanded" class="min-w-0 flex flex-col">
-        <span class="text-[13px] font-semibold text-fg truncate leading-tight">Agent Overview</span>
-        <span class="flex items-center gap-1 text-[10px] text-fg-faint" role="status">
-          <span
-            class="w-1.5 h-1.5 rounded-full shrink-0"
-            :class="live ? 'bg-success motion-safe:animate-pulse' : 'bg-warning'"
-            aria-hidden="true"
-          />
-          {{ live ? 'Live · all systems normal' : 'Reconnecting…' }}
-        </span>
-      </div>
-      <button
-        type="button"
-        data-testid="sidebar-pin"
-        class="ml-auto text-fg-faint hover:text-fg text-[14px] rounded px-1 min-h-[28px] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
-        :aria-expanded="pinned"
-        :aria-label="pinned ? 'Unpin sidebar' : 'Pin sidebar open'"
-        @click="togglePinned"
-      >
-        <span aria-hidden="true">{{ pinned ? '«' : '»' }}</span>
-      </button>
-    </div>
-
-    <div class="flex-1 flex flex-col gap-0.5 overflow-y-auto">
-      <div
-        v-for="(g, gi) in grouped"
-        :key="g.group"
-        class="flex flex-col gap-0.5"
-        :class="{ 'mt-auto': gi === grouped.length - 1 }"
-      >
-        <div v-if="expanded" class="px-2 pt-3 pb-1 text-[9px] uppercase tracking-wider text-fg-faint font-bold">
-          {{ g.group }}
-        </div>
-        <NavItem
-          v-for="item in g.items"
-          :key="item.view"
-          :icon="item.icon"
-          :label="item.label"
-          :active="activeView === item.view"
-          :expanded="expanded"
-          @select="activeView = item.view"
-        >
-          <template v-if="badgeFor(item.view) !== null" #badge>
+    <nav
+      aria-label="Primary"
+      class="absolute inset-y-0 left-0 z-30 bg-card border-r border-line flex flex-col py-3 transition-[width] duration-200"
+      :class="[
+        expanded ? 'w-[220px] px-2' : 'w-[56px] px-1.5',
+        floating ? 'shadow-[4px_0_16px_rgba(0,0,0,0.18)]' : '',
+      ]"
+      @mouseenter="setHovering(true)"
+      @mouseleave="setHovering(false)"
+      @focusin="setHovering(true)"
+      @focusout="onFocusOut"
+    >
+      <div class="flex items-center gap-2 px-1.5 pb-3 mb-2 border-b border-line">
+        <div class="w-7 h-7 rounded-lg bg-accent shrink-0" aria-hidden="true" />
+        <div v-if="expanded" class="min-w-0 flex flex-col">
+          <span class="text-[13px] font-semibold text-fg truncate leading-tight">Agent Overview</span>
+          <span class="flex items-center gap-1 text-[10px] text-fg-faint" role="status">
             <span
-              class="text-[9px] rounded-full px-1.5 py-0.5"
-              :class="badgeDanger(item.view)
-                ? 'bg-red-500 text-white font-bold'
-                : 'bg-raised text-fg-mute'"
-            >{{ badgeFor(item.view) }}</span>
-          </template>
-        </NavItem>
+              class="w-1.5 h-1.5 rounded-full shrink-0"
+              :class="live ? 'bg-success motion-safe:animate-pulse' : 'bg-warning'"
+              aria-hidden="true"
+            />
+            {{ live ? 'Live · all systems normal' : 'Reconnecting…' }}
+          </span>
+        </div>
+        <button
+          type="button"
+          data-testid="sidebar-pin"
+          class="ml-auto text-fg-faint hover:text-fg text-[14px] rounded px-1 min-h-[28px] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+          :aria-expanded="pinned"
+          :aria-label="pinned ? 'Unpin sidebar' : 'Pin sidebar open'"
+          @click="togglePinned"
+        >
+          <span aria-hidden="true">{{ pinned ? '«' : '»' }}</span>
+        </button>
       </div>
-    </div>
 
-    <SidebarFooter
-      :expanded="expanded"
-      :theme="theme"
-      :can-install="canInstall"
-      @open-sessions="emit('openSessions')"
-      @toggle-theme="emit('toggleTheme')"
-      @install="emit('install')"
-    />
-  </nav>
+      <div class="flex-1 flex flex-col gap-0.5 overflow-y-auto">
+        <div
+          v-for="(g, gi) in grouped"
+          :key="g.group"
+          class="flex flex-col gap-0.5"
+          :class="{ 'mt-auto': gi === grouped.length - 1 }"
+        >
+          <div v-if="expanded" class="px-2 pt-3 pb-1 text-[9px] uppercase tracking-wider text-fg-faint font-bold">
+            {{ g.group }}
+          </div>
+          <div
+            v-else-if="gi > 0"
+            aria-hidden="true"
+            data-testid="nav-group-divider"
+            class="h-px w-6 bg-line self-center my-2"
+          />
+          <NavItem
+            v-for="item in g.items"
+            :key="item.view"
+            :icon="item.icon"
+            :label="item.label"
+            :active="activeView === item.view"
+            :expanded="expanded"
+            @select="activeView = item.view"
+          >
+            <template v-if="badgeFor(item.view) !== null" #badge>
+              <span
+                class="text-[9px] rounded-full px-1.5 py-0.5"
+                :class="badgeDanger(item.view)
+                  ? 'bg-red-500 text-white font-bold'
+                  : 'bg-raised text-fg-mute'"
+              >{{ badgeFor(item.view) }}</span>
+            </template>
+          </NavItem>
+        </div>
+      </div>
+
+      <SidebarFooter
+        :expanded="expanded"
+        :theme="theme"
+        :can-install="canInstall"
+        @open-sessions="emit('openSessions')"
+        @toggle-theme="emit('toggleTheme')"
+        @install="emit('install')"
+      />
+    </nav>
+  </div>
 </template>

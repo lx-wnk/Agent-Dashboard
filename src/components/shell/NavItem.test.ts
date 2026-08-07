@@ -32,16 +32,13 @@ describe('navItem', () => {
     expect(w.text()).toContain('12')
   })
 
-  it('renders a focus-visible tooltip with the label when collapsed', () => {
+  // The collapsed rail is 43px wide inside a scroll container; an absolutely
+  // positioned label box next to the icon widened its scrollable overflow to
+  // 132px and put a horizontal scrollbar in the rail. The native title plus the
+  // hover/focus expansion carry the label instead.
+  it('renders no positioned label box when collapsed, only the native title', () => {
     const w = mount(NavItem, { props: { icon: '▦', label: 'Dashboard', active: false, expanded: false } })
-    const tooltip = w.find('.nav-tooltip')
-    expect(tooltip.exists()).toBe(true)
-    expect(tooltip.attributes('aria-hidden')).toBe('true')
-    expect(tooltip.text()).toBe('Dashboard')
-  })
-
-  it('omits the tooltip element when expanded (label already visible)', () => {
-    const w = mount(NavItem, { props: { icon: '▦', label: 'Dashboard', active: false, expanded: true } })
-    expect(w.find('.nav-tooltip').exists()).toBe(false)
+    expect(w.get('button').attributes('title')).toBe('Dashboard')
+    expect(w.findAll('span').some(s => s.classes().includes('absolute'))).toBe(false)
   })
 })
