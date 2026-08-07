@@ -19,6 +19,7 @@ const emit = defineEmits<{
   openSessions: []
   toggleTheme: []
   install: []
+  openSettings: []
 }>()
 
 const { expanded, pinned, togglePinned, setHovering } = useSidebar()
@@ -137,6 +138,7 @@ function onFocusOut(event: FocusEvent): void {
         @open-sessions="emit('openSessions')"
         @toggle-theme="emit('toggleTheme')"
         @install="emit('install')"
+        @open-settings="emit('openSettings')"
       />
     </nav>
   </div>

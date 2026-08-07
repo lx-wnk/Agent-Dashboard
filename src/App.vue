@@ -325,16 +325,12 @@ onMounted(() => usageComposable.start())
           @open-sessions="showSessions = true"
           @toggle-theme="toggleTheme"
           @install="promptInstall"
+          @open-settings="showSettings = true"
         />
       </template>
 
       <template #topbar>
-        <AppTopbar
-          :active-view="activeView"
-          :search-query="searchQuery"
-          @open-settings="showSettings = true"
-          @update:search-query="searchQuery = $event"
-        >
+        <AppTopbar :active-view="activeView">
           <template #cta>
             <button
               v-if="activeView === 'pipeline'"
@@ -381,13 +377,17 @@ onMounted(() => usageComposable.start())
             :project="dashboardProject"
             :sort-by="dashboardSort"
             :group-by="dashboardGroup"
+            :search-query="searchQuery"
             :project-options="projectOptions"
             :spawner-options="spawnerOptions"
+            :total-count="agents.length"
+            :shown-count="rosterAgents.length"
             @update:layout="dashboardLayout = $event"
             @update:spawner="dashboardSpawner = $event"
             @update:project="dashboardProject = $event"
             @update:sort-by="dashboardSort = $event"
             @update:group-by="dashboardGroup = $event"
+            @update:search-query="searchQuery = $event"
           />
           <template v-if="dashboardLayout === 'list'">
             <EmptyAgentState v-if="rosterAgents.length === 0" :search-query="searchQuery" />

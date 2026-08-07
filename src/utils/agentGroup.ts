@@ -10,12 +10,14 @@ export const AGENT_SORT_OPTIONS = [
   { value: 'expensive', label: 'Most expensive' },
 ] as const
 
+// The control that renders these is already labelled "Group", so the options
+// name the dimension alone instead of repeating "Group by …" in every row.
 export const AGENT_GROUP_OPTIONS = [
   { value: 'none', label: 'No grouping' },
-  { value: 'project', label: 'Group by project' },
-  { value: 'status', label: 'Group by status' },
-  { value: 'model', label: 'Group by model' },
-  { value: 'spawner', label: 'Group by spawner' },
+  { value: 'project', label: 'Project' },
+  { value: 'status', label: 'Status' },
+  { value: 'model', label: 'Model' },
+  { value: 'spawner', label: 'Spawner' },
 ] as const
 
 export type AgentSort = typeof AGENT_SORT_OPTIONS[number]['value']

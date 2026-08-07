@@ -4,27 +4,27 @@ import AppTopbar from './AppTopbar.vue'
 
 describe('appTopbar', () => {
   it('renders the view title', () => {
-    const w = mount(AppTopbar, { props: { activeView: 'cost', searchQuery: '' } })
+    const w = mount(AppTopbar, { props: { activeView: 'cost' } })
     expect(w.text()).toContain('Cost')
-  })
-
-  it('emits update:searchQuery on input', async () => {
-    const w = mount(AppTopbar, { props: { activeView: 'dashboard', searchQuery: '' } })
-    await w.get('input').setValue('foo')
-    expect(w.emitted('update:searchQuery')![0]).toEqual(['foo'])
   })
 
   it('renders the cta slot', () => {
     const w = mount(AppTopbar, {
-      props: { activeView: 'dashboard', searchQuery: '' },
+      props: { activeView: 'dashboard' },
       slots: { cta: '<button>+ New Agent</button>' },
     })
     expect(w.text()).toContain('+ New Agent')
   })
 
-  it('emits openSettings when the gear button is clicked', async () => {
-    const w = mount(AppTopbar, { props: { activeView: 'dashboard', searchQuery: '' } })
-    await w.get('button[aria-label="Settings"]').trigger('click')
-    expect(w.emitted('openSettings')).toBeTruthy()
+  // Search narrows the agent roster only, so it lives in the roster toolbar; on
+  // every other view the topbar field promised a filter that never ran.
+  it('carries no search field', () => {
+    const w = mount(AppTopbar, { props: { activeView: 'pipeline' } })
+    expect(w.find('input').exists()).toBe(false)
+  })
+
+  it('carries no settings button — it sits with the other global actions in the sidebar', () => {
+    const w = mount(AppTopbar, { props: { activeView: 'dashboard' } })
+    expect(w.find('button[aria-label="Settings"]').exists()).toBe(false)
   })
 })
