@@ -286,11 +286,17 @@ func registerCreateTask(registry mcp.ToolRegistry, d WriteDeps) {
 				if projectSlug != "" {
 					p, err := d.ProjectRepo.GetBySlug(ctx, projectSlug)
 					if err != nil {
+						if !ent.IsNotFound(err) {
+							return nil, mcp.Fail("create_task: " + err.Error())
+						}
 						return nil, mcp.Fail("create_task: project not found: " + projectSlug + " (create it with create_project)")
 					}
 					projectID = p.ID
 				} else if _, err := d.ProjectRepo.GetByID(ctx, projectID); err != nil {
-					return nil, mcp.Fail("create_task: project not found: " + projectID)
+					if !ent.IsNotFound(err) {
+						return nil, mcp.Fail("create_task: " + err.Error())
+					}
+					return nil, mcp.Fail("create_task: project not found: " + projectID + " (list_projects to find the right id)")
 				}
 				in.ProjectID = &projectID
 			}
