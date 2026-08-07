@@ -297,6 +297,10 @@ type PendingScreen struct {
 // How an agent's spawner attribution was established: recorded from the pipeline
 // task the agent runs, or read back from the live process, which is how sessions
 // started outside the dashboard are placed.
+//
+// These are untyped consts, so tygo emits no counterpart; the client mirrors
+// them by hand in src/types.ts (SPAWNER_SOURCE_TASK / SPAWNER_SOURCE_ENV).
+// Changing a value here means changing it there.
 const (
 	SpawnerSourceTask = "task"
 	SpawnerSourceEnv  = "env"

@@ -1,5 +1,5 @@
 import type { Agent } from '../types'
-import { AGENT_STATUSES } from '../types'
+import { AGENT_STATUSES, SPAWNER_SOURCE_ENV } from '../types'
 import { STATUS_ORDER } from './agentSort'
 import { secondsSince, shortModel } from './format'
 import { friendlyProjectName } from './friendlyProjectName'
@@ -118,7 +118,7 @@ export function groupAgents(list: Agent[], groupBy: AgentGroup): AgentGrouping[]
         : { key: UNASSIGNED_SPAWNER_KEY, label: 'Unassigned' }
     ))
     for (const group of groups) {
-      if (group.agents.some(a => a.spawnerSource === 'env'))
+      if (group.agents.some(a => a.spawnerSource === SPAWNER_SOURCE_ENV))
         group.derivedFrom = 'Derived from the config directory these sessions run on'
     }
     // Unattributed agents are the residual bucket, so they trail the named ones.
