@@ -27,11 +27,7 @@ type projectView struct {
 	UpdatedAt       string `json:"updatedAt"`
 }
 
-// createdProjectView renders a freshly created project. A project has no folders
-// until one is added through the UI or the folders API, so folderCount is zero
-// by construction here rather than queried — do not reuse for a project loaded
-// from the database.
-func createdProjectView(p *ent.Project) projectView {
+func toProjectView(p *ent.Project, folderCount int) projectView {
 	return projectView{
 		ID:               p.ID,
 		Slug:             p.Slug,
@@ -40,7 +36,7 @@ func createdProjectView(p *ent.Project) projectView {
 		Color:            p.Color,
 		DefaultSpawnerID: p.DefaultSpawnerID,
 		HasSetupCommand:  p.SetupCommand != nil && *p.SetupCommand != "",
-		FolderCount:      0,
+		FolderCount:      folderCount,
 		CreatedAt:        tsFmt(p.CreatedAt),
 		UpdatedAt:        tsFmt(p.UpdatedAt),
 	}
@@ -67,18 +63,7 @@ func registerListProjects(registry mcp.ToolRegistry, d ReadDeps) {
 			}
 			result := make([]projectView, len(rows))
 			for i, r := range rows {
-				result[i] = projectView{
-					ID:               r.ID,
-					Slug:             r.Slug,
-					Name:             r.Name,
-					Description:      r.Description,
-					Color:            r.Color,
-					DefaultSpawnerID: r.DefaultSpawnerID,
-					HasSetupCommand:  r.SetupCommand != nil && *r.SetupCommand != "",
-					FolderCount:      r.FolderCount,
-					CreatedAt:        tsFmt(r.CreatedAt),
-					UpdatedAt:        tsFmt(r.UpdatedAt),
-				}
+				result[i] = toProjectView(r.Project, r.FolderCount)
 			}
 			return mcp.OK(result)
 		},
@@ -166,7 +151,9 @@ func registerCreateProject(registry mcp.ToolRegistry, d WriteDeps) {
 				}
 				return nil, mcp.Fail("create_project: " + err.Error())
 			}
-			view := createdProjectView(p)
+			// A project has no folders until one is added through the UI or the
+			// folders API, so the count is zero by construction rather than queried.
+			view := toProjectView(p, 0)
 			safeBroadcastProject(d.ProjectBroadcaster, "project_created", p.ID, view)
 			return mcp.OK(view)
 		},
