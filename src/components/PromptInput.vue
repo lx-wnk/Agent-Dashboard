@@ -115,12 +115,16 @@ const hasPendingApproval = computed(() =>
 // Prefer sessionId so suggestions reflect the running session's actual
 // CLAUDE_CONFIG_DIR (spawner-dependent); fall back to cwd for project-local commands.
 watch(() => [props.agent?.sessionId, props.agent?.cwd] as const, async ([sessionId, cwd]) => {
-  if (sessionId || cwd) {
-    const set = await fetchDynamicCommands({ sessionId: sessionId || undefined, cwd: cwd || undefined })
-    dynamicCommands.value = set.commands
-    builtinsMayBeStale.value = set.builtinsMayBeStale
-    engineVersion.value = set.engineVersion
+  if (!sessionId && !cwd) {
+    dynamicCommands.value = []
+    builtinsMayBeStale.value = false
+    engineVersion.value = undefined
+    return
   }
+  const set = await fetchDynamicCommands({ sessionId: sessionId || undefined, cwd: cwd || undefined })
+  dynamicCommands.value = set.commands
+  builtinsMayBeStale.value = set.builtinsMayBeStale
+  engineVersion.value = set.engineVersion
 }, { immediate: true })
 
 const slashSuggestions = computed(() => {
