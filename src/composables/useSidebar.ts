@@ -37,8 +37,14 @@ function setFocused(v: boolean) {
 }
 
 function collapseAfterSelect() {
-  if (hovering.value)
-    pointerSuppressed.value = true
+  if (!hovering.value)
+    return
+  pointerSuppressed.value = true
+  // A real browser focuses the button as part of the click, so `focused` is
+  // already set by the time this runs and would hold the nav open on its own.
+  // Picking the view that is already active moves focus nowhere afterwards, so
+  // nothing would ever clear it again.
+  focused.value = false
 }
 
 function handleShortcut(e: KeyboardEvent) {

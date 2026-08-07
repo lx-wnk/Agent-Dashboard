@@ -150,6 +150,25 @@ describe('appSidebar', () => {
     expect(nav.classes()).toContain('w-[56px]')
   })
 
+  // A browser focuses the button as part of the click, which `trigger('click')`
+  // alone does not reproduce. Re-picking the active view is the case with no
+  // safety net: App.vue only moves focus to #main-content when activeView
+  // actually changes, so nothing else would ever collapse the nav again.
+  it('collapses after a nav pick that also focuses the item', async () => {
+    const { AppSidebar } = await load()
+    const w = mount(AppSidebar, { props, attachTo: document.body })
+    const nav = w.get('nav')
+    await nav.trigger('mouseenter')
+
+    const dashboard = w.findAll('button').find(b => b.text().includes('Dashboard'))!
+    await dashboard.trigger('focusin')
+    await dashboard.trigger('click')
+
+    expect(nav.classes()).toContain('w-[56px]')
+    await nav.trigger('mouseleave')
+    expect(nav.classes()).toContain('w-[56px]')
+  })
+
   it('expands again once the pointer has left and comes back', async () => {
     const { AppSidebar } = await load()
     const w = mount(AppSidebar, { props })
