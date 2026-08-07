@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref, useId, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, useId, watch } from 'vue'
 
 const props = withDefaults(defineProps<{
   label: string
@@ -14,6 +14,13 @@ const props = withDefaults(defineProps<{
   badge: null,
   active: false,
   showCaret: true,
+})
+
+// aria-label overrides the child nodes, so the badge the trigger shows visually
+// has to be spelled into the name or it reaches no assistive technology at all.
+const accessibleName = computed(() => {
+  const base = props.ariaLabel ?? props.label
+  return props.badge ? `${base}, ${props.badge} active` : base
 })
 
 const panelId = useId()
@@ -86,10 +93,10 @@ defineExpose({ close })
       :class="props.active || isOpen
         ? 'border-accent bg-accent-soft text-accent font-semibold'
         : 'border-line bg-card text-fg hover:border-line-strong'"
-      :aria-label="props.ariaLabel ?? props.label"
+      :aria-label="accessibleName"
       :aria-expanded="isOpen"
       :aria-controls="panelId"
-      aria-haspopup="true"
+      aria-haspopup="dialog"
       @click="toggle"
     >
       <span v-if="props.icon" aria-hidden="true">{{ props.icon }}</span>

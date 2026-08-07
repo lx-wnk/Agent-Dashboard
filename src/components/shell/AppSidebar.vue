@@ -58,13 +58,13 @@ function selectView(view: ActiveView): void {
 
 <template>
   <div
-    class="relative shrink-0 h-full transition-[width] duration-200"
+    class="relative shrink-0 h-full transition-[width] duration-200 motion-reduce:transition-none"
     :class="pinned ? 'w-[220px]' : 'w-[56px]'"
     data-testid="sidebar-rail"
   >
     <nav
       aria-label="Primary"
-      class="absolute inset-y-0 left-0 z-30 bg-card border-r border-line flex flex-col py-3 transition-[width] duration-200"
+      class="absolute inset-y-0 left-0 z-30 bg-card border-r border-line flex flex-col py-3 transition-[width] duration-200 motion-reduce:transition-none"
       :class="[
         expanded ? 'w-[220px] px-2' : 'w-[56px] px-1.5',
         floating ? 'shadow-[4px_0_16px_rgba(0,0,0,0.18)]' : '',

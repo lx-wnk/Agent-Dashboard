@@ -36,7 +36,7 @@ function mountToolbar(overrides: Partial<typeof BASE_PROPS> = {}) {
 }
 
 async function openFilterMenu(w: ReturnType<typeof mountToolbar>) {
-  await w.get('button[aria-label="Filter agents"]').trigger('click')
+  await w.get('[data-testid="filter-menu"] > button').trigger('click')
   return w
 }
 
@@ -76,7 +76,11 @@ describe('dashboardToolbar', () => {
 
   it('counts only the menu filters in the badge, not the search', async () => {
     const w = mountToolbar({ project: 'my-project', searchQuery: 'shop' })
-    expect(w.get('button[aria-label="Filter agents"]').text()).toContain('1')
+    const trigger = w.get('[data-testid="filter-menu"] > button')
+    expect(trigger.text()).toContain('1')
+    // aria-label overrides the child nodes, so the badge only reaches assistive
+    // technology if the name spells it out.
+    expect(trigger.attributes('aria-label')).toBe('Filter agents, 1 active')
   })
 
   it('emits update:sortBy when the sort select changes', async () => {

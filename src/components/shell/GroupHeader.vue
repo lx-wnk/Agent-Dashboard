@@ -21,7 +21,7 @@ const chevron = computed(() => props.collapsed ? '▶' : '▼')
     type="button"
     class="w-full flex items-center gap-2 px-1 py-0.5 focus-visible:outline-2 focus-visible:outline-ring rounded"
     :aria-expanded="!collapsed"
-    :aria-label="`Toggle ${label} group`"
+    :aria-label="derivedFrom ? `Toggle ${label} group — ${derivedFrom}` : `Toggle ${label} group`"
     data-testid="group-header-toggle"
     @click="emit('toggle')"
   >

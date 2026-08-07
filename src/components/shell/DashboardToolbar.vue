@@ -167,14 +167,14 @@ function clearAll(): void {
             class="flex items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent"
             :class="layout === option[0] ? 'bg-accent-soft text-accent font-semibold' : 'text-fg-mute hover:bg-raised hover:text-fg'"
             :aria-pressed="layout === option[0]"
-            @click="$emit('update:layout', option[0]); close()"
+            @click="$emit('update:layout', option[0]); close(true)"
           >
             <span aria-hidden="true">{{ layout === option[0] ? '●' : '○' }}</span>{{ option[1] }}
           </button>
         </fieldset>
       </ToolbarPopover>
 
-      <span class="ml-auto text-xs text-fg-faint" data-testid="agent-count">
+      <span class="ml-auto text-xs text-fg-faint" role="status" data-testid="agent-count">
         <b class="font-semibold text-fg-mute">{{ shownCount }}</b>
         <template v-if="activeFilters.length"> / {{ totalCount }}</template>
         agents
