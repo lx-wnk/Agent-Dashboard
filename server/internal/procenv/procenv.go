@@ -10,26 +10,39 @@ package procenv
 import (
 	"bufio"
 	"bytes"
+	"context"
+	"log/slog"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/platform"
 )
+
+// psPath is absolute on both supported platforms; only the macOS branch uses it.
+const psPath = "/bin/ps"
 
 // Lookup returns the value of key for each pid that has it set. Pids that are
 // gone, owned by another user, or simply do not set key are absent from the
 // result rather than reported as an error: the caller treats "unknown" and
 // "unset" the same way.
-func Lookup(pids []int, key string) map[int]string {
+// The read runs inside the SSE broadcast tick, which is a single goroutine that
+// also drives the heartbeat: an unbounded `ps` would stall every connected
+// client for as long as it hangs, so the call is always given a deadline.
+const lookupTimeout = 2 * time.Second
+
+func Lookup(ctx context.Context, pids []int, key string) map[int]string {
 	if len(pids) == 0 || key == "" {
 		return nil
 	}
 	if platform.IsLinux {
 		return lookupProc(pids, key)
 	}
-	return lookupPS(pids, key)
+	ctx, cancel := context.WithTimeout(ctx, lookupTimeout)
+	defer cancel()
+	return lookupPS(ctx, pids, key)
 }
 
 // lookupProc reads /proc/<pid>/environ, whose entries are NUL-separated.
@@ -55,7 +68,7 @@ func lookupProc(pids []int, key string) map[int]string {
 // /proc, and `ps eww` prints `KEY=value` pairs after the command; values with
 // spaces are therefore indistinguishable from the next pair, which is fine for
 // the path-shaped variables this is used for.
-func lookupPS(pids []int, key string) map[int]string {
+func lookupPS(ctx context.Context, pids []int, key string) map[int]string {
 	args := make([]string, 0, len(pids)+3)
 	args = append(args, "eww", "-o", "pid=,command=", "-p")
 	list := make([]string, len(pids))
@@ -64,8 +77,11 @@ func lookupPS(pids []int, key string) map[int]string {
 	}
 	args = append(args, strings.Join(list, ","))
 
-	raw, err := exec.Command("ps", args...).Output()
+	// Absolute path: the server inherits a PATH that on a dev machine routinely
+	// contains user-writable directories, and this runs every broadcast tick.
+	raw, err := exec.CommandContext(ctx, psPath, args...).Output()
 	if err != nil && len(raw) == 0 {
+		slog.Debug("procenv: ps lookup failed", "err", err)
 		return nil
 	}
 	return parsePSOutput(raw, key)
@@ -91,6 +107,11 @@ func parsePSOutput(raw []byte, key string) map[int]string {
 				break
 			}
 		}
+	}
+	// An over-long line aborts the scan, silently dropping every pid printed
+	// after it — which downstream reads as "variable unset", not as a failure.
+	if err := scanner.Err(); err != nil {
+		slog.Warn("procenv: ps output truncated, some pids unresolved", "err", err)
 	}
 	return out
 }

@@ -36,7 +36,7 @@ func spawner(id, name, configDir string, isDefault bool) *ent.Spawner {
 }
 
 func fixedEnv(byPID map[int]string) envLookupFn {
-	return func(_ []int, _ string) map[int]string { return byPID }
+	return func(_ context.Context, _ []int, _ string) map[int]string { return byPID }
 }
 
 func enrich(t *testing.T, rows []*ent.Spawner, tasks taskLister, env map[int]string, agents []sdk.Agent) []sdk.Agent {

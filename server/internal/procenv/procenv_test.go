@@ -2,7 +2,6 @@ package procenv
 
 import (
 	"os"
-	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -42,16 +41,15 @@ func TestLookupReadsALiveProcess(t *testing.T) {
 	require.NoError(t, os.Setenv(key, "/tmp/marker"))
 	t.Cleanup(func() { _ = os.Unsetenv(key) })
 
-	pid, err := strconv.Atoi(strconv.Itoa(os.Getpid()))
-	require.NoError(t, err)
+	pid := os.Getpid()
 
 	// `ps eww` reports the environment the process was started with, so a
 	// variable set after start is only visible on Linux's /proc. Assert the
 	// call is well-formed on both, and the value only where it can be seen.
-	got := Lookup([]int{pid}, key)
+	got := Lookup(t.Context(), []int{pid}, key)
 	if v, ok := got[pid]; ok {
 		assert.Equal(t, "/tmp/marker", v)
 	}
-	assert.NotPanics(t, func() { Lookup(nil, key) })
-	assert.Nil(t, Lookup([]int{pid}, ""))
+	assert.NotPanics(t, func() { Lookup(t.Context(), nil, key) })
+	assert.Nil(t, Lookup(t.Context(), []int{pid}, ""))
 }

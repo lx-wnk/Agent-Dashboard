@@ -21,7 +21,7 @@ import (
 const ClaudeConfigDirEnv = "CLAUDE_CONFIG_DIR"
 
 // envLookupFn is the seam procenv.Lookup fills; tests substitute a map.
-type envLookupFn func(pids []int, key string) map[int]string
+type envLookupFn func(ctx context.Context, pids []int, key string) map[int]string
 
 // Only the two reads this needs, so the repos can be stubbed without standing
 // up their full interfaces.
@@ -91,7 +91,7 @@ func newSpawnerEnricher(spawners spawnerLister, tasks taskLister, lookupEnv envL
 				pids = append(pids, agents[i].PID)
 			}
 		}
-		configDirs := lookupEnv(pids, ClaudeConfigDirEnv)
+		configDirs := lookupEnv(ctx, pids, ClaudeConfigDirEnv)
 
 		for i := range agents {
 			id, source := attribute(&agents[i], taskSpawner, configDirs, byConfigDir, defaultSpawner)
