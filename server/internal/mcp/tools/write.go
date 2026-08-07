@@ -23,8 +23,7 @@ type WriteDeps struct {
 	SpawnerRepo      repo.SpawnerRepo
 	Broadcast        func(taskID string)
 	BroadcastDeleted func(taskID string)
-	// ProjectBroadcaster feeds the /api/projects/stream SSE channel the SPA
-	// relies on instead of polling. May be nil (tests) — see safeBroadcastProject.
+	// May be nil — see safeBroadcastProject.
 	ProjectBroadcaster *sse.ProjectBroadcaster
 }
 
@@ -143,8 +142,6 @@ func safeBroadcast(fn func(string), id string) {
 	}
 }
 
-// safeBroadcastProject publishes a project event, tolerating a nil broadcaster
-// the same way safeBroadcast tolerates a nil func.
 func safeBroadcastProject(b *sse.ProjectBroadcaster, eventType, projectID string, payload any) {
 	if b == nil {
 		return
@@ -283,21 +280,18 @@ func registerCreateTask(registry mcp.ToolRegistry, d WriteDeps) {
 				if d.ProjectRepo == nil {
 					return nil, mcp.Fail("create_task: project repository not configured")
 				}
+				lookup, ref, hint := d.ProjectRepo.GetByID, projectID, "list_projects to find the right id"
 				if projectSlug != "" {
-					p, err := d.ProjectRepo.GetBySlug(ctx, projectSlug)
-					if err != nil {
-						if !ent.IsNotFound(err) {
-							return nil, mcp.Fail("create_task: " + err.Error())
-						}
-						return nil, mcp.Fail("create_task: project not found: " + projectSlug + " (create it with create_project)")
-					}
-					projectID = p.ID
-				} else if _, err := d.ProjectRepo.GetByID(ctx, projectID); err != nil {
+					lookup, ref, hint = d.ProjectRepo.GetBySlug, projectSlug, "create it with create_project"
+				}
+				p, err := lookup(ctx, ref)
+				if err != nil {
 					if !ent.IsNotFound(err) {
 						return nil, mcp.Fail("create_task: " + err.Error())
 					}
-					return nil, mcp.Fail("create_task: project not found: " + projectID + " (list_projects to find the right id)")
+					return nil, mcp.Fail("create_task: project not found: " + ref + " (" + hint + ")")
 				}
+				projectID = p.ID
 				in.ProjectID = &projectID
 			}
 			if spawnerID := mcp.OptionalString(args, "spawnerId"); spawnerID != "" {

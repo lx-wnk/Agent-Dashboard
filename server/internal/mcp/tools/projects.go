@@ -108,7 +108,7 @@ func registerCreateProject(registry mcp.ToolRegistry, d WriteDeps) {
 			if name == "" {
 				return nil, mcp.Fail("create_project: name is required")
 			}
-			color, err := optionalPtr(args, "color")
+			color, err := nonBlankPtr(args, "color")
 			if err != nil {
 				return nil, err
 			}
@@ -121,7 +121,7 @@ func registerCreateProject(registry mcp.ToolRegistry, d WriteDeps) {
 				return nil, mcp.Fail("create_project: " + err.Error())
 			}
 
-			spawnerID, err := optionalPtr(args, "defaultSpawnerId")
+			spawnerID, err := nonBlankPtr(args, "defaultSpawnerId")
 			if err != nil {
 				return nil, err
 			}
@@ -134,7 +134,7 @@ func registerCreateProject(registry mcp.ToolRegistry, d WriteDeps) {
 				}
 			}
 
-			description, err := optionalPtr(args, "description")
+			description, err := nonBlankPtr(args, "description")
 			if err != nil {
 				return nil, err
 			}
@@ -161,12 +161,12 @@ func registerCreateProject(registry mcp.ToolRegistry, d WriteDeps) {
 	})
 }
 
-// optionalPtr returns a pointer to the named string argument, or nil when it is
+// nonBlankPtr returns a pointer to the named string argument, or nil when it is
 // absent or blank — the repo layer distinguishes "leave unset" (nil) from "set
 // to empty string", so an omitted optional must not become a pointer to "".
 // Create-only: an update path needs the absent/null/value distinction instead
 // (cf. api/projects.parseNullableString).
-func optionalPtr(args map[string]any, key string) (*string, error) {
+func nonBlankPtr(args map[string]any, key string) (*string, error) {
 	raw, err := mcp.OptionalStringArg(args, key)
 	if err != nil {
 		return nil, err
