@@ -475,7 +475,6 @@ func readCommandBody(path string) (body string, fm frontmatter) {
 	return body, parseFrontmatter(strings.NewReader(body))
 }
 
-
 // frontmatter holds the leading YAML keys a command or skill file contributes
 // to the dashboard's command list.
 type frontmatter struct {
