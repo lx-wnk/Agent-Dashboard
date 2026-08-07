@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"time"
@@ -48,6 +49,10 @@ func main() {
 			log.Fatalf("%v", err)
 		}
 		return
+	}
+
+	if err := claimAddr(serverAddr); err != nil {
+		log.Fatalf("%v", err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -111,6 +116,11 @@ func waitForServer(ctx context.Context, serverErr <-chan error, url string, time
 		resp, err := healthPollClient.Get(url)
 		if err == nil {
 			resp.Body.Close()
+			// A 200 only proves something serves this address, not that it is
+			// ours: an already-running instance answers before our own Serve has
+			// finished loading config, plugins, and the DB, so its error never
+			// reaches serverErr in time. claimAddr, not this poll, is what keeps
+			// a second shell from adopting the first one's server.
 			if resp.StatusCode == http.StatusOK {
 				return nil
 			}
@@ -118,4 +128,16 @@ func waitForServer(ctx context.Context, serverErr <-chan error, url string, time
 		time.Sleep(200 * time.Millisecond)
 	}
 	return fmt.Errorf("timeout after %s waiting for %s", timeout, url)
+}
+
+// claimAddr fails when another process already listens on addr. Without it the
+// shell starts, loses the port, and then adopts the running instance's server —
+// opening a window on that instance's embedded SPA, so a freshly built app shows
+// the previous build's frontend.
+func claimAddr(addr string) error {
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return fmt.Errorf("another Agent Dashboard is already using %s — quit it first: %w", addr, err)
+	}
+	return ln.Close()
 }
