@@ -7,7 +7,11 @@
       // The Wails webview boots on the wails://wails origin. Redirect to the
       // in-process server so the page adopts the http://127.0.0.1:13120 origin,
       // which the server's same-origin mutation guard accepts unchanged.
-      window.location.replace('http://127.0.0.1:13120')
+      //
+      // ?shell=desktop tells the SPA it is running inside the shell rather than
+      // in a browser — the same bundle is served to both, and only the browser
+      // registers a service worker (see src/utils/serviceWorker.ts).
+      window.location.replace('http://127.0.0.1:13120/?shell=desktop')
     </script>
   </head>
   <body></body>
