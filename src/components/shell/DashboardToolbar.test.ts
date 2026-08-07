@@ -97,4 +97,26 @@ describe('dashboardToolbar', () => {
     await w.vm.$nextTick()
     expect(w.emitted('update:groupBy')?.[0]).toEqual(['status'])
   })
+
+  it('offers "Group by spawner" while no spawner is filtered', async () => {
+    const w = mount(DashboardToolbar, { props: BASE_PROPS, attachTo: document.body })
+    const panel = await openListbox(w.get('[data-testid="select-group"]'))
+    expect(panel.querySelectorAll('[role="option"]')).toHaveLength(5)
+    expect(optionByLabel(panel, 'Group by spawner')).toBeTruthy()
+  })
+
+  it('hides "Group by spawner" once a spawner is filtered', async () => {
+    const props = { ...BASE_PROPS, spawner: 'claude' }
+    const w = mount(DashboardToolbar, { props, attachTo: document.body })
+    const panel = await openListbox(w.get('[data-testid="select-group"]'))
+    const labels = [...panel.querySelectorAll('[role="option"]')].map(o => o.textContent?.trim())
+    expect(labels).toHaveLength(4)
+    expect(labels).not.toContain('Group by spawner')
+  })
+
+  it('shows "No grouping" when a spawner filter hides the stored spawner grouping', () => {
+    const props = { ...BASE_PROPS, spawner: 'claude', groupBy: 'spawner' as const }
+    const w = mount(DashboardToolbar, { props, attachTo: document.body })
+    expect(w.get('[data-testid="select-group"]').text()).toContain('No grouping')
+  })
 })

@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import type { DashboardLayout } from '../../composables/useViewState'
 import type { AgentGroup, AgentSort } from '../../utils/agentGroup'
-import { AGENT_GROUP_OPTIONS, AGENT_SORT_OPTIONS } from '../../utils/agentGroup'
+import { computed } from 'vue'
+import { AGENT_SORT_OPTIONS, agentGroupOptions, resolveGroup } from '../../utils/agentGroup'
 import AppSelect from '../ui/AppSelect.vue'
 
-defineProps<{
+const props = defineProps<{
   layout: DashboardLayout
   spawner: string
   project: string
@@ -21,6 +22,9 @@ defineEmits<{
   'update:sortBy': [value: AgentSort]
   'update:groupBy': [value: AgentGroup]
 }>()
+
+const groupOptions = computed(() => agentGroupOptions(props.spawner))
+const effectiveGroup = computed(() => resolveGroup(props.groupBy, props.spawner))
 </script>
 
 <template>
@@ -59,8 +63,8 @@ defineEmits<{
         />
       </span>
       <AppSelect
-        :model-value="groupBy"
-        :options="AGENT_GROUP_OPTIONS"
+        :model-value="effectiveGroup"
+        :options="groupOptions"
         aria-label="Group agents"
         data-testid="select-group"
         @update:model-value="$emit('update:groupBy', $event)"

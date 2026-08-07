@@ -1,6 +1,6 @@
 import type { Agent } from '../../types'
 import { describe, expect, it } from 'vitest'
-import { groupAgents, sortAgents } from '../agentGroup'
+import { agentGroupOptions, groupAgents, resolveGroup, sortAgents } from '../agentGroup'
 
 function makeAgent(overrides: Partial<Agent> = {}): Agent {
   return {
@@ -120,5 +120,47 @@ describe('groupAgents', () => {
     const a = makeAgent({ model: 'claude-opus-4' })
     const groups = groupAgents([a], 'model')
     expect(groups[0].label).toBe('opus 4')
+  })
+
+  it('spawner: buckets by resolved spawner id and labels with its name', () => {
+    const a1 = makeAgent({ pid: 1, pipelineTaskId: 't1' })
+    const a2 = makeAgent({ pid: 2, pipelineTaskId: 't2' })
+    const a3 = makeAgent({ pid: 3, pipelineTaskId: 't3' })
+    const spawners: Record<string, { id: string, name: string }> = {
+      t1: { id: 's1', name: 'Local Claude' },
+      t2: { id: 's2', name: 'Remote' },
+      t3: { id: 's1', name: 'Local Claude' },
+    }
+    const groups = groupAgents([a1, a2, a3], 'spawner', a => spawners[a.pipelineTaskId!] ?? null)
+    expect(groups.map(g => [g.key, g.label])).toEqual([['s1', 'Local Claude'], ['s2', 'Remote']])
+    expect(groups[0].agents.map(a => a.pid)).toEqual([1, 3])
+  })
+
+  it('spawner: collects unresolved agents in a trailing "No spawner" group', () => {
+    const free = makeAgent({ pid: 1, pipelineTaskId: undefined })
+    const owned = makeAgent({ pid: 2, pipelineTaskId: 't1' })
+    const groups = groupAgents([free, owned], 'spawner', a =>
+      a.pipelineTaskId ? { id: 's1', name: 'Local Claude' } : null)
+    expect(groups.map(g => g.label)).toEqual(['Local Claude', 'No spawner'])
+    expect(groups[1].agents.map(a => a.pid)).toEqual([1])
+  })
+
+  it('spawner: without a resolver every agent lands in "No spawner"', () => {
+    const groups = groupAgents([makeAgent({ pipelineTaskId: 't1' })], 'spawner')
+    expect(groups).toHaveLength(1)
+    expect(groups[0].label).toBe('No spawner')
+  })
+})
+
+describe('agentGroupOptions / resolveGroup', () => {
+  it('offers spawner grouping only while no spawner is filtered', () => {
+    expect(agentGroupOptions('all').map(o => o.value)).toContain('spawner')
+    expect(agentGroupOptions('s1').map(o => o.value)).not.toContain('spawner')
+  })
+
+  it('falls back to "none" when spawner grouping is filtered away', () => {
+    expect(resolveGroup('spawner', 'all')).toBe('spawner')
+    expect(resolveGroup('spawner', 's1')).toBe('none')
+    expect(resolveGroup('status', 's1')).toBe('status')
   })
 })

@@ -41,7 +41,7 @@ import { useTodayCost } from './composables/useTodayCost'
 import { useUsage } from './composables/useUsage'
 import { useUser } from './composables/useUser'
 import { useViewState } from './composables/useViewState'
-import { groupAgents, sortAgents } from './utils/agentGroup'
+import { groupAgents, resolveGroup, sortAgents } from './utils/agentGroup'
 import { formatCost } from './utils/format'
 import { friendlyProjectName } from './utils/friendlyProjectName'
 
@@ -160,7 +160,14 @@ const rosterAgents = computed(() => {
     base = base.filter(a => a.pipelineTaskId != null && taskSpawnerById.value.get(a.pipelineTaskId) === dashboardSpawner.value)
   return sortAgents(base, dashboardSort.value, nowMs.value)
 })
-const rosterGroups = computed(() => groupAgents(rosterAgents.value, dashboardGroup.value))
+const activeGroup = computed(() => resolveGroup(dashboardGroup.value, dashboardSpawner.value))
+const spawnerNameById = computed(() => new Map(spawners.value.map(s => [s.id, s.name])))
+const rosterGroups = computed(() => groupAgents(rosterAgents.value, activeGroup.value, (agent) => {
+  const spawnerId = agent.pipelineTaskId ? taskSpawnerById.value.get(agent.pipelineTaskId) : undefined
+  if (!spawnerId)
+    return null
+  return { id: spawnerId, name: spawnerNameById.value.get(spawnerId) ?? spawnerId }
+}))
 const projectOptions = computed(() => [
   { value: 'all', label: 'All projects' },
   ...[...new Set(agents.value.map(a => a.projectName))].sort().map(n => ({ value: n, label: friendlyProjectName(n) })),
@@ -388,7 +395,7 @@ onMounted(() => usageComposable.start())
           </template>
           <template v-else>
             <EmptyAgentState v-if="rosterAgents.length === 0" :search-query="searchQuery" />
-            <AgentCardGrid v-else :agents="rosterAgents" :groups="rosterGroups" :group-by="dashboardGroup" @select="selectAgent" @dismiss="dismissAgent" />
+            <AgentCardGrid v-else :agents="rosterAgents" :groups="rosterGroups" :group-by="activeGroup" @select="selectAgent" @dismiss="dismissAgent" />
           </template>
           <ChannelScriptCallout />
         </template>

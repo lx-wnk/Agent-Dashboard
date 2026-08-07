@@ -15,10 +15,33 @@ export const AGENT_GROUP_OPTIONS = [
   { value: 'project', label: 'Group by project' },
   { value: 'status', label: 'Group by status' },
   { value: 'model', label: 'Group by model' },
+  { value: 'spawner', label: 'Group by spawner' },
 ] as const
 
 export type AgentSort = typeof AGENT_SORT_OPTIONS[number]['value']
 export type AgentGroup = typeof AGENT_GROUP_OPTIONS[number]['value']
+
+export interface SpawnerRef {
+  id: string
+  name: string
+}
+
+/** Agents reference a spawner only through their pipeline task, so the lookup is injected. */
+export type SpawnerResolver = (agent: Agent) => SpawnerRef | null
+
+const NO_SPAWNER_KEY = '__none__'
+
+/** Grouping by spawner is redundant while a single spawner is filtered, so the option drops out. */
+export function agentGroupOptions(spawnerFilter: string): ReadonlyArray<{ value: AgentGroup, label: string }> {
+  return spawnerFilter === 'all'
+    ? AGENT_GROUP_OPTIONS
+    : AGENT_GROUP_OPTIONS.filter(o => o.value !== 'spawner')
+}
+
+/** Falls back to 'none' when the stored grouping is unavailable under the current filter. */
+export function resolveGroup(groupBy: AgentGroup, spawnerFilter: string): AgentGroup {
+  return agentGroupOptions(spawnerFilter).some(o => o.value === groupBy) ? groupBy : 'none'
+}
 
 export interface AgentGrouping {
   key: string
@@ -51,23 +74,30 @@ export function sortAgents(list: Agent[], sortBy: AgentSort, nowMs: number): Age
   return sorted
 }
 
-export function groupAgents(list: Agent[], groupBy: AgentGroup): AgentGrouping[] {
-  if (groupBy === 'project') {
-    const seen = new Map<string, Agent[]>()
-    for (const agent of list) {
-      const key = agent.projectName
-      const bucket = seen.get(key)
-      if (bucket) {
-        bucket.push(agent)
-      }
-      else {
-        seen.set(key, [agent])
-      }
+function bucketBy(list: Agent[], keyOf: (agent: Agent) => { key: string, label: string }): AgentGrouping[] {
+  const seen = new Map<string, AgentGrouping>()
+  for (const agent of list) {
+    const { key, label } = keyOf(agent)
+    const bucket = seen.get(key)
+    if (bucket) {
+      bucket.agents.push(agent)
     }
-    return Array.from(seen.entries()).map(([key, agents]) => ({
-      key,
-      label: friendlyProjectName(key),
-      agents,
+    else {
+      seen.set(key, { key, label, agents: [agent] })
+    }
+  }
+  return Array.from(seen.values())
+}
+
+export function groupAgents(
+  list: Agent[],
+  groupBy: AgentGroup,
+  spawnerOf?: SpawnerResolver,
+): AgentGrouping[] {
+  if (groupBy === 'project') {
+    return bucketBy(list, agent => ({
+      key: agent.projectName,
+      label: friendlyProjectName(agent.projectName),
     }))
   }
 
@@ -80,18 +110,21 @@ export function groupAgents(list: Agent[], groupBy: AgentGroup): AgentGrouping[]
   }
 
   if (groupBy === 'model') {
-    const seen = new Map<string, Agent[]>()
-    for (const agent of list) {
+    return bucketBy(list, (agent) => {
       const key = shortModel(agent.model ?? null)
-      const bucket = seen.get(key)
-      if (bucket) {
-        bucket.push(agent)
-      }
-      else {
-        seen.set(key, [agent])
-      }
-    }
-    return Array.from(seen.entries()).map(([key, agents]) => ({ key, label: key, agents }))
+      return { key, label: key }
+    })
+  }
+
+  if (groupBy === 'spawner') {
+    const groups = bucketBy(list, (agent) => {
+      const spawner = spawnerOf?.(agent) ?? null
+      return spawner
+        ? { key: spawner.id, label: spawner.name }
+        : { key: NO_SPAWNER_KEY, label: 'No spawner' }
+    })
+    // Un-orchestrated agents are the residual bucket, so they trail the named ones.
+    return groups.sort((a, b) => Number(a.key === NO_SPAWNER_KEY) - Number(b.key === NO_SPAWNER_KEY))
   }
 
   return [{ key: 'all', label: null, agents: list }]
