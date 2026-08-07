@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"strconv"
 	"strings"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
@@ -70,9 +71,9 @@ func registerListProjects(registry mcp.ToolRegistry, d ReadDeps) {
 	})
 }
 
-// registerCreateProject registers the create_project tool.
-// Scope: tasks:write. Field rules mirror POST /api/projects — both writers must
-// accept the same set of valid projects.
+// registerCreateProject registers the create_project tool. Scope: tasks:write.
+// Stricter than POST /api/projects on purpose: name is trimmed, blank optionals
+// are stored as NULL rather than "", and defaultSpawnerId must resolve.
 func registerCreateProject(registry mcp.ToolRegistry, d WriteDeps) {
 	registry.Register(&mcp.ToolDef{
 		Name:        "create_project",
@@ -82,7 +83,7 @@ func registerCreateProject(registry mcp.ToolRegistry, d WriteDeps) {
 			"properties": map[string]any{
 				"slug":             map[string]any{"type": "string", "description": "Unique " + validation.SlugPatternMessage},
 				"name":             map[string]any{"type": "string", "description": "Human-readable project name"},
-				"description":      map[string]any{"type": "string"},
+				"description":      map[string]any{"type": "string", "description": "Optional free-text summary shown in the dashboard project list"},
 				"color":            map[string]any{"type": "string", "description": "Hex colour for the dashboard, e.g. #3b82f6"},
 				"defaultSpawnerId": map[string]any{"type": "string", "description": "Optional spawner ID used by this project's tasks by default"},
 			},
@@ -97,7 +98,7 @@ func registerCreateProject(registry mcp.ToolRegistry, d WriteDeps) {
 				return nil, err
 			}
 			if !validation.IsValidSlug(slug) {
-				return nil, mcp.Fail("invalid slug: " + validation.SlugPatternMessage)
+				return nil, mcp.Fail("create_project: invalid slug " + strconv.Quote(slug) + ": " + validation.SlugPatternMessage)
 			}
 			name, err := mcp.StringArg(args, "name")
 			if err != nil {
@@ -114,8 +115,8 @@ func registerCreateProject(registry mcp.ToolRegistry, d WriteDeps) {
 			if color != nil && !validation.IsValidColor(*color) {
 				return nil, mcp.Fail("create_project: " + validation.ColorPatternMessage)
 			}
-			if _, err := d.ProjectRepo.GetBySlug(ctx, slug); err == nil {
-				return nil, mcp.Fail("create_project: project already exists: " + slug)
+			if existing, err := d.ProjectRepo.GetBySlug(ctx, slug); err == nil {
+				return nil, mcp.Fail("create_project: project already exists: " + slug + " (id " + existing.ID + ") — use it instead of creating a new one")
 			} else if !ent.IsNotFound(err) {
 				return nil, mcp.Fail("create_project: " + err.Error())
 			}
