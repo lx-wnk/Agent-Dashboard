@@ -84,6 +84,20 @@ describe('initServiceWorker', () => {
     expect(cachesDelete).toHaveBeenCalledWith('workbox-precache-v2')
   })
 
+  // CacheStorage is origin-scoped, so eviction has to name what it owns rather
+  // than enumerate every key the origin happens to hold.
+  it('leaves caches it did not create alone', async () => {
+    vi.stubEnv('PROD', true)
+    setSearch('?shell=desktop')
+    getRegistrations.mockResolvedValue([])
+    cachesKeys.mockResolvedValue(['workbox-precache-v2', 'agent-avatars'])
+
+    await initServiceWorker()
+
+    expect(cachesDelete).toHaveBeenCalledWith('workbox-precache-v2')
+    expect(cachesDelete).not.toHaveBeenCalledWith('agent-avatars')
+  })
+
   // A property that exists but holds undefined still passes `'serviceWorker' in
   // navigator`, so both entry points have to survive that shape.
   it('does nothing when the browser exposes no service worker container', async () => {

@@ -19,6 +19,11 @@ function swContainer(): ServiceWorkerContainer | undefined {
   return typeof navigator === 'undefined' ? undefined : navigator.serviceWorker
 }
 
+// Workbox names every cache it creates `workbox-*` or `<prefix>-precache-*`.
+function isWorkboxCache(name: string): boolean {
+  return name.startsWith('workbox-') || name.includes('-precache-') || name.includes('-runtime-')
+}
+
 export async function unregisterServiceWorkers(): Promise<number> {
   const container = swContainer()
   if (!container)
@@ -28,10 +33,12 @@ export async function unregisterServiceWorkers(): Promise<number> {
   await Promise.all(registrations.map(r => r.unregister()))
 
   // Unregistering leaves the precache behind; without this the next visit still
-  // has a populated cache storage for a worker that will never run again.
+  // has a populated cache storage for a worker that will never run again. Only
+  // the workbox-owned caches are dropped — CacheStorage is origin-scoped, so a
+  // blanket delete would also take any cache a future feature adds here.
   if (typeof caches !== 'undefined') {
     const keys = await caches.keys()
-    await Promise.all(keys.map(k => caches.delete(k)))
+    await Promise.all(keys.filter(isWorkboxCache).map(k => caches.delete(k)))
   }
   return registrations.length
 }
