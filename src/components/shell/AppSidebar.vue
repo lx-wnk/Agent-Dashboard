@@ -22,7 +22,7 @@ const emit = defineEmits<{
   openSettings: []
 }>()
 
-const { expanded, pinned, togglePinned, setHovering } = useSidebar()
+const { expanded, pinned, togglePinned, setHovering, setFocused, collapseAfterSelect } = useSidebar()
 const { activeView } = useViewState()
 
 const grouped = computed(() =>
@@ -47,7 +47,12 @@ const floating = computed(() => expanded.value && !pinned.value)
 function onFocusOut(event: FocusEvent): void {
   const next = event.relatedTarget as Node | null
   if (!next || !(event.currentTarget as HTMLElement).contains(next))
-    setHovering(false)
+    setFocused(false)
+}
+
+function selectView(view: ActiveView): void {
+  activeView.value = view
+  collapseAfterSelect()
 }
 </script>
 
@@ -66,7 +71,7 @@ function onFocusOut(event: FocusEvent): void {
       ]"
       @mouseenter="setHovering(true)"
       @mouseleave="setHovering(false)"
-      @focusin="setHovering(true)"
+      @focusin="setFocused(true)"
       @focusout="onFocusOut"
     >
       <div class="flex items-center gap-2 px-1.5 pb-3 mb-2 border-b border-line">
@@ -117,7 +122,7 @@ function onFocusOut(event: FocusEvent): void {
             :label="item.label"
             :active="activeView === item.view"
             :expanded="expanded"
-            @select="activeView = item.view"
+            @select="selectView(item.view)"
           >
             <template v-if="badgeFor(item.view) !== null" #badge>
               <span

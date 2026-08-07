@@ -137,6 +137,43 @@ describe('appSidebar', () => {
     expect(nav.classes()).toContain('w-[56px]')
   })
 
+  // The floating nav covers the left 220px of the view it just navigated to, so
+  // a nav pick with the pointer still on it would swallow the next click there.
+  it('collapses after a nav pick while the pointer is still on it', async () => {
+    const { AppSidebar } = await load()
+    const w = mount(AppSidebar, { props })
+    const nav = w.get('nav')
+    await nav.trigger('mouseenter')
+    expect(nav.classes()).toContain('w-[220px]')
+
+    await w.findAll('button').find(b => b.text().includes('Pipeline'))!.trigger('click')
+    expect(nav.classes()).toContain('w-[56px]')
+  })
+
+  it('expands again once the pointer has left and comes back', async () => {
+    const { AppSidebar } = await load()
+    const w = mount(AppSidebar, { props })
+    const nav = w.get('nav')
+    await nav.trigger('mouseenter')
+    await w.findAll('button').find(b => b.text().includes('Pipeline'))!.trigger('click')
+
+    await nav.trigger('mouseleave')
+    await nav.trigger('mouseenter')
+    expect(nav.classes()).toContain('w-[220px]')
+  })
+
+  it('leaves keyboard expansion untouched by a pointer suppression', async () => {
+    const { AppSidebar } = await load()
+    const w = mount(AppSidebar, { props })
+    const nav = w.get('nav')
+    await nav.trigger('mouseenter')
+    await w.findAll('button').find(b => b.text().includes('Pipeline'))!.trigger('click')
+    expect(nav.classes()).toContain('w-[56px]')
+
+    await nav.trigger('focusin')
+    expect(nav.classes()).toContain('w-[220px]')
+  })
+
   it('keeps the nav open while focus moves between its own items', async () => {
     const { AppSidebar } = await load()
     const w = mount(AppSidebar, { props })

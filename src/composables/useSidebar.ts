@@ -6,7 +6,13 @@ const storedPinned = typeof localStorage !== 'undefined'
 
 const pinned = ref<boolean>(storedPinned)
 const hovering = ref(false)
-const expanded = computed(() => pinned.value || hovering.value)
+const focused = ref(false)
+// Set when a nav item is picked with the pointer still over the floating nav.
+// Without it the nav stays expanded across the content it just navigated to,
+// and anything under those 220px swallows the next click.
+const pointerSuppressed = ref(false)
+const expanded = computed(() =>
+  pinned.value || focused.value || (hovering.value && !pointerSuppressed.value))
 
 watch(pinned, (v) => {
   if (typeof localStorage !== 'undefined')
@@ -19,6 +25,20 @@ function togglePinned() {
 
 function setHovering(v: boolean) {
   hovering.value = v
+  // Leaving re-arms hover expansion for the next entry.
+  if (!v)
+    pointerSuppressed.value = false
+}
+
+// Keyboard expansion is tracked separately so a pointer suppression never hides
+// the labels from someone tabbing through the nav.
+function setFocused(v: boolean) {
+  focused.value = v
+}
+
+function collapseAfterSelect() {
+  if (hovering.value)
+    pointerSuppressed.value = true
 }
 
 function handleShortcut(e: KeyboardEvent) {
@@ -33,5 +53,5 @@ function handleShortcut(e: KeyboardEvent) {
 }
 
 export function useSidebar() {
-  return { pinned, hovering, expanded, togglePinned, setHovering, handleShortcut }
+  return { pinned, hovering, expanded, togglePinned, setHovering, setFocused, collapseAfterSelect, handleShortcut }
 }
