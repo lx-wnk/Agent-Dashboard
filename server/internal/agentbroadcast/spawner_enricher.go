@@ -11,6 +11,7 @@ import (
 	sdk "github.com/lx-wnk/agent-dashboard/sdk"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/merger"
+	"github.com/lx-wnk/agent-dashboard/server/internal/pathutil"
 	"github.com/lx-wnk/agent-dashboard/server/internal/procenv"
 )
 
@@ -52,13 +53,19 @@ type taskLister interface {
 //
 // Best-effort throughout: a missing repo, an unreadable process, or a query
 // error leaves the annotation empty instead of failing the scan.
+// A nil spawner repo returns a nil enricher, which merger.ChainEnrichers skips
+// — matching NewHookEventEnricher, so the no-database path keeps composing away
+// without the composition root carrying a per-enricher guard.
 func NewSpawnerEnricher(spawners spawnerLister, tasks taskLister) merger.Enricher {
 	return newSpawnerEnricher(spawners, tasks, procenv.Lookup)
 }
 
 func newSpawnerEnricher(spawners spawnerLister, tasks taskLister, lookupEnv envLookupFn) merger.Enricher {
+	if spawners == nil {
+		return nil
+	}
 	return func(ctx context.Context, agents []sdk.Agent) {
-		if spawners == nil || len(agents) == 0 {
+		if len(agents) == 0 {
 			return
 		}
 		rows, err := spawners.List(ctx)
@@ -173,17 +180,14 @@ func defaultConfigDir() string {
 
 // canonicalDir resolves ~, relative segments, and symlinks so that a spawner
 // pointing at ~/.claude and a process reporting the store it links to compare
-// equal.
+// equal. Tilde handling goes through pathutil so attribution expands exactly
+// what BuildSpawnEnv exported to the process in the first place.
 func canonicalDir(dir string) string {
 	dir = strings.TrimSpace(dir)
 	if dir == "" {
 		return ""
 	}
-	if rest, ok := strings.CutPrefix(dir, "~"); ok {
-		if home, err := os.UserHomeDir(); err == nil {
-			dir = filepath.Join(home, rest)
-		}
-	}
+	dir = pathutil.ExpandLeadingTilde(dir)
 	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
 		return filepath.Clean(resolved)
 	}

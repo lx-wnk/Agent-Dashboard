@@ -120,6 +120,12 @@ func TestPrefersTheDefaultSpawnerWhenTwoClaimTheSameConfigDir(t *testing.T) {
 	}
 }
 
+// merger.ChainEnrichers skips nil elements, so the no-database path composes
+// away here rather than in the composition root.
+func TestReturnsANilEnricherWithoutASpawnerRepo(t *testing.T) {
+	assert.Nil(t, NewSpawnerEnricher(nil, nil))
+}
+
 func TestAnnotatesNothingWithoutSpawners(t *testing.T) {
 	agents := []sdk.Agent{{PID: 1}}
 
