@@ -14,6 +14,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	mcp "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
+	"github.com/lx-wnk/agent-dashboard/server/internal/validation"
 )
 
 func invokeCreateProject(t *testing.T, registry mcp.ToolRegistry, args map[string]any) (map[string]any, error) {
@@ -377,4 +378,41 @@ func TestCreateProject_LogsTheCallingKeyWithoutFreeText(t *testing.T) {
 	require.Contains(t, logged, "web")
 	require.Contains(t, logged, out["id"].(string))
 	require.NotContains(t, logged, "internal-only note")
+}
+
+// tasks:write reaches this path and no MCP tool can rename or delete a project
+// afterwards, so an unbounded name is a permanent artefact in every project list.
+func TestCreateProject_RejectsAnOverlongNameAndDescription(t *testing.T) {
+	registry, deps := newProjectRegistry(t)
+
+	_, err := invokeCreateProject(t, registry, map[string]any{
+		"slug": "long-name",
+		"name": strings.Repeat("n", validation.MaxProjectNameLen+1),
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), validation.ProjectNameLengthMessage)
+
+	_, err = invokeCreateProject(t, registry, map[string]any{
+		"slug":        "long-description",
+		"name":        "Fine",
+		"description": strings.Repeat("d", validation.MaxProjectDescriptionLen+1),
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), validation.ProjectDescriptionLengthMessage)
+
+	for _, slug := range []string{"long-name", "long-description"} {
+		_, err := deps.ProjectRepo.GetBySlug(context.Background(), slug)
+		require.Error(t, err, "a rejected call must not create the project")
+	}
+}
+
+func TestCreateProject_AcceptsTheLimitExactly(t *testing.T) {
+	registry, _ := newProjectRegistry(t)
+
+	_, err := invokeCreateProject(t, registry, map[string]any{
+		"slug":        "at-the-limit",
+		"name":        strings.Repeat("n", validation.MaxProjectNameLen),
+		"description": strings.Repeat("d", validation.MaxProjectDescriptionLen),
+	})
+	require.NoError(t, err)
 }

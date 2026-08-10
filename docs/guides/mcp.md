@@ -48,7 +48,9 @@ That command is executed as `sh -c` in every worktree the project creates, so `P
 restricts it to admins **when `auth.mode` is not `none`**; the MCP tool omits the field
 unconditionally. It is the one tool whose schema declares `"additionalProperties": false`, and the
 handler enforces it: any key outside `slug`, `name`, `description`, `color`, and `defaultSpawnerId`
-fails the call by name instead of being dropped in silence. Set it in the UI under **Settings → Projects** instead. For the same reason
+fails the call by name instead of being dropped in silence. `name` is capped at 200 characters and
+`description` at 10 000 — the same limits `POST /api/projects` applies, so the rule does not depend
+on which door the caller used. Set it in the UI under **Settings → Projects** instead. For the same reason
 `list_projects` and `create_project` report `hasSetupCommand` (a boolean) rather than the command
 itself: the text is deliberately never put on the wire, because those strings routinely carry
 registry tokens and `tasks:read` is enough to call `list_projects`.

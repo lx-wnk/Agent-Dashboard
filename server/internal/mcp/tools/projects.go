@@ -144,6 +144,9 @@ func registerCreateProject(registry mcp.ToolRegistry, d WriteDeps) {
 			if name == "" {
 				return nil, mcp.Fail("create_project: name is required")
 			}
+			if !validation.IsValidProjectName(name) {
+				return nil, mcp.Fail("create_project: " + validation.ProjectNameLengthMessage)
+			}
 			color, err := nonBlankPtr(args, "color")
 			if err != nil {
 				return nil, err
@@ -173,6 +176,9 @@ func registerCreateProject(registry mcp.ToolRegistry, d WriteDeps) {
 			description, err := nonBlankPtr(args, "description")
 			if err != nil {
 				return nil, err
+			}
+			if description != nil && !validation.IsValidProjectDescription(*description) {
+				return nil, mcp.Fail("create_project: " + validation.ProjectDescriptionLengthMessage)
 			}
 			// setupCommand is deliberately absent from this tool: it is an
 			// RCE-equivalent sink (`sh -c` in the worktree, see
