@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	sdk "github.com/lx-wnk/agent-dashboard/sdk"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
@@ -55,6 +56,10 @@ type taskLister interface {
 // — matching NewHookEventEnricher, so the no-database path keeps composing away
 // without the composition root carrying a per-enricher guard.
 func NewSpawnerEnricher(spawners spawnerLister, tasks taskLister) merger.Enricher {
+	return newSpawnerEnricher(spawners, tasks, newDirResolver(dirCacheTTL, time.Now))
+}
+
+func newSpawnerEnricher(spawners spawnerLister, tasks taskLister, dirs *dirResolver) merger.Enricher {
 	if spawners == nil {
 		return nil
 	}
@@ -75,12 +80,12 @@ func NewSpawnerEnricher(spawners spawnerLister, tasks taskLister) merger.Enriche
 		for _, s := range rows {
 			byID[s.ID] = s
 		}
-		byConfigDir := indexByConfigDir(rows)
+		byConfigDir := indexByConfigDir(rows, dirs)
 
 		taskSpawner := taskSpawnerIDs(ctx, tasks, agents)
 
 		for i := range agents {
-			id, source := attribute(&agents[i], taskSpawner, byConfigDir)
+			id, source := attribute(&agents[i], taskSpawner, byConfigDir, dirs)
 			if id == "" {
 				continue
 			}
@@ -99,6 +104,7 @@ func attribute(
 	agent *sdk.Agent,
 	taskSpawner map[string]string,
 	byConfigDir map[string]*ent.Spawner,
+	dirs *dirResolver,
 ) (id, source string) {
 	if agent.PipelineTaskID != "" {
 		if fromTask := taskSpawner[agent.PipelineTaskID]; fromTask != "" {
@@ -118,7 +124,7 @@ func attribute(
 		// default config dir, which is what a spawner without one targets.
 		dir = userDefaultConfigDir()
 	}
-	if match, ok := byConfigDir[canonicalDir(dir)]; ok {
+	if match, ok := byConfigDir[dirs.canonical(dir)]; ok {
 		return match.ID, sdk.SpawnerSourceEnv
 	}
 	return "", ""
@@ -129,7 +135,7 @@ func attribute(
 // session either matches a declared directory or matches nothing. Two spawners
 // can name the same directory (a symlink to the same store); the default one
 // wins so the attribution is stable rather than map-order dependent.
-func indexByConfigDir(rows []*ent.Spawner) map[string]*ent.Spawner {
+func indexByConfigDir(rows []*ent.Spawner, dirs *dirResolver) map[string]*ent.Spawner {
 	byDir := make(map[string]*ent.Spawner, len(rows))
 	var fallback *ent.Spawner
 	for _, s := range rows {
@@ -140,14 +146,14 @@ func indexByConfigDir(rows []*ent.Spawner) map[string]*ent.Spawner {
 			}
 			continue
 		}
-		key := canonicalDir(dir)
+		key := dirs.canonical(dir)
 		if prev, ok := byDir[key]; ok && prev.IsDefault {
 			continue
 		}
 		byDir[key] = s
 	}
 	if fallback != nil {
-		if key := canonicalDir(userDefaultConfigDir()); key != "" {
+		if key := dirs.canonical(userDefaultConfigDir()); key != "" {
 			if prev, ok := byDir[key]; !ok || !prev.IsDefault {
 				byDir[key] = fallback
 			}
