@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"log/slog"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -73,6 +74,41 @@ func registerListProjects(registry mcp.ToolRegistry, d ReadDeps) {
 	})
 }
 
+// createProjectProperties is both the advertised JSON Schema `properties` block
+// and the accepted-key set the handler enforces — one definition, so the
+// "additionalProperties": false the schema promises cannot drift from what the
+// handler actually refuses.
+var createProjectProperties = map[string]any{
+	"slug":             map[string]any{"type": "string", "description": "Unique " + validation.SlugPatternMessage},
+	"name":             map[string]any{"type": "string", "description": "Human-readable project name"},
+	"description":      map[string]any{"type": "string", "description": "Optional free-text summary shown in the dashboard project list"},
+	"color":            map[string]any{"type": "string", "description": "Hex colour for the dashboard, e.g. #3b82f6"},
+	"defaultSpawnerId": map[string]any{"type": "string", "description": "Optional spawner ID used by this project's tasks by default"},
+}
+
+// rejectUnknownArgs makes a schema's "additionalProperties": false binding. The
+// JSON-RPC layer hands tool arguments through unvalidated, so without this the
+// flag would only constrain clients that validate for themselves and a smuggled
+// key would still be dropped in silence.
+// create_project only, deliberately: the other 40 tools have live callers whose
+// harmless extra keys must not start failing.
+func rejectUnknownArgs(tool string, args map[string]any, properties map[string]any) error {
+	var unknown []string
+	for key := range args {
+		if _, known := properties[key]; !known {
+			unknown = append(unknown, key)
+		}
+	}
+	if len(unknown) == 0 {
+		return nil
+	}
+	sort.Strings(unknown)
+	accepted := mapKeys(properties)
+	sort.Strings(accepted)
+	return mcp.Fail(tool + ": unknown argument(s): " + strings.Join(unknown, ", ") +
+		" — this tool accepts only: " + strings.Join(accepted, ", "))
+}
+
 // registerCreateProject registers the create_project tool. Scope: tasks:write.
 // Stricter than POST /api/projects on purpose: name is trimmed, blank optionals
 // are stored as NULL rather than "", and defaultSpawnerId must resolve.
@@ -81,19 +117,17 @@ func registerCreateProject(registry mcp.ToolRegistry, d WriteDeps) {
 		Name:        "create_project",
 		Description: "Create a project. Fails if the slug is already taken — call list_projects first to reuse an existing project.",
 		InputSchema: map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"slug":             map[string]any{"type": "string", "description": "Unique " + validation.SlugPatternMessage},
-				"name":             map[string]any{"type": "string", "description": "Human-readable project name"},
-				"description":      map[string]any{"type": "string", "description": "Optional free-text summary shown in the dashboard project list"},
-				"color":            map[string]any{"type": "string", "description": "Hex colour for the dashboard, e.g. #3b82f6"},
-				"defaultSpawnerId": map[string]any{"type": "string", "description": "Optional spawner ID used by this project's tasks by default"},
-			},
-			"required": []string{"slug", "name"},
+			"type":                 "object",
+			"properties":           createProjectProperties,
+			"required":             []string{"slug", "name"},
+			"additionalProperties": false,
 		},
 		Handler: func(ctx context.Context, args map[string]any) (*mcp.ToolResult, error) {
 			if d.ProjectRepo == nil {
 				return nil, mcp.Fail("create_project: project repository not configured")
+			}
+			if err := rejectUnknownArgs("create_project", args, createProjectProperties); err != nil {
+				return nil, err
 			}
 			slug, err := mcp.StringArg(args, "slug")
 			if err != nil {
@@ -145,6 +179,7 @@ func registerCreateProject(registry mcp.ToolRegistry, d WriteDeps) {
 			// serverapp/di_pipeline.go) that the HTTP writer gates behind an
 			// admin check. tasks:write is not admin, so the MCP path always
 			// creates a project without one — do not add it back for parity.
+			// Sending the key anyway is refused by rejectUnknownArgs above.
 			p, err := d.ProjectRepo.Create(ctx, name, slug, description, color, spawnerID, nil)
 			if err != nil {
 				// Lost race against a concurrent create: the unique index, not the
