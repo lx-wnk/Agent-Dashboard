@@ -503,6 +503,8 @@ func parseFrontmatterFile(path string) frontmatter {
 // parseFrontmatter scans the leading YAML frontmatter (capped at 80 lines) of r
 // for the `name:`, `description:`, and `argument-hint:` keys, resolving
 // block-scalar markers (>-, >, |, |-) against the following indented line.
+// `argument-hint:` passes through sanitizeArgumentHint — the file may come from
+// the plugin cache, and this is the only place that trust boundary is crossed.
 // It always scans to the end of the frontmatter: the keys may appear in any
 // order, so returning early on one of them would hide the others.
 func parseFrontmatter(r io.Reader) frontmatter {
@@ -543,7 +545,7 @@ func parseFrontmatter(r io.Reader) frontmatter {
 			fm.Name = scalarValue(strings.TrimPrefix(line, "name:"))
 		}
 		if strings.HasPrefix(line, "argument-hint:") {
-			fm.ArgumentHint = scalarValue(strings.TrimPrefix(line, "argument-hint:"))
+			fm.ArgumentHint = sanitizeArgumentHint(scalarValue(strings.TrimPrefix(line, "argument-hint:")))
 		}
 		if strings.HasPrefix(line, "description:") {
 			desc := strings.TrimSpace(strings.TrimPrefix(line, "description:"))

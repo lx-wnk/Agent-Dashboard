@@ -94,3 +94,32 @@ describe('promptInput drift notice', () => {
     expect(w.find('[data-testid="builtins-stale-note"]').exists()).toBe(false)
   })
 })
+
+describe('promptInput argument hints', () => {
+  // A hint can come from an installed plugin's frontmatter, so the row must not
+  // be stretchable by its content — the server cap is not the only guard.
+  it('clips a long argument hint and keeps the full value in the title', async () => {
+    const longHint = `[${'x'.repeat(200)}]`
+    commandsResponse = {
+      commands: [{ name: '/plugin-cmd', description: 'From a plugin', argumentHint: longHint }],
+      builtinsMayBeStale: false,
+    }
+    const w = await mountWithQuery('/plugin-cmd')
+
+    const usage = w.find('[data-testid="command-usage"]')
+    expect(usage.exists()).toBe(true)
+    expect(usage.text().length).toBeLessThanOrEqual(61)
+    expect(usage.text().endsWith('…')).toBe(true)
+    expect(usage.attributes('title')).toBe(longHint)
+  })
+
+  it('renders a short hint unchanged', async () => {
+    commandsResponse = {
+      commands: [{ name: '/deploy', description: 'Deploy', argumentHint: '[env] [--dry-run]' }],
+      builtinsMayBeStale: false,
+    }
+    const w = await mountWithQuery('/deploy')
+
+    expect(w.find('[data-testid="command-usage"]').text()).toBe('[env] [--dry-run]')
+  })
+})

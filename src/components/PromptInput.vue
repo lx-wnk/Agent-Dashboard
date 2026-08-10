@@ -281,7 +281,7 @@ defineExpose({ focus })
         >
           <span class="text-accent font-semibold flex-shrink-0">{{ cmd.name }}</span>
           <span class="text-fg-mute text-xs">{{ cmd.description }}</span>
-          <span v-if="cmd.usage" class="text-fg-faint text-[10px] ml-1">{{ cmd.usage }}</span>
+          <span v-if="cmd.usage" data-testid="command-usage" :title="cmd.usage" class="text-fg-faint text-[10px] ml-1">{{ truncate(cmd.usage, 60) }}</span>
           <span v-if="cmd.requiresTask && cmd.disabled" class="text-warning-text text-[10px] ml-auto">requires linked task</span>
         </button>
       </div>

@@ -66,6 +66,12 @@ Each entry shows its argument template next to the name, read from the command f
 example. Commands without that key show no template; built-ins never carry one, since they have no
 file on disk to read it from.
 
+That template is file content, and the file may belong to an installed plugin rather than to you, so
+it is sanitised server-side before it reaches the API: a value that is not valid UTF-8 is dropped,
+control characters and Unicode bidi overrides are stripped, and the hint is capped at 120
+characters. The menu clips it to 60 characters for display and shows the full value on hover. Treat
+a hint as what the command's author suggests you type, not as advice from the dashboard.
+
 ## Permissions
 
 Stage agents run with an allow-list derived from `task_permissions` rows. Grants flow through a single validated path (`bulkGrantPermissions`) checked against an allow-list and a dangerous-bash block-list. Permission templates provide quick presets: `feature_implementation`, `research_only`, `test_only`, `review_only`.
