@@ -6,7 +6,9 @@ package serverapp
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"net"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -28,10 +30,24 @@ import (
 // the same way whether the process is asked to restart or the caller simply
 // cancels ctx.
 func Run(ctx context.Context, cfg config.Config, cfgFile string, restartCtl *restart.Controller) error {
+	return runOn(ctx, cfg, cfgFile, restartCtl, nil)
+}
+
+// runOn is Run on an optional pre-bound listener. A nil listener means the HTTP
+// server binds cfg.Addr() itself when it starts; a non-nil one was bound by
+// Listen before any other startup work and is served as-is, so nothing else can
+// take the address in between.
+func runOn(ctx context.Context, cfg config.Config, cfgFile string, restartCtl *restart.Controller, ln net.Listener) error {
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	comps, err := initializeServer(runCtx, cfg, cfgFile, restartCtl)
+	if ln != nil {
+		// Serve and Shutdown both close it; this only covers the paths that
+		// never reach the HTTP server at all.
+		defer ln.Close() //nolint:errcheck
+	}
+
+	comps, err := initializeServer(runCtx, cfg, cfgFile, restartCtl, ln)
 	if err != nil {
 		if comps != nil && comps.Cleanup != nil {
 			comps.Cleanup()
@@ -98,15 +114,60 @@ func Run(ctx context.Context, cfg config.Config, cfgFile string, restartCtl *res
 	return err
 }
 
-// Serve loads configuration from cfgFile (empty for defaults), builds the
-// restart controller, and runs the server until ctx is cancelled. It is the
-// entrypoint for callers outside the server module (e.g. the desktop shell),
-// which cannot construct the internal config/restart types themselves.
-func Serve(ctx context.Context, cfgFile string) error {
+// Instance is a dashboard server that already owns its address but is not
+// serving yet. Splitting the bind from the run lets a host (the desktop shell)
+// take the address before it loads config, plugins and the database, so a
+// second launch fails at once instead of racing through that window and then
+// adopting the first instance's server.
+//
+// It exposes no internal types, so callers outside the server module can hold
+// one. Exactly one of Serve or Close must be called.
+type Instance struct {
+	cfg     config.Config
+	cfgFile string
+	ln      net.Listener
+}
+
+// Listen loads configuration from cfgFile (empty for defaults) and binds its
+// address, returning a server that is holding it. The address is held until
+// Serve returns or Close is called.
+func Listen(cfgFile string) (*Instance, error) {
 	cfg, err := config.Load(cfgFile)
+	if err != nil {
+		return nil, err
+	}
+	ln, err := net.Listen("tcp", cfg.Addr())
+	if err != nil {
+		return nil, fmt.Errorf("bind %s: %w", cfg.Addr(), err)
+	}
+	return &Instance{cfg: cfg, cfgFile: cfgFile, ln: ln}, nil
+}
+
+// Addr is the address the instance holds — the one source of truth for callers
+// that need to reach it (health polling, a webview's target URL), including
+// when the configured port was resolved from the environment or a config file.
+func (i *Instance) Addr() string { return i.ln.Addr().String() }
+
+// Serve runs the server on the held listener until ctx is cancelled. It returns
+// after graceful shutdown and cleanup, with the listener closed.
+func (i *Instance) Serve(ctx context.Context) error {
+	restartCtl := restart.NewController(i.cfg.RestartMode)
+	return runOn(ctx, i.cfg, i.cfgFile, restartCtl, i.ln)
+}
+
+// Close releases the address without serving, for a host that aborts startup
+// between Listen and Serve.
+func (i *Instance) Close() error { return i.ln.Close() }
+
+// Serve loads configuration from cfgFile (empty for defaults), binds the
+// configured address, and runs the server until ctx is cancelled. It is the
+// entrypoint for callers outside the server module (e.g. the desktop shell),
+// which cannot construct the internal config/restart types themselves. A host
+// that needs the address before serving starts uses Listen instead.
+func Serve(ctx context.Context, cfgFile string) error {
+	inst, err := Listen(cfgFile)
 	if err != nil {
 		return err
 	}
-	restartCtl := restart.NewController(cfg.RestartMode)
-	return Run(ctx, cfg, cfgFile, restartCtl)
+	return inst.Serve(ctx)
 }

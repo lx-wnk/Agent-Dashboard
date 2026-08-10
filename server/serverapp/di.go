@@ -15,6 +15,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/agentbroadcast"
@@ -123,7 +124,9 @@ type ServerComponents struct {
 	Cleanup      func()
 }
 
-func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, restartCtl *restart.Controller) (*ServerComponents, error) {
+// ln is the address already bound by Listen, or nil to let the HTTP server
+// bind cfg.Addr() itself when it starts.
+func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, restartCtl *restart.Controller, ln net.Listener) (*ServerComponents, error) {
 	bundle, err := provideDB(cfg)
 	if err != nil {
 		return nil, err
@@ -684,7 +687,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		),
 	}
 	router := api.NewRouter(routerDeps)
-	server := provideServer(cfg, settingsSvc, router)
+	server := provideServer(cfg, settingsSvc, router, ln)
 	return &ServerComponents{
 		API:          server,
 		Broadcaster:  broadcaster,

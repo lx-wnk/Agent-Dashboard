@@ -2,6 +2,7 @@ package serverapp
 
 import (
 	"log/slog"
+	"net"
 	"net/http"
 	"time"
 
@@ -44,7 +45,11 @@ func provideRouterConfig(cfg config.Config, settingsSvc *settings.Service, oauth
 	}
 }
 
-func provideServer(cfg config.Config, settingsSvc *settings.Service, handler http.Handler) *api.Server {
+func provideServer(cfg config.Config, settingsSvc *settings.Service, handler http.Handler, ln net.Listener) *api.Server {
 	shutdownTimeout := time.Duration(settingsSvc.Int("shutdown.timeoutSeconds")) * time.Second
-	return api.NewServer(cfg.Addr(), handler, shutdownTimeout)
+	srv := api.NewServer(cfg.Addr(), handler, shutdownTimeout)
+	if ln != nil {
+		srv.UseListener(ln)
+	}
+	return srv
 }
