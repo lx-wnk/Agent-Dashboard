@@ -35,13 +35,9 @@ func spawner(id, name, configDir string, isDefault bool) *ent.Spawner {
 	return &ent.Spawner{ID: id, Name: name, Env: env, IsDefault: isDefault}
 }
 
-func fixedEnv(byPID map[int]string) envLookupFn {
-	return func(_ context.Context, _ []int, _ string) map[int]string { return byPID }
-}
-
-func enrich(t *testing.T, rows []*ent.Spawner, tasks taskLister, env map[int]string, agents []sdk.Agent) []sdk.Agent {
+func enrich(t *testing.T, rows []*ent.Spawner, tasks taskLister, agents []sdk.Agent) []sdk.Agent {
 	t.Helper()
-	newSpawnerEnricher(stubSpawnerRepo{rows: rows}, tasks, fixedEnv(env))(context.Background(), agents)
+	NewSpawnerEnricher(stubSpawnerRepo{rows: rows}, tasks)(context.Background(), agents)
 	return agents
 }
 
@@ -51,9 +47,9 @@ func TestPlacesASessionByTheConfigDirItsProcessCarries(t *testing.T) {
 		spawner("default-id", "Claude (default)", "", true),
 		spawner("work-id", "Claude Work", work, false),
 	}
-	agents := []sdk.Agent{{PID: 4597}, {PID: 9920}}
+	agents := []sdk.Agent{{PID: 4597, ClaudeConfigDir: work}, {PID: 9920}}
 
-	got := enrich(t, rows, nil, map[int]string{4597: work}, agents)
+	got := enrich(t, rows, nil, agents)
 
 	assert.Equal(t, "work-id", got[0].SpawnerID)
 	assert.Equal(t, "Claude Work", got[0].SpawnerName)
@@ -68,10 +64,9 @@ func TestResolvesSymlinkedConfigDirsToTheSameSpawner(t *testing.T) {
 	require.NoError(t, os.Symlink(store, link))
 
 	rows := []*ent.Spawner{spawner("work-id", "Claude Work", link, false)}
-	agents := []sdk.Agent{{PID: 1}}
 
 	// The spawner names the symlink, the process reports the store it points at.
-	got := enrich(t, rows, nil, map[int]string{1: store}, agents)
+	got := enrich(t, rows, nil, []sdk.Agent{{PID: 1, ClaudeConfigDir: store}})
 
 	assert.Equal(t, "work-id", got[0].SpawnerID)
 }
@@ -84,10 +79,9 @@ func TestPipelineTaskWinsOverTheProcessEnvironment(t *testing.T) {
 	}
 	taskSpawner := "work-id"
 	tasks := stubTaskRepo{rows: []*ent.Task{{ID: "task-1", SpawnerID: &taskSpawner}}}
-	agents := []sdk.Agent{{PID: 1, PipelineTaskID: "task-1"}}
 
 	// The process reports no config dir, which would place it on the default.
-	got := enrich(t, rows, tasks, nil, agents)
+	got := enrich(t, rows, tasks, []sdk.Agent{{PID: 1, PipelineTaskID: "task-1"}})
 
 	assert.Equal(t, "work-id", got[0].SpawnerID)
 	assert.Equal(t, sdk.SpawnerSourceTask, got[0].SpawnerSource)
@@ -95,10 +89,9 @@ func TestPipelineTaskWinsOverTheProcessEnvironment(t *testing.T) {
 
 func TestLeavesTheAgentUnattributedWhenNoSpawnerOwnsItsConfigDir(t *testing.T) {
 	rows := []*ent.Spawner{spawner("work-id", "Claude Work", t.TempDir(), false)}
-	agents := []sdk.Agent{{PID: 1}}
 
 	// Not the work dir, and no spawner claims the default one.
-	got := enrich(t, rows, nil, map[int]string{1: t.TempDir()}, agents)
+	got := enrich(t, rows, nil, []sdk.Agent{{PID: 1, ClaudeConfigDir: t.TempDir()}})
 
 	assert.Empty(t, got[0].SpawnerID)
 	assert.Empty(t, got[0].SpawnerSource)
@@ -112,10 +105,9 @@ func TestPrefersTheDefaultSpawnerWhenTwoClaimTheSameConfigDir(t *testing.T) {
 		spawner("custom-id", "Custom (imported)", shared, false),
 		spawner("default-id", "Claude (default)", shared, true),
 	}
-	agents := []sdk.Agent{{PID: 1}}
 
 	for range 5 {
-		got := enrich(t, rows, nil, map[int]string{1: shared}, []sdk.Agent{agents[0]})
+		got := enrich(t, rows, nil, []sdk.Agent{{PID: 1, ClaudeConfigDir: shared}})
 		assert.Equal(t, "default-id", got[0].SpawnerID)
 	}
 }
@@ -127,9 +119,25 @@ func TestReturnsANilEnricherWithoutASpawnerRepo(t *testing.T) {
 }
 
 func TestAnnotatesNothingWithoutSpawners(t *testing.T) {
-	agents := []sdk.Agent{{PID: 1}}
-
-	got := enrich(t, nil, nil, map[int]string{1: "/tmp"}, agents)
+	got := enrich(t, nil, nil, []sdk.Agent{{PID: 1, ClaudeConfigDir: "/tmp"}})
 
 	assert.Empty(t, got[0].SpawnerID)
+}
+
+// A finished agent's process is gone, so nothing can be read back out of it —
+// but the config dir it ran under was recorded on the agent while it was live.
+// Attribution has to use that, or every finished card lands on the default
+// spawner regardless of the profile it actually ran under.
+func TestAttributesAFinishedAgentFromTheConfigDirRecordedWhileItWasLive(t *testing.T) {
+	work := t.TempDir()
+	rows := []*ent.Spawner{
+		spawner("default-id", "Claude (default)", "", true),
+		spawner("work-id", "Claude Work", work, false),
+	}
+	agents := []sdk.Agent{{PID: 4597, ClaudeConfigDir: work, Status: sdk.AgentStatusFinished}}
+
+	got := enrich(t, rows, nil, agents)
+
+	assert.Equal(t, "work-id", got[0].SpawnerID)
+	assert.Equal(t, sdk.SpawnerSourceEnv, got[0].SpawnerSource)
 }

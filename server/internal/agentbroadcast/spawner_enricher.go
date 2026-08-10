@@ -12,16 +12,12 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/merger"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pathutil"
-	"github.com/lx-wnk/agent-dashboard/server/internal/procenv"
 )
 
 // ClaudeConfigDirEnv is the variable a Claude profile wrapper sets to point a
 // session at its own config directory; it is what separates one configured
 // spawner from another when both run the same command.
 const ClaudeConfigDirEnv = "CLAUDE_CONFIG_DIR"
-
-// envLookupFn is the seam procenv.Lookup fills; tests substitute a map.
-type envLookupFn func(ctx context.Context, pids []int, key string) map[int]string
 
 // Only the two reads this needs, so the repos can be stubbed without standing
 // up their full interfaces.
@@ -38,10 +34,12 @@ type taskLister interface {
 // Two sources, most authoritative first:
 //
 //  1. task — the agent runs a pipeline stage whose task names a spawner.
-//  2. env — the live process carries CLAUDE_CONFIG_DIR, which identifies the
-//     profile it was started with. This is read from the running process, not
-//     guessed from session files: two config dirs that symlink to the same
-//     store are indistinguishable on disk but not here.
+//  2. env — the CLAUDE_CONFIG_DIR the scanner read out of the process, which
+//     identifies the profile the session was started with. It comes off the
+//     agent rather than from a second read of the process: it is read once per
+//     scan (scanner.ProcessInfo.ClaudeConfigDir), it survives the process
+//     exiting so finished cards keep their profile, and it cannot drift onto
+//     an unrelated process that reused the PID.
 //
 // A dashboard-started session needs no third source: spawning applies the
 // spawner's own env to the child, so the env source recognises it exactly. Two
@@ -57,10 +55,6 @@ type taskLister interface {
 // — matching NewHookEventEnricher, so the no-database path keeps composing away
 // without the composition root carrying a per-enricher guard.
 func NewSpawnerEnricher(spawners spawnerLister, tasks taskLister) merger.Enricher {
-	return newSpawnerEnricher(spawners, tasks, procenv.Lookup)
-}
-
-func newSpawnerEnricher(spawners spawnerLister, tasks taskLister, lookupEnv envLookupFn) merger.Enricher {
 	if spawners == nil {
 		return nil
 	}
@@ -85,16 +79,8 @@ func newSpawnerEnricher(spawners spawnerLister, tasks taskLister, lookupEnv envL
 
 		taskSpawner := taskSpawnerIDs(ctx, tasks, agents)
 
-		pids := make([]int, 0, len(agents))
 		for i := range agents {
-			if agents[i].PID > 0 {
-				pids = append(pids, agents[i].PID)
-			}
-		}
-		configDirs := lookupEnv(ctx, pids, ClaudeConfigDirEnv)
-
-		for i := range agents {
-			id, source := attribute(&agents[i], taskSpawner, configDirs, byConfigDir, defaultSpawner)
+			id, source := attribute(&agents[i], taskSpawner, byConfigDir, defaultSpawner)
 			if id == "" {
 				continue
 			}
@@ -112,7 +98,6 @@ func newSpawnerEnricher(spawners spawnerLister, tasks taskLister, lookupEnv envL
 func attribute(
 	agent *sdk.Agent,
 	taskSpawner map[string]string,
-	configDirs map[int]string,
 	byConfigDir map[string]*ent.Spawner,
 	defaultSpawner *ent.Spawner,
 ) (id, source string) {
@@ -121,8 +106,8 @@ func attribute(
 			return fromTask, sdk.SpawnerSourceTask
 		}
 	}
-	dir, ok := configDirs[agent.PID]
-	if !ok {
+	dir := strings.TrimSpace(agent.ClaudeConfigDir)
+	if dir == "" {
 		// No variable set means the session runs on the default config dir,
 		// which is exactly what a spawner without one targets.
 		if defaultSpawner != nil {

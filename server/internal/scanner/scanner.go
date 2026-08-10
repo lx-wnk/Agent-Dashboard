@@ -26,7 +26,10 @@ type ProcessInfo struct {
 }
 
 var (
-	claudeConfigDirRE = regexp.MustCompile(`CLAUDE_CONFIG_DIR=(\S+)`)
+	// Anchored to a field boundary: the whole environment shares one line, so an
+	// unanchored match also fires on any variable ending in the same name
+	// (OLD_CLAUDE_CONFIG_DIR, a wrapper's saved copy) and returns its value.
+	claudeConfigDirRE = regexp.MustCompile(`(?:^|\s)CLAUDE_CONFIG_DIR=(\S+)`)
 	pidFieldRE        = regexp.MustCompile(`^\s*(\d+)\s`)
 )
 
@@ -63,7 +66,15 @@ func getClaudeConfigDirsBatch(pids []int) map[int]string {
 	if err != nil {
 		return result
 	}
-	for _, line := range strings.Split(string(out), "\n") {
+	return parsePSEnvBatch(string(out))
+}
+
+// parsePSEnvBatch reads `ps ewww` output into pid → CLAUDE_CONFIG_DIR. Each line
+// starts with the PID and carries the process's command line followed by its
+// whole environment as space-separated KEY=value pairs.
+func parsePSEnvBatch(out string) map[int]string {
+	result := make(map[int]string)
+	for _, line := range strings.Split(out, "\n") {
 		m := pidFieldRE.FindStringSubmatch(line)
 		if m == nil {
 			continue
@@ -73,7 +84,7 @@ func getClaudeConfigDirsBatch(pids []int) map[int]string {
 			continue
 		}
 		if cm := claudeConfigDirRE.FindStringSubmatch(line); cm != nil {
-			result[pid] = string(cm[1])
+			result[pid] = cm[1]
 		}
 	}
 	return result
