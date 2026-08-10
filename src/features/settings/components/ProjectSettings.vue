@@ -128,11 +128,8 @@ function openEdit(project: Project) {
   void fetchProjectPipeline(project.id)
 }
 
-// An existing project's slug is a lookup key (repo.GetBySlug) that other records
-// already point at, so only a new project's slug follows the name. openEdit()
-// clears isCreating before this watcher runs, so opening a project never
-// re-derives its slug; openCreate() empties both fields, which derives an empty
-// slug from an empty name.
+// openEdit() clears isCreating before this pre-flush watcher runs, so opening an
+// existing project never re-derives its slug.
 watch(() => form.value.name, (name) => {
   if (isCreating.value)
     form.value.slug = slugFollowingName(name, form.value.slug, slugTouched.value)
@@ -457,7 +454,9 @@ function setDefault(targetRow: FolderRow) {
             @input="onSlugInput"
           >
           <p id="proj-slug-hint" data-testid="proj-slug-hint" class="text-[11px] text-fg-faint mt-0.5">
-            Filled in from the name; type here to take it over, clear it to hand it back. Starts with a lowercase letter or digit, then lowercase letters, digits and hyphens, up to 64 characters.
+            <template v-if="isCreating">Filled in from the name; type here to take it over, clear it to hand it back. </template>
+            <template v-else>This project's lookup key — other records already point at it. </template>
+            Starts with a lowercase letter or digit, then lowercase letters, digits and hyphens, up to 64 characters.
           </p>
         </div>
         <div class="col-span-2">

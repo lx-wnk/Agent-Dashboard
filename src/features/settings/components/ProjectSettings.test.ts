@@ -147,6 +147,21 @@ describe('projectSettings slug', () => {
     const hint = wrapper.get('[data-testid="proj-slug-hint"]')
     expect(slugInput(wrapper).getAttribute('aria-describedby')).toBe(hint.attributes('id'))
     expect(hint.text()).toContain('64 characters')
+    expect(hint.text()).toContain('Filled in from the name')
+  })
+
+  // The same form renders for edit, where the slug deliberately does not follow
+  // the name — so the derivation sentence must not be shown there.
+  it('drops the derivation sentence when an existing project is open', async () => {
+    const wrapper = mount(ProjectSettings)
+    await wrapper.get('[data-testid="proj-edit-web"]').trigger('click')
+    await flushPromises()
+
+    const hint = wrapper.get('[data-testid="proj-slug-hint"]')
+    expect(slugInput(wrapper).getAttribute('aria-describedby')).toBe(hint.attributes('id'))
+    expect(hint.text()).not.toContain('Filled in from the name')
+    expect(hint.text()).toContain('lookup key')
+    expect(hint.text()).toContain('64 characters')
   })
 
   it('hands the slug back to the name once the slug field is cleared', async () => {
