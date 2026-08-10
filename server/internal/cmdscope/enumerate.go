@@ -14,6 +14,10 @@ type SlashCommand struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Source      string `json:"source"` // "builtin" | "user" | "project" | "plugin:<plugin-id>"
+	// ArgumentHint is the command's `argument-hint:` frontmatter value, e.g.
+	// "[base-branch] [--apply-fixes]" — the argument template Claude's own slash
+	// menu shows. Empty for built-ins, which have no file to read it from.
+	ArgumentHint string `json:"argumentHint,omitempty"`
 }
 
 // CommandDetail is a slash command with its on-disk body, for the Config
@@ -22,7 +26,12 @@ type CommandDetail struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Source      string `json:"source"`
-	Body        string `json:"body"`
+	// ArgumentHint travels through this struct because SlashCommands() builds
+	// from it, and is emitted on GET /api/config/commands for API consumers.
+	// The Config explorer does not render it — nothing in the dashboard UI
+	// reads it from here.
+	ArgumentHint string `json:"argumentHint,omitempty"`
+	Body         string `json:"body"`
 	// Path is the absolute on-disk path of the command file. Empty for builtins.
 	Path string `json:"path,omitempty"`
 	// Editable is true only for user/project sources (see IsEditableSource).
@@ -34,6 +43,11 @@ type SkillEntry struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Source      string `json:"source"` // "user" | "project" | "plugin:<plugin-id>"
+	// ArgumentHint mirrors SlashCommand.ArgumentHint — every skill is typeable
+	// as /<name>, so it carries the same argument template. Emitted on
+	// GET /api/config/skills for API consumers; the Config explorer does not
+	// render it.
+	ArgumentHint string `json:"argumentHint,omitempty"`
 	// Path is the absolute on-disk path of the SKILL.md file.
 	Path string `json:"path,omitempty"`
 	// Editable is true only for user/project sources (see IsEditableSource).
@@ -53,6 +67,14 @@ const maxCommandBodyBytes = 1 * 1024 * 1024 // 1 MB
 // builtinCommands are the Claude Code commands baked into the CLI binary. The
 // CLI exposes no machine-readable listing, so they are curated here against
 // CuratedBuiltinsVersion; the version probe surfaces drift (see version.go).
+//
+// The list goes stale in both directions, so re-curating means checking both.
+// The CLI binary ships a "Recently changed surfaces" document naming commands
+// that were removed or renamed — `strings <claude-binary> | grep -A20 "Removed
+// slash commands"` reads it. Additions have no such record and have to come
+// from the release notes or from using the CLI. Drift found at 2.1.224:
+// /fork had been added, and /pr-comments and /vim had been removed since the
+// list was last curated at 2.1.161.
 var builtinCommands = []SlashCommand{
 	{Name: "/add-dir", Description: "Add a working directory", Source: "builtin"},
 	{Name: "/agents", Description: "Manage agents", Source: "builtin"},
@@ -64,6 +86,7 @@ var builtinCommands = []SlashCommand{
 	{Name: "/cost", Description: "Show token cost of the session", Source: "builtin"},
 	{Name: "/doctor", Description: "Diagnose Claude Code health", Source: "builtin"},
 	{Name: "/export", Description: "Export the conversation", Source: "builtin"},
+	{Name: "/fork", Description: "Fork the session into a parallel conversation", Source: "builtin"},
 	{Name: "/help", Description: "Show available commands", Source: "builtin"},
 	{Name: "/init", Description: "Initialize a CLAUDE.md", Source: "builtin"},
 	{Name: "/login", Description: "Log in to an account", Source: "builtin"},
@@ -71,7 +94,6 @@ var builtinCommands = []SlashCommand{
 	{Name: "/mcp", Description: "Manage MCP servers", Source: "builtin"},
 	{Name: "/memory", Description: "Edit memory files", Source: "builtin"},
 	{Name: "/model", Description: "Switch model", Source: "builtin"},
-	{Name: "/pr-comments", Description: "Show pull request comments", Source: "builtin"},
 	{Name: "/release-notes", Description: "Show release notes", Source: "builtin"},
 	{Name: "/resume", Description: "Resume a previous conversation", Source: "builtin"},
 	{Name: "/review", Description: "Review a pull request", Source: "builtin"},
@@ -81,7 +103,6 @@ var builtinCommands = []SlashCommand{
 	{Name: "/status", Description: "Show session status", Source: "builtin"},
 	{Name: "/terminal-setup", Description: "Configure terminal key bindings", Source: "builtin"},
 	{Name: "/verify", Description: "Verify a change does what it should", Source: "builtin"},
-	{Name: "/vim", Description: "Toggle vim keybindings", Source: "builtin"},
 }
 
 // sourceRank orders sources for dedup precedence (lower wins) and for the final
@@ -108,9 +129,13 @@ func (s Scope) Commands() []SlashCommand {
 	details := s.commandDetails(false)
 	out := make([]SlashCommand, len(details))
 	for i, d := range details {
-		out[i] = SlashCommand{Name: d.Name, Description: d.Description, Source: d.Source}
+		out[i] = d.slashCommand()
 	}
 	return out
+}
+
+func (d CommandDetail) slashCommand() SlashCommand {
+	return SlashCommand{Name: d.Name, Description: d.Description, Source: d.Source, ArgumentHint: d.ArgumentHint}
 }
 
 // CommandDetails returns the same commands as Commands, each with its on-disk
@@ -171,12 +196,12 @@ func (s Scope) SlashCommands() []SlashCommand {
 	}
 	details := s.commandDetails(false)
 	for _, sk := range s.Skills() {
-		details = append(details, CommandDetail{Name: "/" + sk.Name, Description: sk.Description, Source: sk.Source})
+		details = append(details, CommandDetail{Name: "/" + sk.Name, Description: sk.Description, ArgumentHint: sk.ArgumentHint, Source: sk.Source})
 	}
 	details = dedupAndSortCommands(details)
 	out := make([]SlashCommand, len(details))
 	for i, d := range details {
-		out[i] = SlashCommand{Name: d.Name, Description: d.Description, Source: d.Source}
+		out[i] = d.slashCommand()
 	}
 	return out
 }
@@ -205,11 +230,11 @@ func (s Scope) Skills() []SkillEntry {
 	for _, pluginDir := range pluginDirs(filepath.Join(s.ConfigDir, "plugins", "cache")) {
 		source := "plugin:" + filepath.Base(pluginDir)
 		for _, file := range findSkillFiles(pluginDir) {
-			name, desc := parseSkillFrontmatter(file)
-			if name == "" {
+			fm := parseFrontmatterFile(file)
+			if fm.Name == "" {
 				continue
 			}
-			out = append(out, SkillEntry{Name: name, Description: desc, Source: source, Path: file, Editable: IsEditableSource(source)})
+			out = append(out, SkillEntry{Name: fm.Name, Description: fm.Description, ArgumentHint: fm.ArgumentHint, Source: source, Path: file, Editable: IsEditableSource(source)})
 		}
 	}
 
@@ -221,11 +246,12 @@ func skillsInDir(dir, source string) []SkillEntry {
 	var out []SkillEntry
 	for _, entry := range listSkillDirs(dir) {
 		skillPath := filepath.Join(dir, entry, "SKILL.md")
-		name, desc := parseSkillFrontmatter(skillPath)
+		fm := parseFrontmatterFile(skillPath)
+		name := fm.Name
 		if name == "" {
 			name = entry
 		}
-		out = append(out, SkillEntry{Name: name, Description: desc, Source: source, Path: skillPath, Editable: IsEditableSource(source)})
+		out = append(out, SkillEntry{Name: name, Description: fm.Description, ArgumentHint: fm.ArgumentHint, Source: source, Path: skillPath, Editable: IsEditableSource(source)})
 	}
 	return out
 }
@@ -419,31 +445,29 @@ func readCommand(path, source string, withBody bool) (CommandDetail, bool) {
 	d := CommandDetail{Name: "/" + base, Source: source, Path: path, Editable: IsEditableSource(source)}
 
 	if withBody {
-		body, desc := readCommandBody(path)
+		body, fm := readCommandBody(path)
 		d.Body = body
-		d.Description = desc
+		d.Description = fm.Description
+		d.ArgumentHint = fm.ArgumentHint
 		return d, true
 	}
 
-	f, err := os.Open(path)
-	if err != nil {
-		return d, true
-	}
-	defer f.Close()
-	d.Description = parseFrontmatterDescription(f)
+	fm := parseFrontmatterFile(path)
+	d.Description = fm.Description
+	d.ArgumentHint = fm.ArgumentHint
 	return d, true
 }
 
 // readCommandBody reads the (capped) file content and its frontmatter
 // description in one pass.
-func readCommandBody(path string) (body, desc string) {
+func readCommandBody(path string) (body string, fm frontmatter) {
 	info, err := os.Stat(path)
 	if err != nil || info.IsDir() {
-		return "", ""
+		return "", frontmatter{}
 	}
 	f, err := os.Open(path)
 	if err != nil {
-		return "", ""
+		return "", frontmatter{}
 	}
 	defer f.Close()
 
@@ -459,36 +483,38 @@ func readCommandBody(path string) (body, desc string) {
 	if truncated {
 		body += "\n\n<!-- truncated: file exceeds 1 MB limit -->\n"
 	}
-	desc = parseFrontmatterDescription(strings.NewReader(body))
-	return body, desc
+	return body, parseFrontmatter(strings.NewReader(body))
 }
 
-// parseSkillFrontmatter reads the YAML frontmatter of a SKILL.md and returns
-// (name, description). name is unquoted; no leading slash is added.
-func parseSkillFrontmatter(path string) (string, string) {
+// frontmatter holds the leading YAML keys a command or skill file contributes
+// to the dashboard's command list.
+type frontmatter struct {
+	Name         string
+	Description  string
+	ArgumentHint string
+}
+
+// parseFrontmatterFile opens path and parses its frontmatter. A missing or
+// unreadable file yields the zero value, never an error — a single bad file
+// must not drop the whole command list.
+func parseFrontmatterFile(path string) frontmatter {
 	f, err := os.Open(path)
 	if err != nil {
-		return "", ""
+		return frontmatter{}
 	}
 	defer f.Close()
-	return parseFrontmatter(f, false)
+	return parseFrontmatter(f)
 }
 
-// parseFrontmatterDescription extracts the `description:` field from the leading
-// YAML frontmatter of a command markdown file. Returns "" when none is present.
-func parseFrontmatterDescription(r io.Reader) string {
-	_, description := parseFrontmatter(r, true)
-	return description
-}
-
-// parseFrontmatter scans the leading YAML frontmatter (capped at 80 lines) of
-// r for the `name:` and `description:` keys, resolving block-scalar markers
-// (>-, >, |, |-) against the following indented line. When stopAtDescription
-// is true, it returns as soon as a description value is resolved — the shape
-// parseFrontmatterDescription needs, since it never reads name: anyway; when
-// false, it scans to the end of the frontmatter so parseSkillFrontmatter can
-// also collect name.
-func parseFrontmatter(r io.Reader, stopAtDescription bool) (name, description string) {
+// parseFrontmatter scans the leading YAML frontmatter (capped at 80 lines) of r
+// for the `name:`, `description:`, and `argument-hint:` keys, resolving
+// block-scalar markers (>-, >, |, |-) against the following indented line.
+// `argument-hint:` passes through sanitizeArgumentHint — the file may come from
+// the plugin cache, and this is the only place that trust boundary is crossed.
+// It always scans to the end of the frontmatter: the keys may appear in any
+// order, so returning early on one of them would hide the others.
+func parseFrontmatter(r io.Reader) frontmatter {
+	var fm frontmatter
 	sc := bufio.NewScanner(r)
 	lineNum := 0
 	inFrontmatter := false
@@ -506,18 +532,15 @@ func parseFrontmatter(r io.Reader, stopAtDescription bool) (name, description st
 				inFrontmatter = true
 				continue
 			}
-			return "", ""
+			return frontmatter{}
 		}
 		if !inFrontmatter || line == "---" {
 			break
 		}
 
 		if readingDesc && strings.HasPrefix(line, " ") {
-			if stopAtDescription {
-				return name, strings.TrimSpace(line)
-			}
-			if description == "" {
-				description = strings.TrimSpace(line)
+			if fm.Description == "" {
+				fm.Description = strings.TrimSpace(line)
 			}
 			readingDesc = false
 			continue
@@ -525,7 +548,10 @@ func parseFrontmatter(r io.Reader, stopAtDescription bool) (name, description st
 		readingDesc = false
 
 		if strings.HasPrefix(line, "name:") {
-			name = strings.Trim(strings.TrimSpace(strings.TrimPrefix(line, "name:")), `"'`)
+			fm.Name = scalarValue(strings.TrimPrefix(line, "name:"))
+		}
+		if strings.HasPrefix(line, "argument-hint:") {
+			fm.ArgumentHint = sanitizeArgumentHint(scalarValue(strings.TrimPrefix(line, "argument-hint:")))
 		}
 		if strings.HasPrefix(line, "description:") {
 			desc := strings.TrimSpace(strings.TrimPrefix(line, "description:"))
@@ -533,12 +559,66 @@ func parseFrontmatter(r io.Reader, stopAtDescription bool) (name, description st
 			case ">-", ">", "|", "|-":
 				readingDesc = true
 			default:
-				if stopAtDescription {
-					return name, strings.Trim(desc, `"'`)
-				}
-				description = strings.Trim(desc, `"'`)
+				fm.Description = scalarValue(desc)
 			}
 		}
 	}
-	return name, description
+	return fm
+}
+
+// scalarValue unquotes a single-line YAML scalar.
+//
+// A quoted value ends at its closing quote, so a trailing `# comment` is
+// dropped rather than swallowed — real argument hints carry both, e.g.
+// `"[arg]" # required when user-invocable`. Inside single quotes YAML escapes a
+// literal apostrophe by doubling it, and inside double quotes with a backslash;
+// both appear in real hints, so a naive search for the next quote character
+// would truncate the value at the escape.
+func scalarValue(raw string) string {
+	v := strings.TrimSpace(raw)
+	if len(v) > 0 {
+		switch v[0] {
+		case '\'':
+			return unquoteSingle(v)
+		case '"':
+			return unquoteDouble(v)
+		}
+	}
+	if i := strings.Index(v, " #"); i >= 0 {
+		v = strings.TrimSpace(v[:i])
+	}
+	return v
+}
+
+func unquoteSingle(v string) string {
+	var b strings.Builder
+	for i := 1; i < len(v); i++ {
+		if v[i] != '\'' {
+			b.WriteByte(v[i])
+			continue
+		}
+		if i+1 < len(v) && v[i+1] == '\'' {
+			b.WriteByte('\'')
+			i++
+			continue
+		}
+		return b.String()
+	}
+	return b.String()
+}
+
+func unquoteDouble(v string) string {
+	var b strings.Builder
+	for i := 1; i < len(v); i++ {
+		if v[i] == '\\' && i+1 < len(v) {
+			b.WriteByte(v[i+1])
+			i++
+			continue
+		}
+		if v[i] == '"' {
+			return b.String()
+		}
+		b.WriteByte(v[i])
+	}
+	return b.String()
 }
