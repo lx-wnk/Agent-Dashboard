@@ -23,9 +23,13 @@ type SlashCommand struct {
 // CommandDetail is a slash command with its on-disk body, for the Config
 // explorer. Built-in commands carry an empty Body and Path.
 type CommandDetail struct {
-	Name         string `json:"name"`
-	Description  string `json:"description"`
-	Source       string `json:"source"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Source      string `json:"source"`
+	// ArgumentHint travels through this struct because SlashCommands() builds
+	// from it, and is emitted on GET /api/config/commands for API consumers.
+	// The Config explorer does not render it — nothing in the dashboard UI
+	// reads it from here.
 	ArgumentHint string `json:"argumentHint,omitempty"`
 	Body         string `json:"body"`
 	// Path is the absolute on-disk path of the command file. Empty for builtins.
@@ -40,7 +44,9 @@ type SkillEntry struct {
 	Description string `json:"description"`
 	Source      string `json:"source"` // "user" | "project" | "plugin:<plugin-id>"
 	// ArgumentHint mirrors SlashCommand.ArgumentHint — every skill is typeable
-	// as /<name>, so it carries the same argument template.
+	// as /<name>, so it carries the same argument template. Emitted on
+	// GET /api/config/skills for API consumers; the Config explorer does not
+	// render it.
 	ArgumentHint string `json:"argumentHint,omitempty"`
 	// Path is the absolute on-disk path of the SKILL.md file.
 	Path string `json:"path,omitempty"`

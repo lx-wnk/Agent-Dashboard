@@ -42,6 +42,32 @@ func TestBuiltins_CuratedAgainstEngineVersion(t *testing.T) {
 	require.Equal(t, "2.1.224", CuratedBuiltinsVersion)
 }
 
+func detailOf(details []CommandDetail, name string) (CommandDetail, bool) {
+	for _, d := range details {
+		if d.Name == name {
+			return d, true
+		}
+	}
+	return CommandDetail{}, false
+}
+
+// CommandDetails() takes the withBody path, which reads the frontmatter out of
+// the already-buffered body instead of re-opening the file. SlashCommands()
+// never exercises it, so the hint and the body are asserted together here.
+func TestCommandDetails_CarriesArgumentHintWithBody(t *testing.T) {
+	cfg := t.TempDir()
+	writeFile(t, filepath.Join(cfg, "commands", "deploy.md"),
+		"---\ndescription: Deploy app\nargument-hint: \"[env] [--dry-run]\"\n---\nRun the deploy playbook.\n")
+
+	got, ok := detailOf(Scope{Supported: true, ConfigDir: cfg}.CommandDetails(), "/deploy")
+
+	require.True(t, ok, "the command file must be listed")
+	require.Equal(t, "[env] [--dry-run]", got.ArgumentHint)
+	require.Equal(t, "Deploy app", got.Description)
+	require.Contains(t, got.Body, "Run the deploy playbook.")
+	require.True(t, got.Editable)
+}
+
 func TestArgumentHint_FromCommandFile(t *testing.T) {
 	cfg := t.TempDir()
 	writeFile(t, filepath.Join(cfg, "commands", "deploy.md"),
