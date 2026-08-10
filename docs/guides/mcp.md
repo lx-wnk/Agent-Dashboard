@@ -54,6 +54,11 @@ registry tokens and `tasks:read` is enough to call `list_projects`.
 A successful `create_project` publishes a `project_created` event on `/api/projects/stream`, the
 same channel `POST /api/projects` uses, so the dashboard picks the new project up without a reload.
 
+It is also attributed: an audit event (`project_created`, target `project:<id>`, metadata
+`{slug, source: "mcp_create_project"}`) is written, and a `mcp: project created` line is logged with
+the slug, the project id, and the id of the API key that made the call. Neither records the name or
+description — those are agent-supplied free text.
+
 Each tool checks its required scope at call time and returns an MCP error if the token's scope is insufficient.
 
 ## Connect the dashboard to Claude

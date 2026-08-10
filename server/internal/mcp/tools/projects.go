@@ -2,10 +2,12 @@ package tools
 
 import (
 	"context"
+	"log/slog"
 	"strconv"
 	"strings"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	mcp "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
 	"github.com/lx-wnk/agent-dashboard/server/internal/validation"
 )
@@ -152,12 +154,33 @@ func registerCreateProject(registry mcp.ToolRegistry, d WriteDeps) {
 				}
 				return nil, mcp.Fail("create_project: " + err.Error())
 			}
+			recordProjectCreated(ctx, d.AuditRepo, p)
 			// A project has no folders until one is added through the UI or the
 			// folders API, so the count is zero by construction rather than queried.
 			view := toProjectView(p, 0)
 			safeBroadcastProject(d.ProjectBroadcaster, "project_created", p.ID, view)
 			return mcp.OK(view)
 		},
+	})
+}
+
+// recordProjectCreated attributes an MCP-created project: a durable audit row
+// plus a log line carrying the API key that made the call, which the audit row
+// has no column for. Both carry the slug and id only — name and description are
+// agent-supplied free text and stay out of both sinks. Best-effort, like every
+// other audit write in this package.
+func recordProjectCreated(ctx context.Context, auditRepo repo.AuditEventRepo, p *ent.Project) {
+	keyID := ""
+	if auth := mcp.AuthFromContext(ctx); auth != nil {
+		keyID = auth.KeyID
+	}
+	slog.Info("mcp: project created", "slug", p.Slug, "projectId", p.ID, "keyId", keyID)
+	if auditRepo == nil {
+		return
+	}
+	_ = auditRepo.RecordAudit(ctx, nil, "project_created", "project:"+p.ID, map[string]any{
+		"slug":   p.Slug,
+		"source": "mcp_create_project",
 	})
 }
 

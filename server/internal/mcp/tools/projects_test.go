@@ -4,21 +4,28 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	mcp "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 )
 
 func invokeCreateProject(t *testing.T, registry mcp.ToolRegistry, args map[string]any) (map[string]any, error) {
 	t.Helper()
+	return invokeCreateProjectCtx(t, context.Background(), registry, args)
+}
+
+func invokeCreateProjectCtx(t *testing.T, ctx context.Context, registry mcp.ToolRegistry, args map[string]any) (map[string]any, error) {
+	t.Helper()
 	tool, ok := registry["create_project"]
 	require.True(t, ok, "create_project not registered")
-	result, err := tool.Handler(context.Background(), args)
+	result, err := tool.Handler(ctx, args)
 	if err != nil {
 		return nil, err
 	}
@@ -300,4 +307,55 @@ func TestCreateTask_RejectsNonStringSpawnerId(t *testing.T) {
 
 	_, err = deps.TaskRepo.GetBySlug(context.Background(), "add-login")
 	require.Error(t, err, "the task must not exist after a rejected spawnerId")
+}
+
+// A top-level entity created from a bearer token must leave a durable record;
+// nothing else writes one for the MCP path.
+func TestCreateProject_RecordsAnAuditEvent(t *testing.T) {
+	registry, deps := newProjectRegistry(t)
+	ctx := mcp.ContextWithAuth(context.Background(), &mcp.MCPAuthInfo{KeyID: "key-42"})
+
+	out, err := invokeCreateProjectCtx(t, ctx, registry, map[string]any{
+		"slug":        "web",
+		"name":        "Web",
+		"description": "internal-only note",
+	})
+	require.NoError(t, err)
+
+	action := "project_created"
+	events, err := deps.AuditRepo.List(context.Background(), repo.AuditEventFilters{Action: &action})
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	require.Equal(t, "project:"+out["id"].(string), events[0].Target)
+	require.Equal(t, "web", events[0].Metadata["slug"])
+	require.Equal(t, "mcp_create_project", events[0].Metadata["source"])
+
+	raw, err := json.Marshal(events[0].Metadata)
+	require.NoError(t, err)
+	require.NotContains(t, string(raw), "internal-only note", "free text must stay out of the audit row")
+}
+
+// The key id is the only attribution the audit row does not carry, and it is
+// the one that says *who* created the project.
+func TestCreateProject_LogsTheCallingKeyWithoutFreeText(t *testing.T) {
+	registry, _ := newProjectRegistry(t)
+
+	var buf bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	ctx := mcp.ContextWithAuth(context.Background(), &mcp.MCPAuthInfo{KeyID: "key-42"})
+	out, err := invokeCreateProjectCtx(t, ctx, registry, map[string]any{
+		"slug":        "web",
+		"name":        "Web",
+		"description": "internal-only note",
+	})
+	require.NoError(t, err)
+
+	logged := buf.String()
+	require.Contains(t, logged, "key-42")
+	require.Contains(t, logged, "web")
+	require.Contains(t, logged, out["id"].(string))
+	require.NotContains(t, logged, "internal-only note")
 }
