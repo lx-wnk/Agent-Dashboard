@@ -124,10 +124,10 @@ test('create & refine with a project auto-fills cwd and opens the refinement cha
 
   // 6. Assert the POST /api/tasks body actually carries what the form drove:
   //    cwd auto-filled from the stubbed folders/suggest default ('/tmp'),
-  //    and the typed title with its auto-derived slug (see onTitleInput()
-  //    in BacklogForm.vue — the slug field itself was never touched, so it
-  //    tracks slugify(title), not the raw `slug` local var used as a title
-  //    suffix above).
+  //    and the typed title with its auto-derived slug (see the [title,
+  //    slugTouched] watcher in BacklogForm.vue — the slug field itself was
+  //    never touched, so it tracks slugify(title), not the raw `slug` local
+  //    var used as a title suffix above).
   await expect.poll(() => capturedTaskPayload.value).not.toBeNull()
   const payload = capturedTaskPayload.value as Record<string, unknown>
   expect(payload.cwd).toBe('/tmp')

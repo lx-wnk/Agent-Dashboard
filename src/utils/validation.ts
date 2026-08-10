@@ -1,12 +1,26 @@
 export const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/
 export const SLUG_PATTERN_MESSAGE = 'slug must match [a-z0-9][a-z0-9-]{0,63}'
 
+/** Character budget SLUG_RE allows: one leading char plus up to 63 more. */
+const SLUG_MAX_CHARS = 64
+
 export function slugify(value: string): string {
   return value
     .toLowerCase()
     .trim()
     .replace(/[^a-z0-9]+/g, '-')
+    .slice(0, SLUG_MAX_CHARS)
     .replace(/^-+|-+$/g, '')
+}
+
+/**
+ * Slug to display for `name`, given whether the user has taken the slug over.
+ * `slugTouched` is set by the slug field's own input handler, so an edited slug
+ * is never overwritten. Clearing that field unsets the flag and hands the slug
+ * back to the name.
+ */
+export function slugFollowingName(name: string, currentSlug: string, slugTouched: boolean): string {
+  return slugTouched ? currentSlug : slugify(name)
 }
 
 /** Maximum characters allowed in a task description. */
