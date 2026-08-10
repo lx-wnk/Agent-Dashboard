@@ -14,8 +14,9 @@ import { toast } from '@/composables/useToast'
 import { useTrackerImport } from '@/composables/useTrackerImport'
 import { createTask } from '@/features/pipeline/composables/useTasks'
 import { errorMessage } from '@/utils/errorMessage'
+import { derivedSlugHint } from '@/utils/slugHint'
 import { TASK_AUTONOMY_OPTIONS, TASK_PRIORITY_OPTIONS } from '@/utils/taskOptions'
-import { slugify } from '@/utils/validation'
+import { slugFollowingName } from '@/utils/validation'
 
 const emit = defineEmits<{
   createdAndRefine: [task: PipelineTask]
@@ -30,6 +31,7 @@ const projectChoice = ref<string>('')
 const showCreate = ref(false)
 const title = ref('')
 const slug = ref('')
+const slugTouched = ref(false)
 const description = ref('')
 const cwd = ref('')
 const priority = ref<'high' | 'medium' | 'low'>('medium')
@@ -87,17 +89,18 @@ watch(projectChoice, async (v) => {
   }
 })
 
-function onTitleInput(e: Event): void {
-  const value = (e.target as HTMLInputElement).value
-  const previousSlug = slugify(title.value)
-  title.value = value
-  if (!slug.value || slug.value === previousSlug)
-    slug.value = slugify(value)
-}
+// Watching the flag too is what hands the slug back when the field is emptied.
+// Both sources flush together, after the input event's own v-model write, which
+// runs before the handler on a native input and after it on AppInput.
+watch([title, slugTouched], ([v, touched]) => {
+  slug.value = slugFollowingName(v, slug.value, touched)
+})
 
 function onSlugInput(e: Event): void {
-  slug.value = (e.target as HTMLInputElement).value
+  slugTouched.value = (e.target as HTMLInputElement).value.length > 0
 }
+
+const slugHint = derivedSlugHint('title')
 
 async function importFromIssue(): Promise<void> {
   const ref = importRef.value.trim()
@@ -106,8 +109,8 @@ async function importFromIssue(): Promise<void> {
   isImporting.value = true
   try {
     const iss = await fetchIssue(ref)
+    slugTouched.value = false
     title.value = iss.title
-    slug.value = slugify(iss.title)
     const sourceLink = `\n\nSource: ${iss.url}`
     description.value = iss.body ? iss.body + sourceLink : iss.url
   }
@@ -226,10 +229,9 @@ async function onCreateAndRefine(): Promise<void> {
       </AppFieldLabel>
       <AppInput
         id="details-title"
+        v-model="title"
         data-testid="details-title"
-        :model-value="title"
         placeholder="What should the agent do?"
-        @input="onTitleInput"
       />
     </div>
 
@@ -239,12 +241,16 @@ async function onCreateAndRefine(): Promise<void> {
       </AppFieldLabel>
       <AppInput
         id="details-slug"
+        v-model="slug"
         data-testid="details-slug"
-        :model-value="slug"
+        aria-describedby="details-slug-hint"
         placeholder="task-slug"
         class="font-mono"
         @input="onSlugInput"
       />
+      <p id="details-slug-hint" data-testid="details-slug-hint" class="text-[11px] text-fg-faint">
+        {{ slugHint }}
+      </p>
     </div>
 
     <AppInput v-model="description" type="textarea" :rows="3" label="Description" placeholder="Additional context (optional)" />

@@ -33,6 +33,18 @@ vi.mock('@/composables/useProjectFolders', () => ({
   createFolder: vi.fn(),
 }))
 
+const fetchIssueMock = vi.fn().mockResolvedValue({
+  tracker: 'github',
+  key: 'owner/repo#7',
+  title: 'Imported Issue Title',
+  body: 'issue body',
+  url: 'https://example.test/7',
+  labels: [],
+})
+vi.mock('@/composables/useTrackerImport', () => ({
+  useTrackerImport: () => ({ fetchIssue: (ref: string) => fetchIssueMock(ref) }),
+}))
+
 // AppSelect (project/autonomy dropdowns) is a custom listbox, not a native
 // <select> — its panel teleports to <body> while open, so option counts and
 // value changes are exercised through the trigger button + the teleported
@@ -69,6 +81,66 @@ describe('backlogForm single-screen', () => {
   it('auto-derives slug from the title', async () => {
     const wrapper = mount(BacklogForm)
     await wrapper.get('[data-testid="details-title"]').setValue('My New Task')
+    const slug = wrapper.get('[data-testid="details-slug"]').element as HTMLInputElement
+    expect(slug.value).toBe('my-new-task')
+  })
+
+  it('tells the user the slug is derived from the title and what it has to look like', () => {
+    const wrapper = mount(BacklogForm)
+
+    const hint = wrapper.get('[data-testid="details-slug-hint"]')
+    expect(wrapper.get('[data-testid="details-slug"]').attributes('aria-describedby')).toBe(hint.attributes('id'))
+    expect(hint.text()).toContain('Filled in from the title')
+    expect(hint.text()).toContain('64 characters')
+  })
+
+  it('stops deriving the slug once the user has edited it', async () => {
+    const wrapper = mount(BacklogForm)
+    await wrapper.get('[data-testid="details-title"]').setValue('My New Task')
+    await wrapper.get('[data-testid="details-slug"]').setValue('my-own-slug')
+
+    await wrapper.get('[data-testid="details-title"]').setValue('A Different Task')
+
+    const slug = wrapper.get('[data-testid="details-slug"]').element as HTMLInputElement
+    expect(slug.value).toBe('my-own-slug')
+  })
+
+  it('derives the slug again once the slug field is cleared', async () => {
+    const wrapper = mount(BacklogForm)
+    await wrapper.get('[data-testid="details-title"]').setValue('My New Task')
+    await wrapper.get('[data-testid="details-slug"]').setValue('my-own-slug')
+    await wrapper.get('[data-testid="details-slug"]').setValue('')
+
+    await wrapper.get('[data-testid="details-title"]').setValue('A Different Task')
+
+    const slug = wrapper.get('[data-testid="details-slug"]').element as HTMLInputElement
+    expect(slug.value).toBe('a-different-task')
+  })
+
+  // Importing rewrites the title, so the slug it derives is not user-authored —
+  // leaving the flag set would freeze the slug on the imported title forever.
+  it('keeps deriving from the title after an issue import overwrites a typed slug', async () => {
+    const wrapper = mount(BacklogForm)
+    await wrapper.get('[data-testid="details-slug"]').setValue('my-own-slug')
+
+    await wrapper.get('[data-testid="import-ref-input"]').setValue('owner/repo#7')
+    await wrapper.get('[data-testid="import-ref-fetch"]').trigger('click')
+    await flushPromises()
+
+    const slug = wrapper.get('[data-testid="details-slug"]').element as HTMLInputElement
+    expect(slug.value).toBe('imported-issue-title')
+
+    await wrapper.get('[data-testid="details-title"]').setValue('Changed After Import')
+    expect(slug.value).toBe('changed-after-import')
+  })
+
+  it('refills the slug the moment the field is cleared, without touching the title', async () => {
+    const wrapper = mount(BacklogForm)
+    await wrapper.get('[data-testid="details-title"]').setValue('My New Task')
+    await wrapper.get('[data-testid="details-slug"]').setValue('my-own-slug')
+
+    await wrapper.get('[data-testid="details-slug"]').setValue('')
+
     const slug = wrapper.get('[data-testid="details-slug"]').element as HTMLInputElement
     expect(slug.value).toBe('my-new-task')
   })
