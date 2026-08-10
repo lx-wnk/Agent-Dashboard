@@ -27,6 +27,7 @@ var ToolScopeMap = map[string]string{
 	"create_task": "tasks:write", "update_task": "tasks:write",
 	"delete_task": "tasks:write", "manage_task": "tasks:write",
 	"add_dependency": "tasks:write", "remove_dependency": "tasks:write",
+	"create_project":  "tasks:write",
 	"manage_schedule": "tasks:write",
 	// agent:coord
 	"write_scratchpad": "agent:coord", "read_scratchpad": "agent:coord",

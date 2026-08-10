@@ -17,14 +17,54 @@ Scopes are hierarchical — a higher scope implies all lower ones.
 
 | Scope | Access |
 |---|---|
-| `tasks:read` | List and read tasks, stage runs, audit log, permission requests |
-| `tasks:write` | Create, update, delete tasks (implies `tasks:read`) |
-| `pipeline:control` | Progress, approve, cancel, retry tasks; manage permissions (implies `tasks:read`) |
+| `tasks:read` | List and read tasks, stage runs, audit log, permission requests, projects, spawners, schedules |
+| `tasks:write` | Create, update, delete tasks; create projects (implies `tasks:read`) |
+| `agent:coord` | Scratchpads, lease locks, and port waits shared between agents |
+| `pipeline:control` | Progress, approve, cancel, retry tasks; manage permissions; refine and plan gates (implies `tasks:read` and `agent:coord`) |
 | `keys:manage` | Full access including API key management |
 
-## Tools (21)
+## Tools (41)
 
-`list_tasks`, `get_task`, `list_stage_runs`, `list_audit`, `list_permission_requests`, `create_task`, `update_task`, `delete_task`, `manage_task`, `progress_task`, `cancel_task`, `retry_task`, `grant_permission`, `resolve_permission_request`, `add_dependency`, `remove_dependency`, `list_schedules`, `manage_schedule`, `list_api_keys`, `create_api_key`, `revoke_api_key`
+**`tasks:read`** — `list_tasks`, `get_task`, `list_stage_runs`, `list_audit`, `list_permission_requests`, `list_projects`, `list_spawners`, `list_schedules`
+
+**`tasks:write`** — `create_task`, `update_task`, `delete_task`, `manage_task`, `add_dependency`, `remove_dependency`, `create_project`, `manage_schedule`
+
+**`agent:coord`** — `write_scratchpad`, `read_scratchpad`, `list_scratchpad`, `acquire_lock`, `release_lock`, `wait_for_port`
+
+**`pipeline:control`** — `advance_task`, `hold_task`, `resume_task`, `progress_task`, `cancel_task`, `retry_task`, `grant_permission`, `resolve_permission_request`, `approve_all_pending`, `get_refine_status`, `approve_spec`, `refine_task`, `inject_concept`, `approve_plan`, `reject_plan`, `get_plan_status`
+
+**`keys:manage`** — `list_api_keys`, `create_api_key`, `revoke_api_key`
+
+### Attaching a task to a project
+
+`create_task` takes either a `projectId` or a `projectSlug` — never both. The slug is resolved to
+its project and the call fails if no project carries it, so a typo cannot silently produce an
+unattached task. When no project matches, create one with `create_project` (slug and name required)
+and use the returned id or slug. A project created this way has no folders yet, and the UI's New-Task
+form takes its working directory *only* from a project's folders — so that form cannot be submitted
+for the new project until a folder is added under **Settings → Projects**. `create_project` says so
+in its tool description and returns it as `nextStep` on the created project, so the agent can pass
+the handover on; tasks created over MCP are unaffected because `create_task` carries its own `cwd`.
+
+`create_project` accepts `description`, `color`, and `defaultSpawnerId`, but **not** `setupCommand`.
+That command is executed as `sh -c` in every worktree the project creates, so `POST /api/projects`
+restricts it to admins **when `auth.mode` is not `none`**; the MCP tool omits the field
+unconditionally. It is the one tool whose schema declares `"additionalProperties": false`, and the
+handler enforces it: any key outside `slug`, `name`, `description`, `color`, and `defaultSpawnerId`
+fails the call by name instead of being dropped in silence. `name` is capped at 200 characters and
+`description` at 10 000 — the same limits `POST /api/projects` applies, so the rule does not depend
+on which door the caller used. Set it in the UI under **Settings → Projects** instead. For the same reason
+`list_projects` and `create_project` report `hasSetupCommand` (a boolean) rather than the command
+itself: the text is deliberately never put on the wire, because those strings routinely carry
+registry tokens and `tasks:read` is enough to call `list_projects`.
+
+A successful `create_project` publishes a `project_created` event on `/api/projects/stream`, the
+same channel `POST /api/projects` uses, so the dashboard picks the new project up without a reload.
+
+It is also attributed: an audit event (`project_created`, target `project:<id>`, metadata
+`{slug, source: "mcp_create_project"}`) is written, and a `mcp: project created` line is logged with
+the slug, the project id, and the id of the API key that made the call. Neither records the name or
+description — those are agent-supplied free text.
 
 Each tool checks its required scope at call time and returns an MCP error if the token's scope is insufficient.
 

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
+	"github.com/lx-wnk/agent-dashboard/server/internal/validation"
 )
 
 const testJWTSecret = "test-secret-projects"
@@ -165,5 +167,41 @@ func TestCreate_BroadcastsProjectCreated(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("no project_created event broadcast")
+	}
+}
+
+// The MCP writer bounds these; the HTTP writer must agree, or the same rule
+// depends on which door the caller used.
+func TestCreate_RejectsAnOverlongName(t *testing.T) {
+	h := newTestHandler(t, true)
+	body := `{"name":"` + strings.Repeat("n", validation.MaxProjectNameLen+1) + `","slug":"long-name"}`
+	req := httptest.NewRequest("POST", "/api/projects", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	r := chi.NewRouter()
+	h.Mount(r)
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("overlong name: got %d, want 400, body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), validation.ProjectNameLengthMessage) {
+		t.Fatalf("error must name the limit, body=%s", rr.Body.String())
+	}
+}
+
+func TestCreate_RejectsAnOverlongDescription(t *testing.T) {
+	h := newTestHandler(t, true)
+	body := `{"name":"Fine","slug":"long-description","description":"` + strings.Repeat("d", validation.MaxProjectDescriptionLen+1) + `"}`
+	req := httptest.NewRequest("POST", "/api/projects", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	r := chi.NewRouter()
+	h.Mount(r)
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("overlong description: got %d, want 400, body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), validation.ProjectDescriptionLengthMessage) {
+		t.Fatalf("error must name the limit, body=%s", rr.Body.String())
 	}
 }
