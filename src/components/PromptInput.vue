@@ -149,6 +149,11 @@ const slashSuggestions = computed(() => {
 
 const showSuggestions = computed(() => slashSuggestions.value.length > 0)
 
+// The drift note explains why an expected command is ABSENT, so it must survive
+// the zero-match case — which is exactly when no suggestion renders.
+const isSlashQuery = computed(() => promptInput.value.trim().startsWith('/'))
+const showStaleNote = computed(() => isSlashQuery.value && commandSet.value.builtinsMayBeStale)
+
 // Only a live-injectable session (pty broker or tmux) can receive a live prompt.
 // Any other session resumes as a NEW session (claude --resume) on send — surface
 // that so it's not mistaken for live injection.
@@ -254,34 +259,38 @@ defineExpose({ focus })
          it — hence the shorter list here; it scrolls. The full variant sits at
          the bottom of the modal, where upward is the only direction with room. -->
     <div
-      v-if="showSuggestions"
-      :id="listboxId"
-      role="listbox"
+      v-if="showSuggestions || showStaleNote"
       :class="variant === 'full'
         ? 'bottom-full border-b-0 rounded-t-md max-h-60'
         : 'top-full border-t-0 rounded-b-md max-h-28'"
       class="absolute left-0 right-0 bg-app border border-line overflow-y-auto z-10"
     >
-      <button
-        v-for="(cmd, i) in slashSuggestions"
-        :key="cmd.name"
-        type="button"
-        role="option"
-        :aria-selected="i === selectedIndex"
-        :disabled="cmd.disabled"
-        class="flex items-center gap-2.5 w-full px-4 py-2 bg-transparent border-none text-fg-mute text-[13px] font-mono cursor-pointer text-left hover:bg-raised disabled:opacity-40 disabled:cursor-not-allowed"
-        :class="{ 'bg-raised': i === selectedIndex }"
-        @mousedown.prevent="selectSuggestion(cmd)"
-      >
-        <span class="text-accent font-semibold flex-shrink-0">{{ cmd.name }}</span>
-        <span class="text-fg-mute text-xs">{{ cmd.description }}</span>
-        <span v-if="cmd.usage" class="text-fg-faint text-[10px] ml-1">{{ cmd.usage }}</span>
-        <span v-if="cmd.requiresTask && cmd.disabled" class="text-warning-text text-[10px] ml-auto">requires linked task</span>
-      </button>
+      <!-- role="listbox" owns only role="option" children; the drift note is a
+           sibling so it stays a valid listbox and can be announced on its own. -->
+      <div v-if="showSuggestions" :id="listboxId" role="listbox">
+        <button
+          v-for="(cmd, i) in slashSuggestions"
+          :key="cmd.name"
+          type="button"
+          role="option"
+          :aria-selected="i === selectedIndex"
+          :disabled="cmd.disabled"
+          class="flex items-center gap-2.5 w-full px-4 py-2 bg-transparent border-none text-fg-mute text-[13px] font-mono cursor-pointer text-left hover:bg-raised disabled:opacity-40 disabled:cursor-not-allowed"
+          :class="{ 'bg-raised': i === selectedIndex }"
+          @mousedown.prevent="selectSuggestion(cmd)"
+        >
+          <span class="text-accent font-semibold flex-shrink-0">{{ cmd.name }}</span>
+          <span class="text-fg-mute text-xs">{{ cmd.description }}</span>
+          <span v-if="cmd.usage" class="text-fg-faint text-[10px] ml-1">{{ cmd.usage }}</span>
+          <span v-if="cmd.requiresTask && cmd.disabled" class="text-warning-text text-[10px] ml-auto">requires linked task</span>
+        </button>
+      </div>
       <p
-        v-if="commandSet.builtinsMayBeStale"
+        v-if="showStaleNote"
+        role="status"
         data-testid="builtins-stale-note"
-        class="m-0 px-4 py-1.5 text-[10px] text-fg-faint border-t border-line"
+        class="m-0 px-4 py-1.5 text-[10px] text-fg-faint"
+        :class="{ 'border-t border-line': showSuggestions }"
       >
         Built-in commands are listed for a different Claude Code version{{ commandSet.engineVersion ? ` (session runs ${commandSet.engineVersion})` : '' }} — a command missing here may still work if you type it.
       </p>

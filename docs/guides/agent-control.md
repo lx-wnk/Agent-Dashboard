@@ -55,8 +55,9 @@ to the agent verbatim, so what works is whatever that session supports.
 
 Claude's own built-in commands are the one group the dashboard cannot discover — the CLI exposes no
 machine-readable listing, so they are curated per version (`CuratedBuiltinsVersion`). When a session
-reports a different version, the menu says so: a command missing from the list may still work if you
-type it in full. Re-curating means checking both directions — the CLI binary ships a "Recently
+reports a different version, the menu says so on every `/` query — including one that matches no
+command at all, which is the case the note exists for: a command missing from the list may still
+work if you type it in full. Re-curating means checking both directions — the CLI binary ships a "Recently
 changed surfaces" document naming removed and renamed commands, while additions have to come from
 the release notes.
 
