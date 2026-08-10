@@ -21,7 +21,7 @@ import { useProjectPipelineConfig } from '@/features/pipeline'
 import { errorMessage } from '@/utils/errorMessage'
 import { AVAILABLE_MODELS } from '@/utils/models'
 import { STAGE_LABELS } from '@/utils/stageLabels'
-import { isAbsolutePath, slugFollowingName } from '@/utils/validation'
+import { isAbsolutePath, slugFollowingName, slugify } from '@/utils/validation'
 
 withDefaults(defineProps<{ hideTitle?: boolean }>(), { hideTitle: false })
 
@@ -141,6 +141,13 @@ watch(() => form.value.name, (name) => {
 function onSlugInput(e: Event): void {
   slugTouched.value = (e.target as HTMLInputElement).value.length > 0
 }
+
+// Runs after the input event's own v-model write, so emptying the field hands the
+// slug back to the name instead of being overwritten with the empty value.
+watch(slugTouched, (touched) => {
+  if (!touched && isCreating.value)
+    form.value.slug = slugify(form.value.name)
+})
 
 function closeForm() {
   formVisible.value = false

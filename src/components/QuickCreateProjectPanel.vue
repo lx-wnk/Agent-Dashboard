@@ -29,6 +29,12 @@ const defaultClaudeSpawner = computed(() =>
 watch(name, (v) => {
   slug.value = slugFollowingName(v, slug.value, slugTouched.value)
 })
+// Runs after the input event's own v-model write, so emptying the field hands the
+// slug back to the name instead of being overwritten with the empty value.
+watch(slugTouched, (touched) => {
+  if (!touched)
+    slug.value = slugify(name.value)
+})
 watch(defaultClaudeSpawner, (v) => {
   if (v && !defaultSpawnerId.value)
     defaultSpawnerId.value = v.id

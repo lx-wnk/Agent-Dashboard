@@ -67,6 +67,16 @@ describe('quickCreateProjectPanel', () => {
     expect((wrapper.find('input[name="slug"]').element as HTMLInputElement).value).toBe('my-own-slug')
   })
 
+  it('refills the slug the moment the field is cleared, without touching the name', async () => {
+    const wrapper = mount(QuickCreateProjectPanel, { props: { spawners: [] } })
+    await wrapper.find('input[name="name"]').setValue('New Thing')
+    await wrapper.find('input[name="slug"]').setValue('my-own-slug')
+
+    await wrapper.find('input[name="slug"]').setValue('')
+
+    expect((wrapper.find('input[name="slug"]').element as HTMLInputElement).value).toBe('new-thing')
+  })
+
   it('rolls back project create when folder create fails', async () => {
     const errorSpy = vi.spyOn(toast, 'error')
     fetchMock

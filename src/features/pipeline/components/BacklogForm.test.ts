@@ -96,6 +96,17 @@ describe('backlogForm single-screen', () => {
     expect(slug.value).toBe('a-different-task')
   })
 
+  it('refills the slug the moment the field is cleared, without touching the title', async () => {
+    const wrapper = mount(BacklogForm)
+    await wrapper.get('[data-testid="details-title"]').setValue('My New Task')
+    await wrapper.get('[data-testid="details-slug"]').setValue('my-own-slug')
+
+    await wrapper.get('[data-testid="details-slug"]').setValue('')
+
+    const slug = wrapper.get('[data-testid="details-slug"]').element as HTMLInputElement
+    expect(slug.value).toBe('my-new-task')
+  })
+
   it('auto-fills cwd from the default folder when a project is selected', async () => {
     const wrapper = mount(BacklogForm, { attachTo: document.body })
     const panel = await openListbox(wrapper.get('[data-testid="backlog-project-select"]'))

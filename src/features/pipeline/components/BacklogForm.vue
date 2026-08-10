@@ -91,6 +91,12 @@ watch(projectChoice, async (v) => {
 watch(title, (v) => {
   slug.value = slugFollowingName(v, slug.value, slugTouched.value)
 })
+// Runs after the input event's own v-model write, so emptying the field hands the
+// slug back to the title instead of being overwritten with the empty value.
+watch(slugTouched, (touched) => {
+  if (!touched)
+    slug.value = slugify(title.value)
+})
 
 function onSlugInput(e: Event): void {
   slugTouched.value = (e.target as HTMLInputElement).value.length > 0

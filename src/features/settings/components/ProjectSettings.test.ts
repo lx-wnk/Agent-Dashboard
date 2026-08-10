@@ -160,4 +160,28 @@ describe('projectSettings slug', () => {
 
     expect(slugInput(wrapper).value).toBe('second-name')
   })
+
+  // The hint promises the slug comes back when the field is cleared, not when the
+  // name is next edited — so clearing alone has to refill it.
+  it('refills the slug the moment the field is cleared, without touching the name', async () => {
+    const wrapper = mount(ProjectSettings)
+    await wrapper.get('[data-testid="proj-new"]').trigger('click')
+    await wrapper.get('[data-testid="proj-name"]').setValue('First Name')
+    await wrapper.get('[data-testid="proj-slug"]').setValue('my-own-slug')
+
+    await wrapper.get('[data-testid="proj-slug"]').setValue('')
+
+    expect(slugInput(wrapper).value).toBe('first-name')
+  })
+
+  it('does not refill an existing project\'s slug when the field is cleared', async () => {
+    const wrapper = mount(ProjectSettings)
+    await wrapper.get('[data-testid="proj-edit-legacy-key"]').trigger('click')
+    await flushPromises()
+
+    await wrapper.get('[data-testid="proj-slug"]').setValue('typed')
+    await wrapper.get('[data-testid="proj-slug"]').setValue('')
+
+    expect(slugInput(wrapper).value).toBe('')
+  })
 })
