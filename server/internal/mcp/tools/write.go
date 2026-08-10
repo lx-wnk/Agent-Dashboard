@@ -294,7 +294,13 @@ func registerCreateTask(registry mcp.ToolRegistry, d WriteDeps) {
 				projectID = p.ID
 				in.ProjectID = &projectID
 			}
-			if spawnerID := mcp.OptionalString(args, "spawnerId"); spawnerID != "" {
+			// Same reason as projectId above: a mistyped spawnerId reading as absent
+			// would silently create the task with the project default instead.
+			spawnerID, err := mcp.OptionalStringArg(args, "spawnerId")
+			if err != nil {
+				return nil, err
+			}
+			if spawnerID != "" {
 				if d.SpawnerRepo == nil {
 					return nil, mcp.Fail("create_task: spawner repository not configured")
 				}

@@ -283,3 +283,21 @@ func TestCreateTask_RejectsNonStringProjectIdentifier(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "projectId must be a string")
 }
+
+// A mistyped spawnerId used to read as absent, so the task was created with the
+// project default instead of the requested spawner — wrong stored state, no error.
+func TestCreateTask_RejectsNonStringSpawnerId(t *testing.T) {
+	registry, deps := newProjectRegistry(t)
+
+	_, err := invokeCreateTask(t, registry, map[string]any{
+		"slug":      "add-login",
+		"title":     "Add login",
+		"cwd":       "/repos/web",
+		"spawnerId": float64(123),
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "spawnerId must be a string")
+
+	_, err = deps.TaskRepo.GetBySlug(context.Background(), "add-login")
+	require.Error(t, err, "the task must not exist after a rejected spawnerId")
+}
