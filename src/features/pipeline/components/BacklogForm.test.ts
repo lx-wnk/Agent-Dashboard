@@ -33,6 +33,18 @@ vi.mock('@/composables/useProjectFolders', () => ({
   createFolder: vi.fn(),
 }))
 
+const fetchIssueMock = vi.fn().mockResolvedValue({
+  tracker: 'github',
+  key: 'owner/repo#7',
+  title: 'Imported Issue Title',
+  body: 'issue body',
+  url: 'https://example.test/7',
+  labels: [],
+})
+vi.mock('@/composables/useTrackerImport', () => ({
+  useTrackerImport: () => ({ fetchIssue: (ref: string) => fetchIssueMock(ref) }),
+}))
+
 // AppSelect (project/autonomy dropdowns) is a custom listbox, not a native
 // <select> — its panel teleports to <body> while open, so option counts and
 // value changes are exercised through the trigger button + the teleported
@@ -94,6 +106,23 @@ describe('backlogForm single-screen', () => {
 
     const slug = wrapper.get('[data-testid="details-slug"]').element as HTMLInputElement
     expect(slug.value).toBe('a-different-task')
+  })
+
+  // Importing rewrites the title, so the slug it derives is not user-authored —
+  // leaving the flag set would freeze the slug on the imported title forever.
+  it('keeps deriving from the title after an issue import overwrites a typed slug', async () => {
+    const wrapper = mount(BacklogForm)
+    await wrapper.get('[data-testid="details-slug"]').setValue('my-own-slug')
+
+    await wrapper.get('[data-testid="import-ref-input"]').setValue('owner/repo#7')
+    await wrapper.get('[data-testid="import-ref-fetch"]').trigger('click')
+    await flushPromises()
+
+    const slug = wrapper.get('[data-testid="details-slug"]').element as HTMLInputElement
+    expect(slug.value).toBe('imported-issue-title')
+
+    await wrapper.get('[data-testid="details-title"]').setValue('Changed After Import')
+    expect(slug.value).toBe('changed-after-import')
   })
 
   it('refills the slug the moment the field is cleared, without touching the title', async () => {

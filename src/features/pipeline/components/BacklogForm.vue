@@ -109,8 +109,8 @@ async function importFromIssue(): Promise<void> {
   isImporting.value = true
   try {
     const iss = await fetchIssue(ref)
+    slugTouched.value = false
     title.value = iss.title
-    slug.value = slugify(iss.title)
     const sourceLink = `\n\nSource: ${iss.url}`
     description.value = iss.body ? iss.body + sourceLink : iss.url
   }
