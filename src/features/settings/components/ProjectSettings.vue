@@ -20,6 +20,7 @@ import { toast } from '@/composables/useToast'
 import { useProjectPipelineConfig } from '@/features/pipeline'
 import { errorMessage } from '@/utils/errorMessage'
 import { AVAILABLE_MODELS } from '@/utils/models'
+import { derivedSlugHint, SLUG_FORMAT_HINT } from '@/utils/slugHint'
 import { STAGE_LABELS } from '@/utils/stageLabels'
 import { isAbsolutePath, slugFollowingName } from '@/utils/validation'
 
@@ -140,10 +141,8 @@ function onSlugInput(e: Event): void {
   slugTouched.value = (e.target as HTMLInputElement).value.length > 0
 }
 
-const SLUG_FORMAT_HINT = 'Starts with a lowercase letter or digit, then lowercase letters, digits and hyphens, up to 64 characters.'
-
 const slugHint = computed(() => isCreating.value
-  ? `Filled in from the name; type here to take it over, clear it to hand it back. ${SLUG_FORMAT_HINT}`
+  ? derivedSlugHint('name')
   : `This project's lookup key — other records already point at it. ${SLUG_FORMAT_HINT}`)
 
 function closeForm() {

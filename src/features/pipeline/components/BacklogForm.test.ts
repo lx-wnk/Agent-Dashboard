@@ -85,6 +85,15 @@ describe('backlogForm single-screen', () => {
     expect(slug.value).toBe('my-new-task')
   })
 
+  it('tells the user the slug is derived from the title and what it has to look like', () => {
+    const wrapper = mount(BacklogForm)
+
+    const hint = wrapper.get('[data-testid="details-slug-hint"]')
+    expect(wrapper.get('[data-testid="details-slug"]').attributes('aria-describedby')).toBe(hint.attributes('id'))
+    expect(hint.text()).toContain('Filled in from the title')
+    expect(hint.text()).toContain('64 characters')
+  })
+
   it('stops deriving the slug once the user has edited it', async () => {
     const wrapper = mount(BacklogForm)
     await wrapper.get('[data-testid="details-title"]').setValue('My New Task')

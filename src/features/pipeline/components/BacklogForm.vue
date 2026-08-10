@@ -14,6 +14,7 @@ import { toast } from '@/composables/useToast'
 import { useTrackerImport } from '@/composables/useTrackerImport'
 import { createTask } from '@/features/pipeline/composables/useTasks'
 import { errorMessage } from '@/utils/errorMessage'
+import { derivedSlugHint } from '@/utils/slugHint'
 import { TASK_AUTONOMY_OPTIONS, TASK_PRIORITY_OPTIONS } from '@/utils/taskOptions'
 import { slugFollowingName } from '@/utils/validation'
 
@@ -98,6 +99,8 @@ watch([title, slugTouched], ([v, touched]) => {
 function onSlugInput(e: Event): void {
   slugTouched.value = (e.target as HTMLInputElement).value.length > 0
 }
+
+const slugHint = derivedSlugHint('title')
 
 async function importFromIssue(): Promise<void> {
   const ref = importRef.value.trim()
@@ -240,10 +243,14 @@ async function onCreateAndRefine(): Promise<void> {
         id="details-slug"
         v-model="slug"
         data-testid="details-slug"
+        aria-describedby="details-slug-hint"
         placeholder="task-slug"
         class="font-mono"
         @input="onSlugInput"
       />
+      <p id="details-slug-hint" data-testid="details-slug-hint" class="text-[11px] text-fg-faint">
+        {{ slugHint }}
+      </p>
     </div>
 
     <AppInput v-model="description" type="textarea" :rows="3" label="Description" placeholder="Additional context (optional)" />

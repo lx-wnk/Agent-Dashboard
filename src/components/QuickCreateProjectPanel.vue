@@ -5,7 +5,8 @@ import { createFolder } from '../composables/useProjectFolders'
 import { createProject, deleteProject } from '../composables/useProjects'
 import { toast } from '../composables/useToast'
 import { errorMessage } from '../utils/errorMessage'
-import { slugFollowingName, slugify } from '../utils/validation'
+import { derivedSlugHint } from '../utils/slugHint'
+import { slugFollowingName } from '../utils/validation'
 import AppButton from './ui/AppButton.vue'
 import AppSelect from './ui/AppSelect.vue'
 
@@ -41,6 +42,8 @@ function onSlugInput(e: Event): void {
   slugTouched.value = (e.target as HTMLInputElement).value.length > 0
 }
 
+const slugHint = derivedSlugHint('name')
+
 const inputClass = 'w-full bg-app border border-line rounded text-fg text-[13px] px-2.5 py-2 leading-snug focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent'
 
 const spawnerOptions = computed(() => [
@@ -51,15 +54,15 @@ const spawnerOptions = computed(() => [
 async function submit(): Promise<void> {
   if (isSubmitting.value)
     return
-  if (!name.value.trim() || !path.value.trim()) {
-    toast.error('Name and Path are required.')
+  if (!name.value.trim() || !path.value.trim() || !slug.value.trim()) {
+    toast.error('Name, Path and Slug are required.')
     return
   }
   isSubmitting.value = true
 
   const projectInput = {
     name: name.value.trim(),
-    slug: slug.value.trim() || slugify(name.value),
+    slug: slug.value.trim(),
     ...(description.value.trim() ? { description: description.value.trim() } : {}),
     ...(color.value.trim() ? { color: color.value.trim() } : {}),
     ...(defaultSpawnerId.value ? { defaultSpawnerId: defaultSpawnerId.value } : {}),
@@ -118,15 +121,20 @@ async function submit(): Promise<void> {
         >
       </div>
       <div class="mb-2">
-        <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1" for="qcp-slug">Slug</label>
+        <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1" for="qcp-slug">Slug *</label>
         <input
           id="qcp-slug"
           v-model="slug"
           name="slug"
+          required
+          aria-describedby="qcp-slug-hint"
           :class="inputClass"
-          placeholder="auto from name"
+          placeholder="my-project"
           @input="onSlugInput"
         >
+        <p id="qcp-slug-hint" data-testid="qcp-slug-hint" class="text-[11px] text-fg-faint mt-0.5">
+          {{ slugHint }}
+        </p>
       </div>
       <div class="mb-2">
         <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1" for="qcp-spawner">Default Spawner</label>
@@ -163,7 +171,7 @@ async function submit(): Promise<void> {
         <AppButton type="button" variant="secondary" @click="emit('cancel')">
           Cancel
         </AppButton>
-        <AppButton type="submit" variant="primary" :disabled="isSubmitting || !name.trim() || !path.trim()">
+        <AppButton type="submit" variant="primary" :disabled="isSubmitting || !name.trim() || !path.trim() || !slug.trim()">
           {{ isSubmitting ? 'Creating…' : 'Create' }}
         </AppButton>
       </div>
