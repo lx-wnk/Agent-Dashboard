@@ -218,3 +218,48 @@ func TestGetAgents_NonChannelAgentNoFinishedCard(t *testing.T) {
 		}
 	}
 }
+
+// "The process sets no CLAUDE_CONFIG_DIR" and "its environment could not be
+// read" both leave ClaudeConfigDir empty, so the read flag is the only thing
+// carrying the difference to spawner attribution — including onto the finished
+// card, where the process is gone but the answer was taken while it was alive.
+func TestGetAgents_CarriesTheConfigDirReadFlagOntoLiveAndFinishedAgents(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	const sessionID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+	const pid = 5150
+	cwd := filepath.Join(home, "work", "project")
+	projectDir := filepath.Join(home, ".claude", "projects", parser.EncodePath(cwd))
+	require.NoError(t, os.MkdirAll(projectDir, 0o755))
+	ts := time.Now().UTC().Format(time.RFC3339)
+	lines := `{"type":"user","sessionId":"` + sessionID + `","timestamp":"` + ts +
+		`","message":{"role":"user","content":"hi"}}` + "\n"
+	require.NoError(t, os.WriteFile(filepath.Join(projectDir, sessionID+".jsonl"), []byte(lines), 0o644))
+
+	discDir := filepath.Join(home, ".claude", "dashboard-channel")
+	require.NoError(t, os.MkdirAll(discDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(discDir, "5150.json"), []byte(`{"port":1}`), 0o644))
+
+	var procs []scanner.ProcessInfo
+	m := merger.New(merger.WithScanFn(func(context.Context) ([]scanner.ProcessInfo, error) {
+		return procs, nil
+	}))
+
+	// Environment read, variable unset: the session runs on the default dir.
+	procs = []scanner.ProcessInfo{{
+		PID: pid, CWD: cwd, Uptime: 30, Provider: sdk.ProviderClaude,
+		ClaudeConfigDir: "", ClaudeConfigDirKnown: true,
+	}}
+	live, err := m.GetAgents(context.Background(), merger.GetAgentsOpts{})
+	require.NoError(t, err)
+	require.Len(t, live, 1)
+	assert.True(t, live[0].ClaudeConfigDirKnown, "the scan read this process's environment")
+
+	procs = nil
+	finished, err := m.GetAgents(context.Background(), merger.GetAgentsOpts{})
+	require.NoError(t, err)
+	require.Len(t, finished, 1)
+	require.Equal(t, sdk.AgentStatusFinished, finished[0].Status)
+	assert.True(t, finished[0].ClaudeConfigDirKnown, "the answer was read while the process was alive")
+}

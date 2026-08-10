@@ -75,12 +75,12 @@ func NewSpawnerEnricher(spawners spawnerLister, tasks taskLister) merger.Enriche
 		for _, s := range rows {
 			byID[s.ID] = s
 		}
-		byConfigDir, defaultSpawner := indexByConfigDir(rows)
+		byConfigDir := indexByConfigDir(rows)
 
 		taskSpawner := taskSpawnerIDs(ctx, tasks, agents)
 
 		for i := range agents {
-			id, source := attribute(&agents[i], taskSpawner, byConfigDir, defaultSpawner)
+			id, source := attribute(&agents[i], taskSpawner, byConfigDir)
 			if id == "" {
 				continue
 			}
@@ -99,21 +99,24 @@ func attribute(
 	agent *sdk.Agent,
 	taskSpawner map[string]string,
 	byConfigDir map[string]*ent.Spawner,
-	defaultSpawner *ent.Spawner,
 ) (id, source string) {
 	if agent.PipelineTaskID != "" {
 		if fromTask := taskSpawner[agent.PipelineTaskID]; fromTask != "" {
 			return fromTask, sdk.SpawnerSourceTask
 		}
 	}
+	if !agent.ClaudeConfigDirKnown {
+		// The environment was never read, so there is no profile to place this
+		// on. Unassigned says that; the default spawner would claim a config dir
+		// nothing observed, and the derived marker would present the guess as a
+		// reading.
+		return "", ""
+	}
 	dir := strings.TrimSpace(agent.ClaudeConfigDir)
 	if dir == "" {
-		// No variable set means the session runs on the default config dir,
-		// which is exactly what a spawner without one targets.
-		if defaultSpawner != nil {
-			return defaultSpawner.ID, sdk.SpawnerSourceEnv
-		}
-		return "", ""
+		// Read, and the variable is unset — the session runs on the user's
+		// default config dir, which is what a spawner without one targets.
+		dir = userDefaultConfigDir()
 	}
 	if match, ok := byConfigDir[canonicalDir(dir)]; ok {
 		return match.ID, sdk.SpawnerSourceEnv
@@ -121,11 +124,12 @@ func attribute(
 	return "", ""
 }
 
-// indexByConfigDir maps each spawner's config dir to it, and returns the
-// spawner that owns the default dir. Two spawners can name the same directory
-// (a symlink to the same store); the default one wins so the attribution is
-// stable rather than map-order dependent.
-func indexByConfigDir(rows []*ent.Spawner) (map[string]*ent.Spawner, *ent.Spawner) {
+// indexByConfigDir maps each spawner's config dir to it. A spawner that names no
+// config dir targets the user's default one and is indexed under that, so a
+// session either matches a declared directory or matches nothing. Two spawners
+// can name the same directory (a symlink to the same store); the default one
+// wins so the attribution is stable rather than map-order dependent.
+func indexByConfigDir(rows []*ent.Spawner) map[string]*ent.Spawner {
 	byDir := make(map[string]*ent.Spawner, len(rows))
 	var fallback *ent.Spawner
 	for _, s := range rows {
@@ -143,19 +147,25 @@ func indexByConfigDir(rows []*ent.Spawner) (map[string]*ent.Spawner, *ent.Spawne
 		byDir[key] = s
 	}
 	if fallback != nil {
-		if key := canonicalDir(defaultConfigDir()); key != "" {
+		if key := canonicalDir(userDefaultConfigDir()); key != "" {
 			if prev, ok := byDir[key]; !ok || !prev.IsDefault {
 				byDir[key] = fallback
 			}
 		}
 	}
-	return byDir, fallback
+	return byDir
 }
 
-func defaultConfigDir() string {
-	if v := strings.TrimSpace(os.Getenv(ClaudeConfigDirEnv)); v != "" {
-		return v
-	}
+// userDefaultConfigDir is the config dir a session that sets no
+// CLAUDE_CONFIG_DIR runs on: always ~/.claude.
+//
+// Deliberately not the server process's own CLAUDE_CONFIG_DIR. That variable
+// says which dir this server was launched under — a different fact, and one
+// that already has an owner in parser.AllClaudeConfigDirs (which session trees
+// to scan). Reading it here made a server started under ~/.claude-work declare
+// that dir to be the user default, so a spawner targeting the default profile
+// claimed sessions on the work profile and lost the ones on ~/.claude.
+func userDefaultConfigDir() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return ""

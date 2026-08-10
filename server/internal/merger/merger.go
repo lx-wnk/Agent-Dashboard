@@ -375,11 +375,12 @@ func (m *Merger) GetAgents(ctx context.Context, opts GetAgentsOpts) ([]sdk.Agent
 		liveSessions[a.SessionID] = true
 		if a.ChannelAvailable {
 			m.tracker.record(a.PID, liveSnapshot{
-				sessionID:   a.SessionID,
-				path:        sessionPaths[i],
-				projectPath: a.ProjectPath,
-				configDir:   a.ClaudeConfigDir,
-				provider:    a.Provider,
+				sessionID:      a.SessionID,
+				path:           sessionPaths[i],
+				projectPath:    a.ProjectPath,
+				configDir:      a.ClaudeConfigDir,
+				configDirKnown: a.ClaudeConfigDirKnown,
+				provider:       a.Provider,
 			})
 		}
 	}
@@ -465,6 +466,7 @@ func (m *Merger) buildAgent(proc scanner.ProcessInfo, session *parser.SessionDat
 		ProjectName:               filepath.Base(proc.CWD),
 		CWD:                       proc.CWD,
 		ClaudeConfigDir:           proc.ClaudeConfigDir,
+		ClaudeConfigDirKnown:      proc.ClaudeConfigDirKnown,
 		Entrypoint:                session.Entrypoint,
 		Status:                    CalculateStatus(session.LastActivity),
 		Working:                   session.TurnOpen || discovery.recentOutput,

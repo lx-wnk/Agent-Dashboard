@@ -318,7 +318,14 @@ type Agent struct {
 	// session's process env (empty when the session uses the default ~/.claude).
 	// Lets the dashboard resolve which config root a session's slash commands /
 	// skills / plugins are loaded from when enumerating per-session scope.
-	ClaudeConfigDir           string         `json:"claudeConfigDir,omitempty"`
+	ClaudeConfigDir string `json:"claudeConfigDir,omitempty"`
+	// ClaudeConfigDirKnown says whether the process environment was actually
+	// read, which is what separates "this session sets no CLAUDE_CONFIG_DIR"
+	// from "its environment could not be read" — indistinguishable in
+	// ClaudeConfigDir alone, and the difference between attributing a session
+	// to a profile and having no idea which profile it runs on. Server-side
+	// only (the client has no use for it), hence no JSON field.
+	ClaudeConfigDirKnown      bool           `json:"-"`
 	Entrypoint                Entrypoint     `json:"entrypoint"`
 	Status                    AgentStatus    `json:"status"`
 	Uptime                    int64          `json:"uptime"`

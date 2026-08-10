@@ -17,7 +17,11 @@ type liveSnapshot struct {
 	path        string
 	projectPath string
 	configDir   string
-	provider    sdk.Provider
+	// configDirKnown mirrors sdk.Agent.ClaudeConfigDirKnown: it was read while
+	// the process was alive, and stays true after it exits — the answer does not
+	// become unknown just because the process is gone.
+	configDirKnown bool
+	provider       sdk.Provider
 }
 
 // staleTracker is an in-memory, process-scoped registry of controllable agents
@@ -117,6 +121,7 @@ func buildFinishedAgent(pid int, snap liveSnapshot, session *parser.SessionData,
 		ProjectName:               filepath.Base(snap.projectPath),
 		CWD:                       snap.projectPath,
 		ClaudeConfigDir:           snap.configDir,
+		ClaudeConfigDirKnown:      snap.configDirKnown,
 		Entrypoint:                session.Entrypoint,
 		Status:                    sdk.AgentStatusFinished,
 		Working:                   false,
