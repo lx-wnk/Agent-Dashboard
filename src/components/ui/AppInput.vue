@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { useId } from 'vue'
+import { computed, useAttrs, useId } from 'vue'
 
 defineOptions({ inheritAttrs: false })
 
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
   type?: 'input' | 'textarea'
   modelValue?: string
   placeholder?: string
@@ -29,6 +29,14 @@ type ResizeProp = 'none' | 'y' | 'both' | 'x'
 const inputId = useId()
 const errorId = `${inputId}-error`
 
+// The explicit binding below wins over v-bind="$attrs", so a caller's own
+// description has to be folded in here or it never reaches the control.
+const attrs = useAttrs()
+const describedBy = computed(() => {
+  const ids = [attrs['aria-describedby'], props.error ? errorId : null]
+  return ids.filter(Boolean).join(' ') || undefined
+})
+
 const resizeClass: Record<ResizeProp, string> = {
   none: 'resize-none',
   y: 'resize-y',
@@ -53,7 +61,7 @@ const resizeClass: Record<ResizeProp, string> = {
       :disabled="disabled"
       :rows="rows"
       :aria-invalid="error ? 'true' : undefined"
-      :aria-describedby="error ? errorId : undefined"
+      :aria-describedby="describedBy"
       class="w-full bg-app border border-line rounded-md px-3 py-1.5 text-sm text-fg placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent disabled:opacity-50 font-sans"
       :class="resizeClass[resize]"
       @input="$emit('update:modelValue', ($event.target as HTMLTextAreaElement).value)"
@@ -66,7 +74,7 @@ const resizeClass: Record<ResizeProp, string> = {
       :placeholder="placeholder"
       :disabled="disabled"
       :aria-invalid="error ? 'true' : undefined"
-      :aria-describedby="error ? errorId : undefined"
+      :aria-describedby="describedBy"
       class="w-full bg-app border border-line rounded-md px-3 py-1.5 text-sm text-fg placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent disabled:opacity-50 font-sans"
       @input="$emit('update:modelValue', ($event.target as HTMLInputElement).value)"
     >
