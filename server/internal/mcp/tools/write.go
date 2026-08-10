@@ -8,6 +8,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	mcp "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
 	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
+	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 	"github.com/lx-wnk/agent-dashboard/server/internal/taskcontrol"
 	"github.com/lx-wnk/agent-dashboard/server/internal/validation"
 )
@@ -22,6 +23,8 @@ type WriteDeps struct {
 	SpawnerRepo      repo.SpawnerRepo
 	Broadcast        func(taskID string)
 	BroadcastDeleted func(taskID string)
+	// May be nil — see safeBroadcastProject.
+	ProjectBroadcaster *sse.ProjectBroadcaster
 }
 
 // permissionTemplates is derived from permissions.TemplateTools — the single source of truth
@@ -42,9 +45,10 @@ func init() {
 	}
 }
 
-// RegisterWriteTools registers all 6 write tools into the given registry.
+// RegisterWriteTools registers all write tools into the given registry.
 func RegisterWriteTools(registry mcp.ToolRegistry, d WriteDeps) {
 	registerCreateTask(registry, d)
+	registerCreateProject(registry, d)
 	registerUpdateTask(registry, d)
 	registerDeleteTask(registry, d)
 	registerManageTask(registry, d)
@@ -138,6 +142,13 @@ func safeBroadcast(fn func(string), id string) {
 	}
 }
 
+func safeBroadcastProject(b *sse.ProjectBroadcaster, eventType, projectID string, payload any) {
+	if b == nil {
+		return
+	}
+	b.Broadcast(sse.ProjectEvent{Type: eventType, ProjectID: projectID, Payload: payload})
+}
+
 // registerCreateTask registers the create_task tool.
 func registerCreateTask(registry mcp.ToolRegistry, d WriteDeps) {
 	registry.Register(&mcp.ToolDef{
@@ -164,7 +175,8 @@ func registerCreateTask(registry mcp.ToolRegistry, d WriteDeps) {
 				"permissions":        map[string]any{"type": "array"},
 				"inheritPermissions": map[string]any{"type": "boolean"},
 				"autonomy":           map[string]any{"type": "string", "enum": []string{"manual", "spec_gated", "full"}, "description": "Permission gate level: manual=human-gated, spec_gated=auto-approve all requests (human gates the spec), full=allow-all"},
-				"projectId":          map[string]any{"type": "string", "description": "Optional project ID to associate the task with"},
+				"projectId":          map[string]any{"type": "string", "description": "Optional project ID to associate the task with. Mutually exclusive with projectSlug."},
+				"projectSlug":        map[string]any{"type": "string", "description": "Optional project slug, resolved to its ID. Mutually exclusive with projectId; the project must already exist — create one with create_project."},
 				"spawnerId":          map[string]any{"type": "string", "description": "Optional spawner ID overriding the project default"},
 			},
 			"required": []string{"slug", "title", "cwd"},
@@ -251,16 +263,44 @@ func registerCreateTask(registry mcp.ToolRegistry, d WriteDeps) {
 				}
 			}
 
-			if projectID := mcp.OptionalString(args, "projectId"); projectID != "" {
+			// A non-string value must not read as absent here: that would defeat the
+			// projectId/projectSlug exclusion below instead of rejecting the call.
+			projectID, err := mcp.OptionalStringArg(args, "projectId")
+			if err != nil {
+				return nil, err
+			}
+			projectSlug, err := mcp.OptionalStringArg(args, "projectSlug")
+			if err != nil {
+				return nil, err
+			}
+			if projectID != "" && projectSlug != "" {
+				return nil, mcp.Fail("create_task: pass either projectId or projectSlug, not both")
+			}
+			if projectID != "" || projectSlug != "" {
 				if d.ProjectRepo == nil {
 					return nil, mcp.Fail("create_task: project repository not configured")
 				}
-				if _, err := d.ProjectRepo.GetByID(ctx, projectID); err != nil {
-					return nil, mcp.Fail("create_task: project not found")
+				lookup, ref, hint := d.ProjectRepo.GetByID, projectID, "list_projects to find the right id"
+				if projectSlug != "" {
+					lookup, ref, hint = d.ProjectRepo.GetBySlug, projectSlug, "create it with create_project"
 				}
+				p, err := lookup(ctx, ref)
+				if err != nil {
+					if !ent.IsNotFound(err) {
+						return nil, mcp.Fail("create_task: " + err.Error())
+					}
+					return nil, mcp.Fail("create_task: project not found: " + ref + " (" + hint + ")")
+				}
+				projectID = p.ID
 				in.ProjectID = &projectID
 			}
-			if spawnerID := mcp.OptionalString(args, "spawnerId"); spawnerID != "" {
+			// Same reason as projectId above: a mistyped spawnerId reading as absent
+			// would silently create the task with the project default instead.
+			spawnerID, err := mcp.OptionalStringArg(args, "spawnerId")
+			if err != nil {
+				return nil, err
+			}
+			if spawnerID != "" {
 				if d.SpawnerRepo == nil {
 					return nil, mcp.Fail("create_task: spawner repository not configured")
 				}

@@ -2,7 +2,6 @@ package tools
 
 import (
 	"context"
-	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
@@ -30,24 +29,6 @@ func RegisterReadTools(registry mcp.ToolRegistry, d ReadDeps) {
 	registerListSpawners(registry, d)
 }
 
-const readIsoFormat = "2006-01-02T15:04:05Z"
-
-func readTsFmt(t time.Time) string { return t.UTC().Format(readIsoFormat) }
-
-// projectView is the JSON shape returned by the list_projects MCP tool.
-// Mirrors the camelCase wire shape used by the projects HTTP handler.
-type projectView struct {
-	ID               string  `json:"id"`
-	Slug             string  `json:"slug"`
-	Name             string  `json:"name"`
-	Description      *string `json:"description,omitempty"`
-	Color            *string `json:"color,omitempty"`
-	DefaultSpawnerID *string `json:"defaultSpawnerId,omitempty"`
-	FolderCount      int     `json:"folderCount"`
-	CreatedAt        string  `json:"createdAt"`
-	UpdatedAt        string  `json:"updatedAt"`
-}
-
 // spawnerView is the JSON shape returned by the list_spawners MCP tool.
 // Mirrors the camelCase wire shape used by the spawners HTTP handler.
 type spawnerView struct {
@@ -62,44 +43,6 @@ type spawnerView struct {
 	BuiltIn       bool              `json:"builtIn"`
 	CreatedAt     string            `json:"createdAt"`
 	UpdatedAt     string            `json:"updatedAt"`
-}
-
-// registerListProjects registers the list_projects tool.
-// Returns an array of project views, each with a `folderCount` field.
-// Scope: tasks:read.
-func registerListProjects(registry mcp.ToolRegistry, d ReadDeps) {
-	registry.Register(&mcp.ToolDef{
-		Name:        "list_projects",
-		Description: "List all projects with folder counts.",
-		InputSchema: map[string]any{
-			"type":       "object",
-			"properties": map[string]any{},
-		},
-		Handler: func(ctx context.Context, _ map[string]any) (*mcp.ToolResult, error) {
-			if d.ProjectRepo == nil {
-				return nil, mcp.Fail("list_projects: project repository not configured")
-			}
-			rows, err := d.ProjectRepo.ListWithFolderCount(ctx)
-			if err != nil {
-				return nil, mcp.Fail("list_projects: " + err.Error())
-			}
-			result := make([]projectView, len(rows))
-			for i, r := range rows {
-				result[i] = projectView{
-					ID:               r.ID,
-					Slug:             r.Slug,
-					Name:             r.Name,
-					Description:      r.Description,
-					Color:            r.Color,
-					DefaultSpawnerID: r.DefaultSpawnerID,
-					FolderCount:      r.FolderCount,
-					CreatedAt:        readTsFmt(r.CreatedAt),
-					UpdatedAt:        readTsFmt(r.UpdatedAt),
-				}
-			}
-			return mcp.OK(result)
-		},
-	})
 }
 
 // registerListSpawners registers the list_spawners tool.
@@ -141,8 +84,8 @@ func registerListSpawners(registry mcp.ToolRegistry, d ReadDeps) {
 					ModelOverride: s.ModelOverride,
 					Description:   s.Description,
 					BuiltIn:       s.BuiltIn,
-					CreatedAt:     readTsFmt(s.CreatedAt),
-					UpdatedAt:     readTsFmt(s.UpdatedAt),
+					CreatedAt:     tsFmt(s.CreatedAt),
+					UpdatedAt:     tsFmt(s.UpdatedAt),
 				}
 			}
 			return mcp.OK(result)
