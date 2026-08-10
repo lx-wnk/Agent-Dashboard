@@ -15,7 +15,7 @@ import { useTrackerImport } from '@/composables/useTrackerImport'
 import { createTask } from '@/features/pipeline/composables/useTasks'
 import { errorMessage } from '@/utils/errorMessage'
 import { TASK_AUTONOMY_OPTIONS, TASK_PRIORITY_OPTIONS } from '@/utils/taskOptions'
-import { slugFollowingName, slugify } from '@/utils/validation'
+import { slugFollowingName } from '@/utils/validation'
 
 const emit = defineEmits<{
   createdAndRefine: [task: PipelineTask]
@@ -88,14 +88,11 @@ watch(projectChoice, async (v) => {
   }
 })
 
-watch(title, (v) => {
-  slug.value = slugFollowingName(v, slug.value, slugTouched.value)
-})
-// Runs after the input event's own v-model write, so emptying the field hands the
-// slug back to the title instead of being overwritten with the empty value.
-watch(slugTouched, (touched) => {
-  if (!touched)
-    slug.value = slugify(title.value)
+// Watching the flag too is what hands the slug back when the field is emptied.
+// Both sources flush together, after the input event's own v-model write, which
+// runs before the handler on a native input and after it on AppInput.
+watch([title, slugTouched], ([v, touched]) => {
+  slug.value = slugFollowingName(v, slug.value, touched)
 })
 
 function onSlugInput(e: Event): void {

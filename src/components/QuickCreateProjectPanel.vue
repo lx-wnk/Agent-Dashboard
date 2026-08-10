@@ -26,14 +26,11 @@ const defaultClaudeSpawner = computed(() =>
   props.spawners.find(s => s.slug === defaultSpawnerSlug),
 )
 
-watch(name, (v) => {
-  slug.value = slugFollowingName(v, slug.value, slugTouched.value)
-})
-// Runs after the input event's own v-model write, so emptying the field hands the
-// slug back to the name instead of being overwritten with the empty value.
-watch(slugTouched, (touched) => {
-  if (!touched)
-    slug.value = slugify(name.value)
+// Watching the flag too is what hands the slug back when the field is emptied.
+// Both sources flush together, after the input event's own v-model write, which
+// runs before the handler on a native input and after it on AppInput.
+watch([name, slugTouched], ([v, touched]) => {
+  slug.value = slugFollowingName(v, slug.value, touched)
 })
 watch(defaultClaudeSpawner, (v) => {
   if (v && !defaultSpawnerId.value)

@@ -21,7 +21,7 @@ import { useProjectPipelineConfig } from '@/features/pipeline'
 import { errorMessage } from '@/utils/errorMessage'
 import { AVAILABLE_MODELS } from '@/utils/models'
 import { STAGE_LABELS } from '@/utils/stageLabels'
-import { isAbsolutePath, slugFollowingName, slugify } from '@/utils/validation'
+import { isAbsolutePath, slugFollowingName } from '@/utils/validation'
 
 withDefaults(defineProps<{ hideTitle?: boolean }>(), { hideTitle: false })
 
@@ -128,23 +128,23 @@ function openEdit(project: Project) {
   void fetchProjectPipeline(project.id)
 }
 
+// Watching the flag too is what hands the slug back when the field is emptied.
 // openEdit() clears isCreating before this pre-flush watcher runs, so opening an
 // existing project never re-derives its slug.
-watch(() => form.value.name, (name) => {
+watch([() => form.value.name, slugTouched], ([name, touched]) => {
   if (isCreating.value)
-    form.value.slug = slugFollowingName(name, form.value.slug, slugTouched.value)
+    form.value.slug = slugFollowingName(name, form.value.slug, touched)
 })
 
 function onSlugInput(e: Event): void {
   slugTouched.value = (e.target as HTMLInputElement).value.length > 0
 }
 
-// Runs after the input event's own v-model write, so emptying the field hands the
-// slug back to the name instead of being overwritten with the empty value.
-watch(slugTouched, (touched) => {
-  if (!touched && isCreating.value)
-    form.value.slug = slugify(form.value.name)
-})
+const SLUG_FORMAT_HINT = 'Starts with a lowercase letter or digit, then lowercase letters, digits and hyphens, up to 64 characters.'
+
+const slugHint = computed(() => isCreating.value
+  ? `Filled in from the name; type here to take it over, clear it to hand it back. ${SLUG_FORMAT_HINT}`
+  : `This project's lookup key — other records already point at it. ${SLUG_FORMAT_HINT}`)
 
 function closeForm() {
   formVisible.value = false
@@ -454,9 +454,7 @@ function setDefault(targetRow: FolderRow) {
             @input="onSlugInput"
           >
           <p id="proj-slug-hint" data-testid="proj-slug-hint" class="text-[11px] text-fg-faint mt-0.5">
-            <template v-if="isCreating">Filled in from the name; type here to take it over, clear it to hand it back. </template>
-            <template v-else>This project's lookup key — other records already point at it. </template>
-            Starts with a lowercase letter or digit, then lowercase letters, digits and hyphens, up to 64 characters.
+            {{ slugHint }}
           </p>
         </div>
         <div class="col-span-2">
