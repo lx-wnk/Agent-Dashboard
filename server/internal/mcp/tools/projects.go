@@ -74,6 +74,22 @@ func registerListProjects(registry mcp.ToolRegistry, d ReadDeps) {
 	})
 }
 
+// createProjectResult is the create_project response: the project view plus the
+// one thing the view cannot express — that the project is not usable from the
+// New-Task form yet. Not on projectView itself: list_projects reuses that shape
+// and so does the SSE payload the SPA reads as a Project.
+type createProjectResult struct {
+	projectView
+	NextStep string `json:"nextStep"`
+}
+
+// noFolderYetAdvice names the dead end a freshly created project sits in:
+// BacklogForm sources `cwd` exclusively from the project's folder suggestions,
+// so with none the New-Task form can never be submitted for it.
+const noFolderYetAdvice = "This project has no folder yet. The dashboard's New-Task form takes its working directory " +
+	"only from a project's folders, so it cannot be submitted for this project until someone adds one under " +
+	"Settings → Projects. Tell whoever asked for the project. Tasks created with create_task are unaffected — they carry their own cwd."
+
 // createProjectProperties is both the advertised JSON Schema `properties` block
 // and the accepted-key set the handler enforces — one definition, so the
 // "additionalProperties": false the schema promises cannot drift from what the
@@ -114,8 +130,11 @@ func rejectUnknownArgs(tool string, args map[string]any, properties map[string]a
 // are stored as NULL rather than "", and defaultSpawnerId must resolve.
 func registerCreateProject(registry mcp.ToolRegistry, d WriteDeps) {
 	registry.Register(&mcp.ToolDef{
-		Name:        "create_project",
-		Description: "Create a project. Fails if the slug is already taken — call list_projects first to reuse an existing project.",
+		Name: "create_project",
+		Description: "Create a project. Fails if the slug is already taken — call list_projects first to reuse an existing project. " +
+			"The project starts with no folder, and the dashboard's New-Task form takes its working directory only from a project's folders, " +
+			"so nobody can create a task for it in the UI until a folder is added under Settings → Projects. Pass that on to whoever asked for the project. " +
+			"create_task over MCP is unaffected — it takes an explicit cwd.",
 		InputSchema: map[string]any{
 			"type":                 "object",
 			"properties":           createProjectProperties,
@@ -199,8 +218,10 @@ func registerCreateProject(registry mcp.ToolRegistry, d WriteDeps) {
 			// A project has no folders until one is added through the UI or the
 			// folders API, so the count is zero by construction rather than queried.
 			view := toProjectView(p, 0)
+			// The broadcast keeps the plain project shape the SPA casts it to; the
+			// advisory is for the caller of this tool only.
 			safeBroadcastProject(d.ProjectBroadcaster, "project_created", p.ID, view)
-			return mcp.OK(view)
+			return mcp.OK(createProjectResult{projectView: view, NextStep: noFolderYetAdvice})
 		},
 	})
 }

@@ -40,8 +40,11 @@ Scopes are hierarchical — a higher scope implies all lower ones.
 `create_task` takes either a `projectId` or a `projectSlug` — never both. The slug is resolved to
 its project and the call fails if no project carries it, so a typo cannot silently produce an
 unattached task. When no project matches, create one with `create_project` (slug and name required)
-and use the returned id or slug. A project created this way has no folders yet, so the new-task form
-in the UI cannot pre-fill a working directory for it until one is added under **Settings → Projects**.
+and use the returned id or slug. A project created this way has no folders yet, and the UI's New-Task
+form takes its working directory *only* from a project's folders — so that form cannot be submitted
+for the new project until a folder is added under **Settings → Projects**. `create_project` says so
+in its tool description and returns it as `nextStep` on the created project, so the agent can pass
+the handover on; tasks created over MCP are unaffected because `create_task` carries its own `cwd`.
 
 `create_project` accepts `description`, `color`, and `defaultSpawnerId`, but **not** `setupCommand`.
 That command is executed as `sh -c` in every worktree the project creates, so `POST /api/projects`

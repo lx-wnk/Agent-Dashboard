@@ -416,3 +416,51 @@ func TestCreateProject_AcceptsTheLimitExactly(t *testing.T) {
 	})
 	require.NoError(t, err)
 }
+
+// A project created over MCP has no folder, and the New-Task form sources its
+// working directory only from folder suggestions — so the form is permanently
+// un-submittable for it. The agent that created the project is the only one who
+// can relay that, so it has to be told.
+func TestCreateProject_SaysTheProjectHasNoFolderYet(t *testing.T) {
+	registry, _ := newProjectRegistry(t)
+
+	out, err := invokeCreateProject(t, registry, map[string]any{"slug": "web", "name": "Web"})
+	require.NoError(t, err)
+
+	next, ok := out["nextStep"].(string)
+	require.True(t, ok, "the success payload must name the folderless dead end")
+	require.Contains(t, next, "folder")
+	require.Contains(t, next, "Settings → Projects")
+	require.Equal(t, "web", out["slug"], "the project view must still be returned in full")
+
+	require.Contains(t, registry["create_project"].Description, "folder",
+		"an agent reading only the tool list must learn of the consequence too")
+}
+
+// The SPA casts the SSE payload as a Project; the advisory belongs to the tool
+// caller, not to the dashboard's project store.
+func TestCreateProject_BroadcastPayloadCarriesNoAdvisory(t *testing.T) {
+	deps := newWriteDepsForTest(t)
+	bc := sse.NewProjectBroadcaster(sse.NewBroadcaster())
+	deps.ProjectBroadcaster = bc
+	registry := mcp.ToolRegistry{}
+	RegisterWriteTools(registry, deps)
+
+	ch := bc.Subscribe()
+	defer bc.Unsubscribe(ch)
+
+	_, err := invokeCreateProject(t, registry, map[string]any{"slug": "web", "name": "Web"})
+	require.NoError(t, err)
+
+	select {
+	case raw := <-ch:
+		frame := bytes.TrimSuffix(bytes.TrimPrefix(raw, []byte("data: ")), []byte("\n\n"))
+		var ev map[string]any
+		require.NoError(t, json.Unmarshal(frame, &ev))
+		payload, ok := ev["payload"].(map[string]any)
+		require.True(t, ok)
+		require.NotContains(t, payload, "nextStep")
+	case <-time.After(time.Second):
+		t.Fatal("no project_created event broadcast")
+	}
+}
