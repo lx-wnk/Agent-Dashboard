@@ -189,6 +189,75 @@ func TestCreate_RejectsAnOverlongName(t *testing.T) {
 	}
 }
 
+// A bound that only guards creation is no bound: the same project can be
+// renamed past it a second later.
+func TestUpdate_RejectsAnOverlongName(t *testing.T) {
+	h := newTestHandler(t, true)
+	id := seedProject(t, h)
+	body := `{"name":"` + strings.Repeat("n", validation.MaxProjectNameLen+1) + `"}`
+	req := httptest.NewRequest("PATCH", "/api/projects/"+id, bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	r := chi.NewRouter()
+	h.Mount(r)
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("overlong name: got %d, want 400, body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), validation.ProjectNameLengthMessage) {
+		t.Fatalf("error must name the limit, body=%s", rr.Body.String())
+	}
+}
+
+func TestUpdate_RejectsAnOverlongDescription(t *testing.T) {
+	h := newTestHandler(t, true)
+	id := seedProject(t, h)
+	body := `{"description":"` + strings.Repeat("d", validation.MaxProjectDescriptionLen+1) + `"}`
+	req := httptest.NewRequest("PATCH", "/api/projects/"+id, bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	r := chi.NewRouter()
+	h.Mount(r)
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("overlong description: got %d, want 400, body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), validation.ProjectDescriptionLengthMessage) {
+		t.Fatalf("error must name the limit, body=%s", rr.Body.String())
+	}
+}
+
+func TestUpdate_RejectsAnEmptyName(t *testing.T) {
+	h := newTestHandler(t, true)
+	id := seedProject(t, h)
+	req := httptest.NewRequest("PATCH", "/api/projects/"+id, bytes.NewBufferString(`{"name":""}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	r := chi.NewRouter()
+	h.Mount(r)
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("empty name: got %d, want 400, body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+// A name at the limit must still pass, or the guard above would be indistinguishable
+// from a broken one that rejects every rename.
+func TestUpdate_AcceptsANameAtTheLimit(t *testing.T) {
+	h := newTestHandler(t, true)
+	id := seedProject(t, h)
+	body := `{"name":"` + strings.Repeat("n", validation.MaxProjectNameLen) + `"}`
+	req := httptest.NewRequest("PATCH", "/api/projects/"+id, bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	r := chi.NewRouter()
+	h.Mount(r)
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("name at the limit: got %d, want 200, body=%s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestCreate_RejectsAnOverlongDescription(t *testing.T) {
 	h := newTestHandler(t, true)
 	body := `{"name":"Fine","slug":"long-description","description":"` + strings.Repeat("d", validation.MaxProjectDescriptionLen+1) + `"}`

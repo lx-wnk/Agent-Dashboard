@@ -6,7 +6,7 @@ import { createProject, deleteProject } from '../composables/useProjects'
 import { toast } from '../composables/useToast'
 import { errorMessage } from '../utils/errorMessage'
 import { derivedSlugHint } from '../utils/slugHint'
-import { slugFollowingName } from '../utils/validation'
+import { MAX_DESCRIPTION_CHARS, MAX_PROJECT_NAME_CHARS, slugFollowingName } from '../utils/validation'
 import AppButton from './ui/AppButton.vue'
 import AppSelect from './ui/AppSelect.vue'
 
@@ -105,6 +105,7 @@ async function submit(): Promise<void> {
           v-model="name"
           name="name"
           required
+          :maxlength="MAX_PROJECT_NAME_CHARS"
           placeholder="My Project"
           :class="inputClass"
         >
@@ -162,6 +163,7 @@ async function submit(): Promise<void> {
             id="qcp-desc"
             v-model="description"
             name="description"
+            :maxlength="MAX_DESCRIPTION_CHARS"
             placeholder="(optional)"
             :class="inputClass"
           >

@@ -22,7 +22,7 @@ import { errorMessage } from '@/utils/errorMessage'
 import { AVAILABLE_MODELS } from '@/utils/models'
 import { derivedSlugHint, SLUG_FORMAT_HINT } from '@/utils/slugHint'
 import { STAGE_LABELS } from '@/utils/stageLabels'
-import { isAbsolutePath, slugFollowingName } from '@/utils/validation'
+import { isAbsolutePath, MAX_DESCRIPTION_CHARS, MAX_PROJECT_NAME_CHARS, slugFollowingName } from '@/utils/validation'
 
 withDefaults(defineProps<{ hideTitle?: boolean }>(), { hideTitle: false })
 
@@ -435,6 +435,7 @@ function setDefault(targetRow: FolderRow) {
             data-testid="proj-name"
             type="text"
             required
+            :maxlength="MAX_PROJECT_NAME_CHARS"
             class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
             placeholder="My Project"
           >
@@ -462,6 +463,7 @@ function setDefault(targetRow: FolderRow) {
             id="proj-desc"
             v-model="form.description"
             type="text"
+            :maxlength="MAX_DESCRIPTION_CHARS"
             class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
             placeholder="Short description"
           >

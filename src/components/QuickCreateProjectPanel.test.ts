@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { toast } from '../composables/useToast'
+import { MAX_DESCRIPTION_CHARS, MAX_PROJECT_NAME_CHARS } from '../utils/validation'
 import QuickCreateProjectPanel from './QuickCreateProjectPanel.vue'
 
 const sampleProject = {
@@ -162,5 +163,14 @@ describe('quickCreateProjectPanel', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('slug already exists'))
+  })
+})
+
+describe('quickCreateProjectPanel length limits', () => {
+  it('caps the name and description fields at the limits the server enforces', () => {
+    const wrapper = mount(QuickCreateProjectPanel, { props: { spawners: [] } })
+
+    expect((wrapper.find('input[name="name"]').element as HTMLInputElement).maxLength).toBe(MAX_PROJECT_NAME_CHARS)
+    expect((wrapper.find('input[name="description"]').element as HTMLInputElement).maxLength).toBe(MAX_DESCRIPTION_CHARS)
   })
 })
