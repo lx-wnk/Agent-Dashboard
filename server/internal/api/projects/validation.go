@@ -2,14 +2,10 @@
 package projects
 
 import (
-	"regexp"
 	"strings"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/validation"
 )
-
-// ColorRE matches #rgb or #rrggbb hex colors (case-insensitive).
-var ColorRE = regexp.MustCompile(`^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`)
 
 // ValidateSlug returns true when s is a valid slug.
 // Delegates to the canonical validation package — do not define a local copy.
@@ -18,8 +14,21 @@ func ValidateSlug(s string) bool {
 }
 
 // ValidateColor returns true when c is a valid 3- or 6-digit hex color.
+// Delegates to the canonical validation package — do not define a local copy.
 func ValidateColor(c string) bool {
-	return ColorRE.MatchString(c)
+	return validation.IsValidColor(c)
+}
+
+// ValidateName returns true when n is within the shared project-name limit.
+// Delegates to the canonical validation package — do not define a local copy.
+func ValidateName(n string) bool {
+	return validation.IsValidProjectName(n)
+}
+
+// ValidateDescription returns true when d is within the shared project-description limit.
+// Delegates to the canonical validation package — do not define a local copy.
+func ValidateDescription(d string) bool {
+	return validation.IsValidProjectDescription(d)
 }
 
 // ValidateAbsolutePath returns true when p is an absolute POSIX path with no

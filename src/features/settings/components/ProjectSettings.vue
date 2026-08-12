@@ -20,8 +20,9 @@ import { toast } from '@/composables/useToast'
 import { useProjectPipelineConfig } from '@/features/pipeline'
 import { errorMessage } from '@/utils/errorMessage'
 import { AVAILABLE_MODELS } from '@/utils/models'
+import { derivedSlugHint, SLUG_FORMAT_HINT } from '@/utils/slugHint'
 import { STAGE_LABELS } from '@/utils/stageLabels'
-import { isAbsolutePath } from '@/utils/validation'
+import { isAbsolutePath, slugFollowingName } from '@/utils/validation'
 
 withDefaults(defineProps<{ hideTitle?: boolean }>(), { hideTitle: false })
 
@@ -100,11 +101,13 @@ const isCreating = ref(false)
 const formVisible = ref(false)
 const formSaving = ref(false)
 const form = ref<ProjectFormState>({ slug: '', name: '', description: '', color: '#3b82f6', defaultSpawnerId: '', setupCommand: '' })
+const slugTouched = ref(false)
 const folderRows = ref<FolderRow[]>([])
 
 function openCreate() {
   editingProject.value = null
   form.value = { slug: '', name: '', description: '', color: '#3b82f6', defaultSpawnerId: '', setupCommand: '' }
+  slugTouched.value = false
   formVisible.value = true
   isCreating.value = true
 }
@@ -125,6 +128,22 @@ function openEdit(project: Project) {
   pipelineDraft.value = null
   void fetchProjectPipeline(project.id)
 }
+
+// Watching the flag too is what hands the slug back when the field is emptied.
+// openEdit() clears isCreating before this pre-flush watcher runs, so opening an
+// existing project never re-derives its slug.
+watch([() => form.value.name, slugTouched], ([name, touched]) => {
+  if (isCreating.value)
+    form.value.slug = slugFollowingName(name, form.value.slug, touched)
+})
+
+function onSlugInput(e: Event): void {
+  slugTouched.value = (e.target as HTMLInputElement).value.length > 0
+}
+
+const slugHint = computed(() => isCreating.value
+  ? derivedSlugHint('name')
+  : `This project's lookup key — other records already point at it. ${SLUG_FORMAT_HINT}`)
 
 function closeForm() {
   formVisible.value = false
@@ -310,7 +329,7 @@ function setDefault(targetRow: FolderRow) {
           Group tasks under named projects. Each project can have default folders (working directories) and a spawner override.
         </p>
       </div>
-      <AppButton variant="info" class="ml-auto" @click="openCreate">
+      <AppButton variant="info" class="ml-auto" data-testid="proj-new" @click="openCreate">
         + New Project
       </AppButton>
     </div>
@@ -378,6 +397,7 @@ function setDefault(targetRow: FolderRow) {
               <button
                 type="button"
                 class="bg-transparent border-none text-fg-mute cursor-pointer text-sm px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-950/30 hover:text-blue-600 dark:hover:text-blue-400 mr-1"
+                :data-testid="`proj-edit-${project.slug}`"
                 @click="openEdit(project)"
               >
                 Edit
@@ -412,6 +432,7 @@ function setDefault(targetRow: FolderRow) {
           <input
             id="proj-name"
             v-model="form.name"
+            data-testid="proj-name"
             type="text"
             required
             class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
@@ -423,11 +444,17 @@ function setDefault(targetRow: FolderRow) {
           <input
             id="proj-slug"
             v-model="form.slug"
+            data-testid="proj-slug"
             type="text"
             required
+            aria-describedby="proj-slug-hint"
             class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg font-mono focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
             placeholder="my-project"
+            @input="onSlugInput"
           >
+          <p id="proj-slug-hint" data-testid="proj-slug-hint" class="text-[11px] text-fg-faint mt-0.5">
+            {{ slugHint }}
+          </p>
         </div>
         <div class="col-span-2">
           <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1" for="proj-desc">Description (optional)</label>

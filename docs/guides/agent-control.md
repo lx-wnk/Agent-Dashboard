@@ -34,7 +34,43 @@ Spawned agents run **detached** — they survive dashboard restarts and appear i
 
 ## Slash commands
 
-`/spawn`, `/grant`, `/cancel`, `/status`, `/session` are available from the command palette.
+Typing `/` in the prompt input opens a menu with two kinds of command.
+
+**Dashboard commands** are executed by the dashboard itself against its own API — the agent never
+sees them:
+
+| Command | Arguments | Needs a linked task |
+| --- | --- | --- |
+| `/spawn` | `<slug> <description>` | no |
+| `/grant` | `<toolName>` | yes |
+| `/cancel` | — | yes |
+| `/retry` | — | yes |
+| `/promote` | — | yes |
+| `/help` | — | no |
+
+**Session commands** are everything the connected Claude session itself knows — its built-ins, your
+`~/.claude/commands`, project commands, plugin commands, and every installed skill (each skill is
+typeable as `/<name>`). They are discovered per session via `GET /api/slash-commands` and forwarded
+to the agent verbatim, so what works is whatever that session supports.
+
+Claude's own built-in commands are the one group the dashboard cannot discover — the CLI exposes no
+machine-readable listing, so they are curated per version (`CuratedBuiltinsVersion`). When a session
+reports a different version, the menu says so on every `/` query — including one that matches no
+command at all, which is the case the note exists for: a command missing from the list may still
+work if you type it in full. Re-curating means checking both directions — the CLI binary ships a "Recently
+changed surfaces" document naming removed and renamed commands, while additions have to come from
+the release notes.
+
+Each entry shows its argument template next to the name, read from the command file's
+`argument-hint:` frontmatter — `/branch-review` displays `[base-branch] [--apply-fixes]`, for
+example. Commands without that key show no template; built-ins never carry one, since they have no
+file on disk to read it from.
+
+That template is file content, and the file may belong to an installed plugin rather than to you, so
+it is sanitised server-side before it reaches the API: a value that is not valid UTF-8 is dropped,
+control characters and Unicode bidi overrides are stripped, and the hint is capped at 120
+characters. The menu clips it to 60 characters for display and shows the full value on hover. Treat
+a hint as what the command's author suggests you type, not as advice from the dashboard.
 
 ## Permissions
 

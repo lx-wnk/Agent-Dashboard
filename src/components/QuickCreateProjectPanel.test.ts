@@ -56,6 +56,69 @@ describe('quickCreateProjectPanel', () => {
     expect(emitted![0][0]).toMatchObject({ id: 'prj_new' })
   })
 
+  it('derives the slug from the name until the slug is edited by hand', async () => {
+    const wrapper = mount(QuickCreateProjectPanel, { props: { spawners: [] } })
+    await wrapper.find('input[name="name"]').setValue('New Thing')
+    expect((wrapper.find('input[name="slug"]').element as HTMLInputElement).value).toBe('new-thing')
+
+    await wrapper.find('input[name="slug"]').setValue('my-own-slug')
+    await wrapper.find('input[name="name"]').setValue('Renamed Thing')
+
+    expect((wrapper.find('input[name="slug"]').element as HTMLInputElement).value).toBe('my-own-slug')
+  })
+
+  it('tells the user the slug is derived and what it has to look like', () => {
+    const wrapper = mount(QuickCreateProjectPanel, { props: { spawners: [] } })
+
+    const hint = wrapper.get('[data-testid="qcp-slug-hint"]')
+    expect(wrapper.find('input[name="slug"]').attributes('aria-describedby')).toBe(hint.attributes('id'))
+    expect(hint.text()).toContain('Filled in from the name')
+    expect(hint.text()).toContain('64 characters')
+  })
+
+  // A name written entirely in a non-Latin script derives nothing, so the slug
+  // stays empty — the state that used to POST "slug":"" and come back with the
+  // server's raw pattern.
+  it('refuses to submit a name that derives no slug', async () => {
+    const errorSpy = vi.spyOn(toast, 'error')
+    const wrapper = mount(QuickCreateProjectPanel, { props: { spawners: [] } })
+    await wrapper.find('input[name="name"]').setValue('プロジェクト')
+    await wrapper.find('input[name="path"]').setValue('/home/u/new-thing')
+
+    expect((wrapper.find('input[name="slug"]').element as HTMLInputElement).value).toBe('')
+    expect(wrapper.get('button[type="submit"]').attributes('disabled')).toBeDefined()
+
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('Slug'))
+  })
+
+  it('never substitutes a derived slug for the one on screen', async () => {
+    const errorSpy = vi.spyOn(toast, 'error')
+    const wrapper = mount(QuickCreateProjectPanel, { props: { spawners: [] } })
+    await wrapper.find('input[name="name"]').setValue('New Thing')
+    await wrapper.find('input[name="path"]').setValue('/home/u/new-thing')
+    await wrapper.find('input[name="slug"]').setValue('  ')
+
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('Slug'))
+  })
+
+  it('refills the slug the moment the field is cleared, without touching the name', async () => {
+    const wrapper = mount(QuickCreateProjectPanel, { props: { spawners: [] } })
+    await wrapper.find('input[name="name"]').setValue('New Thing')
+    await wrapper.find('input[name="slug"]').setValue('my-own-slug')
+
+    await wrapper.find('input[name="slug"]').setValue('')
+
+    expect((wrapper.find('input[name="slug"]').element as HTMLInputElement).value).toBe('new-thing')
+  })
+
   it('rolls back project create when folder create fails', async () => {
     const errorSpy = vi.spyOn(toast, 'error')
     fetchMock
