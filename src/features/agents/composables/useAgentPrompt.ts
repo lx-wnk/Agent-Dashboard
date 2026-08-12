@@ -5,7 +5,7 @@ import { dispatchSlashCommand, parseSlashCommand, SLASH_COMMAND_DEFS } from '@/c
 import { errorMessage } from '@/utils/errorMessage'
 import { addPending } from '@/utils/pendingMessages'
 import { BACKGROUND_SYNC_TAG } from '@/utils/swConstants'
-import { SEND_STATUS_RESET_MS } from '@/utils/timing'
+import { SEND_STATUS_RESET_MS, SW_READY_TIMEOUT_MS } from '@/utils/timing'
 
 export type OnMessageSent = (msg: OutputMessage) => void
 
@@ -18,7 +18,15 @@ async function registerBackgroundSync(): Promise<void> {
   if (!('serviceWorker' in navigator) || !('SyncManager' in window))
     return
   try {
-    const registration = await navigator.serviceWorker.ready
+    // `ready` resolves once a worker controls the page and otherwise never
+    // settles — the desktop shell registers none — so awaiting it alone would
+    // hold the send path open forever with the message already queued.
+    const registration = await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise<null>(resolve => setTimeout(resolve, SW_READY_TIMEOUT_MS, null)),
+    ])
+    if (!registration)
+      return
     // @ts-expect-error: Remove when lib.dom.d.ts ships ServiceWorkerRegistration.sync (Background Sync API)
     await registration.sync.register(BACKGROUND_SYNC_TAG)
   }

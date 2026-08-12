@@ -1,6 +1,10 @@
 import type { Agent } from '@/types'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { addPending } from '@/utils/pendingMessages'
+import { SW_READY_TIMEOUT_MS } from '@/utils/timing'
 import { useAgentPrompt } from './useAgentPrompt'
+
+vi.mock('@/utils/pendingMessages', () => ({ addPending: vi.fn(async () => {}) }))
 
 function makeAgent(over: Partial<Agent> = {}): Agent {
   return {
@@ -102,5 +106,38 @@ describe('useAgentPrompt routing', () => {
 
     expect(fetch).not.toHaveBeenCalled()
     expect(resumeConfirm.value).toBeNull()
+  })
+})
+
+// The desktop shell registers no service worker, so `ready` never settles there.
+describe('useAgentPrompt offline queueing', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      throw new TypeError('Failed to fetch')
+    }))
+    vi.stubGlobal('SyncManager', class {})
+    vi.stubGlobal('navigator', {
+      serviceWorker: { ready: new Promise(() => {}) },
+    })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+
+  it('reports the message as queued even when the service worker never becomes ready', async () => {
+    vi.useFakeTimers()
+    const agent = makeAgent({ liveInjectable: true })
+    const { promptInput, handleSend, isSending, sendStatus } = useAgentPrompt(() => agent)
+    promptInput.value = 'offline message'
+
+    const sent = handleSend()
+    await vi.advanceTimersByTimeAsync(SW_READY_TIMEOUT_MS)
+    await sent
+
+    expect(addPending).toHaveBeenCalledWith(expect.objectContaining({ message: 'offline message' }))
+    expect(sendStatus.value).toBe('queued')
+    expect(isSending.value).toBe(false)
   })
 })
