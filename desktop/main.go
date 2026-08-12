@@ -14,6 +14,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -57,7 +58,7 @@ func main() {
 	// from this one's binary.
 	instance, err := serverapp.Listen("")
 	if err != nil {
-		log.Fatalf("cannot start the Agent Dashboard — if one is already running, quit it first: %v", err)
+		fatalf("cannot start the Agent Dashboard — if one is already running, quit it first: %v", err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -71,7 +72,7 @@ func main() {
 	healthURL := "http://" + instance.Addr() + "/api/system/health"
 	if err := waitForServer(ctx, serverErr, healthURL, 30*time.Second); err != nil {
 		cancel()
-		log.Fatalf("dashboard server did not become ready: %v", err)
+		fatalf("dashboard server did not become ready: %v", err)
 	}
 
 	err = wails.Run(&options.App{
@@ -95,7 +96,31 @@ func main() {
 	})
 	if err != nil {
 		cancel()
-		log.Fatalf("wails run: %v", err)
+		fatalf("wails run: %v", err)
+	}
+}
+
+// fatalf reports a startup failure and exits 1. A .app launched from Finder has
+// no terminal attached, so stderr alone would make a refused start look like the
+// app doing nothing at all: the message is also shown as a dialog.
+func fatalf(format string, args ...any) {
+	msg := fmt.Sprintf(format, args...)
+	log.Print(msg)
+	if err := exec.Command("osascript", alertArgs(msg)...).Run(); err != nil {
+		log.Printf("could not show the alert dialog: %v", err)
+	}
+	os.Exit(1)
+}
+
+// alertArgs builds the osascript invocation for a critical alert. The message is
+// passed as an argument rather than spliced into the script, so quotes and
+// backslashes in it cannot change the script being run.
+func alertArgs(msg string) []string {
+	return []string{
+		"-e", "on run argv",
+		"-e", "display alert (item 1 of argv) message (item 2 of argv) as critical",
+		"-e", "end run",
+		"Agent Dashboard", msg,
 	}
 }
 
