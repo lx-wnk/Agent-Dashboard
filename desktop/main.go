@@ -1,19 +1,20 @@
 //go:build darwin
 
 // Command desktop is the macOS wails shell for the Agent Dashboard. It starts
-// the dashboard HTTP server in-process on 127.0.0.1:13120 and opens a webview
-// that redirects to it, so the page runs on the loopback-http origin the
-// server's same-origin mutation guard accepts.
+// the dashboard HTTP server in-process on the configured loopback address and
+// opens a webview that redirects to it, so the page runs on the loopback-http
+// origin the server's same-origin mutation guard accepts.
 package main
 
 import (
 	"context"
-	"embed"
+	_ "embed"
 	"fmt"
-	"io/fs"
+	"io"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/wailsapp/wails/v2"
@@ -24,25 +25,24 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/serverapp"
 )
 
-//go:embed bootstrap
-var bootstrapDir embed.FS
+//go:embed bootstrap/index.html
+var bootstrapPage string
 
-const (
-	serverAddr = "127.0.0.1:13120"
-	healthURL  = "http://" + serverAddr + "/api/system/health"
+// dashboardURLPlaceholder is what the bootstrap page carries instead of a
+// hardcoded address; it is replaced with the address the server actually bound.
+const dashboardURLPlaceholder = "__DASHBOARD_URL__"
 
-	// drainTimeout is a last-resort backstop against an unquittable app, not a
-	// drain budget: it must stay above the server's own shutdown.timeoutSeconds
-	// (default 10s, user-configurable) so the server's own graceful path always
-	// gets to finish first. If shutdown.timeoutSeconds is ever raised above this
-	// value, the app can again exit mid-drain before the server closes cleanly.
-	drainTimeout = 20 * time.Second
-)
+// drainTimeout is a last-resort backstop against an unquittable app, not a
+// drain budget: it must stay above the server's own shutdown.timeoutSeconds
+// (default 10s, user-configurable) so the server's own graceful path always
+// gets to finish first. If shutdown.timeoutSeconds is ever raised above this
+// value, the app can again exit mid-drain before the server closes cleanly.
+const drainTimeout = 20 * time.Second
 
 func main() {
 	// A re-executed subcommand (pty-host, channel) must never boot a second
-	// server or contend for port 13120 — dispatch and return before anything
-	// else starts.
+	// server or contend for the dashboard address — dispatch and return before
+	// anything else starts.
 	if handled, err := serverapp.DispatchHeadless(context.Background(), os.Args[1:]); handled {
 		if err != nil {
 			log.Fatalf("%v", err)
@@ -50,23 +50,28 @@ func main() {
 		return
 	}
 
+	// Binding comes first and the address is held from here on. A probe that
+	// released it would leave the whole config/plugin/database startup window
+	// open, so two launches could both pass it and the loser would then adopt
+	// the winner's server — showing that instance's frontend in a window built
+	// from this one's binary.
+	instance, err := serverapp.Listen("")
+	if err != nil {
+		log.Fatalf("cannot start the Agent Dashboard — if one is already running, quit it first: %v", err)
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 
-	// Start the dashboard server in-process; it drains when ctx is cancelled.
+	// The dashboard server drains when ctx is cancelled.
 	serverErr := make(chan error, 1)
-	go func() { serverErr <- serverapp.Serve(ctx, "") }()
+	go func() { serverErr <- instance.Serve(ctx) }()
 
 	// The bootstrap page redirects to the server, so the window must not open
 	// until the server accepts requests.
+	healthURL := "http://" + instance.Addr() + "/api/system/health"
 	if err := waitForServer(ctx, serverErr, healthURL, 30*time.Second); err != nil {
 		cancel()
 		log.Fatalf("dashboard server did not become ready: %v", err)
-	}
-
-	assets, err := fs.Sub(bootstrapDir, "bootstrap")
-	if err != nil {
-		cancel()
-		log.Fatalf("bootstrap assets: %v", err)
 	}
 
 	err = wails.Run(&options.App{
@@ -74,7 +79,7 @@ func main() {
 		Width:  1400,
 		Height: 900,
 		AssetServer: &assetserver.Options{
-			Assets: assets,
+			Handler: bootstrapHandler("http://" + instance.Addr() + "/?shell=desktop"),
 		},
 		Mac: &mac.Options{},
 		OnShutdown: func(_ context.Context) {
@@ -94,6 +99,16 @@ func main() {
 	}
 }
 
+// bootstrapHandler serves the redirect page for every webview request, pointed
+// at the address the server is really listening on.
+func bootstrapHandler(dashboardURL string) http.Handler {
+	page := strings.ReplaceAll(bootstrapPage, dashboardURLPlaceholder, dashboardURL)
+	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = io.WriteString(w, page)
+	})
+}
+
 var healthPollClient = &http.Client{Timeout: 2 * time.Second}
 
 // waitForServer polls url until it returns 200, the timeout/ctx elapses, or
@@ -111,6 +126,10 @@ func waitForServer(ctx context.Context, serverErr <-chan error, url string, time
 		resp, err := healthPollClient.Get(url)
 		if err == nil {
 			resp.Body.Close()
+			// A 200 only proves something serves this address, not that it is
+			// ours. That is safe here only because serverapp.Listen already
+			// holds the address: nothing else can be answering on it. This poll
+			// on its own would happily adopt a foreign server.
 			if resp.StatusCode == http.StatusOK {
 				return nil
 			}

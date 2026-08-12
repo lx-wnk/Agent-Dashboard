@@ -1,6 +1,6 @@
 import type { Agent } from '../../types'
 import { describe, expect, it } from 'vitest'
-import { groupAgents, sortAgents } from '../agentGroup'
+import { agentGroupOptions, groupAgents, resolveGroup, sortAgents } from '../agentGroup'
 
 function makeAgent(overrides: Partial<Agent> = {}): Agent {
   return {
@@ -120,5 +120,48 @@ describe('groupAgents', () => {
     const a = makeAgent({ model: 'claude-opus-4' })
     const groups = groupAgents([a], 'model')
     expect(groups[0].label).toBe('opus 4')
+  })
+
+  it('spawner: buckets by the spawner the server attributed, labelled with its name', () => {
+    const a1 = makeAgent({ pid: 1, spawnerId: 's1', spawnerName: 'Claude (default)' })
+    const a2 = makeAgent({ pid: 2, spawnerId: 's2', spawnerName: 'Claude Work' })
+    const a3 = makeAgent({ pid: 3, spawnerId: 's1', spawnerName: 'Claude (default)' })
+    const groups = groupAgents([a1, a2, a3], 'spawner')
+    expect(groups.map(g => [g.key, g.label])).toEqual([['s1', 'Claude (default)'], ['s2', 'Claude Work']])
+    expect(groups[0].agents.map(a => a.pid)).toEqual([1, 3])
+  })
+
+  it('spawner: collects unattributed agents in a trailing "Unassigned" group', () => {
+    const free = makeAgent({ pid: 1, spawnerId: undefined })
+    const owned = makeAgent({ pid: 2, spawnerId: 's1', spawnerName: 'Claude Work' })
+    const groups = groupAgents([free, owned], 'spawner')
+    expect(groups.map(g => g.label)).toEqual(['Claude Work', 'Unassigned'])
+    expect(groups[1].agents.map(a => a.pid)).toEqual([1])
+  })
+
+  it('spawner: falls back to the id when the server sent no name', () => {
+    const groups = groupAgents([makeAgent({ spawnerId: 's1' })], 'spawner')
+    expect(groups[0].label).toBe('s1')
+  })
+
+  it('spawner: marks a group the server derived rather than recorded', () => {
+    const derived = makeAgent({ pid: 1, spawnerId: 's1', spawnerName: 'Claude Work', spawnerSource: 'env' })
+    const recorded = makeAgent({ pid: 2, spawnerId: 's2', spawnerName: 'Pipeline', spawnerSource: 'task' })
+    const groups = groupAgents([derived, recorded], 'spawner')
+    expect(groups[0].derivedFrom).toContain('config directory')
+    expect(groups[1].derivedFrom).toBeUndefined()
+  })
+})
+
+describe('agentGroupOptions / resolveGroup', () => {
+  it('offers spawner grouping only while no spawner is filtered', () => {
+    expect(agentGroupOptions('all').map(o => o.value)).toContain('spawner')
+    expect(agentGroupOptions('s1').map(o => o.value)).not.toContain('spawner')
+  })
+
+  it('falls back to "none" when spawner grouping is filtered away', () => {
+    expect(resolveGroup('spawner', 'all')).toBe('spawner')
+    expect(resolveGroup('spawner', 's1')).toBe('none')
+    expect(resolveGroup('status', 's1')).toBe('status')
   })
 })

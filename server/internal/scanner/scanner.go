@@ -21,18 +21,29 @@ type ProcessInfo struct {
 	CWD             string
 	Uptime          int64 // seconds
 	Command         string
-	ClaudeConfigDir string       // value of CLAUDE_CONFIG_DIR in the process env, or "" for default
-	Provider        sdk.Provider // detected AI coding CLI provider; defaults to ProviderClaude
+	ClaudeConfigDir string // value of CLAUDE_CONFIG_DIR in the process env, or "" for default
+	// ClaudeConfigDirKnown is true when the process environment was read at all.
+	// False means unknown, not "default": ClaudeConfigDir is "" in both cases.
+	ClaudeConfigDirKnown bool
+	Provider             sdk.Provider // detected AI coding CLI provider; defaults to ProviderClaude
 }
 
 var (
-	claudeConfigDirRE = regexp.MustCompile(`CLAUDE_CONFIG_DIR=(\S+)`)
+	// Anchored to a field boundary: the whole environment shares one line, so an
+	// unanchored match also fires on any variable ending in the same name
+	// (OLD_CLAUDE_CONFIG_DIR, a wrapper's saved copy) and returns its value.
+	claudeConfigDirRE = regexp.MustCompile(`(?:^|\s)CLAUDE_CONFIG_DIR=(\S+)`)
 	pidFieldRE        = regexp.MustCompile(`^\s*(\d+)\s`)
 )
 
 // getClaudeConfigDirsBatch fetches CLAUDE_CONFIG_DIR for all given PIDs.
 // On Linux, reads /proc/{pid}/environ per-PID (file reads, no subprocess).
 // On macOS, issues a single `ps ewww -p pid1,pid2,...` call instead of one per PID.
+//
+// A PID is present in the result exactly when its environment was read, with an
+// empty value when the variable is not set. A PID whose environment could not be
+// read — gone, owned by another user, hardened /proc, a failed `ps` — is absent,
+// so callers can tell "runs on the default config dir" from "unknown".
 func getClaudeConfigDirsBatch(pids []int) map[int]string {
 	result := make(map[int]string, len(pids))
 	if platform.IsLinux {
@@ -41,6 +52,7 @@ func getClaudeConfigDirsBatch(pids []int) map[int]string {
 			if err != nil {
 				continue
 			}
+			result[pid] = ""
 			for _, kv := range strings.Split(string(raw), "\x00") {
 				if strings.HasPrefix(kv, "CLAUDE_CONFIG_DIR=") {
 					result[pid] = strings.TrimPrefix(kv, "CLAUDE_CONFIG_DIR=")
@@ -63,7 +75,15 @@ func getClaudeConfigDirsBatch(pids []int) map[int]string {
 	if err != nil {
 		return result
 	}
-	for _, line := range strings.Split(string(out), "\n") {
+	return parsePSEnvBatch(string(out))
+}
+
+// parsePSEnvBatch reads `ps ewww` output into pid → CLAUDE_CONFIG_DIR. Each line
+// starts with the PID and carries the process's command line followed by its
+// whole environment as space-separated KEY=value pairs.
+func parsePSEnvBatch(out string) map[int]string {
+	result := make(map[int]string)
+	for _, line := range strings.Split(out, "\n") {
 		m := pidFieldRE.FindStringSubmatch(line)
 		if m == nil {
 			continue
@@ -72,8 +92,11 @@ func getClaudeConfigDirsBatch(pids []int) map[int]string {
 		if err != nil {
 			continue
 		}
+		// The line is this process's environment, so it was read whether or not
+		// it carries the variable.
+		result[pid] = ""
 		if cm := claudeConfigDirRE.FindStringSubmatch(line); cm != nil {
-			result[pid] = string(cm[1])
+			result[pid] = cm[1]
 		}
 	}
 	return result
@@ -219,13 +242,15 @@ func ScanProcessesWithDetector(ctx context.Context, detector ProviderDetector) (
 		if !ok || cwd == "" || cwd == "/" {
 			continue
 		}
+		configDir, configDirKnown := configDirs[r.pid]
 		result = append(result, ProcessInfo{
-			PID:             r.pid,
-			CWD:             cwd,
-			Uptime:          ParseElapsedTime(r.etime),
-			Command:         r.command,
-			ClaudeConfigDir: configDirs[r.pid],
-			Provider:        detectProviderVia(detector, r.command),
+			PID:                  r.pid,
+			CWD:                  cwd,
+			Uptime:               ParseElapsedTime(r.etime),
+			Command:              r.command,
+			ClaudeConfigDir:      configDir,
+			ClaudeConfigDirKnown: configDirKnown,
+			Provider:             detectProviderVia(detector, r.command),
 		})
 	}
 	return result, nil

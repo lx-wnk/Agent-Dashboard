@@ -50,15 +50,24 @@ test.describe('dashboard view', () => {
   // -------------------------------------------------------------------------
   // Cards / List layout toggle
   // -------------------------------------------------------------------------
+  // Density moved into the toolbar's ⋮ overflow when the toolbar was split into
+  // narrow-the-set controls (search, filters) and arrange-what-is-left controls.
   test('cards/list layout toggle switches aria-pressed', async ({ page }) => {
+    const overflow = page.getByRole('button', { name: 'More view options' })
     const cards = page.getByTestId('layout-cards')
     const list = page.getByTestId('layout-list')
+
+    await overflow.click()
     await expect(cards).toHaveAttribute('aria-pressed', 'true')
     await list.click()
+
+    // Selecting a density closes the menu, so reopen it to read the new state.
+    await overflow.click()
     await expect(list).toHaveAttribute('aria-pressed', 'true')
     await expect(cards).toHaveAttribute('aria-pressed', 'false')
-    // Toggle back
+
     await cards.click()
+    await overflow.click()
     await expect(cards).toHaveAttribute('aria-pressed', 'true')
     await expect(list).toHaveAttribute('aria-pressed', 'false')
   })
@@ -93,6 +102,7 @@ test.describe('dashboard view', () => {
     await page.reload()
     await page.waitForSelector('[aria-label="Primary"]', { timeout: 10000 })
 
+    await page.getByRole('button', { name: 'Filter agents' }).click()
     const trigger = page.getByTestId('select-spawner')
     // AppSelect is a <button>, not a <select> — there is no `value`, so assert
     // the visible label of the currently selected option instead (aria-label

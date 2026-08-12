@@ -26,6 +26,7 @@ const RequestGraceDefault = 2 * time.Second
 // Server wraps net/http.Server with graceful shutdown support.
 type Server struct {
 	httpSrv         *http.Server
+	listener        net.Listener
 	shutdownTimeout time.Duration
 	requestGrace    time.Duration
 }
@@ -46,6 +47,12 @@ func NewServer(addr string, handler http.Handler, timeout time.Duration) *Server
 		requestGrace:    clampRequestGrace(RequestGraceDefault, timeout),
 	}
 }
+
+// UseListener makes Run serve an already-bound listener instead of binding the
+// address itself. A host that must own the address before the rest of startup
+// runs (the desktop shell, so a second launch cannot slip in) binds first and
+// hands the listener over.
+func (s *Server) UseListener(ln net.Listener) { s.listener = ln }
 
 // SetRequestGrace overrides the request grace window (clamped below
 // shutdownTimeout, same as the default). Exposed for tests that need a short
@@ -83,7 +90,7 @@ func (s *Server) Run(ctx context.Context) error {
 
 	g.Go(func() error {
 		slog.Info("server starting", "addr", s.httpSrv.Addr)
-		if err := s.httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := s.serve(); err != nil && err != http.ErrServerClosed {
 			return fmt.Errorf("listen: %w", err)
 		}
 		return nil
@@ -104,4 +111,11 @@ func (s *Server) Run(ctx context.Context) error {
 	})
 
 	return g.Wait()
+}
+
+func (s *Server) serve() error {
+	if s.listener != nil {
+		return s.httpSrv.Serve(s.listener)
+	}
+	return s.httpSrv.ListenAndServe()
 }

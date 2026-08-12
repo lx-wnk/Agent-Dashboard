@@ -5,9 +5,19 @@
     <title>Agent Dashboard</title>
     <script>
       // The Wails webview boots on the wails://wails origin. Redirect to the
-      // in-process server so the page adopts the http://127.0.0.1:13120 origin,
-      // which the server's same-origin mutation guard accepts unchanged.
-      window.location.replace('http://127.0.0.1:13120')
+      // in-process server so the page adopts its http://127.0.0.1:<port>
+      // origin, which the server's same-origin mutation guard accepts
+      // unchanged.
+      //
+      // The placeholder is substituted at startup with the address the server
+      // actually bound (see dashboardURLPlaceholder in main.go) — writing the
+      // port here would send the window to a port nothing listens on as soon
+      // as the configured one differs.
+      //
+      // ?shell=desktop tells the SPA it is running inside the shell rather than
+      // in a browser — the same bundle is served to both, and only the browser
+      // registers a service worker (see src/utils/serviceWorker.ts).
+      window.location.replace('__DASHBOARD_URL__')
     </script>
   </head>
   <body></body>

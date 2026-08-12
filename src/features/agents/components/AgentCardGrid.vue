@@ -103,6 +103,7 @@ watch(() => props.groups, (groups) => {
           :label="group.label!"
           :agents="group.agents"
           :collapsed="isCollapsed(group.key)"
+          :derived-from="group.derivedFrom"
           @toggle="toggleGroup(group.key)"
         />
         <div

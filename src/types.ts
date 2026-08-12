@@ -45,6 +45,13 @@ export type Agent = Omit<_AgentBase, 'tasks' | 'subagents' | 'meta'> & {
 // Derived from sdk.generated consts — automatically stays in sync with sdk/types.go.
 export const AGENT_STATUSES = [AgentStatusActive, AgentStatusWaiting, AgentStatusIdle, AgentStatusFinished] as const
 
+// Mirrors sdk.SpawnerSourceTask / sdk.SpawnerSourceEnv. Those are untyped Go
+// consts, so tygo emits `spawnerSource?: string` and no constant — the parity
+// is hand-held and this is the one place the client names it.
+export const SPAWNER_SOURCE_TASK = 'task'
+export const SPAWNER_SOURCE_ENV = 'env'
+export type SpawnerSource = typeof SPAWNER_SOURCE_TASK | typeof SPAWNER_SOURCE_ENV
+
 export interface ChannelReply {
   message: string
   timestamp: string

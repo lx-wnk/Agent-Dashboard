@@ -13,6 +13,7 @@ The dashboard reads the following data from your local filesystem at runtime. No
 | `~/.claude/projects/{encoded_path}/*.jsonl` | Full Claude Code session transcripts — prompts, responses, tool calls, token counts | Real-time agent monitoring |
 | `~/.claude/usage-data/session-meta/*.json` | Session metadata — model, start time, token totals | Cost and status display |
 | `ps`, `lsof` (macOS) / `/proc/<pid>/cwd` (Linux) | Running process list, working directories | Matching PIDs to session files |
+| `ps ewww` (macOS) / `/proc/<pid>/environ` (Linux) | The environment block of monitored agent processes, read once per process scan. Only `CLAUDE_CONFIG_DIR` is extracted — nothing else is retained, logged, persisted, or transmitted. The whole block is read transiently because neither OS offers a single-variable read. | Resolving which config root a session's commands/skills load from, and attributing it to its configured spawner profile |
 | `~/.claude/dashboard-tasks.db` | Task pipeline state (see section 2) | Pipeline orchestration |
 | Provider session logs (`~/.codex`, `~/.gemini`, `~/.junie`, `~/.pi/agent/sessions`, or the path from the provider's config-dir/env) | Local JSONL session logs of an enabled provider — tokens, model, cost | Monitoring Codex/Gemini/Junie/pi.dev agents (only when that provider is enabled) |
 

@@ -95,7 +95,9 @@ test.describe('AskUserQuestion in the needs-you band', () => {
     await page.goto('/')
 
     // The answerable question card surfaces in the band.
-    await expect(page.getByText('Which colour do you prefer?')).toBeVisible()
+    // The card renders the question twice — as its visible heading and as the
+    // radio group's sr-only legend — so match the group, which is unambiguous.
+    await expect(page.getByRole('group', { name: 'Which colour do you prefer?' })).toBeVisible()
     await expect(page.getByText('Red')).toBeVisible()
 
     // Pick Red (first option) and send.
@@ -120,7 +122,9 @@ test.describe('AskUserQuestion in the needs-you band', () => {
     })
 
     await page.goto('/')
-    await expect(page.getByText('Which colour do you prefer?')).toBeVisible()
+    // The card renders the question twice — as its visible heading and as the
+    // radio group's sr-only legend — so match the group, which is unambiguous.
+    await expect(page.getByRole('group', { name: 'Which colour do you prefer?' })).toBeVisible()
 
     const checkboxes = page.locator('input[type="checkbox"]')
     await checkboxes.nth(0).check()

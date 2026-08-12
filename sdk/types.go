@@ -294,6 +294,18 @@ type PendingScreen struct {
 	Confirm  *DetectedConfirm  `json:"confirm,omitempty"`
 }
 
+// How an agent's spawner attribution was established: recorded from the pipeline
+// task the agent runs, or read back from the live process, which is how sessions
+// started outside the dashboard are placed.
+//
+// These are untyped consts, so tygo emits no counterpart; the client mirrors
+// them by hand in src/types.ts (SPAWNER_SOURCE_TASK / SPAWNER_SOURCE_ENV).
+// Changing a value here means changing it there.
+const (
+	SpawnerSourceTask = "task"
+	SpawnerSourceEnv  = "env"
+)
+
 // Agent is the unified view of a running Claude Code process.
 type Agent struct {
 	PID         int      `json:"pid"`
@@ -306,7 +318,14 @@ type Agent struct {
 	// session's process env (empty when the session uses the default ~/.claude).
 	// Lets the dashboard resolve which config root a session's slash commands /
 	// skills / plugins are loaded from when enumerating per-session scope.
-	ClaudeConfigDir           string         `json:"claudeConfigDir,omitempty"`
+	ClaudeConfigDir string `json:"claudeConfigDir,omitempty"`
+	// ClaudeConfigDirKnown says whether the process environment was actually
+	// read, which is what separates "this session sets no CLAUDE_CONFIG_DIR"
+	// from "its environment could not be read" — indistinguishable in
+	// ClaudeConfigDir alone, and the difference between attributing a session
+	// to a profile and having no idea which profile it runs on. Server-side
+	// only (the client has no use for it), hence no JSON field.
+	ClaudeConfigDirKnown      bool           `json:"-"`
 	Entrypoint                Entrypoint     `json:"entrypoint"`
 	Status                    AgentStatus    `json:"status"`
 	Uptime                    int64          `json:"uptime"`
@@ -345,17 +364,23 @@ type Agent struct {
 	// detected on this session's live terminal, or nil. Mutually exclusive with
 	// PendingQuestion: the TUI shows one or the other, never both. Only ever set
 	// on injectable sessions.
-	PendingConfirm      *DetectedConfirm    `json:"pendingConfirm,omitempty"`
-	LastOutput          *string             `json:"lastOutput"`
-	ConvergenceAlert    bool                `json:"convergenceAlert"`
-	ConvergenceToolName *string             `json:"convergenceToolName"`
-	ErrorState          *ErrorState         `json:"errorState"`
-	PipelineTaskID      string              `json:"pipelineTaskId,omitempty"`
-	PipelineTaskTitle   string              `json:"pipelineTaskTitle,omitempty"`
-	PendingPermissions  []PendingPermission `json:"pendingPermissions,omitempty"`
-	PendingToolUse      *PendingToolUse     `json:"pendingToolUse,omitempty"`
-	Machine             string              `json:"machine,omitempty"`
-	LastBtw             *BtwMessage         `json:"lastBtw"`
+	PendingConfirm      *DetectedConfirm `json:"pendingConfirm,omitempty"`
+	LastOutput          *string          `json:"lastOutput"`
+	ConvergenceAlert    bool             `json:"convergenceAlert"`
+	ConvergenceToolName *string          `json:"convergenceToolName"`
+	ErrorState          *ErrorState      `json:"errorState"`
+	PipelineTaskID      string           `json:"pipelineTaskId,omitempty"`
+	PipelineTaskTitle   string           `json:"pipelineTaskTitle,omitempty"`
+	// SpawnerID/SpawnerName name the configured spawner this session belongs to,
+	// and SpawnerSource says how that was established (see SpawnerSource*).
+	// Empty when no spawner could be attributed.
+	SpawnerID          string              `json:"spawnerId,omitempty"`
+	SpawnerName        string              `json:"spawnerName,omitempty"`
+	SpawnerSource      string              `json:"spawnerSource,omitempty"`
+	PendingPermissions []PendingPermission `json:"pendingPermissions,omitempty"`
+	PendingToolUse     *PendingToolUse     `json:"pendingToolUse,omitempty"`
+	Machine            string              `json:"machine,omitempty"`
+	LastBtw            *BtwMessage         `json:"lastBtw"`
 	// CostUnknown is true when the provider does not expose token counts and
 	// cost cannot be estimated. CostEstimate will be 0 in this case.
 	CostUnknown bool `json:"costUnknown,omitempty"`

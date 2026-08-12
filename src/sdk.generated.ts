@@ -351,6 +351,14 @@ export interface Agent {
   errorState?: ErrorState
   pipelineTaskId?: string
   pipelineTaskTitle?: string
+  /**
+   * SpawnerID/SpawnerName name the configured spawner this session belongs to,
+   * and SpawnerSource says how that was established (see SpawnerSource*).
+   * Empty when no spawner could be attributed.
+   */
+  spawnerId?: string
+  spawnerName?: string
+  spawnerSource?: string
   pendingPermissions?: PendingPermission[]
   pendingToolUse?: PendingToolUse
   /**

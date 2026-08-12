@@ -1,5 +1,5 @@
 import type { Agent } from '../types'
-import { AGENT_STATUSES } from '../types'
+import { AGENT_STATUSES, SPAWNER_SOURCE_ENV } from '../types'
 import { STATUS_ORDER } from './agentSort'
 import { secondsSince, shortModel } from './format'
 import { friendlyProjectName } from './friendlyProjectName'
@@ -10,20 +10,39 @@ export const AGENT_SORT_OPTIONS = [
   { value: 'expensive', label: 'Most expensive' },
 ] as const
 
+// The control that renders these is already labelled "Group", so the options
+// name the dimension alone instead of repeating "Group by …" in every row.
 export const AGENT_GROUP_OPTIONS = [
   { value: 'none', label: 'No grouping' },
-  { value: 'project', label: 'Group by project' },
-  { value: 'status', label: 'Group by status' },
-  { value: 'model', label: 'Group by model' },
+  { value: 'project', label: 'Project' },
+  { value: 'status', label: 'Status' },
+  { value: 'model', label: 'Model' },
+  { value: 'spawner', label: 'Spawner' },
 ] as const
 
 export type AgentSort = typeof AGENT_SORT_OPTIONS[number]['value']
 export type AgentGroup = typeof AGENT_GROUP_OPTIONS[number]['value']
 
+const UNASSIGNED_SPAWNER_KEY = '__unassigned__'
+
+/** Grouping by spawner is redundant while a single spawner is filtered, so the option drops out. */
+export function agentGroupOptions(spawnerFilter: string): ReadonlyArray<{ value: AgentGroup, label: string }> {
+  return spawnerFilter === 'all'
+    ? AGENT_GROUP_OPTIONS
+    : AGENT_GROUP_OPTIONS.filter(o => o.value !== 'spawner')
+}
+
+/** Falls back to 'none' when the stored grouping is unavailable under the current filter. */
+export function resolveGroup(groupBy: AgentGroup, spawnerFilter: string): AgentGroup {
+  return agentGroupOptions(spawnerFilter).some(o => o.value === groupBy) ? groupBy : 'none'
+}
+
 export interface AgentGrouping {
   key: string
   label: string | null
   agents: Agent[]
+  /** Set when the grouping was derived rather than recorded; carries the why. */
+  derivedFrom?: string
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -51,23 +70,26 @@ export function sortAgents(list: Agent[], sortBy: AgentSort, nowMs: number): Age
   return sorted
 }
 
+function bucketBy(list: Agent[], keyOf: (agent: Agent) => { key: string, label: string }): AgentGrouping[] {
+  const seen = new Map<string, AgentGrouping>()
+  for (const agent of list) {
+    const { key, label } = keyOf(agent)
+    const bucket = seen.get(key)
+    if (bucket) {
+      bucket.agents.push(agent)
+    }
+    else {
+      seen.set(key, { key, label, agents: [agent] })
+    }
+  }
+  return Array.from(seen.values())
+}
+
 export function groupAgents(list: Agent[], groupBy: AgentGroup): AgentGrouping[] {
   if (groupBy === 'project') {
-    const seen = new Map<string, Agent[]>()
-    for (const agent of list) {
-      const key = agent.projectName
-      const bucket = seen.get(key)
-      if (bucket) {
-        bucket.push(agent)
-      }
-      else {
-        seen.set(key, [agent])
-      }
-    }
-    return Array.from(seen.entries()).map(([key, agents]) => ({
-      key,
-      label: friendlyProjectName(key),
-      agents,
+    return bucketBy(list, agent => ({
+      key: agent.projectName,
+      label: friendlyProjectName(agent.projectName),
     }))
   }
 
@@ -80,18 +102,28 @@ export function groupAgents(list: Agent[], groupBy: AgentGroup): AgentGrouping[]
   }
 
   if (groupBy === 'model') {
-    const seen = new Map<string, Agent[]>()
-    for (const agent of list) {
+    return bucketBy(list, (agent) => {
       const key = shortModel(agent.model ?? null)
-      const bucket = seen.get(key)
-      if (bucket) {
-        bucket.push(agent)
-      }
-      else {
-        seen.set(key, [agent])
-      }
+      return { key, label: key }
+    })
+  }
+
+  if (groupBy === 'spawner') {
+    // The server attributes each agent to a configured spawner (from its
+    // pipeline task, or from the config dir its process runs on); anything it
+    // could not place lands in one trailing bucket.
+    const groups = bucketBy(list, agent => (
+      agent.spawnerId
+        ? { key: agent.spawnerId, label: agent.spawnerName || agent.spawnerId }
+        : { key: UNASSIGNED_SPAWNER_KEY, label: 'Unassigned' }
+    ))
+    for (const group of groups) {
+      if (group.agents.some(a => a.spawnerSource === SPAWNER_SOURCE_ENV))
+        group.derivedFrom = 'Derived from the config directory these sessions run on'
     }
-    return Array.from(seen.entries()).map(([key, agents]) => ({ key, label: key, agents }))
+    // Unattributed agents are the residual bucket, so they trail the named ones.
+    return groups.sort((a, b) =>
+      Number(a.key === UNASSIGNED_SPAWNER_KEY) - Number(b.key === UNASSIGNED_SPAWNER_KEY))
   }
 
   return [{ key: 'all', label: null, agents: list }]

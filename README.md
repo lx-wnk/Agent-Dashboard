@@ -22,7 +22,7 @@ See every running agent at a glance — tokens, cost, status, tools, tasks, and 
 
 Most agent monitors require you to wire hooks or wrappers into every project. This one doesn't — it reads what Claude Code already writes to disk and watches the processes you already run.
 
-- 🔌 **Zero-config monitoring** — discovers agents by scanning processes (`ps`/`lsof`); no per-project hooks or wrappers
+- 🔌 **Zero-config monitoring** — discovers agents by scanning processes (`ps`/`lsof`) and reading `CLAUDE_CONFIG_DIR` from them to tell profiles apart; no per-project hooks or wrappers
 - 🔁 **Autonomous task pipeline** — a real state machine that spawns a `claude` CLI process per stage in an isolated git worktree
 - 🎛️ **MCP control plane** — an authenticated MCP endpoint with scoped tokens lets agents (and you) drive the dashboard back
 - 🔐 **Auth & permissions** — GitHub OAuth + JWT, scoped API keys, and a two-way permission gate for spawned agents

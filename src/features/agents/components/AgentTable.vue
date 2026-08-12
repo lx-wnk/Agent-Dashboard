@@ -25,7 +25,7 @@ const useGroups = computed(() =>
     <!-- Grouped rendering -->
     <template v-if="useGroups && groups">
       <div v-for="group in groups" :key="group.key" class="flex flex-col gap-1.5">
-        <GroupHeader :label="group.label!" :agents="group.agents" class="mt-2 first:mt-0" />
+        <GroupHeader :label="group.label!" :agents="group.agents" :derived-from="group.derivedFrom" class="mt-2 first:mt-0" />
         <AgentRow
           v-for="agent in group.agents"
           :key="agent.pid"

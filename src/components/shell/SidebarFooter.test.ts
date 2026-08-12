@@ -17,10 +17,18 @@ describe('sidebarFooter', () => {
     expect(w.emitted('toggleTheme')).toHaveLength(1)
   })
 
-  it('has no quota bar or settings button (moved to status bar / topbar)', () => {
+  it('has no quota bar (that one lives in the status bar)', () => {
     const w = mount(SidebarFooter, { props: base })
     expect(w.find('[role="progressbar"]').exists()).toBe(false)
-    expect(w.find('[data-testid="footer-settings"]').exists()).toBe(false)
+  })
+
+  // Settings sat in the topbar between #187 and the toolbar restructure; it is
+  // back beside the other global actions now that the topbar keeps only the
+  // view title, its CTA, and the offline badge.
+  it('emits openSettings from the gear button', async () => {
+    const w = mount(SidebarFooter, { props: base })
+    await w.get('[data-testid="footer-settings"]').trigger('click')
+    expect(w.emitted('openSettings')).toHaveLength(1)
   })
 
   it('hides install button unless canInstall', () => {

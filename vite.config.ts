@@ -27,6 +27,11 @@ export default defineConfig(({ mode }) => ({
       // Use 'prompt' so the user controls when a new service worker activates.
       // This prevents stale cached assets from silently replacing a running session.
       registerType: 'prompt',
+      // Registration is done by src/utils/serviceWorker.ts, not by an injected
+      // script: the same bundle is served to a browser (register) and to the
+      // desktop shell (do not register — it serves this SPA from its own
+      // in-process server, so a precache only pins the previous build).
+      injectRegister: null,
       // injectManifest: custom SW at src/sw.ts handles Background Sync + precaching.
       strategies: 'injectManifest',
       srcDir: 'src',

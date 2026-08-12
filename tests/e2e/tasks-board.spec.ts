@@ -85,7 +85,7 @@ test.describe('Pipeline board', () => {
     await expect(stagesTab).toHaveAttribute('aria-selected', 'true')
     await expect(page.getByText('No stage runs yet.')).toBeVisible()
 
-    await dialog.getByRole('button', { name: '×' }).click()
+    await dialog.getByRole('button', { name: 'Close' }).click()
     await expect(dialog).not.toBeVisible()
   })
 })

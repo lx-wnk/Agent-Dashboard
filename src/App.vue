@@ -41,7 +41,7 @@ import { useTodayCost } from './composables/useTodayCost'
 import { useUsage } from './composables/useUsage'
 import { useUser } from './composables/useUser'
 import { useViewState } from './composables/useViewState'
-import { groupAgents, sortAgents } from './utils/agentGroup'
+import { groupAgents, resolveGroup, sortAgents } from './utils/agentGroup'
 import { formatCost } from './utils/format'
 import { friendlyProjectName } from './utils/friendlyProjectName'
 
@@ -137,19 +137,6 @@ const { nowMs } = useNow()
 
 const { spawners } = useSpawners()
 
-// Agents have no direct spawner link; they reach a configured spawner through
-// the task they were spawned for (task.spawnerId). Map taskId → spawnerId so the
-// roster spawner filter can match. Free (un-orchestrated) agents have no task,
-// so they only appear under "All spawners".
-const taskSpawnerById = computed(() => {
-  const m = new Map<string, string>()
-  for (const t of tasks.value) {
-    if (t.spawnerId)
-      m.set(t.id, t.spawnerId)
-  }
-  return m
-})
-
 // Dashboard roster: project + spawner filter → sort → optional grouping. Project
 // options list every known project (pre-filter) so the dropdown stays stable.
 const rosterAgents = computed(() => {
@@ -157,10 +144,11 @@ const rosterAgents = computed(() => {
   if (dashboardProject.value !== 'all')
     base = base.filter(a => a.projectName === dashboardProject.value)
   if (dashboardSpawner.value !== 'all')
-    base = base.filter(a => a.pipelineTaskId != null && taskSpawnerById.value.get(a.pipelineTaskId) === dashboardSpawner.value)
+    base = base.filter(a => a.spawnerId === dashboardSpawner.value)
   return sortAgents(base, dashboardSort.value, nowMs.value)
 })
-const rosterGroups = computed(() => groupAgents(rosterAgents.value, dashboardGroup.value))
+const activeGroup = computed(() => resolveGroup(dashboardGroup.value, dashboardSpawner.value))
+const rosterGroups = computed(() => groupAgents(rosterAgents.value, activeGroup.value))
 const projectOptions = computed(() => [
   { value: 'all', label: 'All projects' },
   ...[...new Set(agents.value.map(a => a.projectName))].sort().map(n => ({ value: n, label: friendlyProjectName(n) })),
@@ -318,16 +306,12 @@ onMounted(() => usageComposable.start())
           @open-sessions="showSessions = true"
           @toggle-theme="toggleTheme"
           @install="promptInstall"
+          @open-settings="showSettings = true"
         />
       </template>
 
       <template #topbar>
-        <AppTopbar
-          :active-view="activeView"
-          :search-query="searchQuery"
-          @open-settings="showSettings = true"
-          @update:search-query="searchQuery = $event"
-        >
+        <AppTopbar :active-view="activeView">
           <template #cta>
             <button
               v-if="activeView === 'pipeline'"
@@ -374,13 +358,17 @@ onMounted(() => usageComposable.start())
             :project="dashboardProject"
             :sort-by="dashboardSort"
             :group-by="dashboardGroup"
+            :search-query="searchQuery"
             :project-options="projectOptions"
             :spawner-options="spawnerOptions"
+            :total-count="agents.length"
+            :shown-count="rosterAgents.length"
             @update:layout="dashboardLayout = $event"
             @update:spawner="dashboardSpawner = $event"
             @update:project="dashboardProject = $event"
             @update:sort-by="dashboardSort = $event"
             @update:group-by="dashboardGroup = $event"
+            @update:search-query="searchQuery = $event"
           />
           <template v-if="dashboardLayout === 'list'">
             <EmptyAgentState v-if="rosterAgents.length === 0" :search-query="searchQuery" />
@@ -388,7 +376,7 @@ onMounted(() => usageComposable.start())
           </template>
           <template v-else>
             <EmptyAgentState v-if="rosterAgents.length === 0" :search-query="searchQuery" />
-            <AgentCardGrid v-else :agents="rosterAgents" :groups="rosterGroups" :group-by="dashboardGroup" @select="selectAgent" @dismiss="dismissAgent" />
+            <AgentCardGrid v-else :agents="rosterAgents" :groups="rosterGroups" :group-by="activeGroup" @select="selectAgent" @dismiss="dismissAgent" />
           </template>
           <ChannelScriptCallout />
         </template>
