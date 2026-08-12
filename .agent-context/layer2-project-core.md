@@ -40,7 +40,7 @@
 ## Testing Strategy
 
 - **Unit:** Vitest — `pnpm test` / `pnpm test:watch`
-- **E2E:** Playwright — `pnpm test:e2e` (auto-starts dev server on port 13120)
+- **E2E:** Playwright — `pnpm test:e2e` (auto-starts its own server on port 13199; never reuses a running dashboard)
 
 ## Commit Convention
 

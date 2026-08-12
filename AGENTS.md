@@ -30,7 +30,7 @@
 | Frontend | `pnpm lint && pnpm typecheck && pnpm test` |
 | Go | `task test` (sdk + server, `-race`) and `go vet ./...` per module |
 | Go lint | `task lint` (golangci-lint, sdk + server) |
-| E2E | `pnpm test:e2e` (Playwright, dev server on port 13120) |
+| E2E | `pnpm test:e2e` (Playwright; starts its own server on port 13199, never reuses one) |
 
 `go vet ./...` runs module-wide on purpose: a narrow `go test ./pkg/...` misses `_test.go` files in parent or
 sibling packages that reference a changed exported type, and `go build` skips test files entirely.
