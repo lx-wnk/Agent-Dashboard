@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import type { DashboardLayout } from '../../composables/useViewState'
 import type { AgentGroup, AgentSort } from '../../utils/agentGroup'
-import { computed } from 'vue'
-import { AGENT_SORT_OPTIONS, agentGroupOptions, resolveGroup } from '../../utils/agentGroup'
+import { computed, nextTick, ref } from 'vue'
+import { AGENT_SORT_OPTIONS, agentGroupOptions } from '../../utils/agentGroup'
 import AppSelect from '../ui/AppSelect.vue'
 import ToolbarPopover from './ToolbarPopover.vue'
 
@@ -29,7 +29,6 @@ const emit = defineEmits<{
 }>()
 
 const groupOptions = computed(() => agentGroupOptions(props.spawner))
-const effectiveGroup = computed(() => resolveGroup(props.groupBy, props.spawner))
 
 const projectLabel = computed(() =>
   props.projectOptions.find(o => o.value === props.project)?.label ?? props.project)
@@ -64,9 +63,31 @@ const activeFilters = computed<ActiveFilter[]>(() => {
 const menuFilterCount = computed(() =>
   activeFilters.value.filter(f => f.key !== 'search').length)
 
-function clearAll(): void {
+const searchInput = ref<HTMLInputElement | null>(null)
+const chipRow = ref<HTMLElement | null>(null)
+
+// Clearing a chip removes the button that was focused, which drops focus to
+// <body> and loses the keyboard user's place in the toolbar. Focus moves to the
+// chip that took its position, else to the search field — the one control that
+// is always there and the natural place to keep narrowing from.
+async function clearFilter(filter: ActiveFilter): Promise<void> {
+  const index = activeFilters.value.findIndex(f => f.key === filter.key)
+  const remaining = activeFilters.value.filter(f => f.key !== filter.key)
+  const next = remaining[index] ?? remaining[remaining.length - 1]
+
+  filter.clear()
+  await nextTick()
+  const target = next
+    ? chipRow.value?.querySelector<HTMLElement>(`[data-testid="clear-${next.key}"]`)
+    : searchInput.value
+  target?.focus()
+}
+
+async function clearAll(): Promise<void> {
   for (const filter of activeFilters.value)
     filter.clear()
+  await nextTick()
+  searchInput.value?.focus()
 }
 </script>
 
@@ -77,6 +98,7 @@ function clearAll(): void {
       <div class="relative flex items-center">
         <span aria-hidden="true" class="absolute left-2.5 text-[11px] text-fg-faint">🔍</span>
         <input
+          ref="searchInput"
           :value="searchQuery"
           type="search"
           aria-label="Search agents"
@@ -139,7 +161,7 @@ function clearAll(): void {
       <span class="flex items-center gap-1.5">
         <span aria-hidden="true" class="text-[11px] uppercase tracking-wider text-fg-faint">Group</span>
         <AppSelect
-          :model-value="effectiveGroup"
+          :model-value="groupBy"
           :options="groupOptions"
           size="compact"
           aria-label="Group agents"
@@ -182,7 +204,7 @@ function clearAll(): void {
     </div>
 
     <!-- Applied filters, mirrored out of the controls so the state is readable at a glance -->
-    <div v-if="activeFilters.length" class="flex items-center gap-1.5 flex-wrap" data-testid="active-filters">
+    <div v-if="activeFilters.length" ref="chipRow" class="flex items-center gap-1.5 flex-wrap" data-testid="active-filters">
       <span
         v-for="filter in activeFilters"
         :key="filter.key"
@@ -194,7 +216,7 @@ function clearAll(): void {
           class="rounded-full px-1 leading-none hover:bg-accent hover:text-accent-contrast focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent"
           :aria-label="`Clear ${filter.label}`"
           :data-testid="`clear-${filter.key}`"
-          @click="filter.clear()"
+          @click="clearFilter(filter)"
         >×</button>
       </span>
       <button

@@ -1,6 +1,6 @@
 import type { AgentGroup, AgentSort } from '../utils/agentGroup'
 import { ref, watch } from 'vue'
-import { AGENT_GROUP_OPTIONS, AGENT_SORT_OPTIONS } from '../utils/agentGroup'
+import { AGENT_GROUP_OPTIONS, AGENT_SORT_OPTIONS, resolveGroup } from '../utils/agentGroup'
 
 export type ActiveView = 'dashboard' | 'workflows' | 'pipeline' | 'cost' | 'schedules' | 'eval'
 export type DashboardLayout = 'cards' | 'list'
@@ -71,6 +71,13 @@ function readStoredGroup(): AgentGroup {
   return v && AGENT_GROUP_VALUES.includes(v as AgentGroup) ? (v as AgentGroup) : 'none'
 }
 
+// The grouping parked while a filter hides it. Empty string = nothing parked.
+function readParkedGroup(): AgentGroup | null {
+  const ls = typeof localStorage !== 'undefined' ? localStorage : null
+  const v = ls?.getItem('agent-dashboard-group-parked')
+  return v && AGENT_GROUP_VALUES.includes(v as AgentGroup) ? (v as AgentGroup) : null
+}
+
 function readStoredProject(): string {
   const ls = typeof localStorage !== 'undefined' ? localStorage : null
   return ls?.getItem('agent-dashboard-project') ?? 'all'
@@ -88,6 +95,28 @@ const dashboardSort = ref<AgentSort>(readStoredSort())
 const dashboardGroup = ref<AgentGroup>(readStoredGroup())
 const dashboardProject = ref<string>(readStoredProject())
 const dashboardSpawner = ref<string>(readStoredSpawner())
+const parkedGroup = ref<AgentGroup | null>(readParkedGroup())
+
+// Filtering to one spawner takes "Spawner" out of the grouping options. Parking
+// the choice keeps dashboardGroup a value the control can actually show — so
+// picking "No grouping" while filtered sticks — and restores it when the filter
+// clears, which is what the disappearing option looked like it promised.
+watch(dashboardSpawner, (spawner) => {
+  if (resolveGroup(dashboardGroup.value, spawner) !== dashboardGroup.value) {
+    parkedGroup.value = dashboardGroup.value
+    dashboardGroup.value = 'none'
+  }
+  else if (parkedGroup.value && resolveGroup(parkedGroup.value, spawner) === parkedGroup.value) {
+    dashboardGroup.value = parkedGroup.value
+    parkedGroup.value = null
+  }
+}, { flush: 'sync' })
+
+/** Records an explicit grouping choice, which supersedes any parked one. */
+function setDashboardGroup(value: AgentGroup): void {
+  parkedGroup.value = null
+  dashboardGroup.value = value
+}
 
 watch(activeView, (v) => {
   if (typeof localStorage !== 'undefined')
@@ -105,6 +134,10 @@ watch(dashboardGroup, (v) => {
   if (typeof localStorage !== 'undefined')
     localStorage.setItem('agent-dashboard-group', v)
 }, { flush: 'sync' })
+watch(parkedGroup, (v) => {
+  if (typeof localStorage !== 'undefined')
+    localStorage.setItem('agent-dashboard-group-parked', v ?? '')
+}, { flush: 'sync' })
 watch(dashboardProject, (v) => {
   if (typeof localStorage !== 'undefined')
     localStorage.setItem('agent-dashboard-project', v)
@@ -115,5 +148,5 @@ watch(dashboardSpawner, (v) => {
 }, { flush: 'sync' })
 
 export function useViewState() {
-  return { activeView, dashboardLayout, dashboardSort, dashboardGroup, dashboardProject, dashboardSpawner }
+  return { activeView, dashboardLayout, dashboardSort, dashboardGroup, setDashboardGroup, dashboardProject, dashboardSpawner }
 }

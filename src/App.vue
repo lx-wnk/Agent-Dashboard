@@ -41,7 +41,7 @@ import { useTodayCost } from './composables/useTodayCost'
 import { useUsage } from './composables/useUsage'
 import { useUser } from './composables/useUser'
 import { useViewState } from './composables/useViewState'
-import { groupAgents, resolveGroup, sortAgents } from './utils/agentGroup'
+import { groupAgents, sortAgents } from './utils/agentGroup'
 import { formatCost } from './utils/format'
 import { friendlyProjectName } from './utils/friendlyProjectName'
 
@@ -75,7 +75,7 @@ const { needsRefresh, updateSW } = usePWA()
 const { canInstall, promptInstall } = useInstallPrompt()
 const { theme, toggleTheme } = useTheme()
 
-const { activeView, dashboardLayout, dashboardSort, dashboardGroup, dashboardProject, dashboardSpawner } = useViewState()
+const { activeView, dashboardLayout, dashboardSort, dashboardGroup, setDashboardGroup, dashboardProject, dashboardSpawner } = useViewState()
 const { handleShortcut: handleSidebarShortcut } = useSidebar()
 const { resolveAgent, approveAll } = usePermissionResolve()
 
@@ -147,8 +147,7 @@ const rosterAgents = computed(() => {
     base = base.filter(a => a.spawnerId === dashboardSpawner.value)
   return sortAgents(base, dashboardSort.value, nowMs.value)
 })
-const activeGroup = computed(() => resolveGroup(dashboardGroup.value, dashboardSpawner.value))
-const rosterGroups = computed(() => groupAgents(rosterAgents.value, activeGroup.value))
+const rosterGroups = computed(() => groupAgents(rosterAgents.value, dashboardGroup.value))
 const projectOptions = computed(() => [
   { value: 'all', label: 'All projects' },
   ...[...new Set(agents.value.map(a => a.projectName))].sort().map(n => ({ value: n, label: friendlyProjectName(n) })),
@@ -367,7 +366,7 @@ onMounted(() => usageComposable.start())
             @update:spawner="dashboardSpawner = $event"
             @update:project="dashboardProject = $event"
             @update:sort-by="dashboardSort = $event"
-            @update:group-by="dashboardGroup = $event"
+            @update:group-by="setDashboardGroup($event)"
             @update:search-query="searchQuery = $event"
           />
           <template v-if="dashboardLayout === 'list'">
@@ -376,7 +375,7 @@ onMounted(() => usageComposable.start())
           </template>
           <template v-else>
             <EmptyAgentState v-if="rosterAgents.length === 0" :search-query="searchQuery" />
-            <AgentCardGrid v-else :agents="rosterAgents" :groups="rosterGroups" :group-by="activeGroup" @select="selectAgent" @dismiss="dismissAgent" />
+            <AgentCardGrid v-else :agents="rosterAgents" :groups="rosterGroups" :group-by="dashboardGroup" @select="selectAgent" @dismiss="dismissAgent" />
           </template>
           <ChannelScriptCallout />
         </template>

@@ -1,6 +1,7 @@
 import type { AgentGroup, AgentSort } from '@/utils/agentGroup'
 import { mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it } from 'vitest'
+import { nextTick } from 'vue'
 import { openListbox, optionByLabel } from '@/utils/testSelect'
 import DashboardToolbar from './DashboardToolbar.vue'
 
@@ -114,8 +115,10 @@ describe('dashboardToolbar', () => {
     expect(labels).not.toContain('Spawner')
   })
 
-  it('shows "No grouping" when a spawner filter hides the stored spawner grouping', () => {
-    const w = mountToolbar({ spawner: 'claude', groupBy: 'spawner' })
+  // The resolved grouping now comes from useViewState, so the control renders
+  // exactly what it is handed instead of second-guessing it.
+  it('renders the grouping it is given', () => {
+    const w = mountToolbar({ spawner: 'claude', groupBy: 'none' })
     expect(w.get('[data-testid="select-group"]').text()).toContain('No grouping')
   })
 
@@ -155,5 +158,33 @@ describe('dashboardToolbar', () => {
     expect(w.emitted('update:searchQuery')![0]).toEqual([''])
     expect(w.emitted('update:project')![0]).toEqual(['all'])
     expect(w.emitted('update:spawner')![0]).toEqual(['all'])
+  })
+  // Clearing a chip removes the focused button; without a hand-off focus falls
+  // to <body> and the keyboard user loses their place in the toolbar.
+  it('moves focus to the next chip when one is cleared', async () => {
+    const w = mountToolbar({ searchQuery: 'shop', project: 'my-project' })
+    const clearSearch = w.get('[data-testid="clear-search"]')
+    ;(clearSearch.element as HTMLElement).focus()
+
+    await clearSearch.trigger('click')
+    await nextTick()
+
+    expect(document.activeElement).toBe(w.get('[data-testid="clear-project"]').element)
+  })
+
+  it('falls back to the search field when the last chip is cleared', async () => {
+    const w = mountToolbar({ searchQuery: 'shop' })
+    await w.get('[data-testid="clear-search"]').trigger('click')
+    await nextTick()
+
+    expect(document.activeElement).toBe(w.get('[data-testid="toolbar-search"]').element)
+  })
+
+  it('focuses the search field after "Clear all"', async () => {
+    const w = mountToolbar({ searchQuery: 'shop', project: 'my-project', spawner: 'claude' })
+    await w.get('[data-testid="clear-all-filters"]').trigger('click')
+    await nextTick()
+
+    expect(document.activeElement).toBe(w.get('[data-testid="toolbar-search"]').element)
   })
 })
