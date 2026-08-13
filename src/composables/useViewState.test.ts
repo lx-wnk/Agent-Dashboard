@@ -65,3 +65,39 @@ describe('useViewState', () => {
     expect(useViewState().activeView.value).toBe('dashboard')
   })
 })
+
+describe('useViewState grouping under a spawner filter', () => {
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
+  it('parks a grouping the filter removes and restores it when the filter clears', async () => {
+    localStorage.setItem('agent-dashboard-group', 'spawner')
+    const { dashboardGroup, dashboardSpawner } = (await freshModule()).useViewState()
+
+    dashboardSpawner.value = 'spwn_a'
+    expect(dashboardGroup.value).toBe('none')
+
+    dashboardSpawner.value = 'all'
+    expect(dashboardGroup.value).toBe('spawner')
+  })
+
+  it('keeps an explicit "No grouping" chosen while filtered', async () => {
+    localStorage.setItem('agent-dashboard-group', 'spawner')
+    const { dashboardGroup, dashboardSpawner, setDashboardGroup } = (await freshModule()).useViewState()
+
+    dashboardSpawner.value = 'spwn_a'
+    setDashboardGroup('none')
+    dashboardSpawner.value = 'all'
+
+    expect(dashboardGroup.value).toBe('none')
+  })
+
+  it('leaves a grouping the filter does not remove alone', async () => {
+    localStorage.setItem('agent-dashboard-group', 'project')
+    const { dashboardGroup, dashboardSpawner } = (await freshModule()).useViewState()
+
+    dashboardSpawner.value = 'spwn_a'
+    expect(dashboardGroup.value).toBe('project')
+  })
+})
