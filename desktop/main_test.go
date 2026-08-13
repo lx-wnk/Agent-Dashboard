@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os/exec"
 	"strconv"
 	"strings"
 	"testing"
@@ -119,5 +120,29 @@ func TestBootstrapPageRedirectsToTheAddressTheServerBound(t *testing.T) {
 	}
 	if strings.Contains(body, dashboardURLPlaceholder) {
 		t.Fatal("the placeholder was served unsubstituted")
+	}
+}
+
+// A message spliced into the -e script could end the string literal and change
+// what runs; passed as an argument it cannot.
+func TestAlertArgsPassesTheMessageAsAnArgument(t *testing.T) {
+	msg := `quit" & do shell script "touch /tmp/pwned`
+	args := alertArgs(msg)
+
+	if args[len(args)-1] != msg {
+		t.Fatalf("message must be the last argument verbatim, got %q", args[len(args)-1])
+	}
+	for i, a := range args[:len(args)-2] {
+		if strings.Contains(a, "pwned") {
+			t.Fatalf("message leaked into script part %d: %q", i, a)
+		}
+	}
+
+	out, err := exec.Command("osascript", "-e", "on run argv", "-e", "return item 2 of argv", "-e", "end run", args[len(args)-2], msg).Output()
+	if err != nil {
+		t.Fatalf("osascript: %v", err)
+	}
+	if got := strings.TrimRight(string(out), "\n"); got != msg {
+		t.Fatalf("osascript returned %q, want %q", got, msg)
 	}
 }
