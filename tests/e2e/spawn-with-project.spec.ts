@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test'
 import { openListboxOptions, selectListboxOption } from './helpers'
 
 // Allow the dev environment to override the dashboard URL — e.g. point at the
-// Vite dev server (`http://localhost:5173`) when the Go backend on 13120 has
+// Vite dev server (`http://localhost:5173`) when the Go backend on 13199 has
 // no built frontend to serve. Defaults to the playwright.config.ts baseURL.
 const overrideBaseUrl = process.env.DASHBOARD_E2E_BASE_URL
 if (overrideBaseUrl) {
@@ -27,7 +27,7 @@ test('spawn dialog shows project picker and hydrates cwd from default folder', a
   // header (`missing Origin header`, 403). Browser requests get this header
   // for free; APIRequestContext does not, so we set it explicitly for every
   // mutating call.
-  const csrfHeaders = { Origin: baseURL ?? 'http://localhost:13120' }
+  const csrfHeaders = { Origin: baseURL ?? 'http://localhost:13199' }
 
   // 1. Pre-seed a project.
   const projectRes = await request.post('/api/projects', {
@@ -123,7 +123,7 @@ test('spawn dialog shows project picker and hydrates cwd from default folder', a
 
 test('spawn dialog submits payload with project cwd, permission mode, and prompt', async ({ page, request, baseURL }) => {
   const slug = `e2e-${Date.now()}`
-  const csrfHeaders = { Origin: baseURL ?? 'http://localhost:13120' }
+  const csrfHeaders = { Origin: baseURL ?? 'http://localhost:13199' }
 
   const projectRes = await request.post('/api/projects', {
     headers: csrfHeaders,

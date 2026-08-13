@@ -67,7 +67,7 @@ Build the SPA **before** the binary — `go:embed` bakes the compiled frontend i
 |---------|-------------|
 | `pnpm build` | Build Vue SPA for production |
 | `pnpm test` | Vitest unit tests |
-| `pnpm test:e2e` | Playwright end-to-end tests |
+| `pnpm test:e2e` | Playwright end-to-end tests (starts its own server on `:13199`, against a scratch DB under `.e2e/`) |
 | `pnpm typecheck` | vue-tsc type checking |
 
 ## Architecture

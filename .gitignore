@@ -76,3 +76,6 @@ test-results/
 
 # Local git worktrees for parallel branch work — never part of a commit.
 dashboard-worktrees/
+
+# Playwright E2E scratch database (never the real dashboard DB)
+.e2e/
