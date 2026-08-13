@@ -304,6 +304,12 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) error {
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		return apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
 	}
+	if body.Name != nil && *body.Name == "" {
+		return apierr.NewAppError(http.StatusBadRequest, "name is required")
+	}
+	if body.Name != nil && !ValidateName(*body.Name) {
+		return apierr.NewAppError(http.StatusBadRequest, validation.ProjectNameLengthMessage)
+	}
 	if body.Slug != nil && !ValidateSlug(*body.Slug) {
 		return apierr.NewAppError(http.StatusBadRequest, "slug must match ^[a-z0-9][a-z0-9-]{0,63}$")
 	}
@@ -314,6 +320,9 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) error {
 	description, clearDescription, err := parseNullableString(body.Description)
 	if err != nil {
 		return apierr.NewAppError(http.StatusBadRequest, "description must be a string or null")
+	}
+	if description != nil && !ValidateDescription(*description) {
+		return apierr.NewAppError(http.StatusBadRequest, validation.ProjectDescriptionLengthMessage)
 	}
 	color, clearColor, err := parseNullableString(body.Color)
 	if err != nil {

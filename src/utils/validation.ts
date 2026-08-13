@@ -26,6 +26,9 @@ export function slugFollowingName(name: string, currentSlug: string, slugTouched
 /** Maximum characters allowed in a task description. */
 export const MAX_DESCRIPTION_CHARS = 10_000
 
+/** Mirrors validation.MaxProjectNameLen on the server, which rejects anything longer with a 400. */
+export const MAX_PROJECT_NAME_CHARS = 200
+
 /**
  * Returns true when `p` is a safe absolute path:
  * - Must begin with "/"

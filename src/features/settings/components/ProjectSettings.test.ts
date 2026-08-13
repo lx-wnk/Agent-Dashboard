@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 
 import ProjectSettings from '@/features/settings/components/ProjectSettings.vue'
-import { SLUG_RE } from '@/utils/validation'
+import { MAX_DESCRIPTION_CHARS, MAX_PROJECT_NAME_CHARS, SLUG_RE } from '@/utils/validation'
 
 vi.mock('@/composables/useProjects', () => ({
   useProjects: () => ({
@@ -198,5 +198,17 @@ describe('projectSettings slug', () => {
     await wrapper.get('[data-testid="proj-slug"]').setValue('')
 
     expect(slugInput(wrapper).value).toBe('')
+  })
+})
+
+// The server answers a longer name with a 400 the form does not render, so the
+// field has to stop the input before it becomes a request.
+describe('projectSettings length limits', () => {
+  it('caps the name and description fields at the limits the server enforces', async () => {
+    const wrapper = mount(ProjectSettings)
+    await wrapper.get('[data-testid="proj-new"]').trigger('click')
+
+    expect(nameInput(wrapper).maxLength).toBe(MAX_PROJECT_NAME_CHARS)
+    expect((wrapper.get('#proj-desc').element as HTMLInputElement).maxLength).toBe(MAX_DESCRIPTION_CHARS)
   })
 })
