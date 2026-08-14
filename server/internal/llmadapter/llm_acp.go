@@ -113,9 +113,12 @@ func (s *ACPSpawner) connect(ctx context.Context, client *acp.Client) (acpConn, 
 	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
+		_ = stdin.Close()
 		return nil, nil, fmt.Errorf("acp adapter: stdout: %w", err)
 	}
 	if err := cmd.Start(); err != nil {
+		_ = stdin.Close()
+		_ = stdout.Close()
 		return nil, nil, fmt.Errorf("acp adapter: start %q: %w", s.Command, err)
 	}
 	conn := sdkacp.NewClientSideConnection(client, stdin, stdout)

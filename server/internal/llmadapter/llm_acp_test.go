@@ -18,6 +18,7 @@ type fakeConn struct {
 	client    *acp.Client
 	modes     *sdkacp.SessionModeState
 	setModes  []sdkacp.SessionModeId
+	gotPrompt []sdkacp.ContentBlock
 	initErr   error
 	newErr    error
 	promptErr error
@@ -38,6 +39,7 @@ func (f *fakeConn) SetSessionMode(ctx context.Context, p sdkacp.SetSessionModeRe
 }
 
 func (f *fakeConn) Prompt(ctx context.Context, p sdkacp.PromptRequest) (sdkacp.PromptResponse, error) {
+	f.gotPrompt = p.Prompt
 	if f.promptErr != nil {
 		return sdkacp.PromptResponse{}, f.promptErr
 	}
@@ -125,13 +127,35 @@ func TestACPSpawnerFailsWhenThePromptFails(t *testing.T) {
 	require.Error(t, err)
 }
 
+// promptText reads the text out of a recorded prompt the same way client.go
+// does: Text is a pointer, so it must be nil-checked rather than dereferenced
+// blindly.
+func promptText(t *testing.T, blocks []sdkacp.ContentBlock) string {
+	t.Helper()
+	require.Len(t, blocks, 1)
+	require.NotNil(t, blocks[0].Text)
+	return blocks[0].Text.Text
+}
+
 func TestACPSpawnerSendsBothPromptParts(t *testing.T) {
 	f := &fakeConn{modes: gatedModes(), reply: "ok"}
 	args := testArgs(t)
 	_, err := spawnerWith(t, f).Spawn(context.Background(), args)
 	require.NoError(t, err)
-	// The reply file is the observable surface; assert the prompt reached the
-	// agent by checking the spawner did not error and produced a session file.
-	require.NotEmpty(t, f.setModes)
-	require.True(t, strings.Contains(args.SystemPrompt+args.UserPrompt, "do the thing"))
+
+	text := promptText(t, f.gotPrompt)
+	require.Contains(t, text, args.SystemPrompt)
+	require.Contains(t, text, args.UserPrompt)
+	require.Less(t, strings.Index(text, args.SystemPrompt), strings.Index(text, args.UserPrompt),
+		"system prompt must appear before the user prompt")
+}
+
+func TestACPSpawnerOmitsTheSeparatorWhenThereIsNoSystemPrompt(t *testing.T) {
+	f := &fakeConn{modes: gatedModes(), reply: "ok"}
+	args := testArgs(t)
+	args.SystemPrompt = ""
+	_, err := spawnerWith(t, f).Spawn(context.Background(), args)
+	require.NoError(t, err)
+
+	require.Equal(t, args.UserPrompt, promptText(t, f.gotPrompt))
 }
