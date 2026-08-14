@@ -2,6 +2,7 @@ package acp
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	sdkacp "github.com/coder/acp-go-sdk"
@@ -66,4 +67,68 @@ func TestSessionUpdateWithoutCallbackDoesNotPanic(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
+}
+
+func permissionOptions() []sdkacp.PermissionOption {
+	return []sdkacp.PermissionOption{
+		{Kind: sdkacp.PermissionOptionKindAllowOnce, Name: "Allow", OptionId: "allow"},
+		{Kind: sdkacp.PermissionOptionKindRejectOnce, Name: "Reject", OptionId: "reject"},
+	}
+}
+
+func TestRequestPermissionAllowSelectsAllowOption(t *testing.T) {
+	c := &Client{OnPermission: func(context.Context, PermissionRequest) (PermissionDecision, error) {
+		return DecisionAllow, nil
+	}}
+
+	resp, err := c.RequestPermission(context.Background(), sdkacp.RequestPermissionRequest{
+		SessionId: "sess-1",
+		Options:   permissionOptions(),
+		ToolCall:  sdkacp.ToolCallUpdate{ToolCallId: "tc-1"},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, resp.Outcome.Selected)
+	require.Equal(t, sdkacp.PermissionOptionId("allow"), resp.Outcome.Selected.OptionId)
+}
+
+func TestRequestPermissionWithoutCallbackDenies(t *testing.T) {
+	c := &Client{}
+
+	resp, err := c.RequestPermission(context.Background(), sdkacp.RequestPermissionRequest{
+		SessionId: "sess-1",
+		Options:   permissionOptions(),
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, resp.Outcome.Selected)
+	require.Equal(t, sdkacp.PermissionOptionId("reject"), resp.Outcome.Selected.OptionId)
+}
+
+func TestRequestPermissionCallbackErrorDenies(t *testing.T) {
+	c := &Client{OnPermission: func(context.Context, PermissionRequest) (PermissionDecision, error) {
+		return DecisionAllow, errors.New("gate unreachable")
+	}}
+
+	resp, err := c.RequestPermission(context.Background(), sdkacp.RequestPermissionRequest{
+		SessionId: "sess-1",
+		Options:   permissionOptions(),
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, resp.Outcome.Selected)
+	require.Equal(t, sdkacp.PermissionOptionId("reject"), resp.Outcome.Selected.OptionId)
+}
+
+func TestRequestPermissionWithoutRejectOptionCancels(t *testing.T) {
+	c := &Client{}
+
+	resp, err := c.RequestPermission(context.Background(), sdkacp.RequestPermissionRequest{
+		SessionId: "sess-1",
+		Options:   []sdkacp.PermissionOption{{Kind: sdkacp.PermissionOptionKindAllowOnce, Name: "Allow", OptionId: "allow"}},
+	})
+
+	require.NoError(t, err)
+	require.Nil(t, resp.Outcome.Selected)
+	require.NotNil(t, resp.Outcome.Cancelled)
 }

@@ -79,7 +79,35 @@ func (c *Client) SessionUpdate(ctx context.Context, params sdkacp.SessionNotific
 }
 
 func (c *Client) RequestPermission(ctx context.Context, params sdkacp.RequestPermissionRequest) (sdkacp.RequestPermissionResponse, error) {
-	return sdkacp.RequestPermissionResponse{}, errUnsupported
+	decision := DecisionDeny
+	if c.OnPermission != nil {
+		req := PermissionRequest{
+			SessionID:  string(params.SessionId),
+			ToolCallID: string(params.ToolCall.ToolCallId),
+		}
+		if t := params.ToolCall.Title; t != nil {
+			req.Title = *t
+		}
+		// An unreachable gate must not widen access.
+		if d, err := c.OnPermission(ctx, req); err == nil {
+			decision = d
+		}
+	}
+
+	want := sdkacp.PermissionOptionKindRejectOnce
+	if decision == DecisionAllow {
+		want = sdkacp.PermissionOptionKindAllowOnce
+	}
+	for _, o := range params.Options {
+		if o.Kind == want {
+			return sdkacp.RequestPermissionResponse{Outcome: sdkacp.RequestPermissionOutcome{
+				Selected: &sdkacp.RequestPermissionOutcomeSelected{OptionId: o.OptionId},
+			}}, nil
+		}
+	}
+	return sdkacp.RequestPermissionResponse{Outcome: sdkacp.RequestPermissionOutcome{
+		Cancelled: &sdkacp.RequestPermissionOutcomeCancelled{},
+	}}, nil
 }
 
 func (c *Client) ReadTextFile(ctx context.Context, params sdkacp.ReadTextFileRequest) (sdkacp.ReadTextFileResponse, error) {
