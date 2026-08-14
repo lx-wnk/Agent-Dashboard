@@ -113,7 +113,7 @@ func (c *Client) RequestPermission(ctx context.Context, params sdkacp.RequestPer
 	}
 	for _, want := range wantKinds {
 		for _, o := range params.Options {
-			if o.Kind == want {
+			if o.Kind == want && !widensSession(o) {
 				return sdkacp.RequestPermissionResponse{Outcome: sdkacp.RequestPermissionOutcome{
 					Selected: &sdkacp.RequestPermissionOutcomeSelected{OptionId: o.OptionId},
 				}}, nil
@@ -123,6 +123,20 @@ func (c *Client) RequestPermission(ctx context.Context, params sdkacp.RequestPer
 	return sdkacp.RequestPermissionResponse{Outcome: sdkacp.RequestPermissionOutcome{
 		Cancelled: &sdkacp.RequestPermissionOutcomeCancelled{},
 	}}, nil
+}
+
+// An option may carry a mode change in its _meta, which grants for the rest of
+// the session rather than for this call.
+func widensSession(o sdkacp.PermissionOption) bool {
+	perm, ok := o.Meta["permission"].(map[string]any)
+	if !ok {
+		return false
+	}
+	changes, ok := perm["changes"].([]any)
+	if !ok {
+		return false
+	}
+	return len(changes) > 0
 }
 
 func (c *Client) ReadTextFile(ctx context.Context, params sdkacp.ReadTextFileRequest) (sdkacp.ReadTextFileResponse, error) {

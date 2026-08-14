@@ -212,3 +212,80 @@ func TestUnsupportedCapabilitiesRefuse(t *testing.T) {
 		})
 	}
 }
+
+func widening(id string, kind sdkacp.PermissionOptionKind) sdkacp.PermissionOption {
+	return sdkacp.PermissionOption{
+		Kind: kind, Name: "Allow and don't ask again", OptionId: sdkacp.PermissionOptionId(id),
+		Meta: map[string]any{"permission": map[string]any{"changes": []any{
+			map[string]any{"operation": "set", "mode": "acceptEdits",
+				"lifetime": map[string]any{"scope": "session"}},
+		}}},
+	}
+}
+
+func TestRequestPermissionSkipsAWideningAllowOption(t *testing.T) {
+	c := &Client{OnPermission: func(context.Context, PermissionRequest) (PermissionDecision, error) {
+		return DecisionAllow, nil
+	}}
+
+	resp, err := c.RequestPermission(context.Background(), sdkacp.RequestPermissionRequest{
+		SessionId: "sess-1",
+		Options: []sdkacp.PermissionOption{
+			widening("wide", sdkacp.PermissionOptionKindAllowOnce),
+			{Kind: sdkacp.PermissionOptionKindAllowOnce, Name: "Allow Once", OptionId: "narrow"},
+		},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, resp.Outcome.Selected)
+	require.Equal(t, sdkacp.PermissionOptionId("narrow"), resp.Outcome.Selected.OptionId)
+}
+
+func TestRequestPermissionCancelsWhenOnlyWideningOptionsRemain(t *testing.T) {
+	c := &Client{OnPermission: func(context.Context, PermissionRequest) (PermissionDecision, error) {
+		return DecisionAllow, nil
+	}}
+
+	resp, err := c.RequestPermission(context.Background(), sdkacp.RequestPermissionRequest{
+		SessionId: "sess-1",
+		Options:   []sdkacp.PermissionOption{widening("wide", sdkacp.PermissionOptionKindAllowOnce)},
+	})
+
+	require.NoError(t, err)
+	require.Nil(t, resp.Outcome.Selected)
+	require.NotNil(t, resp.Outcome.Cancelled)
+}
+
+func TestRequestPermissionSkipsAWideningDenyOption(t *testing.T) {
+	c := &Client{}
+
+	resp, err := c.RequestPermission(context.Background(), sdkacp.RequestPermissionRequest{
+		SessionId: "sess-1",
+		Options: []sdkacp.PermissionOption{
+			widening("wide", sdkacp.PermissionOptionKindRejectOnce),
+			{Kind: sdkacp.PermissionOptionKindRejectOnce, Name: "Deny", OptionId: "narrow"},
+		},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, resp.Outcome.Selected)
+	require.Equal(t, sdkacp.PermissionOptionId("narrow"), resp.Outcome.Selected.OptionId)
+}
+
+func TestRequestPermissionKeepsOptionsWithUnrelatedMeta(t *testing.T) {
+	c := &Client{OnPermission: func(context.Context, PermissionRequest) (PermissionDecision, error) {
+		return DecisionAllow, nil
+	}}
+
+	opt := sdkacp.PermissionOption{
+		Kind: sdkacp.PermissionOptionKindAllowOnce, Name: "Allow Once", OptionId: "narrow",
+		Meta: map[string]any{"somethingElse": true},
+	}
+	resp, err := c.RequestPermission(context.Background(), sdkacp.RequestPermissionRequest{
+		SessionId: "sess-1", Options: []sdkacp.PermissionOption{opt},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, resp.Outcome.Selected)
+	require.Equal(t, sdkacp.PermissionOptionId("narrow"), resp.Outcome.Selected.OptionId)
+}
