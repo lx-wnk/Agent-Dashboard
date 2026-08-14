@@ -33,6 +33,7 @@ const ADAPTER_TYPE_BADGE: Record<SpawnerAdapterType, string> = {
   ollama: 'bg-cyan-50 dark:bg-cyan-950/30 text-cyan-600 dark:text-cyan-400',
   openai: 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400',
   custom: 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400',
+  acp: 'bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400',
 }
 
 function adapterTypeOf(spawner: Spawner): SpawnerAdapterType {

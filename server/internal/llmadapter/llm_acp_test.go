@@ -5,7 +5,6 @@ import (
 	"errors"
 	"io"
 	"os"
-	"strings"
 	"testing"
 
 	sdkacp "github.com/coder/acp-go-sdk"
@@ -143,11 +142,18 @@ func TestACPSpawnerSendsBothPromptParts(t *testing.T) {
 	_, err := spawnerWith(t, f).Spawn(context.Background(), args)
 	require.NoError(t, err)
 
-	text := promptText(t, f.gotPrompt)
-	require.Contains(t, text, args.SystemPrompt)
-	require.Contains(t, text, args.UserPrompt)
-	require.Less(t, strings.Index(text, args.SystemPrompt), strings.Index(text, args.UserPrompt),
-		"system prompt must appear before the user prompt")
+	require.Equal(t, args.SystemPrompt+"\n\n"+args.UserPrompt, promptText(t, f.gotPrompt))
+}
+
+func TestACPSpawnerRefusesAnAlreadyExpiredContext(t *testing.T) {
+	f := &fakeConn{modes: gatedModes(), reply: "ok"}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := spawnerWith(t, f).Spawn(ctx, testArgs(t))
+
+	require.Error(t, err)
+	require.Empty(t, f.setModes, "an expired context must not let the turn proceed")
 }
 
 func TestACPSpawnerOmitsTheSeparatorWhenThereIsNoSystemPrompt(t *testing.T) {

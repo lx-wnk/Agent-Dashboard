@@ -1,16 +1,24 @@
 package llmadapter
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"os/exec"
 	"strings"
 	"sync"
+	"syscall"
+	"time"
 
 	sdkacp "github.com/coder/acp-go-sdk"
 	"github.com/lx-wnk/agent-dashboard/server/internal/acp"
 )
+
+// acpTurnTimeout bounds one ACP stage. It is longer than the chat-style
+// adapters' 5/10-minute budgets because a coding agent's turn covers a whole
+// stage — tool calls, edits, and test runs — not one round-trip reply.
+const acpTurnTimeout = 30 * time.Minute
 
 // acpConn is the part of an ACP client connection the adapter drives. It exists
 // so tests can run the adapter without starting a process.
@@ -35,6 +43,12 @@ type ACPSpawner struct {
 func (s *ACPSpawner) Name() string { return "acp" }
 
 func (s *ACPSpawner) Spawn(ctx context.Context, args LLMSpawnArgs) (LLMSpawnResult, error) {
+	ctx, cancel := context.WithTimeout(ctx, acpTurnTimeout)
+	defer cancel()
+	if err := ctx.Err(); err != nil {
+		return LLMSpawnResult{}, fmt.Errorf("acp adapter: %w", err)
+	}
+
 	var mu sync.Mutex
 	var reply strings.Builder
 	client := &acp.Client{
@@ -49,7 +63,7 @@ func (s *ACPSpawner) Spawn(ctx context.Context, args LLMSpawnArgs) (LLMSpawnResu
 		OnPermission: s.Permission,
 	}
 
-	conn, closeConn, err := s.connect(ctx, client)
+	conn, closeConn, childStderr, err := s.connect(ctx, client)
 	if err != nil {
 		return LLMSpawnResult{}, err
 	}
@@ -58,7 +72,7 @@ func (s *ACPSpawner) Spawn(ctx context.Context, args LLMSpawnArgs) (LLMSpawnResu
 	if _, err := conn.Initialize(ctx, sdkacp.InitializeRequest{
 		ProtocolVersion: sdkacp.ProtocolVersionNumber,
 	}); err != nil {
-		return LLMSpawnResult{}, fmt.Errorf("acp adapter: initialize: %w", err)
+		return LLMSpawnResult{}, fmt.Errorf("acp adapter: initialize: %w: stderr: %s", err, childStderr())
 	}
 
 	sess, err := conn.NewSession(ctx, sdkacp.NewSessionRequest{
@@ -97,34 +111,50 @@ func (s *ACPSpawner) Spawn(ctx context.Context, args LLMSpawnArgs) (LLMSpawnResu
 	return LLMSpawnResult{PID: 0, SessionID: string(sess.SessionId), SessionFile: file}, nil
 }
 
-// connect starts the agent process and returns the driven connection plus a
-// teardown that stops the process and releases its pipes.
-func (s *ACPSpawner) connect(ctx context.Context, client *acp.Client) (acpConn, func(), error) {
+// connect starts the agent process and returns the driven connection, a
+// teardown that stops the process and releases its pipes, and an accessor
+// for whatever the child has written to stderr so far.
+func (s *ACPSpawner) connect(ctx context.Context, client *acp.Client) (acpConn, func(), func() string, error) {
+	noStderr := func() string { return "" }
 	if s.newConn != nil {
-		return s.newConn(client, io.Discard, strings.NewReader("")), func() {}, nil
+		return s.newConn(client, io.Discard, strings.NewReader("")), func() {}, noStderr, nil
 	}
 	if s.Command == "" {
-		return nil, nil, fmt.Errorf("acp adapter: no command configured")
+		return nil, nil, nil, fmt.Errorf("acp adapter: no command configured")
 	}
 	cmd := exec.CommandContext(ctx, s.Command, s.Args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	var stderrBuf bytes.Buffer
+	cmd.Stderr = &stderrBuf
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
-		return nil, nil, fmt.Errorf("acp adapter: stdin: %w", err)
+		return nil, nil, nil, fmt.Errorf("acp adapter: stdin: %w", err)
 	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		_ = stdin.Close()
-		return nil, nil, fmt.Errorf("acp adapter: stdout: %w", err)
+		return nil, nil, nil, fmt.Errorf("acp adapter: stdout: %w", err)
 	}
 	if err := cmd.Start(); err != nil {
-		_ = stdin.Close()
-		_ = stdout.Close()
-		return nil, nil, fmt.Errorf("acp adapter: start %q: %w", s.Command, err)
+		// exec.Cmd.Start already closes stdin/stdout when the process fails to launch.
+		return nil, nil, nil, fmt.Errorf("acp adapter: start %q: %w: stderr: %s", s.Command, err, stderrBuf.String())
 	}
 	conn := sdkacp.NewClientSideConnection(client, stdin, stdout)
-	return conn, func() {
+	teardown := func() {
 		_ = stdin.Close()
-		_ = cmd.Process.Kill()
+		signalGroup(cmd.Process.Pid, syscall.SIGKILL)
 		_ = cmd.Wait()
-	}, nil
+	}
+	return conn, teardown, func() string { return stderrBuf.String() }, nil
+}
+
+// signalGroup sends sig to the process group led by pid (Setpgid makes the
+// child its own group leader, so its pgid == pid). The negative target
+// reaches the leader and all descendants — killing the pid alone would
+// orphan them, e.g. the node grandchild the default npx command forks.
+// Falls back to the single process if the group send fails.
+func signalGroup(pid int, sig syscall.Signal) {
+	if err := syscall.Kill(-pid, sig); err != nil {
+		_ = syscall.Kill(pid, sig)
+	}
 }

@@ -52,10 +52,10 @@ var AvailableAdapters = []AdapterMeta{
 	},
 	{
 		Name:        "acp",
-		Description: "Agent Client Protocol adapter — drives an ACP agent for the whole stage. Permission requests are denied until the approval gate is wired, so use it for stages that need no approvals.",
+		Description: "Agent Client Protocol adapter — drives an ACP agent for the whole stage. The configured agent's `default` mode must be its ask-first mode for the gate to mean anything; ACP does not require this of an arbitrary agent. Permission requests are denied until the approval gate is wired, so use it for stages that need no approvals.",
 		ConfigKeys: []ConfigKeyDoc{
 			{Key: "command", Type: "string", Required: false, Note: "Agent executable, default npx"},
-			{Key: "args", Type: "string", Required: false, Note: "Space-separated arguments, default -y @agentclientprotocol/claude-agent-acp@latest"},
+			{Key: "args", Type: "string", Required: false, Note: "Space-separated arguments, default -y @agentclientprotocol/claude-agent-acp@0.68.0"},
 		},
 	},
 }

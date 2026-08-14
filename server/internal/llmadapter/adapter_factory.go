@@ -56,7 +56,7 @@ func NewLLMSpawnerFromSpawner(s *ent.Spawner) (LLMSpawner, error) {
 		a := &ACPSpawner{Command: s.AdapterConfig["command"]}
 		if a.Command == "" {
 			a.Command = "npx"
-			a.Args = []string{"-y", "@agentclientprotocol/claude-agent-acp@latest"}
+			a.Args = []string{"-y", "@agentclientprotocol/claude-agent-acp@0.68.0"}
 		} else if raw := s.AdapterConfig["args"]; raw != "" {
 			a.Args = strings.Fields(raw)
 		}
