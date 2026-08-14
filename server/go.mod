@@ -7,6 +7,7 @@ replace github.com/lx-wnk/agent-dashboard/sdk => ../sdk
 require (
 	entgo.io/ent v0.14.6
 	github.com/SherClockHolmes/webpush-go v1.4.0
+	github.com/coder/acp-go-sdk v0.13.5
 	github.com/coder/websocket v1.8.15
 	github.com/creack/pty v1.1.24
 	github.com/fsnotify/fsnotify v1.10.1
@@ -69,3 +70,5 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
+
+replace github.com/coder/acp-go-sdk => github.com/lx-wnk/acp-go-sdk v1.20.0-lxwnk.alpha.1
