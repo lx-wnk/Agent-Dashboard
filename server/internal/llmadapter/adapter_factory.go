@@ -2,6 +2,7 @@ package llmadapter
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 )
@@ -49,6 +50,17 @@ func NewLLMSpawnerFromSpawner(s *ent.Spawner) (LLMSpawner, error) {
 			return nil, fmt.Errorf("custom adapter requires spawner.command to be set")
 		}
 		return &CustomCommandSpawner{Command: s.Command}, nil
+	case "acp":
+		// The ACP adapter owns the agent process for the whole stage, because
+		// an ACP agent blocks on permission requests until the client answers.
+		a := &ACPSpawner{Command: s.AdapterConfig["command"]}
+		if a.Command == "" {
+			a.Command = "npx"
+			a.Args = []string{"-y", "@agentclientprotocol/claude-agent-acp@latest"}
+		} else if raw := s.AdapterConfig["args"]; raw != "" {
+			a.Args = strings.Fields(raw)
+		}
+		return a, nil
 	default:
 		return nil, fmt.Errorf("unknown adapter_type: %q", s.AdapterType)
 	}

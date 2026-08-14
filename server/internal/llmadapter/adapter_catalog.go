@@ -50,4 +50,12 @@ var AvailableAdapters = []AdapterMeta{
 		Description: "Custom command adapter — runs the spawner row's `command`, passes LLMSpawnArgs as JSON on stdin, reads LLMSpawnResult from stdout.",
 		ConfigKeys:  []ConfigKeyDoc{},
 	},
+	{
+		Name:        "acp",
+		Description: "Agent Client Protocol adapter — drives an ACP agent for the whole stage. Permission requests are denied until the approval gate is wired, so use it for stages that need no approvals.",
+		ConfigKeys: []ConfigKeyDoc{
+			{Key: "command", Type: "string", Required: false, Note: "Agent executable, default npx"},
+			{Key: "args", Type: "string", Required: false, Note: "Space-separated arguments, default -y @agentclientprotocol/claude-agent-acp@latest"},
+		},
+	},
 }

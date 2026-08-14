@@ -95,3 +95,38 @@ func TestNewLLMSpawnerFromSpawner_UnknownType(t *testing.T) {
 	assert.Nil(t, got)
 	assert.Contains(t, err.Error(), "unknown adapter_type")
 }
+
+func TestFactoryBuildsTheACPAdapter(t *testing.T) {
+	s, err := llmadapter.NewLLMSpawnerFromSpawner(&ent.Spawner{
+		AdapterType:   "acp",
+		AdapterConfig: map[string]string{"command": "npx", "args": "-y @agentclientprotocol/claude-agent-acp@latest"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, s)
+	require.Equal(t, "acp", s.Name())
+
+	a, ok := s.(*llmadapter.ACPSpawner)
+	require.True(t, ok)
+	require.Equal(t, "npx", a.Command)
+	require.Equal(t, []string{"-y", "@agentclientprotocol/claude-agent-acp@latest"}, a.Args)
+}
+
+func TestFactoryDefaultsTheACPCommand(t *testing.T) {
+	s, err := llmadapter.NewLLMSpawnerFromSpawner(&ent.Spawner{AdapterType: "acp"})
+	require.NoError(t, err)
+
+	a, ok := s.(*llmadapter.ACPSpawner)
+	require.True(t, ok)
+	require.NotEmpty(t, a.Command, "an unconfigured acp row must still be runnable")
+}
+
+func TestCatalogListsTheACPAdapter(t *testing.T) {
+	var found *llmadapter.AdapterMeta
+	for i := range llmadapter.AvailableAdapters {
+		if llmadapter.AvailableAdapters[i].Name == "acp" {
+			found = &llmadapter.AvailableAdapters[i]
+		}
+	}
+	require.NotNil(t, found, "the settings UI reads this catalog")
+	require.NotEmpty(t, found.Description)
+}
