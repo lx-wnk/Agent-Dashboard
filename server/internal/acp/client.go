@@ -126,15 +126,24 @@ func (c *Client) RequestPermission(ctx context.Context, params sdkacp.RequestPer
 }
 
 // An option may carry a mode change in its _meta, which grants for the rest of
-// the session rather than for this call.
+// the session rather than for this call. Anything under a "permission" key
+// that isn't positively recognized as harmless counts as widening.
 func widensSession(o sdkacp.PermissionOption) bool {
-	perm, ok := o.Meta["permission"].(map[string]any)
+	permRaw, ok := o.Meta["permission"]
 	if !ok {
 		return false
 	}
-	changes, ok := perm["changes"].([]any)
+	perm, ok := permRaw.(map[string]any)
+	if !ok {
+		return true
+	}
+	changesRaw, ok := perm["changes"]
 	if !ok {
 		return false
+	}
+	changes, ok := changesRaw.([]any)
+	if !ok {
+		return true
 	}
 	return len(changes) > 0
 }

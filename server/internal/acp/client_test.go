@@ -289,3 +289,56 @@ func TestRequestPermissionKeepsOptionsWithUnrelatedMeta(t *testing.T) {
 	require.NotNil(t, resp.Outcome.Selected)
 	require.Equal(t, sdkacp.PermissionOptionId("narrow"), resp.Outcome.Selected.OptionId)
 }
+
+func TestRequestPermissionWideningMetaShapes(t *testing.T) {
+	tests := []struct {
+		name     string
+		meta     map[string]any
+		selected bool
+	}{
+		{"no meta", nil, true},
+		{"meta without permission key", map[string]any{"somethingElse": true}, true},
+		{"permission not a map", map[string]any{"permission": "acceptEdits"}, false},
+		{
+			"changes not a slice (bypass shape: object instead of array)",
+			map[string]any{"permission": map[string]any{"changes": map[string]any{
+				"0": map[string]any{"operation": "set", "mode": "acceptEdits",
+					"lifetime": map[string]any{"scope": "session"}},
+			}}},
+			false,
+		},
+		{
+			"changes non-empty slice",
+			map[string]any{"permission": map[string]any{"changes": []any{
+				map[string]any{"operation": "set", "mode": "acceptEdits"},
+			}}},
+			false,
+		},
+		{"changes empty slice", map[string]any{"permission": map[string]any{"changes": []any{}}}, true},
+		{"changes absent, permission map", map[string]any{"permission": map[string]any{}}, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &Client{OnPermission: func(context.Context, PermissionRequest) (PermissionDecision, error) {
+				return DecisionAllow, nil
+			}}
+
+			opt := sdkacp.PermissionOption{
+				Kind: sdkacp.PermissionOptionKindAllowOnce, Name: "Allow Once", OptionId: "opt", Meta: tt.meta,
+			}
+			resp, err := c.RequestPermission(context.Background(), sdkacp.RequestPermissionRequest{
+				SessionId: "sess-1", Options: []sdkacp.PermissionOption{opt},
+			})
+
+			require.NoError(t, err)
+			if tt.selected {
+				require.NotNil(t, resp.Outcome.Selected)
+				require.Equal(t, sdkacp.PermissionOptionId("opt"), resp.Outcome.Selected.OptionId)
+			} else {
+				require.Nil(t, resp.Outcome.Selected)
+				require.NotNil(t, resp.Outcome.Cancelled)
+			}
+		})
+	}
+}
