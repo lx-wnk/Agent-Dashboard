@@ -45,6 +45,36 @@ var _ sdkacp.Client = (*Client)(nil)
 var errUnsupported = errors.New("acp: capability not offered by this client")
 
 func (c *Client) SessionUpdate(ctx context.Context, params sdkacp.SessionNotification) error {
+	if c.OnEvent == nil {
+		return nil
+	}
+	e := Event{SessionID: string(params.SessionId), Kind: "other"}
+	switch u := params.Update; {
+	case u.AgentMessageChunk != nil:
+		e.Kind = "agent_message"
+		if t := u.AgentMessageChunk.Content.Text; t != nil {
+			e.Text = t.Text
+		}
+	case u.AgentThoughtChunk != nil:
+		e.Kind = "agent_thought"
+		if t := u.AgentThoughtChunk.Content.Text; t != nil {
+			e.Text = t.Text
+		}
+	case u.ToolCall != nil:
+		e.Kind = "tool_call"
+		e.ToolCallID = string(u.ToolCall.ToolCallId)
+		e.Text = u.ToolCall.Title
+		e.Status = string(u.ToolCall.Status)
+	case u.ToolCallUpdate != nil:
+		e.Kind = "tool_call_update"
+		e.ToolCallID = string(u.ToolCallUpdate.ToolCallId)
+		if s := u.ToolCallUpdate.Status; s != nil {
+			e.Status = string(*s)
+		}
+	case u.Plan != nil:
+		e.Kind = "plan"
+	}
+	c.OnEvent(e)
 	return nil
 }
 
