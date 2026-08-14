@@ -621,5 +621,5 @@ git push -u origin feat/acp-client
 - `server/internal/acp` compiles, `var _ sdkacp.Client = (*Client)(nil)` holds, and every test passes under `-race`.
 - `task test` and `task lint` are green with the raw output pasted into the PR.
 - No process is spawned and no network call is made by any test.
-- `THIRD_PARTY_LICENSES.md` still lists at least as many dependencies as before.
+- `THIRD_PARTY_LICENSES.md` is regenerated via `./scripts/gen-licenses.sh` and byte-identical to the committed file (CI's "License Attribution Freshness" job requires this); the row count (`grep -c '^|'`) rising is an additional sanity guard against a silently dropped section, not the acceptance bar itself.
 - Nothing outside `server/internal/acp`, `server/go.mod` and `server/go.sum` changed.

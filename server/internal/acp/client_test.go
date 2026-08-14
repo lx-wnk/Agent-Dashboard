@@ -132,3 +132,83 @@ func TestRequestPermissionWithoutRejectOptionCancels(t *testing.T) {
 	require.Nil(t, resp.Outcome.Selected)
 	require.NotNil(t, resp.Outcome.Cancelled)
 }
+
+func TestRequestPermissionDenyFallsBackToRejectAlways(t *testing.T) {
+	c := &Client{}
+
+	resp, err := c.RequestPermission(context.Background(), sdkacp.RequestPermissionRequest{
+		SessionId: "sess-1",
+		Options: []sdkacp.PermissionOption{
+			{Kind: sdkacp.PermissionOptionKindAllowOnce, Name: "Allow", OptionId: "allow"},
+			{Kind: sdkacp.PermissionOptionKindRejectAlways, Name: "Always reject", OptionId: "reject-always"},
+		},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, resp.Outcome.Selected)
+	require.Equal(t, sdkacp.PermissionOptionId("reject-always"), resp.Outcome.Selected.OptionId)
+}
+
+func TestRequestPermissionAllowDoesNotFallBackToAllowAlways(t *testing.T) {
+	c := &Client{OnPermission: func(context.Context, PermissionRequest) (PermissionDecision, error) {
+		return DecisionAllow, nil
+	}}
+
+	resp, err := c.RequestPermission(context.Background(), sdkacp.RequestPermissionRequest{
+		SessionId: "sess-1",
+		Options: []sdkacp.PermissionOption{
+			{Kind: sdkacp.PermissionOptionKindAllowAlways, Name: "Always allow", OptionId: "allow-always"},
+			{Kind: sdkacp.PermissionOptionKindRejectOnce, Name: "Reject", OptionId: "reject"},
+		},
+	})
+
+	require.NoError(t, err)
+	require.Nil(t, resp.Outcome.Selected)
+	require.NotNil(t, resp.Outcome.Cancelled)
+}
+
+func TestUnsupportedCapabilitiesRefuse(t *testing.T) {
+	c := &Client{}
+	ctx := context.Background()
+
+	tests := []struct {
+		name string
+		call func() error
+	}{
+		{"ReadTextFile", func() error {
+			_, err := c.ReadTextFile(ctx, sdkacp.ReadTextFileRequest{})
+			return err
+		}},
+		{"WriteTextFile", func() error {
+			_, err := c.WriteTextFile(ctx, sdkacp.WriteTextFileRequest{})
+			return err
+		}},
+		{"CreateTerminal", func() error {
+			_, err := c.CreateTerminal(ctx, sdkacp.CreateTerminalRequest{})
+			return err
+		}},
+		{"KillTerminal", func() error {
+			_, err := c.KillTerminal(ctx, sdkacp.KillTerminalRequest{})
+			return err
+		}},
+		{"TerminalOutput", func() error {
+			_, err := c.TerminalOutput(ctx, sdkacp.TerminalOutputRequest{})
+			return err
+		}},
+		{"ReleaseTerminal", func() error {
+			_, err := c.ReleaseTerminal(ctx, sdkacp.ReleaseTerminalRequest{})
+			return err
+		}},
+		{"WaitForTerminalExit", func() error {
+			_, err := c.WaitForTerminalExit(ctx, sdkacp.WaitForTerminalExitRequest{})
+			return err
+		}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.call()
+			require.ErrorIs(t, err, errUnsupported)
+		})
+	}
+}

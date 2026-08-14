@@ -34,7 +34,18 @@ type Event struct {
 	Status     string
 }
 
-// Client implements sdkacp.Client. Both callbacks may be nil.
+// Client implements sdkacp.Client.
+//
+// OnEvent runs on the connection's single ordered notification goroutine and
+// must not block; once 1024 notifications queue up the SDK closes the
+// connection.
+//
+// OnPermission runs on a per-request goroutine, so it may block waiting for a
+// human, and it should honour the passed context, which is cancelled on
+// disconnect.
+//
+// Both fields must be set before the client is handed to the connection;
+// assigning them afterwards races with those goroutines.
 type Client struct {
 	OnEvent      func(Event)
 	OnPermission func(context.Context, PermissionRequest) (PermissionDecision, error)
@@ -94,15 +105,19 @@ func (c *Client) RequestPermission(ctx context.Context, params sdkacp.RequestPer
 		}
 	}
 
-	want := sdkacp.PermissionOptionKindRejectOnce
+	wantKinds := []sdkacp.PermissionOptionKind{sdkacp.PermissionOptionKindRejectOnce, sdkacp.PermissionOptionKindRejectAlways}
 	if decision == DecisionAllow {
-		want = sdkacp.PermissionOptionKindAllowOnce
+		// A missing allow_once must cancel, not fall back to allow_always: the gate
+		// approved one call, and allow_always would grant the rest of the session.
+		wantKinds = []sdkacp.PermissionOptionKind{sdkacp.PermissionOptionKindAllowOnce}
 	}
-	for _, o := range params.Options {
-		if o.Kind == want {
-			return sdkacp.RequestPermissionResponse{Outcome: sdkacp.RequestPermissionOutcome{
-				Selected: &sdkacp.RequestPermissionOutcomeSelected{OptionId: o.OptionId},
-			}}, nil
+	for _, want := range wantKinds {
+		for _, o := range params.Options {
+			if o.Kind == want {
+				return sdkacp.RequestPermissionResponse{Outcome: sdkacp.RequestPermissionOutcome{
+					Selected: &sdkacp.RequestPermissionOutcomeSelected{OptionId: o.OptionId},
+				}}, nil
+			}
 		}
 	}
 	return sdkacp.RequestPermissionResponse{Outcome: sdkacp.RequestPermissionOutcome{

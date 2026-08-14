@@ -14,6 +14,7 @@ import (
 // twelve methods below; only Initialize, NewSession and Prompt do anything.
 type agentDouble struct {
 	conn *sdkacp.AgentSideConnection
+	t    *testing.T
 }
 
 func (a *agentDouble) Authenticate(ctx context.Context, p sdkacp.AuthenticateRequest) (sdkacp.AuthenticateResponse, error) {
@@ -59,26 +60,34 @@ func (a *agentDouble) NewSession(ctx context.Context, p sdkacp.NewSessionRequest
 }
 
 func (a *agentDouble) Prompt(ctx context.Context, p sdkacp.PromptRequest) (sdkacp.PromptResponse, error) {
-	_ = a.conn.SessionUpdate(ctx, sdkacp.SessionNotification{
+	if err := a.conn.SessionUpdate(ctx, sdkacp.SessionNotification{
 		SessionId: "sess-1",
 		Update: sdkacp.SessionUpdate{
 			AgentMessageChunk: &sdkacp.SessionUpdateAgentMessageChunk{
 				Content: sdkacp.TextBlock("pong"),
 			},
 		},
-	})
+	}); err != nil {
+		a.t.Error(err)
+	}
 	return sdkacp.PromptResponse{StopReason: sdkacp.StopReasonEndTurn}, nil
 }
 
 func TestClientReceivesUpdatesOverAConnection(t *testing.T) {
 	clientReads, agentWrites := io.Pipe()
 	agentReads, clientWrites := io.Pipe()
+	t.Cleanup(func() {
+		_ = clientReads.Close()
+		_ = agentWrites.Close()
+		_ = agentReads.Close()
+		_ = clientWrites.Close()
+	})
 
 	events := make(chan Event, 4)
 	client := &Client{OnEvent: func(e Event) { events <- e }}
 	conn := sdkacp.NewClientSideConnection(client, clientWrites, clientReads)
 
-	agent := &agentDouble{}
+	agent := &agentDouble{t: t}
 	agent.conn = sdkacp.NewAgentSideConnection(agent, agentWrites, agentReads)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
