@@ -18,7 +18,8 @@ type ModeSetter interface {
 
 // EnsureMode pins a session to want. A session inherits its mode from the
 // operator's settings, so an unpinned session may approve every tool call
-// without ever reaching the gate.
+// without ever reaching the gate. An error means the session is not gated;
+// the caller must abandon it rather than proceed.
 func EnsureMode(ctx context.Context, s ModeSetter, sessionID sdkacp.SessionId, state *sdkacp.SessionModeState, want sdkacp.SessionModeId) error {
 	if state == nil {
 		return fmt.Errorf("acp: session %s advertises no modes, cannot pin to %q", sessionID, want)

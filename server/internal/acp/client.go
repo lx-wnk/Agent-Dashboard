@@ -84,6 +84,9 @@ func (c *Client) SessionUpdate(ctx context.Context, params sdkacp.SessionNotific
 		}
 	case u.Plan != nil:
 		e.Kind = "plan"
+	case u.CurrentModeUpdate != nil:
+		e.Kind = "mode"
+		e.Text = string(u.CurrentModeUpdate.CurrentModeId)
 	}
 	c.OnEvent(e)
 	return nil
@@ -126,8 +129,11 @@ func (c *Client) RequestPermission(ctx context.Context, params sdkacp.RequestPer
 }
 
 // An option may carry a mode change in its _meta, which grants for the rest of
-// the session rather than for this call. Anything under a "permission" key
-// that isn't positively recognized as harmless counts as widening.
+// the session rather than for this call. This fails closed: only a small set
+// of shapes is positively recognized as harmless (no "permission" key, an
+// empty "permission" map, or a "changes" key holding an empty slice) -
+// everything else, including a "permission" map that omits "changes"
+// entirely, counts as widening.
 func widensSession(o sdkacp.PermissionOption) bool {
 	permRaw, ok := o.Meta["permission"]
 	if !ok {
@@ -137,9 +143,12 @@ func widensSession(o sdkacp.PermissionOption) bool {
 	if !ok {
 		return true
 	}
+	if len(perm) == 0 {
+		return false
+	}
 	changesRaw, ok := perm["changes"]
 	if !ok {
-		return false
+		return true
 	}
 	changes, ok := changesRaw.([]any)
 	if !ok {

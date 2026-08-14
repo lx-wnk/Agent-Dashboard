@@ -29,7 +29,6 @@ type PollingGate struct {
 	Status   func(ctx context.Context, id string) (RequestStatus, error)
 	Interval time.Duration
 	Timeout  time.Duration
-	Now      func() time.Time
 }
 
 // Decide satisfies Client.OnPermission.
@@ -68,6 +67,8 @@ func (g *PollingGate) Decide(ctx context.Context, req PermissionRequest) (Permis
 			return DecisionAllow, nil
 		case st == StatusDenied:
 			return DecisionDeny, nil
+		default:
+			lastErr = nil
 		}
 
 		select {

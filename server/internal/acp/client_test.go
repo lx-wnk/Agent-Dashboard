@@ -56,6 +56,26 @@ func TestSessionUpdateEmitsToolCall(t *testing.T) {
 	require.Equal(t, "Write file", got[0].Text)
 }
 
+func TestSessionUpdateEmitsModeChange(t *testing.T) {
+	var got []Event
+	c := &Client{OnEvent: func(e Event) { got = append(got, e) }}
+
+	err := c.SessionUpdate(context.Background(), sdkacp.SessionNotification{
+		SessionId: "sess-1",
+		Update: sdkacp.SessionUpdate{
+			CurrentModeUpdate: &sdkacp.SessionCurrentModeUpdate{
+				CurrentModeId: "acceptEdits",
+			},
+		},
+	})
+
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	require.Equal(t, "sess-1", got[0].SessionID)
+	require.Equal(t, "mode", got[0].Kind)
+	require.Equal(t, "acceptEdits", got[0].Text)
+}
+
 func TestSessionUpdateWithoutCallbackDoesNotPanic(t *testing.T) {
 	c := &Client{}
 	err := c.SessionUpdate(context.Background(), sdkacp.SessionNotification{
@@ -315,7 +335,8 @@ func TestRequestPermissionWideningMetaShapes(t *testing.T) {
 			false,
 		},
 		{"changes empty slice", map[string]any{"permission": map[string]any{"changes": []any{}}}, true},
-		{"changes absent, permission map", map[string]any{"permission": map[string]any{}}, true},
+		{"changes absent, permission map", map[string]any{"permission": map[string]any{"mode": "acceptEdits"}}, false},
+		{"permission is an empty map", map[string]any{"permission": map[string]any{}}, true},
 	}
 
 	for _, tt := range tests {

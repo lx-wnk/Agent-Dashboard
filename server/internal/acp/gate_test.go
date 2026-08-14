@@ -91,6 +91,22 @@ func TestPollingGateSurvivesATransientStatusError(t *testing.T) {
 	require.Equal(t, DecisionAllow, d)
 }
 
+func TestPollingGateTimeoutReportsTimeoutNotStaleTransientError(t *testing.T) {
+	var calls atomic.Int32
+	g := gateFor(t, func(context.Context, string) (RequestStatus, error) {
+		if calls.Add(1) == 1 {
+			return StatusPending, errors.New("transient")
+		}
+		return StatusPending, nil
+	})
+
+	d, err := g.Decide(context.Background(), PermissionRequest{})
+	require.Error(t, err)
+	require.Equal(t, DecisionDeny, d)
+	require.NotContains(t, err.Error(), "transient")
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+}
+
 func TestPollingGateWithoutFileDenies(t *testing.T) {
 	g := &PollingGate{}
 	d, err := g.Decide(context.Background(), PermissionRequest{})
