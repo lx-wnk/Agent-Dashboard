@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"sync"
 	"testing"
 
 	sdkacp "github.com/coder/acp-go-sdk"
@@ -154,6 +155,29 @@ func TestACPSpawnerRefusesAnAlreadyExpiredContext(t *testing.T) {
 
 	require.Error(t, err)
 	require.Empty(t, f.setModes, "an expired context must not let the turn proceed")
+}
+
+func TestSyncBufferIsSafeForConcurrentWriteAndString(t *testing.T) {
+	var b syncBuffer
+	const writers = 20
+	const chunk = "x"
+
+	var wg sync.WaitGroup
+	wg.Add(writers + 1)
+	for i := 0; i < writers; i++ {
+		go func() {
+			defer wg.Done()
+			_, err := b.Write([]byte(chunk))
+			require.NoError(t, err)
+		}()
+	}
+	go func() {
+		defer wg.Done()
+		_ = b.String()
+	}()
+	wg.Wait()
+
+	require.Len(t, b.String(), writers*len(chunk))
 }
 
 func TestACPSpawnerOmitsTheSeparatorWhenThereIsNoSystemPrompt(t *testing.T) {

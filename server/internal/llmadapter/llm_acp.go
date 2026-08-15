@@ -124,7 +124,7 @@ func (s *ACPSpawner) connect(ctx context.Context, client *acp.Client) (acpConn, 
 	}
 	cmd := exec.CommandContext(ctx, s.Command, s.Args...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	var stderrBuf bytes.Buffer
+	var stderrBuf syncBuffer
 	cmd.Stderr = &stderrBuf
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -146,6 +146,25 @@ func (s *ACPSpawner) connect(ctx context.Context, client *acp.Client) (acpConn, 
 		_ = cmd.Wait()
 	}
 	return conn, teardown, func() string { return stderrBuf.String() }, nil
+}
+
+// os/exec copies the child's stderr from its own goroutine, and the error paths
+// read the buffer before cmd.Wait() has joined it.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }
 
 // signalGroup sends sig to the process group led by pid (Setpgid makes the
