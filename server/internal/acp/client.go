@@ -24,6 +24,14 @@ type PermissionRequest struct {
 	SessionID  string
 	ToolCallID string
 	Title      string
+	ToolKind   string
+	ToolName   string
+	Locations  []string
+
+	// RawInput is agent-authored, untrusted display data reaching a human and
+	// later a UI; never interpolate it into a shell command, a query, or HTML
+	// without escaping at the point of use.
+	RawInput any
 }
 
 // Event is a normalized session update.
@@ -103,6 +111,16 @@ func (c *Client) RequestPermission(ctx context.Context, params sdkacp.RequestPer
 		if t := params.ToolCall.Title; t != nil {
 			req.Title = *t
 		}
+		if k := params.ToolCall.Kind; k != nil {
+			req.ToolKind = string(*k)
+		}
+		if n := params.ToolCall.Name; n != nil {
+			req.ToolName = *n
+		}
+		for _, loc := range params.ToolCall.Locations {
+			req.Locations = append(req.Locations, loc.Path)
+		}
+		req.RawInput = params.ToolCall.RawInput
 		// An unreachable gate must not widen access.
 		if d, err := c.OnPermission(ctx, req); err == nil {
 			decision = d

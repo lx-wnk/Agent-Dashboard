@@ -112,6 +112,82 @@ func TestRequestPermissionAllowSelectsAllowOption(t *testing.T) {
 	require.Equal(t, sdkacp.PermissionOptionId("allow"), resp.Outcome.Selected.OptionId)
 }
 
+func TestRequestPermissionMapsToolCallDetail(t *testing.T) {
+	var got PermissionRequest
+	c := &Client{OnPermission: func(_ context.Context, req PermissionRequest) (PermissionDecision, error) {
+		got = req
+		return DecisionAllow, nil
+	}}
+
+	kind := sdkacp.ToolKindEdit
+	name := "edit_file"
+	rawInput := map[string]any{"command": "rm -rf /"}
+
+	_, err := c.RequestPermission(context.Background(), sdkacp.RequestPermissionRequest{
+		SessionId: "sess-1",
+		Options:   permissionOptions(),
+		ToolCall: sdkacp.ToolCallUpdate{
+			ToolCallId: "tc-1",
+			Kind:       &kind,
+			Name:       &name,
+			Locations: []sdkacp.ToolCallLocation{
+				{Path: "/tmp/a.txt"},
+				{Path: "/tmp/b.txt"},
+			},
+			RawInput: rawInput,
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "edit", got.ToolKind)
+	require.Equal(t, "edit_file", got.ToolName)
+	require.Equal(t, []string{"/tmp/a.txt", "/tmp/b.txt"}, got.Locations)
+	require.Equal(t, rawInput, got.RawInput)
+}
+
+func TestRequestPermissionMapsEmptyToolCallDetailWithoutPanic(t *testing.T) {
+	var got PermissionRequest
+	called := false
+	c := &Client{OnPermission: func(_ context.Context, req PermissionRequest) (PermissionDecision, error) {
+		called = true
+		got = req
+		return DecisionAllow, nil
+	}}
+
+	_, err := c.RequestPermission(context.Background(), sdkacp.RequestPermissionRequest{
+		SessionId: "sess-1",
+		Options:   permissionOptions(),
+		ToolCall:  sdkacp.ToolCallUpdate{ToolCallId: "tc-1"},
+	})
+
+	require.NoError(t, err)
+	require.True(t, called)
+	require.Empty(t, got.ToolKind)
+	require.Empty(t, got.ToolName)
+	require.Empty(t, got.Locations)
+	require.Nil(t, got.RawInput)
+}
+
+func TestRequestPermissionCarriesLocationWithEmptyPath(t *testing.T) {
+	var got PermissionRequest
+	c := &Client{OnPermission: func(_ context.Context, req PermissionRequest) (PermissionDecision, error) {
+		got = req
+		return DecisionAllow, nil
+	}}
+
+	_, err := c.RequestPermission(context.Background(), sdkacp.RequestPermissionRequest{
+		SessionId: "sess-1",
+		Options:   permissionOptions(),
+		ToolCall: sdkacp.ToolCallUpdate{
+			ToolCallId: "tc-1",
+			Locations:  []sdkacp.ToolCallLocation{{Path: ""}},
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, []string{""}, got.Locations)
+}
+
 func TestRequestPermissionWithoutCallbackDenies(t *testing.T) {
 	c := &Client{}
 
