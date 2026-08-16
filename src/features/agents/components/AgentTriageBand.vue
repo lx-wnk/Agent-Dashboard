@@ -108,6 +108,8 @@ const breakdown = computed(() => {
 
 const totalCount = computed(() => props.permissionItems.length + visibleAgentCards.value.length)
 
+const isClear = computed(() => totalCount.value === 0 && props.permissionItems.length === 0)
+
 // AskUserQuestion is never permission-gated: an unresolved one waits for an
 // ANSWER, not a grant. The parser still reports it as a pendingToolUse so a
 // session whose screen cannot be probed shows something at all, but offering
@@ -307,15 +309,17 @@ watch(() => props.focusedSessionId, (id) => {
 </script>
 
 <template>
-  <section class="mb-4" aria-label="Needs your attention">
-    <!-- Empty state -->
-    <div
-      v-if="totalCount === 0 && permissionItems.length === 0"
-      class="flex items-center gap-2 px-4 py-2.5 rounded-md bg-success-soft border border-success-line"
+  <section :class="isClear ? 'mb-2' : 'mb-4'" aria-label="Needs your attention">
+    <!-- Empty state. Nothing to do is the normal case, so it stays a quiet line:
+         a filled banner here competed with the roster it sits above, and made
+         the band look equally loud whether or not anything needed attention. -->
+    <p
+      v-if="isClear"
+      data-testid="triage-all-clear"
+      class="flex items-center gap-1.5 px-0.5 py-1 text-[11px] text-fg-faint"
     >
-      <span aria-hidden="true" class="text-success-text">✓</span>
-      <span class="text-[13px] font-medium text-success-text">All clear — no agent is waiting on you.</span>
-    </div>
+      <span aria-hidden="true">✓</span>All clear — no agent is waiting on you.
+    </p>
 
     <template v-else>
       <!-- Header row -->
