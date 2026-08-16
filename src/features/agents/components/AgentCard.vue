@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import type { Agent } from '@/types'
-import { computed, ref } from 'vue'
+import { computed, defineAsyncComponent, ref } from 'vue'
 import MachineBadge from '@/components/MachineBadge.vue'
 import PromptInput from '@/components/PromptInput.vue'
 import ProviderBadge from '@/components/ProviderBadge.vue'
 import AppBadge from '@/components/ui/AppBadge.vue'
 import AppCard from '@/components/ui/AppCard.vue'
+import AppModal from '@/components/ui/AppModal.vue'
 import { useNow } from '@/composables/useNow'
 import MetricsPopover from '@/features/agents/components/MetricsPopover.vue'
 import { useAgentIdentity } from '@/features/agents/composables/useAgentIdentity'
@@ -70,6 +71,11 @@ function toggleSubagentExpand(id: string) {
 }
 
 const showMetrics = ref(false)
+// The live terminal used to be a tab at the bottom of the agent modal. It is
+// reached from the card now, so the modal stays a place to read and reply.
+// xterm.js is ~490KB — keep it in its own chunk, loaded on first open.
+const showTerminal = ref(false)
+const AgentTerminal = defineAsyncComponent(() => import('./AgentTerminal.vue'))
 </script>
 
 <template>
@@ -142,6 +148,15 @@ const showMetrics = ref(false)
             >ⓘ</button>
             <MetricsPopover v-if="showMetrics" :agent="agent" @click.stop />
           </span>
+          <button
+            v-if="agent.liveInjectable"
+            type="button"
+            class="inline-flex items-center justify-center min-w-6 min-h-6 text-fg-mute hover:text-fg-soft text-[11px] leading-none focus-visible:outline-2 focus-visible:outline-ring rounded"
+            aria-label="Open terminal"
+            title="Open the live terminal for this session"
+            data-testid="agent-card-terminal"
+            @click.stop="showTerminal = true"
+          >⌨</button>
           <button
             v-if="isFinished"
             type="button"
@@ -221,5 +236,29 @@ const showMetrics = ref(false)
     >
       <PromptInput :agent="agent" variant="compact" />
     </div>
+
+    <AppModal
+      :open="showTerminal"
+      :z-index="1100"
+      :labelled-by="`agent-terminal-title-${agent.pid}`"
+      @close="showTerminal = false"
+    >
+      <div class="bg-raised px-4 py-2.5 flex justify-between items-center flex-shrink-0" @click.stop>
+        <span :id="`agent-terminal-title-${agent.pid}`" class="font-semibold text-sm text-fg">
+          Terminal — {{ projectLabel }}
+        </span>
+        <button
+          type="button"
+          aria-label="Close terminal"
+          class="bg-transparent border-none text-fg-mute text-base cursor-pointer px-2 py-1 rounded hover:bg-raised hover:text-fg"
+          @click.stop="showTerminal = false"
+        >
+          ✕
+        </button>
+      </div>
+      <div data-testid="agent-terminal-modal" class="flex-1 min-h-0" @click.stop>
+        <AgentTerminal v-if="showTerminal" :key="agent.pid" :pid="agent.pid" />
+      </div>
+    </AppModal>
   </AppCard>
 </template>

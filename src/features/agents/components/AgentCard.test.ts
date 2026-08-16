@@ -219,3 +219,33 @@ describe('agentCard your-turn marker', () => {
     expect(w.find('[data-testid="agent-awaiting-input"]').exists()).toBe(false)
   })
 })
+
+describe('agentCard terminal access', () => {
+  const badgeStubs = { MachineBadge: true, ProviderBadge: true, PromptInput: true }
+
+  // The terminal used to live in the agent modal's bottom drawer. Removing that
+  // drawer must not remove the only way to reach a live session's terminal.
+  // AppModal teleports to <body>, so the overlay is asserted through the document.
+  it('offers a terminal for a live-injectable agent', async () => {
+    const w = mount(AgentCard, {
+      props: { agent: { ...baseAgent, liveInjectable: true } },
+      global: { stubs: badgeStubs },
+      attachTo: document.body,
+    })
+    expect(document.querySelector('[data-testid="agent-terminal-modal"]')).toBeNull()
+
+    await w.get('[data-testid="agent-card-terminal"]').trigger('click')
+    expect(document.querySelector('[data-testid="agent-terminal-modal"]')).not.toBeNull()
+
+    w.unmount()
+    document.body.innerHTML = ''
+  })
+
+  it('offers none when the session cannot be driven', () => {
+    const w = mount(AgentCard, {
+      props: { agent: { ...baseAgent, liveInjectable: false } },
+      global: { stubs: badgeStubs },
+    })
+    expect(w.find('[data-testid="agent-card-terminal"]').exists()).toBe(false)
+  })
+})

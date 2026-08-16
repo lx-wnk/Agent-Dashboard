@@ -46,7 +46,7 @@ test.describe('agent detail modal', () => {
     await stubJson(page, '/api/agents/sess-xyz/replies', { replies: [] })
   })
 
-  test('opens from the card, switches tabs, and closes', async ({ page }) => {
+  test('opens from the card, switches views, and closes', async ({ page }) => {
     await page.goto('/')
 
     // The card body paints over the full-card overlay button; clicking it
@@ -57,20 +57,17 @@ test.describe('agent detail modal', () => {
     await expect(dialog).toBeVisible()
     await expect(dialog.getByText('agent-dashboard')).toBeVisible()
 
-    await dialog.getByText('Agent Details (Tasks, Tools, Subagents)').click()
+    // The bottom drawer is gone: transcript and waterfall are the two views, and
+    // the terminal moved to the agent card.
+    const transcriptTab = dialog.getByRole('tab', { name: 'transcript' })
+    const waterfallTab = dialog.getByRole('tab', { name: 'waterfall' })
 
-    const detailsTab = dialog.getByRole('tab', { name: 'Details' })
-    const waterfallTab = dialog.getByRole('tab', { name: 'Waterfall' })
-    const terminalTab = dialog.getByRole('tab', { name: 'Terminal' })
-
-    await expect(detailsTab).toHaveAttribute('aria-selected', 'true')
-    await expect(dialog.getByRole('tabpanel')).toContainText('Input tokens')
+    await expect(transcriptTab).toHaveAttribute('aria-selected', 'true')
+    await expect(dialog.getByRole('tab', { name: 'Terminal' })).toHaveCount(0)
 
     await waterfallTab.click()
     await expect(waterfallTab).toHaveAttribute('aria-selected', 'true')
     await expect(dialog.getByRole('img', { name: 'Execution Waterfall' })).toBeVisible()
-
-    await expect(terminalTab).toBeVisible()
 
     await page.keyboard.press('Escape')
     await expect(dialog).toBeHidden()
