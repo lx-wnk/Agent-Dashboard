@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Agent, OutputMessage } from '@/types'
+import type { Agent, OutputMessage, SubAgent } from '@/types'
 import { computed, defineAsyncComponent, nextTick, ref, watch } from 'vue'
 import CrossLinkBanner from '@/components/CrossLinkBanner.vue'
 import HookEventList from '@/components/HookEventList.vue'
@@ -38,6 +38,14 @@ const { activeTab: activeDetailsTab, tabAttrs, panelAttrs, onKeydown, select } =
 )
 const promptInputRef = ref<InstanceType<typeof PromptInput> | null>(null)
 const chatStreamRef = ref<InstanceType<typeof AgentChatStream> | null>(null)
+
+// A subagent opened from the details drawer takes over the transcript area; the
+// modal otherwise belongs to its parent agent. Switching agents drops it, or the
+// next session would open on someone else's subagent.
+const openSubagent = ref<SubAgent | null>(null)
+watch(() => props.agent?.sessionId, () => {
+  openSubagent.value = null
+})
 
 const { getIdentity } = useAgentIdentity()
 const { resolveAgent } = usePermissionResolve()
@@ -98,7 +106,28 @@ watch(() => props.agent?.sessionId, (sessionId) => {
         button-text="Open →"
         @click="emit('navigate', agent.pipelineTaskId)"
       />
+      <template v-if="openSubagent">
+        <div class="flex items-center gap-2 px-4 py-2 border-b border-line text-xs flex-shrink-0">
+          <button
+            type="button"
+            class="text-accent hover:underline focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent rounded px-1"
+            data-testid="subagent-back"
+            @click="openSubagent = null"
+          >
+            ← Back to session
+          </button>
+          <span class="font-mono text-fg-mute">Subagent {{ openSubagent.id.substring(0, 16) }}</span>
+          <AppBadge :variant="openSubagent.status" />
+        </div>
+        <AgentChatStream
+          :agent="null"
+          :session-id="openSubagent.id"
+          data-testid="subagent-transcript"
+          class="flex-1 min-h-0 overflow-y-auto p-4"
+        />
+      </template>
       <AgentChatStream
+        v-else
         ref="chatStreamRef"
         :agent="agent"
         :local-messages="localMessages"
@@ -149,7 +178,7 @@ watch(() => props.agent?.sessionId, (sessionId) => {
             <ToolTimeline v-if="agent.lastTools.length > 0" :tools="agent.lastTools" />
             <HookEventList v-if="(agent.recentHookEvents?.length ?? 0) > 0" :events="agent.recentHookEvents ?? []" />
             <TaskList v-if="agent.tasks.length > 0" :tasks="agent.tasks" />
-            <SubAgentList v-if="agent.subagents.length > 0" :subagents="agent.subagents" />
+            <SubAgentList v-if="agent.subagents.length > 0" :subagents="agent.subagents" @open="openSubagent = $event" />
             <dl class="grid grid-cols-2 gap-x-4 gap-y-1 text-[13px]">
               <dt class="text-fg-mute">
                 Input tokens

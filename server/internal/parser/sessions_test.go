@@ -262,3 +262,40 @@ func TestParseOutputMessages_TaskCreateRealIDResolution(t *testing.T) {
 	require.NotNil(t, taskMsg.TaskID)
 	require.Equal(t, "real-task-id-42", *taskMsg.TaskID)
 }
+
+// A subagent transcript is a session in its own right, but it sits one level
+// deeper: <projects>/<encoded>/<parent>/subagents/<id>.jsonl. Resolving only the
+// top level left the dashboard unable to open a subagent at all.
+func TestLocateTranscript_FindsMainAndSubagentSessions(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("DASHBOARD_CLAUDE_CONFIG_DIRS", root)
+
+	const (
+		parentID = "22222222-2222-2222-2222-222222222222"
+		subID    = "33333333-3333-3333-3333-333333333333"
+	)
+	projectDir := filepath.Join(root, "projects", "-Users-someone-repo")
+	subDir := filepath.Join(projectDir, parentID, "subagents")
+	require.NoError(t, os.MkdirAll(subDir, 0o755))
+
+	parentPath := filepath.Join(projectDir, parentID+".jsonl")
+	subPath := filepath.Join(subDir, subID+".jsonl")
+	require.NoError(t, os.WriteFile(parentPath, []byte("{}\n"), 0o644))
+	require.NoError(t, os.WriteFile(subPath, []byte("{}\n"), 0o644))
+
+	require.Equal(t, parentPath, locateTranscript(parentID))
+	require.Equal(t, subPath, locateTranscript(subID))
+	require.Empty(t, locateTranscript("44444444-4444-4444-4444-444444444444"))
+}
+
+// A directory named like a session file must not be mistaken for one.
+func TestLocateTranscript_IgnoresDirectories(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("DASHBOARD_CLAUDE_CONFIG_DIRS", root)
+
+	const sessionID = "55555555-5555-5555-5555-555555555555"
+	decoy := filepath.Join(root, "projects", "-Users-someone-repo", sessionID+".jsonl")
+	require.NoError(t, os.MkdirAll(decoy, 0o755))
+
+	require.Empty(t, locateTranscript(sessionID))
+}

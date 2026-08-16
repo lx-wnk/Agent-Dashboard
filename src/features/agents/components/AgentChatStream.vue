@@ -11,6 +11,10 @@ defineOptions({ inheritAttrs: false })
 
 const props = defineProps<{
   agent: Agent | null
+  // A transcript that belongs to no running agent — a subagent's JSONL, which
+  // the output endpoint serves like any other session. Read-only: no channel
+  // replies (a subagent has no channel) and no polling loop.
+  sessionId?: string
   localMessages?: OutputMessage[]
   refreshIntervalMs?: number
 }>()
@@ -229,10 +233,20 @@ function stopRefresh() {
   }
 }
 
-watch(() => props.agent?.sessionId, (sessionId) => {
+watch(() => props.sessionId ?? props.agent?.sessionId, (sessionId) => {
   channelReplies.value = []
   lastReplyTimestamp = null
-  if (sessionId && !props.agent?.machine) {
+  stopRefresh()
+  if (!sessionId) {
+    sessionMessages.value = []
+    return
+  }
+  // A standalone transcript is historical: fetch it once, then leave it alone.
+  if (props.sessionId) {
+    fetchOutput(props.sessionId)
+    return
+  }
+  if (!props.agent?.machine) {
     fetchOutput(sessionId)
     fetchReplies(sessionId)
     startRefresh()
@@ -243,7 +257,7 @@ watch(() => props.agent?.sessionId, (sessionId) => {
 }, { immediate: true })
 
 watch(() => props.agent?.status, () => {
-  if (props.agent)
+  if (props.agent && !props.sessionId)
     startRefresh()
 })
 

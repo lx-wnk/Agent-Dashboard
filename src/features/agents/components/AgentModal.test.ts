@@ -152,3 +152,47 @@ describe('agentModal terminal tab', () => {
     expect(wrapper.find('[pid]').element).not.toBe(elementBeforeSwitch)
   })
 })
+
+describe('agentModal subagent transcript', () => {
+  const subagent = {
+    id: '33333333-3333-3333-3333-333333333333',
+    type: 'subagent',
+    status: 'completed',
+    currentAction: '',
+    sessionFile: '/tmp/x.jsonl',
+    tokensUsed: 0,
+    durationSeconds: 0,
+    latestOutput: '',
+  }
+
+  function mountWithSubagent() {
+    return mount(AgentModal, {
+      props: { agent: { ...baseAgent, subagents: [subagent] } as Agent },
+      global: { stubs: { ...stubs, SubAgentList: false, PromptInput: { template: '<div />', methods: { focus() {} } } } },
+    })
+  }
+
+  it('opens the subagent transcript in place of the session transcript', async () => {
+    const w = mountWithSubagent()
+    expect(w.find('[data-testid="subagent-transcript"]').exists()).toBe(false)
+
+    await w.get('[data-testid="subagent-open"]').trigger('click')
+    expect(w.get('[data-testid="subagent-transcript"]').attributes('sessionid')).toBe(subagent.id)
+  })
+
+  it('returns to the session transcript', async () => {
+    const w = mountWithSubagent()
+    await w.get('[data-testid="subagent-open"]').trigger('click')
+    await w.get('[data-testid="subagent-back"]').trigger('click')
+    expect(w.find('[data-testid="subagent-transcript"]').exists()).toBe(false)
+  })
+
+  // The modal is reused across agents; a stale subagent would open on the wrong session.
+  it('drops the open subagent when the modal switches agents', async () => {
+    const w = mountWithSubagent()
+    await w.get('[data-testid="subagent-open"]').trigger('click')
+
+    await w.setProps({ agent: { ...baseAgent, sessionId: 'other-session', subagents: [] } as Agent })
+    expect(w.find('[data-testid="subagent-transcript"]').exists()).toBe(false)
+  })
+})
