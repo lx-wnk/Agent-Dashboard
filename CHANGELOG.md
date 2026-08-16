@@ -175,6 +175,47 @@ Preparing the first public release.
 - Go dependencies moved to their current minor/patch releases: `chi` 5.3.1, `go-sdk` 1.7.0, `fsnotify` 1.10.1, `sqlite` 1.55.0, `libc` 1.74.1, and `x/sync`/`x/sys`/`x/term`. Two consequences worth knowing: chi 5.3.1 registers the HTTP `QUERY` method on wildcard mounts, which adds `QUERY /*` and `QUERY /api/plugins/{id}/proxy/*` to the route set — both are covered by the existing guards, because `RequireSameOriginForMutations` allowlists `GET`/`HEAD`/`OPTIONS` and treats every other method as a mutation, and the plugin proxy is mounted inside the authenticated group. And go-sdk 1.7.0 deprecates MCP logging (SEP-2577), which is how the dashboard delivers messages to a connected agent; the deprecation removes the feature rather than replacing it, so the call is kept and the warning suppressed at the call site until a different transport is designed. The SDK keeps it working for at least twelve months.
 - Every dropdown in the app is now a custom listbox instead of a native `<select>`. WKWebView renders native select popups as macOS system chrome — system font, light background, no dark mode — and CSS cannot reach the option list, so the desktop app showed foreign-looking dropdowns throughout. The replacement builds the option list from real DOM (ARIA select-only combobox: `role="combobox"` trigger, teleported `role="listbox"` panel, full keyboard support including type-ahead), so it is themed like the rest of the app in both the browser and the desktop shell. The migration also removed the styling drift the 31 native elements had accumulated: hardcoded `blue-500` focus borders, `focus:` rings that fired on click rather than only on keyboard, ring widths that disagreed with the app's 3px, and one plugin enum field that carried no styling at all — replacing the four ad-hoc vertical paddings with two deliberate size variants, `default` and `compact`, so a select renders at the same height as whichever sibling control it's paired with (WorkflowsView's filter bar, TemplatePicker). The compact selects in TaskDependenciesTab's dependency row are an intentional exception: they match the row's other 11px controls, not the taller `AppInput` beside them.
 - Desktop-shell build tasks renamed to the `build:`/`dev:` prefix used by every other task: `desktop:build` → **`build:desktop`**, plus a new **`dev:desktop`** for wails hot-reload. `build:all` stays server-only — the Playwright suite builds through it and must not start needing Xcode CLT — and the new **`build:everything`** adds the desktop shell on top. `build:frontend` is now `run: once`, so a chained build cannot compile the SPA twice.
+- Remaining German UI strings in `ProjectSettings` and `RefinementChat` translated to English.
+- `AgentModal` is now lazy-loaded, reducing the initial JS bundle size.
+- `ProjectRepo.Create` and `Update` accept `setup_command` (nullable).
+- `worktree.force` setting now defaults to `true` — pipeline tasks automatically create a git worktree per task without requiring explicit `SourceBranch`. Set to `false` to restore the previous opt-in behaviour.
+- Plugin route extensions now serve under `/api/plugins/{id}/proxy/*` and enable/disable
+  live via the lifecycle endpoints (`POST /api/plugins/{id}/activate|deactivate` — no
+  server restart). The interim `PATCH /api/settings/plugins-enabled/{id}` and
+  per-plugin boot-mounted routes are removed.
+- Agent card redesign — prominent, readable project name; a compact
+  cost · tokens · uptime metric row with the full labeled detail (last activity,
+  burn rate, cache costs) moved into a hover ⓘ popover and the agent modal; the
+  prompt input is now always docked at the bottom with a larger output area.
+- Accessibility: clickable agent rows are now native `<button>` elements, and the
+  agent-modal summary uses a higher-contrast token.
+- SSE poll and retry intervals are centralized in `src/utils/sse.ts` instead of
+  being hard-coded at call sites.
+- **BREAKING — env vars moved to DB-backed settings.** These `DASHBOARD_*` variables
+  are **no longer read** from the environment; configure them in the Settings UI or
+  with `dashboard settings set <key> <value>` (a still-set env var is ignored and
+  logs a warning on boot): `DASHBOARD_AUTH` → `auth.mode`,
+  `DASHBOARD_PROVIDERS_ENABLED` → `providers.enabled`,
+  `DASHBOARD_ALLOW_GIT_PUSH` → `git.allowPush`,
+  `DASHBOARD_ALLOW_GIT_PULL` → `git.allowPull`,
+  `DASHBOARD_FORCE_WORKTREES` → `worktree.force`,
+  `DASHBOARD_SSE_INTERVAL_MS` → `sse.intervalMs`,
+  `DASHBOARD_SHUTDOWN_TIMEOUT_SECONDS` → `shutdown.timeoutSeconds`,
+  `DASHBOARD_HOOKS_DEBOUNCE_MS` → `hooks.debounceMs`,
+  `DASHBOARD_HOOK_EVENTS_PER_SESSION` → `hooks.eventsPerSession`,
+  `DASHBOARD_SPAWN_RATE_LIMIT` / `DASHBOARD_SPAWN_RATE_WINDOW_MS` →
+  `spawn.rateLimit` / `spawn.rateWindowMs`,
+  `DASHBOARD_SPAWNER_ALLOWED_COMMANDS` → `spawn.allowedCommands`,
+  `DASHBOARD_INJECT_RATE_LIMIT` / `DASHBOARD_INJECT_RATE_WINDOW_MS` →
+  `inject.rateLimit` / `inject.rateWindowMs`,
+  `DASHBOARD_COST_SCAN_INTERVAL_MS` → `cost.scanIntervalMs`, and the
+  `DASHBOARD_EVAL_*` family → `eval.scanIntervalMs` / `eval.windowHours` /
+  `eval.minSamples` / `eval.rateDropPP` / `eval.stddevK`.
+- **BREAKING — plugins now default to all-off.** Previously every plugin found in the
+  plugin directory loaded automatically; you must now enable each plugin explicitly
+  (Plugins settings panel or `plugins.enabled`).
+- Apply semantics: plugin and provider enablement apply **live**; all other settings —
+  **including `auth.mode`** — require a **server restart** to take effect.
 
 - Interactive question answering no longer reads the JSONL transcript: both the **Needs you** triage band card and the Terminal tab's overlay are driven by the session's live rendered screen (see Added, above). The old flow only worked for tmux-backed sessions and left non-tmux sessions read-only; the new one works for any live-injectable session.
 
@@ -249,50 +290,6 @@ Preparing the first public release.
 - The agent bash allow-list filter now also rejects output redirection (`>`/`>>`/`<`), single-`&` backgrounding, and newline command separators, closing allow-list-widening patterns that could append to shell startup files or chain an extra command past the first-token check.
 - Provider session discovery now skips symbolic links, so a crafted symlink placed under a provider directory can no longer be read as a session file (arbitrary-file-read guard).
 - The dashboard-channel plugin now validates the `dashboard_reply` message argument and caps inbound `POST /message` bodies (64 KiB).
-
-### Changed
-
-- Remaining German UI strings in `ProjectSettings` and `RefinementChat` translated to English.
-- `AgentModal` is now lazy-loaded, reducing the initial JS bundle size.
-- `ProjectRepo.Create` and `Update` accept `setup_command` (nullable).
-- `worktree.force` setting now defaults to `true` — pipeline tasks automatically create a git worktree per task without requiring explicit `SourceBranch`. Set to `false` to restore the previous opt-in behaviour.
-- Plugin route extensions now serve under `/api/plugins/{id}/proxy/*` and enable/disable
-  live via the lifecycle endpoints (`POST /api/plugins/{id}/activate|deactivate` — no
-  server restart). The interim `PATCH /api/settings/plugins-enabled/{id}` and
-  per-plugin boot-mounted routes are removed.
-- Agent card redesign — prominent, readable project name; a compact
-  cost · tokens · uptime metric row with the full labeled detail (last activity,
-  burn rate, cache costs) moved into a hover ⓘ popover and the agent modal; the
-  prompt input is now always docked at the bottom with a larger output area.
-- Accessibility: clickable agent rows are now native `<button>` elements, and the
-  agent-modal summary uses a higher-contrast token.
-- SSE poll and retry intervals are centralized in `src/utils/sse.ts` instead of
-  being hard-coded at call sites.
-- **BREAKING — env vars moved to DB-backed settings.** These `DASHBOARD_*` variables
-  are **no longer read** from the environment; configure them in the Settings UI or
-  with `dashboard settings set <key> <value>` (a still-set env var is ignored and
-  logs a warning on boot): `DASHBOARD_AUTH` → `auth.mode`,
-  `DASHBOARD_PROVIDERS_ENABLED` → `providers.enabled`,
-  `DASHBOARD_ALLOW_GIT_PUSH` → `git.allowPush`,
-  `DASHBOARD_ALLOW_GIT_PULL` → `git.allowPull`,
-  `DASHBOARD_FORCE_WORKTREES` → `worktree.force`,
-  `DASHBOARD_SSE_INTERVAL_MS` → `sse.intervalMs`,
-  `DASHBOARD_SHUTDOWN_TIMEOUT_SECONDS` → `shutdown.timeoutSeconds`,
-  `DASHBOARD_HOOKS_DEBOUNCE_MS` → `hooks.debounceMs`,
-  `DASHBOARD_HOOK_EVENTS_PER_SESSION` → `hooks.eventsPerSession`,
-  `DASHBOARD_SPAWN_RATE_LIMIT` / `DASHBOARD_SPAWN_RATE_WINDOW_MS` →
-  `spawn.rateLimit` / `spawn.rateWindowMs`,
-  `DASHBOARD_SPAWNER_ALLOWED_COMMANDS` → `spawn.allowedCommands`,
-  `DASHBOARD_INJECT_RATE_LIMIT` / `DASHBOARD_INJECT_RATE_WINDOW_MS` →
-  `inject.rateLimit` / `inject.rateWindowMs`,
-  `DASHBOARD_COST_SCAN_INTERVAL_MS` → `cost.scanIntervalMs`, and the
-  `DASHBOARD_EVAL_*` family → `eval.scanIntervalMs` / `eval.windowHours` /
-  `eval.minSamples` / `eval.rateDropPP` / `eval.stddevK`.
-- **BREAKING — plugins now default to all-off.** Previously every plugin found in the
-  plugin directory loaded automatically; you must now enable each plugin explicitly
-  (Plugins settings panel or `plugins.enabled`).
-- Apply semantics: plugin and provider enablement apply **live**; all other settings —
-  **including `auth.mode`** — require a **server restart** to take effect.
 
 ### Removed
 
