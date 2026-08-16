@@ -337,6 +337,26 @@ func TestRequestPermissionWideningMetaShapes(t *testing.T) {
 		{"changes empty slice", map[string]any{"permission": map[string]any{"changes": []any{}}}, true},
 		{"changes absent, permission map", map[string]any{"permission": map[string]any{"mode": "acceptEdits"}}, false},
 		{"permission is an empty map", map[string]any{"permission": map[string]any{}}, true},
+		{
+			"capital P key (bypass shape: case-varied top-level key)",
+			map[string]any{"Permission": map[string]any{"changes": []any{
+				map[string]any{"operation": "set", "mode": "acceptEdits"},
+			}}},
+			false,
+		},
+		{
+			"sibling key beside empty changes (bypass shape: mode rides along)",
+			map[string]any{"permission": map[string]any{"mode": "acceptEdits", "changes": []any{}}},
+			false,
+		},
+		{
+			"two case-differing permission keys both present",
+			map[string]any{
+				"permission": map[string]any{"changes": []any{}},
+				"Permission": map[string]any{"changes": []any{}},
+			},
+			false,
+		},
 	}
 
 	for _, tt := range tests {

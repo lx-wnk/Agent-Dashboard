@@ -5,6 +5,7 @@ package acp
 import (
 	"context"
 	"errors"
+	"strings"
 
 	sdkacp "github.com/coder/acp-go-sdk"
 )
@@ -129,14 +130,28 @@ func (c *Client) RequestPermission(ctx context.Context, params sdkacp.RequestPer
 }
 
 // An option may carry a mode change in its _meta, which grants for the rest of
-// the session rather than for this call. This fails closed: only a small set
-// of shapes is positively recognized as harmless (no "permission" key, an
-// empty "permission" map, or a "changes" key holding an empty slice) -
-// everything else, including a "permission" map that omits "changes"
-// entirely, counts as widening.
+// the session rather than for this call. This fails closed: the top-level
+// _meta keys are matched against "permission" case-insensitively, and more
+// than one match is widening (ambiguous). A matched value that isn't a
+// map[string]any, or a map with more than one key, is widening. Recognized as
+// harmless: no match, an empty map, or a map whose only key is "changes"
+// holding an empty slice - everything else, including "changes" holding a
+// non-slice or non-empty value, counts as widening. The "changes" lookup
+// itself stays case-sensitive; only the top-level "permission" match folds
+// case.
 func widensSession(o sdkacp.PermissionOption) bool {
-	permRaw, ok := o.Meta["permission"]
-	if !ok {
+	var permRaw any
+	matched := false
+	for k, v := range o.Meta {
+		if !strings.EqualFold(k, "permission") {
+			continue
+		}
+		if matched {
+			return true
+		}
+		permRaw, matched = v, true
+	}
+	if !matched {
 		return false
 	}
 	perm, ok := permRaw.(map[string]any)
@@ -145,6 +160,9 @@ func widensSession(o sdkacp.PermissionOption) bool {
 	}
 	if len(perm) == 0 {
 		return false
+	}
+	if len(perm) != 1 {
+		return true
 	}
 	changesRaw, ok := perm["changes"]
 	if !ok {
