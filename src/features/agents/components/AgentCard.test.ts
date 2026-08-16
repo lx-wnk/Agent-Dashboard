@@ -33,6 +33,7 @@ const baseAgent: Agent = {
   toolCounts: {},
   channelAvailable: false,
   working: false,
+  permissionsBypassed: false,
   convergenceAlert: false,
   meta: null,
 }

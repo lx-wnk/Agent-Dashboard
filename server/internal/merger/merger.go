@@ -472,6 +472,7 @@ func (m *Merger) buildAgent(proc scanner.ProcessInfo, session *parser.SessionDat
 		Working:                   session.TurnOpen || discovery.recentOutput,
 		ChannelAvailable:          discovery.channelAvailable,
 		LiveInjectable:            discovery.liveInjectable,
+		PermissionsBypassed:       parser.PermissionsBypassedFromArgs(proc.Command),
 		PendingQuestion:           pendingQuestion,
 		PendingConfirm:            pendingConfirm,
 		Uptime:                    proc.Uptime,

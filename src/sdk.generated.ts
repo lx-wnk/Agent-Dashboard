@@ -339,6 +339,13 @@ export interface Agent {
    */
   working: boolean
   /**
+   * PermissionsBypassed is true when the process runs with
+   * --dangerously-skip-permissions or --permission-mode bypassPermissions, so it
+   * never stops for a tool-permission prompt. An unresolved tool_use in such a
+   * session means the tool is running, not that someone has to approve it.
+   */
+  permissionsBypassed: boolean
+  /**
    * LiveInjectable is true when the dashboard can deliver a prompt to this
    * running interactive session as real keyboard input — either via the pty
    * broker (`agent-dashboard ptyhost`) or `tmux send-keys`. When false, sending

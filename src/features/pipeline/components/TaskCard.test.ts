@@ -68,6 +68,7 @@ const baseAgent: Agent = {
   toolCounts: {},
   channelAvailable: false,
   working: false,
+  permissionsBypassed: false,
   convergenceAlert: false,
   pipelineTaskId: 'task-1',
   meta: null,
