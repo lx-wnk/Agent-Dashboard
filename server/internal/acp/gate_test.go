@@ -113,3 +113,104 @@ func TestPollingGateWithoutFileDenies(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, DecisionDeny, d)
 }
+
+func TestPollingGateWithdrawsOnTimeout(t *testing.T) {
+	var calls atomic.Int32
+	var gotID atomic.Value
+	g := gateFor(t, func(context.Context, string) (RequestStatus, error) { return StatusPending, nil })
+	g.Withdraw = func(ctx context.Context, id string) error {
+		calls.Add(1)
+		gotID.Store(id)
+		return nil
+	}
+
+	d, err := g.Decide(context.Background(), PermissionRequest{})
+	require.Error(t, err)
+	require.Equal(t, DecisionDeny, d)
+	require.Equal(t, int32(1), calls.Load())
+	require.Equal(t, "req-1", gotID.Load())
+}
+
+func TestPollingGateWithdrawsOnCallerCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	var calls atomic.Int32
+	var gotID atomic.Value
+	g := gateFor(t, func(context.Context, string) (RequestStatus, error) { return StatusPending, nil })
+	g.Withdraw = func(ctx context.Context, id string) error {
+		calls.Add(1)
+		gotID.Store(id)
+		return nil
+	}
+
+	d, err := g.Decide(ctx, PermissionRequest{})
+	require.Error(t, err)
+	require.Equal(t, DecisionDeny, d)
+	require.Equal(t, int32(1), calls.Load())
+	require.Equal(t, "req-1", gotID.Load())
+}
+
+func TestPollingGateDoesNotWithdrawWhenGranted(t *testing.T) {
+	var calls atomic.Int32
+	g := gateFor(t, func(context.Context, string) (RequestStatus, error) { return StatusGranted, nil })
+	g.Withdraw = func(context.Context, string) error { calls.Add(1); return nil }
+
+	d, err := g.Decide(context.Background(), PermissionRequest{})
+	require.NoError(t, err)
+	require.Equal(t, DecisionAllow, d)
+	require.Equal(t, int32(0), calls.Load())
+}
+
+func TestPollingGateDoesNotWithdrawWhenDenied(t *testing.T) {
+	var calls atomic.Int32
+	g := gateFor(t, func(context.Context, string) (RequestStatus, error) { return StatusDenied, nil })
+	g.Withdraw = func(context.Context, string) error { calls.Add(1); return nil }
+
+	d, err := g.Decide(context.Background(), PermissionRequest{})
+	require.NoError(t, err)
+	require.Equal(t, DecisionDeny, d)
+	require.Equal(t, int32(0), calls.Load())
+}
+
+func TestPollingGateDoesNotWithdrawWhenFilingFails(t *testing.T) {
+	var calls atomic.Int32
+	g := gateFor(t, func(context.Context, string) (RequestStatus, error) { return StatusGranted, nil })
+	g.File = func(context.Context, PermissionRequest) (string, error) { return "", errors.New("db down") }
+	g.Withdraw = func(context.Context, string) error { calls.Add(1); return nil }
+
+	d, err := g.Decide(context.Background(), PermissionRequest{})
+	require.Error(t, err)
+	require.Equal(t, DecisionDeny, d)
+	require.Equal(t, int32(0), calls.Load())
+}
+
+func TestPollingGateDoesNotWithdrawWhenUnwired(t *testing.T) {
+	var calls atomic.Int32
+	g := &PollingGate{Withdraw: func(context.Context, string) error { calls.Add(1); return nil }}
+
+	d, err := g.Decide(context.Background(), PermissionRequest{})
+	require.Error(t, err)
+	require.Equal(t, DecisionDeny, d)
+	require.Equal(t, int32(0), calls.Load())
+}
+
+func TestPollingGateWithdrawFailureDoesNotChangeOutcome(t *testing.T) {
+	g := gateFor(t, func(context.Context, string) (RequestStatus, error) { return StatusPending, nil })
+	g.Withdraw = func(context.Context, string) error { return errors.New("withdraw failed") }
+
+	d, err := g.Decide(context.Background(), PermissionRequest{})
+	require.Error(t, err)
+	require.Equal(t, DecisionDeny, d)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.NotContains(t, err.Error(), "withdraw failed")
+}
+
+func TestPollingGateWithdrawContextIsNotAlreadyCancelled(t *testing.T) {
+	g := gateFor(t, func(context.Context, string) (RequestStatus, error) { return StatusPending, nil })
+	g.Withdraw = func(ctx context.Context, id string) error {
+		require.NoError(t, ctx.Err(), "withdraw must not receive the already-cancelled ctx")
+		return nil
+	}
+
+	_, _ = g.Decide(context.Background(), PermissionRequest{})
+}

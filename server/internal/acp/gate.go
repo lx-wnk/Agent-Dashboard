@@ -19,6 +19,7 @@ const (
 const (
 	defaultPollInterval = 500 * time.Millisecond
 	defaultPollTimeout  = 30 * time.Minute
+	withdrawTimeout     = 5 * time.Second
 )
 
 // PollingGate answers an ACP permission request from the dashboard's
@@ -29,6 +30,11 @@ type PollingGate struct {
 	Status   func(ctx context.Context, id string) (RequestStatus, error)
 	Interval time.Duration
 	Timeout  time.Duration
+
+	// Withdraw releases a filed request when Decide gives up on it before it
+	// was resolved (timeout or caller cancellation), so it doesn't stay
+	// pending forever. Optional.
+	Withdraw func(ctx context.Context, id string) error
 }
 
 // Decide satisfies Client.OnPermission.
@@ -73,6 +79,7 @@ func (g *PollingGate) Decide(ctx context.Context, req PermissionRequest) (Permis
 
 		select {
 		case <-ctx.Done():
+			g.withdraw(ctx, id)
 			if lastErr != nil {
 				return DecisionDeny, fmt.Errorf("acp: permission request %s unresolved: %w", id, lastErr)
 			}
@@ -80,4 +87,18 @@ func (g *PollingGate) Decide(ctx context.Context, req PermissionRequest) (Permis
 		case <-ticker.C:
 		}
 	}
+}
+
+// withdraw releases a filed request that Decide is about to give up on. ctx
+// is already cancelled at this point, so it is used only for its values, via
+// context.WithoutCancel, bounded by withdrawTimeout to keep a misbehaving
+// Withdraw from stalling the caller. Errors are swallowed: a cleanup failure
+// must not change the deny decision or the unresolved-request error above.
+func (g *PollingGate) withdraw(ctx context.Context, id string) {
+	if g.Withdraw == nil {
+		return
+	}
+	wCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), withdrawTimeout)
+	defer cancel()
+	_ = g.Withdraw(wCtx, id)
 }
