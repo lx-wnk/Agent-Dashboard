@@ -1,6 +1,6 @@
 # OFD Runbook (main thread)
 
-Preconditions: an approved spec and an approved plan exist under `docs/superpowers/`. The plan records review cadence, parallelism, role overrides, and iteration cap.
+Preconditions: an approved spec and an approved plan exist under `docs/archive/specs/` and `docs/archive/plans/`. The plan records review cadence, parallelism, role overrides, and iteration cap.
 
 ## Execution model — main-thread orchestrated (default)
 
@@ -51,6 +51,6 @@ git worktree remove ../dashboard-wt-<feature>
 ```
 
 ## Validated lessons (first runs)
-- **Verifier lints untracked files:** the verifier's `pnpm lint` (antfu eslint) lints **untracked** files in the worktree too — a loose scratch/plan md causes a false RED. Keep only deliverables in the worktree; the approved plan lives under tracked `docs/superpowers/`.
+- **Verifier lints untracked files:** the verifier's `pnpm lint` (antfu eslint) lints **untracked** files in the worktree too — a loose scratch/plan md causes a false RED. Keep only deliverables in the worktree; the approved plan lives under tracked `docs/archive/plans/`.
 - **Stall on background dispatch (why main-thread is default):** on the first real run a spawned orchestrator that backgrounded children + waited via `Monitor` came to rest mid-task and stalled across multiple resumes. Main-thread orchestration removes the failure mode.
 - **Take-over hazard:** a "stalled" background orchestrator may still be running silently and will edit the worktree. If you take over concurrently, both edit the same tree. `TaskStop` the orchestrator BEFORE taking over.
