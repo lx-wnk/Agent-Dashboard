@@ -48,6 +48,7 @@ The tree has three tiers, and they are kept apart on purpose:
 | [0010](architecture/adr/0010-single-process-boundary.md) | Local-first single-process boundary |
 | [0011](architecture/adr/0011-cross-language-ssot-parity.md) | Cross-language SSOT parity enforcement |
 | [0012](architecture/adr/0012-plugin-domain-boundaries.md) | Plugin domain package boundaries |
+| [0013](architecture/adr/0013-remote-spawner-nodes.md) | Remote spawner nodes (proposed) |
 
 ## Delivery harness
 
