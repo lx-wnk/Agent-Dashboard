@@ -89,3 +89,5 @@ require (
 replace github.com/lx-wnk/agent-dashboard/server => ../server
 
 replace github.com/lx-wnk/agent-dashboard/sdk => ../sdk
+
+replace github.com/coder/acp-go-sdk => github.com/lx-wnk/acp-go-sdk v1.20.0-lxwnk.alpha.1
