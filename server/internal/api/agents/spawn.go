@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
@@ -292,8 +293,17 @@ func (m *SpawnManager) buildSpawnArgs(req *spawnRequest, spawnerRow *ent.Spawner
 	}
 
 	var canonicalArgs []string
-	if req.resumeSessionID != "" {
+	switch {
+	case req.resumeSessionID != "":
 		canonicalArgs = append(canonicalArgs, "--resume", req.resumeSessionID)
+	case nativeClaudeAdapter(spawnerRow):
+		// Pin the session up front. Claude writes sessions/{pid}.json only after
+		// startup, and until it exists the resolver falls back to "newest session
+		// file in this project with recent activity" — which is the *running*
+		// agent's session when the folder already has one. The new agent then
+		// shows the old agent's transcript. An id in argv is visible on the very
+		// first scan tick (parser.SessionIDFromArgs).
+		canonicalArgs = append(canonicalArgs, "--session-id", uuid.NewString())
 	}
 	if req.model != "" {
 		canonicalArgs = append(canonicalArgs, "--model", req.model)
@@ -332,6 +342,13 @@ func (m *SpawnManager) buildSpawnArgs(req *spawnRequest, spawnerRow *ent.Spawner
 		args = append(args, req.prompt)
 	}
 	return binary, args, nil
+}
+
+// nativeClaudeAdapter reports whether the resolved spawner runs the claude CLI
+// itself, so claude-only flags are safe to add. Custom adapters run an arbitrary
+// binary and would choke on them.
+func nativeClaudeAdapter(spawnerRow *ent.Spawner) bool {
+	return spawnerRow == nil || spawnerRow.AdapterType == "" || spawnerRow.AdapterType == "claude"
 }
 
 // Spawn validates the request, spawns a claude process, and returns the PID.
