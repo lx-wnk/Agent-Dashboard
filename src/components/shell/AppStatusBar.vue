@@ -2,6 +2,7 @@
 import type { SystemInfo } from '../../composables/useSystemResources'
 import type { UsageData, WindowData } from '../../composables/useUsage'
 import { computed } from 'vue'
+import { useBuildVersion } from '../../composables/useBuildVersion'
 import { useStatusBar } from '../../composables/useStatusBar'
 import { useSystemResources } from '../../composables/useSystemResources'
 
@@ -12,6 +13,7 @@ const props = defineProps<{
 }>()
 
 const { collapsed, openSegment, toggleSegment, toggleCollapsed } = useStatusBar()
+const { version } = useBuildVersion()
 const resources = useSystemResources()
 // Explicitly read .value so this works with both a real Ref<SystemInfo> (production)
 // and a plain { value: SystemInfo } object returned by the test mock.
@@ -107,6 +109,9 @@ function formatDelta(d: number | null): string {
         <div>MEM <span data-testid="mem-pct" :class="metricTextClass(systemInfo.memory.usagePercent)">{{ Math.round(systemInfo.memory.usagePercent) }}%</span></div>
         <div>DISK <span :class="metricTextClass(systemInfo.disk.usagePercent)">{{ Math.round(systemInfo.disk.usagePercent) }}%</span></div>
         <div>LOAD {{ systemInfo.loadAvg.map(l => l.toFixed(2)).join(' ') }}</div>
+      </div>
+      <div v-if="version" data-testid="build-version" class="mt-2 pt-2 border-t border-line font-mono">
+        BUILD {{ version }}
       </div>
     </div>
     <div v-if="openSegment === 'cost'" data-testid="panel-cost" class="px-4 py-3 border-b border-line text-[12px] text-fg-mute font-mono flex flex-col gap-1">

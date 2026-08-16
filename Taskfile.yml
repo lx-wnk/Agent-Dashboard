@@ -92,7 +92,12 @@ tasks:
       # -tags production selects the real wails app (the untagged build errors at
       # runtime); the extldflags links UniformTypeIdentifiers, which wails needs
       # on the macOS 15 SDK but a plain `go build` omits.
-      - cd desktop && CGO_ENABLED=1 go build -tags production -ldflags "-extldflags '-framework UniformTypeIdentifiers'" -o ../bin/agent-dashboard-desktop .
+      # The version is stamped here too: a desktop window that cannot name its
+      # own build is indistinguishable from a stale one (see /api/system/health).
+      - cd desktop && CGO_ENABLED=1 go build -tags production -ldflags "-X github.com/lx-wnk/agent-dashboard/server/internal/version.Version={{.VERSION}} -extldflags '-framework UniformTypeIdentifiers'" -o ../bin/agent-dashboard-desktop .
+    vars:
+      VERSION:
+        sh: git describe --tags --always --dirty 2>/dev/null || echo dev
 
   desktop:run:
     desc: Build and launch the macOS desktop shell for a smoke test
@@ -115,10 +120,13 @@ tasks:
       # Same production tag + UniformTypeIdentifiers ldflag as build:desktop, driven
       # through `wails build` so it also renders desktop/wails.json + Info.plist into
       # a real .app bundle instead of a bare Mach-O binary.
-      - cd desktop && $(go env GOPATH)/bin/wails build -clean -tags production -ldflags "-extldflags '-framework UniformTypeIdentifiers'"
+      - cd desktop && $(go env GOPATH)/bin/wails build -clean -tags production -ldflags "-X github.com/lx-wnk/agent-dashboard/server/internal/version.Version={{.VERSION}} -extldflags '-framework UniformTypeIdentifiers'"
       - mkdir -p bin
       - rm -rf "bin/Agent Dashboard.app"
       - cp -R "desktop/build/bin/Agent Dashboard.app" bin/
+    vars:
+      VERSION:
+        sh: git describe --tags --always --dirty 2>/dev/null || echo dev
 
   desktop:dmg:
     desc: Package bin/Agent Dashboard.app into an unsigned bin/Agent Dashboard.dmg (via hdiutil, no external tool needed)

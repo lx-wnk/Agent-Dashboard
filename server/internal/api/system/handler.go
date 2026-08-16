@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"runtime"
 	"time"
+
+	"github.com/lx-wnk/agent-dashboard/server/internal/version"
 )
 
 var startTime = time.Now()
@@ -18,5 +20,6 @@ func HealthHandler(w http.ResponseWriter, r *http.Request) {
 		"uptime":   time.Since(startTime).Seconds(),
 		"go":       runtime.Version(),
 		"platform": runtime.GOOS,
+		"version":  version.Version,
 	})
 }
