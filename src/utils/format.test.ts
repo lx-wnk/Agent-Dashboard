@@ -1,6 +1,6 @@
 import type { TokenUsage } from '../types'
 import { describe, expect, it } from 'vitest'
-import { formatBurnRate, formatCost, formatRelativeActivity, formatTokens, formatUptime, isStalled, maskToken, secondsSince, shortModel, STALLED_THRESHOLD_SECONDS, totalTokenCount } from './format'
+import { formatBurnRate, formatCost, formatRelativeActivity, formatTokens, formatUptime, isAwaitingInput, isStalled, maskToken, secondsSince, shortModel, STALLED_THRESHOLD_SECONDS, totalTokenCount } from './format'
 
 describe('totalTokenCount', () => {
   it('sums all four token fields', () => {
@@ -320,5 +320,26 @@ describe('isStalled', () => {
 
   it('sTALLED_THRESHOLD_SECONDS is 180', () => {
     expect(STALLED_THRESHOLD_SECONDS).toBe(180)
+  })
+})
+
+describe('isAwaitingInput', () => {
+  // The marker answers "will anything happen here without me?" — so it must not
+  // fire while a tool runs, and must not claim a dead process can be continued.
+  it('marks a live session that has stopped on its own', () => {
+    expect(isAwaitingInput({ status: 'idle', working: false })).toBe(true)
+    expect(isAwaitingInput({ status: 'active', working: false })).toBe(true)
+  })
+
+  it('stays silent while the agent is working', () => {
+    expect(isAwaitingInput({ status: 'active', working: true })).toBe(false)
+  })
+
+  it('stays silent for a finished agent — its process is gone', () => {
+    expect(isAwaitingInput({ status: 'finished', working: false })).toBe(false)
+  })
+
+  it('stays silent when the flag is missing rather than guessing', () => {
+    expect(isAwaitingInput({ status: 'active' })).toBe(false)
   })
 })

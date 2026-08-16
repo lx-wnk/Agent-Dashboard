@@ -200,3 +200,22 @@ describe('agentCard finished state', () => {
     expect(wrapper.emitted('dismiss')?.[0]).toEqual([4242])
   })
 })
+
+describe('agentCard your-turn marker', () => {
+  const badgeStubs = { MachineBadge: true, ProviderBadge: true, PromptInput: true }
+
+  it('marks a live agent that stopped on its own', () => {
+    const w = mount(AgentCard, { props: { agent: { ...baseAgent, status: 'idle', working: false } }, global: { stubs: badgeStubs } })
+    expect(w.get('[data-testid="agent-awaiting-input"]').text()).toBe('your turn')
+  })
+
+  it('shows nothing while the agent is working', () => {
+    const w = mount(AgentCard, { props: { agent: { ...baseAgent, status: 'active', working: true } }, global: { stubs: badgeStubs } })
+    expect(w.find('[data-testid="agent-awaiting-input"]').exists()).toBe(false)
+  })
+
+  it('shows nothing for a finished agent — there is nothing to continue', () => {
+    const w = mount(AgentCard, { props: { agent: { ...baseAgent, status: 'finished', working: false } }, global: { stubs: badgeStubs } })
+    expect(w.find('[data-testid="agent-awaiting-input"]').exists()).toBe(false)
+  })
+})

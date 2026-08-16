@@ -9,7 +9,7 @@ import AppCard from '@/components/ui/AppCard.vue'
 import { useNow } from '@/composables/useNow'
 import MetricsPopover from '@/features/agents/components/MetricsPopover.vue'
 import { useAgentIdentity } from '@/features/agents/composables/useAgentIdentity'
-import { formatCost, formatDuration, formatTokens, formatUptime, isStalled, secondsSince, shortModel, totalTokenCount } from '@/utils/format'
+import { formatCost, formatDuration, formatTokens, formatUptime, isAwaitingInput, isStalled, secondsSince, shortModel, totalTokenCount } from '@/utils/format'
 import { friendlyProjectName } from '@/utils/friendlyProjectName'
 
 const props = defineProps<{ agent: Agent }>()
@@ -55,6 +55,7 @@ const healthChipClass = computed(() => {
 
 const secSince = computed(() => secondsSince(props.agent.lastActivity, nowMs.value))
 const stalled = computed(() => isStalled(props.agent.status, secSince.value))
+const awaitingInput = computed(() => isAwaitingInput(props.agent))
 
 const activeSubagents = computed(() => props.agent.subagents.filter(s => s.status === 'active'))
 
@@ -89,6 +90,12 @@ const showMetrics = ref(false)
           class="text-[10px] font-medium px-1 py-0.5 rounded bg-warning-soft text-warning-text whitespace-nowrap"
           title="Agent is active but has produced no output for 3+ minutes"
         >stalled</span>
+        <span
+          v-else-if="awaitingInput"
+          data-testid="agent-awaiting-input"
+          class="text-[10px] font-medium px-1 py-0.5 rounded bg-neutral-soft text-neutral-text whitespace-nowrap"
+          title="The agent finished its turn — it will not do anything else until you send it something"
+        >your turn</span>
         <span class="shrink-0" aria-hidden="true">{{ getIdentity(agent.projectPath).emoji }}</span>
         <span
           class="font-semibold text-[13px] text-fg flex-1 min-w-0 whitespace-nowrap overflow-hidden text-ellipsis"
