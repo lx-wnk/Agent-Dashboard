@@ -214,3 +214,38 @@ func TestPollingGateWithdrawContextIsNotAlreadyCancelled(t *testing.T) {
 
 	_, _ = g.Decide(context.Background(), PermissionRequest{})
 }
+
+func TestPollingGateZeroIntervalFallsBackToDefault(t *testing.T) {
+	// time.NewTicker panics on a non-positive duration, so an unguarded zero
+	// Interval would take the whole process down rather than deny.
+	g := &PollingGate{
+		File:    func(context.Context, PermissionRequest) (string, error) { return "req-1", nil },
+		Status:  func(context.Context, string) (RequestStatus, error) { return StatusGranted, nil },
+		Timeout: 50 * time.Millisecond,
+	}
+
+	d, err := g.Decide(context.Background(), PermissionRequest{})
+	require.NoError(t, err)
+	require.Equal(t, DecisionAllow, d)
+}
+
+func TestPollingGateZeroTimeoutFallsBackToDefault(t *testing.T) {
+	// context.WithTimeout(ctx, 0) is already expired, so an unguarded zero
+	// Timeout would deny on the first poll instead of waiting for an answer.
+	var calls atomic.Int32
+	g := &PollingGate{
+		File: func(context.Context, PermissionRequest) (string, error) { return "req-1", nil },
+		Status: func(context.Context, string) (RequestStatus, error) {
+			if calls.Add(1) < 2 {
+				return StatusPending, nil
+			}
+			return StatusGranted, nil
+		},
+		Interval: time.Millisecond,
+	}
+
+	d, err := g.Decide(context.Background(), PermissionRequest{})
+	require.NoError(t, err)
+	require.Equal(t, DecisionAllow, d)
+	require.GreaterOrEqual(t, calls.Load(), int32(2), "gate must poll again rather than give up immediately")
+}
