@@ -42,6 +42,7 @@ func RunPTY(ctx context.Context, command []string) error {
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 
+	// #nosec G204 -- command is the local operator's CLI argv (hidden `ptyhost` subcommand) or the hardcoded "claude" of `live`; no HTTP route reaches RunPTY and argv is passed without a shell.
 	cmd := exec.CommandContext(ctx, command[0], command[1:]...)
 	ptmx, err := pty.Start(cmd)
 	if err != nil {

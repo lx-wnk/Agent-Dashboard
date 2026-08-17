@@ -36,6 +36,7 @@ func (c whisperCLI) Transcribe(ctx context.Context, audioPath string) (string, e
 	wav := audioPath + ".wav"
 	defer func() { _ = os.Remove(wav) }()
 	// -ar 16000 -ac 1: whisper.cpp expects 16kHz mono.
+	// #nosec G204 -- ffmpegBin comes from the server process environment via the plugin descriptor allow-list (buildPluginEnv), never from DB settings or a request; audioPath is an os.CreateTemp path, not the upload filename.
 	conv := exec.CommandContext(ctx, c.ffmpegBin, "-y", "-i", audioPath,
 		"-ar", "16000", "-ac", "1", wav)
 	if out, err := conv.CombinedOutput(); err != nil {
@@ -46,6 +47,7 @@ func (c whisperCLI) Transcribe(ctx context.Context, audioPath string) (string, e
 	defer func() { _ = os.Remove(outBase + ".txt") }()
 	// whisper.cpp: -otxt writes <outBase>.txt; -l auto detects language per clip
 	// (requires a multilingual model — the *.en models are English-only).
+	// #nosec G204 -- whisperBin, modelPath and lang all come from the server process environment via the plugin descriptor allow-list (buildPluginEnv); no request or DB setting can reach them.
 	w := exec.CommandContext(ctx, c.whisperBin, "-m", c.modelPath, "-f", wav,
 		"-l", c.lang, "-otxt", "-of", outBase, "-nt")
 	if out, err := w.CombinedOutput(); err != nil {

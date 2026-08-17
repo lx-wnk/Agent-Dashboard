@@ -263,6 +263,7 @@ func (h *Handler) taskRunHandler(w http.ResponseWriter, r *http.Request) error {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
+	// #nosec G204 -- args is a value of the compile-time allowedCommands table (LookPath-resolved git/pnpm plus fixed flags); the request body only selects a key and an unknown key is rejected with 400.
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 	cmd.Dir = cwd
 	var stdout, stderr bytes.Buffer

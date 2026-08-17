@@ -241,6 +241,7 @@ func buildExecCommand(sp *ent.Spawner, args []string) *exec.Cmd {
 	combined := make([]string, 0, len(sp.Args)+len(args))
 	combined = append(combined, sp.Args...)
 	combined = append(combined, args...)
+	// #nosec G204 -- sp.Command/sp.Args come from the admin-gated spawner CRUD (RequireAdminOrBypass on /api/spawners); task data only reaches argv, which exec.Command passes without a shell.
 	return exec.Command(sp.Command, combined...)
 }
 

@@ -68,6 +68,7 @@ func (r *Runner) run(ctx context.Context, cwd string, combined bool, args ...str
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+	// #nosec G204 -- r.bin is the PATH-resolved git binary from NewRunner, never caller-supplied; caller-supplied branch names and paths reach argv only, which exec.CommandContext passes without a shell.
 	cmd := exec.CommandContext(ctx, r.bin, args...)
 	cmd.Dir = cwd
 	if combined {

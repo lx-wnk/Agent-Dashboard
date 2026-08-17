@@ -127,6 +127,7 @@ func (s *ACPSpawner) connect(ctx context.Context, client *acp.Client) (acpConn, 
 	if s.Command == "" {
 		return nil, nil, nil, fmt.Errorf("acp adapter: no command configured")
 	}
+	// #nosec G204 -- s.Command/s.Args come from the acp spawner row's adapter_config (keys allow-listed by ValidateAdapterConfig), writable only through the admin-gated /api/spawners CRUD; argv is passed without a shell.
 	cmd := exec.CommandContext(ctx, s.Command, s.Args...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	var stderrBuf syncBuffer

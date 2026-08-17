@@ -431,6 +431,7 @@ func (m *SpawnManager) launchInteractive(binary string, args, env []string, cwd,
 	switch selectHeadlessTransport(lookTmuxPath()) {
 	case transportTmux:
 		session := "claude-spawn-" + newSpawnID()
+		// #nosec G204 -- the executed binary is the literal "tmux"; the child binary is claudeBin unless an admin-gated spawner row passed services.ValidateSpawnerCommand, and request-derived values are separate argv elements of tmux's multi-arg form (execvp, no shell).
 		cmd := exec.Command("tmux", buildTmuxArgs(session, env, binary, args)...)
 		cmd.Dir = cwd
 		var buf bytes.Buffer

@@ -27,6 +27,7 @@ func (c *CustomCommandSpawner) Spawn(ctx context.Context, args LLMSpawnArgs) (LL
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
+	// #nosec G204 -- c.Command is either the resolved anthropic-spawner path or a spawner row's command column, which ValidateSpawnerCommand allow-lists on create and update at the admin-gated /api/spawners routes.
 	cmd := exec.CommandContext(ctx, c.Command)
 	cmd.Stdin = bytes.NewReader(argsJSON)
 	var stderrBuf bytes.Buffer
@@ -51,6 +52,7 @@ func (c *CustomCommandSpawner) SpawnStream(ctx context.Context, args LLMSpawnArg
 	if err != nil {
 		return nil, fmt.Errorf("CustomCommandSpawner.SpawnStream: marshal args: %w", err)
 	}
+	// #nosec G204 -- c.Command is either the resolved anthropic-spawner path or a spawner row's command column, which ValidateSpawnerCommand allow-lists on create and update at the admin-gated /api/spawners routes.
 	cmd := exec.CommandContext(ctx, c.Command)
 	cmd.Stdin = bytes.NewReader(argsJSON)
 	stdout, err := cmd.StdoutPipe()

@@ -48,6 +48,11 @@ linters:
       - third_party$
       - builtin$
       - examples$
+issues:
+  # Defaults cap identical findings at 3 per linter, so a gate can look clean
+  # while duplicates of an already-reported issue stay hidden.
+  max-issues-per-linter: 0
+  max-same-issues: 0
 formatters:
   enable:
     - gofmt
