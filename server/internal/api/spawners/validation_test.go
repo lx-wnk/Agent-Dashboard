@@ -65,3 +65,40 @@ func TestValidateAdapterConfig_OllamaUnaffectedByCommandCheck(t *testing.T) {
 	require.True(t, ok)
 	require.Empty(t, msg)
 }
+
+func TestValidateAdapterConfig_AcpAcceptsTheDocumentedDefaultArgs(t *testing.T) {
+	// The bundled ACP default is npx WITH a package argument — the exact shape a
+	// naive path rule would wrongly reject.
+	msg, ok := ValidateAdapterConfig("acp", map[string]string{
+		"args": "-y @agentclientprotocol/claude-agent-acp@0.68.0",
+	})
+	require.True(t, ok, "documented ACP default args must stay valid, got %q", msg)
+}
+
+func TestValidateAdapterConfig_AcpRejectsAbsolutePathArg(t *testing.T) {
+	msg, ok := ValidateAdapterConfig("acp", map[string]string{
+		"command": "/bin/sh",
+		"args":    "/tmp/payload.sh",
+	})
+	require.False(t, ok)
+	require.Contains(t, msg, "adapter_config.args")
+}
+
+func TestValidateAdapterConfig_AcpRejectsRelativePathArg(t *testing.T) {
+	msg, ok := ValidateAdapterConfig("acp", map[string]string{
+		"command": "/bin/sh",
+		"args":    "./payload.sh",
+	})
+	require.False(t, ok)
+	require.Contains(t, msg, "adapter_config.args")
+}
+
+func TestValidateAdapterConfig_AcpAcceptsTrustedPathArg(t *testing.T) {
+	msg, ok := ValidateAdapterConfig("acp", map[string]string{"args": "/bin/sh"})
+	require.True(t, ok, "a path arg under a trusted bin dir must pass, got %q", msg)
+}
+
+func TestValidateAdapterConfig_AcpAcceptsEmptyArgs(t *testing.T) {
+	msg, ok := ValidateAdapterConfig("acp", map[string]string{"args": ""})
+	require.True(t, ok, "an empty args value must stay valid, got %q", msg)
+}
