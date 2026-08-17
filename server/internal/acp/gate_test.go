@@ -215,37 +215,49 @@ func TestPollingGateWithdrawContextIsNotAlreadyCancelled(t *testing.T) {
 	_, _ = g.Decide(context.Background(), PermissionRequest{})
 }
 
-func TestPollingGateZeroIntervalFallsBackToDefault(t *testing.T) {
-	// time.NewTicker panics on a non-positive duration, so an unguarded zero
-	// Interval would take the whole process down rather than deny.
-	g := &PollingGate{
-		File:    func(context.Context, PermissionRequest) (string, error) { return "req-1", nil },
-		Status:  func(context.Context, string) (RequestStatus, error) { return StatusGranted, nil },
-		Timeout: 50 * time.Millisecond,
-	}
+func TestPollingGateNonPositiveIntervalFallsBackToDefault(t *testing.T) {
+	// time.NewTicker panics on a non-positive duration. Client.ask contains that
+	// panic into a transient deny (client.go:145-152), so the guard is what makes
+	// the default interval actually apply rather than what prevents a crash.
+	for _, interval := range []time.Duration{0, -time.Second} {
+		g := &PollingGate{
+			File:     func(context.Context, PermissionRequest) (string, error) { return "req-1", nil },
+			Status:   func(context.Context, string) (RequestStatus, error) { return StatusGranted, nil },
+			Interval: interval,
+			Timeout:  50 * time.Millisecond,
+		}
 
-	d, err := g.Decide(context.Background(), PermissionRequest{})
-	require.NoError(t, err)
-	require.Equal(t, DecisionAllow, d)
+		d, err := g.Decide(context.Background(), PermissionRequest{})
+		require.NoError(t, err, "interval %s", interval)
+		require.Equal(t, DecisionAllow, d, "interval %s", interval)
+	}
 }
 
-func TestPollingGateZeroTimeoutFallsBackToDefault(t *testing.T) {
-	// context.WithTimeout(ctx, 0) is already expired, so an unguarded zero
-	// Timeout would deny on the first poll instead of waiting for an answer.
-	var calls atomic.Int32
-	g := &PollingGate{
-		File: func(context.Context, PermissionRequest) (string, error) { return "req-1", nil },
-		Status: func(context.Context, string) (RequestStatus, error) {
-			if calls.Add(1) < 2 {
-				return StatusPending, nil
-			}
-			return StatusGranted, nil
-		},
-		Interval: time.Millisecond,
-	}
+func TestPollingGateNonPositiveTimeoutFallsBackToDefault(t *testing.T) {
+	// context.WithTimeout(ctx, 0) is already expired, so an unguarded non-positive
+	// Timeout denies on the first poll instead of waiting for an answer. The caller
+	// context is bounded so a regression that stops observing StatusGranted fails
+	// here rather than running into the default timeout of 30 minutes.
+	for _, timeout := range []time.Duration{0, -time.Second} {
+		var calls atomic.Int32
+		g := &PollingGate{
+			File: func(context.Context, PermissionRequest) (string, error) { return "req-1", nil },
+			Status: func(context.Context, string) (RequestStatus, error) {
+				if calls.Add(1) < 2 {
+					return StatusPending, nil
+				}
+				return StatusGranted, nil
+			},
+			Interval: time.Millisecond,
+			Timeout:  timeout,
+		}
 
-	d, err := g.Decide(context.Background(), PermissionRequest{})
-	require.NoError(t, err)
-	require.Equal(t, DecisionAllow, d)
-	require.GreaterOrEqual(t, calls.Load(), int32(2), "gate must poll again rather than give up immediately")
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		d, err := g.Decide(ctx, PermissionRequest{})
+		cancel()
+
+		require.NoError(t, err, "timeout %s", timeout)
+		require.Equal(t, DecisionAllow, d, "timeout %s", timeout)
+		require.Equal(t, int32(2), calls.Load(), "gate must poll exactly until granted, timeout %s", timeout)
+	}
 }
