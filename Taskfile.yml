@@ -155,10 +155,13 @@ tasks:
     cmd: go test -race ./... -count=1
 
   lint:
-    desc: Run golangci-lint (all modules)
+    desc: Run golangci-lint and the formatter check (all modules)
     cmds:
-      - cd sdk && golangci-lint run ./...
-      - cd server && golangci-lint run ./...
+      # `run` reports only some formatting violations; `fmt --diff` reports all
+      # of them and exits non-zero on any diff.
+      - cd sdk && golangci-lint fmt --diff ./... && golangci-lint run ./...
+      - cd server && golangci-lint fmt --diff ./... && golangci-lint run ./...
+      - for d in plugins/*/; do (cd "$d" && GOWORK=off golangci-lint fmt --diff ./... && GOWORK=off golangci-lint run ./...) || exit 1; done
 
   generate:
     desc: Run go generate (ent schemas) and tygo TS codegen
@@ -184,4 +187,4 @@ tasks:
 
   fmt:
     desc: Format all Go code
-    cmd: gofmt -w sdk/ server/
+    cmd: gofmt -w sdk/ server/ plugins/
