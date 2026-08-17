@@ -108,7 +108,7 @@ func TestClientReceivesUpdatesOverAConnection(t *testing.T) {
 
 	select {
 	case e := <-events:
-		require.Equal(t, "agent_message", e.Kind)
+		require.Equal(t, KindAgentMessage, e.Kind)
 		require.Equal(t, "pong", e.Text)
 	case <-ctx.Done():
 		t.Fatal("no session update arrived")

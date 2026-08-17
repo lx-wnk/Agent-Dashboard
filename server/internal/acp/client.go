@@ -5,6 +5,7 @@ package acp
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 
 	sdkacp "github.com/coder/acp-go-sdk"
@@ -34,13 +35,28 @@ type PermissionRequest struct {
 	RawInput any
 }
 
+// EventKind classifies a normalized session update. Every value Event.Kind can
+// carry is named here; a session update this package does not map lands on
+// KindOther.
+type EventKind string
+
+const (
+	KindOther          EventKind = "other"
+	KindAgentMessage   EventKind = "agent_message"
+	KindAgentThought   EventKind = "agent_thought"
+	KindToolCall       EventKind = "tool_call"
+	KindToolCallUpdate EventKind = "tool_call_update"
+	KindPlan           EventKind = "plan"
+	KindMode           EventKind = "mode"
+)
+
 // Event is a normalized session update.
 type Event struct {
 	SessionID  string
-	Kind       string
+	Kind       EventKind
 	Text       string
 	ToolCallID string
-	Status     string
+	Status     sdkacp.ToolCallStatus
 }
 
 // Client implements sdkacp.Client.
@@ -64,45 +80,90 @@ var _ sdkacp.Client = (*Client)(nil)
 
 var errUnsupported = errors.New("acp: capability not offered by this client")
 
+// denyReason separates a gate that considered the request and refused it from
+// one that never reached a verdict. Only the former may be answered with
+// reject_always, which the agent remembers for the rest of the session.
+type denyReason int
+
+const (
+	denySubstantive denyReason = iota
+	denyTransient
+)
+
 func (c *Client) SessionUpdate(ctx context.Context, params sdkacp.SessionNotification) error {
 	if c.OnEvent == nil {
 		return nil
 	}
-	e := Event{SessionID: string(params.SessionId), Kind: "other"}
+	e := Event{SessionID: string(params.SessionId), Kind: KindOther}
 	switch u := params.Update; {
 	case u.AgentMessageChunk != nil:
-		e.Kind = "agent_message"
+		e.Kind = KindAgentMessage
 		if t := u.AgentMessageChunk.Content.Text; t != nil {
 			e.Text = t.Text
 		}
 	case u.AgentThoughtChunk != nil:
-		e.Kind = "agent_thought"
+		e.Kind = KindAgentThought
 		if t := u.AgentThoughtChunk.Content.Text; t != nil {
 			e.Text = t.Text
 		}
 	case u.ToolCall != nil:
-		e.Kind = "tool_call"
+		e.Kind = KindToolCall
 		e.ToolCallID = string(u.ToolCall.ToolCallId)
 		e.Text = u.ToolCall.Title
-		e.Status = string(u.ToolCall.Status)
+		e.Status = u.ToolCall.Status
 	case u.ToolCallUpdate != nil:
-		e.Kind = "tool_call_update"
+		e.Kind = KindToolCallUpdate
 		e.ToolCallID = string(u.ToolCallUpdate.ToolCallId)
 		if s := u.ToolCallUpdate.Status; s != nil {
-			e.Status = string(*s)
+			e.Status = *s
 		}
 	case u.Plan != nil:
-		e.Kind = "plan"
+		e.Kind = KindPlan
 	case u.CurrentModeUpdate != nil:
-		e.Kind = "mode"
+		e.Kind = KindMode
 		e.Text = string(u.CurrentModeUpdate.CurrentModeId)
 	}
-	c.OnEvent(e)
+	c.emit(e)
 	return nil
+}
+
+// emit contains a panicking consumer. OnEvent runs on the SDK's single
+// notification goroutine, which recovers nothing, so an unguarded panic there
+// takes the whole process down. The event is dropped, the connection lives on.
+func (c *Client) emit(e Event) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("acp: OnEvent panicked, dropping event", "kind", e.Kind, "sessionID", e.SessionID, "panic", r)
+		}
+	}()
+	c.OnEvent(e)
+}
+
+// ask calls the gate. The named results carry the fail-closed answer before
+// the gate is entered, so a panic leaves a transient deny in place: a panicking
+// gate must neither authorize the call nor kill the process from the SDK's
+// per-request goroutine, and it has reached no verdict worth remembering.
+func (c *Client) ask(ctx context.Context, req PermissionRequest) (decision PermissionDecision, reason denyReason) {
+	decision, reason = DecisionDeny, denyTransient
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("acp: OnPermission panicked, denying", "toolCallID", req.ToolCallID, "sessionID", req.SessionID, "panic", r)
+		}
+	}()
+	d, err := c.OnPermission(ctx, req)
+	if err != nil {
+		// An unreachable gate must not widen access, and its outage must not
+		// outlive itself.
+		return DecisionDeny, denyTransient
+	}
+	return d, denySubstantive
 }
 
 func (c *Client) RequestPermission(ctx context.Context, params sdkacp.RequestPermissionRequest) (sdkacp.RequestPermissionResponse, error) {
 	decision := DecisionDeny
+	// A client without a gate refuses every call for the session's lifetime, so
+	// remembering that refusal loses nothing — it is a verdict, not an outage.
+	reason := denySubstantive
 	if c.OnPermission != nil {
 		req := PermissionRequest{
 			SessionID:  string(params.SessionId),
@@ -121,17 +182,19 @@ func (c *Client) RequestPermission(ctx context.Context, params sdkacp.RequestPer
 			req.Locations = append(req.Locations, loc.Path)
 		}
 		req.RawInput = params.ToolCall.RawInput
-		// An unreachable gate must not widen access.
-		if d, err := c.OnPermission(ctx, req); err == nil {
-			decision = d
-		}
+		decision, reason = c.ask(ctx, req)
 	}
 
 	wantKinds := []sdkacp.PermissionOptionKind{sdkacp.PermissionOptionKindRejectOnce, sdkacp.PermissionOptionKindRejectAlways}
-	if decision == DecisionAllow {
+	switch {
+	case decision == DecisionAllow:
 		// A missing allow_once must cancel, not fall back to allow_always: the gate
 		// approved one call, and allow_always would grant the rest of the session.
 		wantKinds = []sdkacp.PermissionOptionKind{sdkacp.PermissionOptionKindAllowOnce}
+	case reason == denyTransient:
+		// A timeout, an outage or a crashed gate is not a considered rejection;
+		// reject_always would turn a momentary failure into a session-wide rule.
+		wantKinds = []sdkacp.PermissionOptionKind{sdkacp.PermissionOptionKindRejectOnce}
 	}
 	for _, want := range wantKinds {
 		for _, o := range params.Options {
@@ -142,6 +205,15 @@ func (c *Client) RequestPermission(ctx context.Context, params sdkacp.RequestPer
 			}
 		}
 	}
+	// No offered option carries the verdict without widening the session, so the
+	// answer is Cancelled — the only other member of the outcome union, and the
+	// only one that authorizes nothing. It is a fallback, not a real
+	// cancellation: no session/cancel was sent, and this client holds no
+	// connection handle to send one with. A strict agent reads it as the user
+	// cancelling and aborts the entire turn, not just this tool call. Making the
+	// outcome honest needs a connection-owning helper that can issue a real
+	// session/cancel first (deferred, see F-13/Design Decision 6 of the PR #358
+	// review).
 	return sdkacp.RequestPermissionResponse{Outcome: sdkacp.RequestPermissionOutcome{
 		Cancelled: &sdkacp.RequestPermissionOutcomeCancelled{},
 	}}, nil
@@ -192,6 +264,16 @@ func widensSession(o sdkacp.PermissionOption) bool {
 	}
 	return len(changes) > 0
 }
+
+// The seven methods below refuse the fs and terminal capabilities
+// unconditionally. Whoever advertises this client's capabilities must therefore
+// leave InitializeRequest.ClientCapabilities zero — today that is the
+// InitializeRequest built in server/internal/llmadapter/llm_acp.go
+// (ACPSpawner.Spawn). Advertising a capability here would not fail to compile;
+// the agent would call the method mid-turn and get errUnsupported back instead
+// of what it was promised. Nothing but this comment ties the two sites
+// together; a Capabilities() accessor this package owns is the real fix and is
+// deferred to the structural PR that also introduces a connect helper.
 
 func (c *Client) ReadTextFile(ctx context.Context, params sdkacp.ReadTextFileRequest) (sdkacp.ReadTextFileResponse, error) {
 	return sdkacp.ReadTextFileResponse{}, errUnsupported
