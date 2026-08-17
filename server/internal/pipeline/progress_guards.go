@@ -165,8 +165,8 @@ func (o *PipelineOrchestrator) runProgressTaskLocked(ctx context.Context, taskID
 		StageModelFn:         o.modelResolver.StageDefault,
 		DispatchHTTPSpawn: func(stageRunID, taskID string, spawn func() (string, error)) {
 			go func() {
-				o.httpPoolSem <- struct{}{} // acquire pool slot
-				defer func() { <-o.httpPoolSem }()
+				o.httpPool.acquire()
+				defer o.httpPool.release()
 				sessionFile, err := spawn()
 				o.httpResultCh <- httpSpawnResult{
 					stageRunID:  stageRunID,

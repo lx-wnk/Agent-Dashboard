@@ -491,7 +491,7 @@ async function handleSetDefault(id: string) {
               class="w-full"
               @update:model-value="onAdapterTypeSelect"
             />
-            <p v-if="currentAdapterMeta?.description" class="text-[11px] text-fg-mute mt-1 line-clamp-2">
+            <p v-if="currentAdapterMeta?.description" class="text-[11px] text-fg-mute mt-1">
               {{ currentAdapterMeta.description }}
             </p>
           </div>
