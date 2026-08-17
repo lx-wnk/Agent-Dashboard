@@ -179,6 +179,74 @@ func TestHTTPSpawnSeam_ResultSendAbandonedOnShutdown(t *testing.T) {
 		"httpPool slot was never released — the goroutine is stuck sending on the full result channel")
 }
 
+// TestHTTPSpawnSeam_ParkedAcquireAbandonsOnShutdown proves that a dispatch
+// goroutine parked on a saturated httpPool returns as soon as the
+// orchestrator's base context is cancelled, without ever acquiring a slot or
+// calling spawn — rather than waiting out the pool's poll interval and
+// launching a process during shutdown.
+func TestHTTPSpawnSeam_ParkedAcquireAbandonsOnShutdown(t *testing.T) {
+	orch, taskRepo := makeOrchFromBundle(t, openSharedBundle(t))
+	orch.SetHTTPPoolPollForTest(20 * time.Millisecond)
+	orch.SaturateHTTPPoolForTest()
+	limit := orch.HTTPPoolInFlightForTest()
+
+	handler := newDispatchCaptureHandler("implementation")
+	orch.SetHandlerOverride("implementation", handler)
+
+	baseCtx, baseCancel := context.WithCancel(context.Background())
+	orch.SetBaseContext(baseCtx)
+
+	taskID := newHTTPSpawnTestTask(t, taskRepo, "parked-acquire-abandons")
+
+	_, err := orch.ProgressTask(context.Background(), taskID, nil)
+	require.NoError(t, err)
+
+	baseCancel()
+	time.Sleep(50 * time.Millisecond) // well past one poll tick — the parked acquire must have observed cancellation
+
+	require.Equal(t, limit, orch.HTTPPoolInFlightForTest(),
+		"a parked acquire must not increment the pool while abandoning the wait")
+
+	// Free the saturating slots after the abandon window: if the parked
+	// acquire is still looping (fix disabled), it will succeed here and call
+	// spawn; if it already exited on cancellation, nothing is left to resume.
+	orch.ReleaseHTTPPoolForTest()
+
+	select {
+	case <-handler.capturedCtx:
+		t.Fatal("spawn ran after shutdown — parked acquire did not abandon the wait")
+	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+// TestHTTPSpawnSeam_AcquiresAndRunsSpawnWhenBaseContextLive proves the normal
+// path still acquires a slot and runs spawn when the base context is live —
+// the shutdown exit must not regress the common case.
+func TestHTTPSpawnSeam_AcquiresAndRunsSpawnWhenBaseContextLive(t *testing.T) {
+	orch, taskRepo := makeOrchFromBundle(t, openSharedBundle(t))
+
+	handler := newDispatchCaptureHandler("implementation")
+	orch.SetHandlerOverride("implementation", handler)
+
+	baseCtx, baseCancel := context.WithCancel(context.Background())
+	t.Cleanup(baseCancel)
+	orch.SetBaseContext(baseCtx)
+
+	taskID := newHTTPSpawnTestTask(t, taskRepo, "acquire-runs-spawn-live-ctx")
+
+	_, err := orch.ProgressTask(context.Background(), taskID, nil)
+	require.NoError(t, err)
+
+	spawnCtx := awaitSpawnCtx(t, handler.capturedCtx)
+	require.NoError(t, spawnCtx.Err(), "spawn must run when a slot is acquired under a live base context")
+	require.Equal(t, 1, orch.HTTPPoolInFlightForTest(), "acquire must hold the slot while spawn is in flight")
+	close(handler.release)
+
+	require.Eventually(t, func() bool {
+		return orch.HTTPPoolInFlightForTest() == 0
+	}, time.Second, 10*time.Millisecond, "slot was not released after spawn returned")
+}
+
 // TestHTTPSpawnSeam_StartSetsBaseContextBeforeLoopRuns proves
 // Orchestrator.Start sets the base context synchronously — before the
 // returned loop closure is ever invoked, not merely before it is likely to

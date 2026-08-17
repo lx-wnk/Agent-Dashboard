@@ -79,13 +79,24 @@ func (p *httpPool) limit() int {
 	return n
 }
 
-// acquire blocks until a slot is free. It takes no caller context on purpose:
-// the request context that triggered the dispatch is often already cancelled
-// by the time the spawn goroutine runs.
-func (p *httpPool) acquire() {
+// acquire blocks until a slot is free or ctx is done, whichever comes first.
+// ctx is the orchestrator's base (shutdown) context, not the caller's request
+// context on purpose: the request context that triggered the dispatch is
+// often already cancelled by the time the spawn goroutine runs, but the base
+// context is what must still stop a parked waiter from launching a process
+// after shutdown. Returns false when ctx ends the wait first — the caller
+// must not treat that as a slot held and must not call spawn.
+func (p *httpPool) acquire(ctx context.Context) bool {
 	for !p.tryAcquire() {
-		time.Sleep(p.poll)
+		timer := time.NewTimer(p.poll)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return false
+		case <-timer.C:
+		}
 	}
+	return true
 }
 
 func (p *httpPool) tryAcquire() bool {

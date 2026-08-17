@@ -169,9 +169,15 @@ func (o *PipelineOrchestrator) runProgressTaskLocked(ctx context.Context, taskID
 			// returns. context.AfterFunc re-attaches orchestrator-shutdown cancellation.
 			detached := context.WithoutCancel(ctx)
 			go func() {
-				o.httpPool.acquire()
-				defer o.httpPool.release()
 				base := o.baseContext()
+				// A parked acquire abandons the wait when base ends first — no
+				// slot was taken, so spawn must not run and release must not
+				// be deferred. The stage_run stays "running"; recoverRunningStageRuns
+				// picks it up on the next start.
+				if !o.httpPool.acquire(base) {
+					return
+				}
+				defer o.httpPool.release()
 				spawnCtx, cancel := context.WithCancel(detached)
 				defer cancel()
 				defer context.AfterFunc(base, cancel)()

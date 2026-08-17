@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"context"
+	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 )
@@ -113,4 +114,28 @@ func (o *PipelineOrchestrator) FillHTTPResultChForTest() {
 // HTTPPoolInFlightForTest reports the current number of active httpPool slots.
 func (o *PipelineOrchestrator) HTTPPoolInFlightForTest() int {
 	return o.httpPool.inFlightForTest()
+}
+
+// SaturateHTTPPoolForTest fills the httpPool to its current live limit by
+// directly setting its slot counter, bypassing acquire/tryAcquire, so a test
+// can force a subsequent dispatch to park without spawning real work in
+// every slot.
+func (o *PipelineOrchestrator) SaturateHTTPPoolForTest() {
+	limit := o.httpPool.limit()
+	o.httpPool.mu.Lock()
+	o.httpPool.active = limit
+	o.httpPool.mu.Unlock()
+}
+
+// ReleaseHTTPPoolForTest frees every slot filled by SaturateHTTPPoolForTest.
+func (o *PipelineOrchestrator) ReleaseHTTPPoolForTest() {
+	o.httpPool.mu.Lock()
+	o.httpPool.active = 0
+	o.httpPool.mu.Unlock()
+}
+
+// SetHTTPPoolPollForTest overrides the httpPool's retry interval so a test
+// can bound how long a parked acquire waits between attempts.
+func (o *PipelineOrchestrator) SetHTTPPoolPollForTest(d time.Duration) {
+	o.httpPool.poll = d
 }

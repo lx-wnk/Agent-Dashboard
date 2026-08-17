@@ -40,7 +40,7 @@ func TestHTTPPool_AcquiresUpToLiveLimit(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		for i := 0; i < defaultMaxParallel+3; i++ {
-			p.acquire()
+			p.acquire(context.Background())
 		}
 		close(done)
 	}()
@@ -55,12 +55,12 @@ func TestHTTPPool_AcquiresUpToLiveLimit(t *testing.T) {
 
 func TestHTTPPool_BlocksBeyondLiveLimit(t *testing.T) {
 	p, _ := newTestPool(t, 2)
-	p.acquire()
-	p.acquire()
+	p.acquire(context.Background())
+	p.acquire(context.Background())
 
 	third := make(chan struct{})
 	go func() {
-		p.acquire()
+		p.acquire(context.Background())
 		close(third)
 	}()
 
@@ -81,12 +81,12 @@ func TestHTTPPool_BlocksBeyondLiveLimit(t *testing.T) {
 
 func TestHTTPPool_RaisedLimitUnblocksParkedWaiter(t *testing.T) {
 	p, cfg := newTestPool(t, 2)
-	p.acquire()
-	p.acquire()
+	p.acquire(context.Background())
+	p.acquire(context.Background())
 
 	third := make(chan struct{})
 	go func() {
-		p.acquire()
+		p.acquire(context.Background())
 		close(third)
 	}()
 
