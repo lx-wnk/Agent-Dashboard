@@ -38,6 +38,11 @@ type ACPSpawner struct {
 	Permission func(context.Context, acp.PermissionRequest) (acp.PermissionDecision, error)
 
 	newConn func(client *acp.Client, in io.Writer, out io.Reader) acpConn
+	// starter launches the built command, defaulting to (*exec.Cmd).Start. Test
+	// seam: it lets a test run the real construction path in connect() and still
+	// decide how the launch ends. A replacement that skips Start also takes over
+	// Start's job of releasing the pipes.
+	starter func(*exec.Cmd) error
 }
 
 func (s *ACPSpawner) Name() string { return "acp" }
@@ -135,7 +140,11 @@ func (s *ACPSpawner) connect(ctx context.Context, client *acp.Client) (acpConn, 
 		_ = stdin.Close()
 		return nil, nil, nil, fmt.Errorf("acp adapter: stdout: %w", err)
 	}
-	if err := cmd.Start(); err != nil {
+	start := s.starter
+	if start == nil {
+		start = (*exec.Cmd).Start
+	}
+	if err := start(cmd); err != nil {
 		// exec.Cmd.Start already closes stdin/stdout when the process fails to launch.
 		return nil, nil, nil, fmt.Errorf("acp adapter: start %q: %w: stderr: %s", s.Command, err, stderrBuf.String())
 	}

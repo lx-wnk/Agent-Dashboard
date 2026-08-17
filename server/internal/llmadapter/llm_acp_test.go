@@ -5,7 +5,10 @@ import (
 	"errors"
 	"io"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"sync"
+	"syscall"
 	"testing"
 
 	sdkacp "github.com/coder/acp-go-sdk"
@@ -178,6 +181,118 @@ func TestSyncBufferIsSafeForConcurrentWriteAndString(t *testing.T) {
 	wg.Wait()
 
 	require.Len(t, b.String(), writers*len(chunk))
+}
+
+// The tests below drive the real connect() path — command construction, pipes,
+// launch — and only control the launch outcome through the starter seam.
+
+func TestACPSpawnerBuildsTheCommandFromItsConfiguration(t *testing.T) {
+	bin := filepath.Join(t.TempDir(), "acp-agent")
+	var got *exec.Cmd
+	s := &ACPSpawner{Command: bin, Args: []string{"--experimental-acp", "-v"}}
+	s.starter = func(cmd *exec.Cmd) error {
+		got = cmd
+		return errors.New("not launched")
+	}
+
+	_, err := s.Spawn(context.Background(), testArgs(t))
+	require.Error(t, err)
+
+	require.NotNil(t, got)
+	require.Equal(t, bin, got.Path)
+	require.Equal(t, []string{bin, "--experimental-acp", "-v"}, got.Args)
+	// The agent inherits the server's environment and working directory; the
+	// stage's own workdir reaches it through NewSessionRequest.Cwd instead.
+	require.Nil(t, got.Env)
+	require.Empty(t, got.Dir)
+	require.True(t, got.SysProcAttr.Setpgid, "the child leads its own group so teardown reaches its descendants")
+	require.NotNil(t, got.Stdin, "ACP framing needs both pipes")
+	require.NotNil(t, got.Stdout)
+	require.NotNil(t, got.Stderr)
+}
+
+func TestACPSpawnerReportsWhatFailedToStart(t *testing.T) {
+	bin := filepath.Join(t.TempDir(), "acp-agent")
+	launchErr := errors.New("permission denied")
+	s := &ACPSpawner{Command: bin}
+	s.starter = func(cmd *exec.Cmd) error {
+		_, _ = cmd.Stderr.Write([]byte("agent: cannot exec"))
+		return launchErr
+	}
+
+	_, err := s.Spawn(context.Background(), testArgs(t))
+
+	require.ErrorIs(t, err, launchErr)
+	require.Contains(t, err.Error(), bin, "the message must name the binary that failed")
+	require.Contains(t, err.Error(), "agent: cannot exec", "the child's stderr is the only clue why")
+}
+
+func TestACPSpawnerFailsOnAMissingBinary(t *testing.T) {
+	bin := filepath.Join(t.TempDir(), "not-installed")
+
+	_, err := (&ACPSpawner{Command: bin}).Spawn(context.Background(), testArgs(t))
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), bin)
+}
+
+func TestACPSpawnerFailsWithoutACommand(t *testing.T) {
+	_, err := (&ACPSpawner{}).Spawn(context.Background(), testArgs(t))
+	require.Error(t, err)
+}
+
+// lowestFreeFD reports the descriptor a fresh open lands on. open(2) always
+// takes the lowest free number, so a leaked pipe pushes it up.
+func lowestFreeFD(t *testing.T) int {
+	t.Helper()
+	f, err := os.Open(os.DevNull)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, f.Close()) }()
+	return int(f.Fd())
+}
+
+func TestACPSpawnerReleasesThePipesWhenTheLaunchFails(t *testing.T) {
+	s := &ACPSpawner{Command: filepath.Join(t.TempDir(), "not-installed")}
+	args := testArgs(t)
+	_, err := s.Spawn(context.Background(), args)
+	require.Error(t, err)
+
+	before := lowestFreeFD(t)
+	for i := 0; i < 20; i++ {
+		_, spawnErr := s.Spawn(context.Background(), args)
+		require.Error(t, spawnErr)
+	}
+
+	require.LessOrEqual(t, lowestFreeFD(t), before+4, "a failed launch must not keep its stdin/stdout pipes")
+}
+
+func TestACPSpawnerKillsTheAgentWhenTheContextIsCancelled(t *testing.T) {
+	sleep, err := exec.LookPath("sleep")
+	if err != nil {
+		t.Skip("no sleep binary on PATH")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var child *exec.Cmd
+	s := &ACPSpawner{Command: sleep, Args: []string{"60"}}
+	s.starter = func(cmd *exec.Cmd) error {
+		child = cmd
+		if startErr := cmd.Start(); startErr != nil {
+			return startErr
+		}
+		cancel() // the turn is abandoned while the agent still holds the pipes
+		return nil
+	}
+
+	_, spawnErr := s.Spawn(ctx, testArgs(t))
+
+	require.Error(t, spawnErr)
+	require.NotNil(t, child.ProcessState, "the agent must be reaped, not left as a zombie")
+	require.False(t, child.ProcessState.Exited(), "a cancelled turn kills the agent, it never asks it to stop")
+	status, ok := child.ProcessState.Sys().(syscall.WaitStatus)
+	require.True(t, ok)
+	require.Equal(t, syscall.SIGKILL, status.Signal())
 }
 
 func TestACPSpawnerOmitsTheSeparatorWhenThereIsNoSystemPrompt(t *testing.T) {
