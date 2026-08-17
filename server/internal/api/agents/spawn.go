@@ -431,7 +431,7 @@ func (m *SpawnManager) launchInteractive(binary string, args, env []string, cwd,
 	switch selectHeadlessTransport(lookTmuxPath()) {
 	case transportTmux:
 		session := "claude-spawn-" + newSpawnID()
-		// #nosec G204 -- the executed binary is the literal "tmux"; the child binary is claudeBin unless an admin-gated spawner row passed services.ValidateSpawnerCommand, and request-derived values are separate argv elements of tmux's multi-arg form (execvp, no shell).
+		// #nosec G204 -- the executed binary is the literal "tmux"; the child binary is claudeBin unless a spawner row passed services.ValidateSpawnerCommand in buildSpawnArgs, and request-derived values are separate argv elements of tmux's multi-arg form (execvp, no shell) — but req.prompt is appended as a bare trailing positional with no "--" terminator, so a prompt starting with "--" reaches the child as a flag; that grants nothing today because bypassPermissions is already an accepted permissionMode.
 		cmd := exec.Command("tmux", buildTmuxArgs(session, env, binary, args)...)
 		cmd.Dir = cwd
 		var buf bytes.Buffer

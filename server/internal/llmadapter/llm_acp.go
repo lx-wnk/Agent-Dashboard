@@ -127,7 +127,7 @@ func (s *ACPSpawner) connect(ctx context.Context, client *acp.Client) (acpConn, 
 	if s.Command == "" {
 		return nil, nil, nil, fmt.Errorf("acp adapter: no command configured")
 	}
-	// #nosec G204 -- s.Command/s.Args come from the acp spawner row's adapter_config (keys allow-listed by ValidateAdapterConfig), writable only through the admin-gated /api/spawners CRUD; argv is passed without a shell.
+	// #nosec G204 -- s.Command/s.Args are unvalidated adapter_config values: ValidateAdapterConfig allow-lists keys and caps value length only, and adapter_factory.go splits args with strings.Fields straight into argv; the writing /api/spawners routes are loopback-only and, with the default auth.mode=none, unauthenticated, so this rests solely on the loopback bind plus the same-origin check, and argv is passed without a shell.
 	cmd := exec.CommandContext(ctx, s.Command, s.Args...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	var stderrBuf syncBuffer

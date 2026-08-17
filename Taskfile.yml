@@ -161,7 +161,7 @@ tasks:
       # of them and exits non-zero on any diff.
       - cd sdk && golangci-lint fmt --diff ./... && golangci-lint run ./...
       - cd server && golangci-lint fmt --diff ./... && golangci-lint run ./...
-      - for d in plugins/*/; do (cd "$d" && GOWORK=off golangci-lint fmt --diff ./... && GOWORK=off golangci-lint run ./...) || exit 1; done
+      - for d in plugins/*/; do [ -d "$d" ] || continue; (cd "$d" && GOWORK=off golangci-lint fmt --diff ./... && GOWORK=off golangci-lint run ./...) || exit 1; done
 
   generate:
     desc: Run go generate (ent schemas) and tygo TS codegen
