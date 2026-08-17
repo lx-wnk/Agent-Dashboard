@@ -4,6 +4,7 @@ package spawners
 import (
 	"regexp"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/services"
 	"github.com/lx-wnk/agent-dashboard/server/internal/validation"
 )
 
@@ -48,6 +49,14 @@ var requiredAdapterConfigKeys = map[string][]string{
 	"openai": {"api_key_env"},
 }
 
+// adapterConfigCommandKeys lists, per adapter_type, the adapter_config keys whose
+// value is an executable and must pass the same trust check as the row's command
+// column (services.ValidateSpawnerCommand). Data-driven so a future adapter that
+// adds a command-valued key cannot silently skip the check.
+var adapterConfigCommandKeys = map[string]map[string]struct{}{
+	"acp": {"command": {}},
+}
+
 // ValidateAdapterType returns "", true when t is one of ValidAdapterTypes,
 // otherwise an error message suitable for a 400 response.
 func ValidateAdapterType(t string) (string, bool) {
@@ -65,6 +74,8 @@ func ValidateAdapterType(t string) (string, bool) {
 //   - every required key must be present and non-empty
 //   - keys must be non-empty, free of shell metacharacters
 //   - values must be <= 4096 chars
+//   - command-valued keys (adapterConfigCommandKeys), if non-empty, must pass
+//     services.ValidateSpawnerCommand
 func ValidateAdapterConfig(adapterType string, cfg map[string]string) (string, bool) {
 	allowed, ok := allowedAdapterConfigKeys[adapterType]
 	if !ok {
@@ -82,6 +93,11 @@ func ValidateAdapterConfig(adapterType string, cfg map[string]string) (string, b
 		}
 		if len(v) > envValueMaxLen {
 			return "adapter_config value exceeds 4096 chars", false
+		}
+		if _, isCommand := adapterConfigCommandKeys[adapterType][k]; isCommand && v != "" {
+			if ok, reason := services.ValidateSpawnerCommand(v); !ok {
+				return "adapter_config." + k + ": " + reason, false
+			}
 		}
 	}
 	for _, req := range requiredAdapterConfigKeys[adapterType] {

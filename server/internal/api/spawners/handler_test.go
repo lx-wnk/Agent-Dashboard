@@ -105,6 +105,77 @@ func TestUpdate_BuiltInEditableExceptSlug(t *testing.T) {
 	}
 }
 
+// TestCreate_RejectsUntrustedAcpAdapterConfigCommand verifies adapter_config.command
+// is checked against the same trust policy as the row's command column.
+func TestCreate_RejectsUntrustedAcpAdapterConfigCommand(t *testing.T) {
+	h := newTestHandlerForPkg(t)
+	r := chi.NewRouter()
+	h.Mount(r)
+
+	body := `{"name":"ACP","slug":"acp-spawner","command":"claude","adapterType":"acp","adapterConfig":{"command":"/tmp/evil"}}`
+	req := httptest.NewRequest("POST", "/api/spawners", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != 400 {
+		t.Fatalf("create with untrusted adapter_config.command: got %d, want 400; body=%s", rr.Code, rr.Body.String())
+	}
+	if !bytes.Contains(rr.Body.Bytes(), []byte("could not be resolved")) {
+		t.Errorf("error body must explain the reason: %s", rr.Body.String())
+	}
+}
+
+func TestCreate_RejectsUnknownAcpAdapterConfigCommand(t *testing.T) {
+	h := newTestHandlerForPkg(t)
+	r := chi.NewRouter()
+	h.Mount(r)
+
+	body := `{"name":"ACP","slug":"acp-spawner","command":"claude","adapterType":"acp","adapterConfig":{"command":"evil-binary"}}`
+	req := httptest.NewRequest("POST", "/api/spawners", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != 400 {
+		t.Fatalf("create with unknown adapter_config.command: got %d, want 400; body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestCreate_AcceptsAllowlistedAcpAdapterConfigCommand(t *testing.T) {
+	h := newTestHandlerForPkg(t)
+	r := chi.NewRouter()
+	h.Mount(r)
+
+	body := `{"name":"ACP","slug":"acp-spawner","command":"claude","adapterType":"acp","adapterConfig":{"command":"npx"}}`
+	req := httptest.NewRequest("POST", "/api/spawners", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != 201 {
+		t.Fatalf("create with allowlisted adapter_config.command: got %d, want 201; body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+// TestUpdate_RejectsUntrustedAcpAdapterConfigCommand mirrors the create-path check
+// on PATCH, where effectiveAdapterType may come from the existing row.
+func TestUpdate_RejectsUntrustedAcpAdapterConfigCommand(t *testing.T) {
+	h := newTestHandlerForPkg(t)
+	r := chi.NewRouter()
+	h.Mount(r)
+
+	s, err := h.repo.Create(t.Context(), "ACP", "acp-spawner", "claude", nil, nil, nil, nil, "acp", map[string]string{"command": "npx"}, false)
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("PATCH", "/api/spawners/"+s.ID, bytes.NewBufferString(`{"adapterConfig":{"command":"/tmp/evil"}}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(rr, req)
+	if rr.Code != 400 {
+		t.Fatalf("update with untrusted adapter_config.command: got %d, want 400; body=%s", rr.Code, rr.Body.String())
+	}
+}
+
 // TestSetDefault_SwitchesAndBroadcastsBoth verifies POST /default moves the flag
 // atomically and broadcasts an update for both the new and the former default.
 func TestSetDefault_SwitchesAndBroadcastsBoth(t *testing.T) {
