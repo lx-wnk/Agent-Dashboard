@@ -54,6 +54,59 @@ type httpSpawnResult struct {
 	err         error
 }
 
+// httpPool bounds concurrent HTTP-adapter dispatches by maxParallelOrchestrators —
+// the same live setting the scheduler picks tasks by. The limit is re-read on
+// every acquire attempt, including from a parked waiter, so raising the setting
+// takes effect without a restart. A fixed-capacity channel semaphore sized at
+// construction could not: a long-running adapter (an ACP turn runs up to 30
+// minutes) would hold a stale slot for the whole turn.
+type httpPool struct {
+	cache  *configCache
+	poll   time.Duration
+	mu     sync.Mutex
+	active int
+}
+
+func newHTTPPool(cache *configCache) *httpPool {
+	return &httpPool{cache: cache, poll: defaultPollInterval}
+}
+
+func (p *httpPool) limit() int {
+	n := p.cache.Number(context.Background(), maxParallelKey, defaultMaxParallel)
+	if n < 1 {
+		return 1
+	}
+	return n
+}
+
+// acquire blocks until a slot is free. It takes no caller context on purpose:
+// the request context that triggered the dispatch is often already cancelled
+// by the time the spawn goroutine runs.
+func (p *httpPool) acquire() {
+	for !p.tryAcquire() {
+		time.Sleep(p.poll)
+	}
+}
+
+func (p *httpPool) tryAcquire() bool {
+	limit := p.limit()
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.active >= limit {
+		return false
+	}
+	p.active++
+	return true
+}
+
+func (p *httpPool) release() {
+	p.mu.Lock()
+	if p.active > 0 {
+		p.active--
+	}
+	p.mu.Unlock()
+}
+
 // PipelineOrchestrator drives the task pipeline state machine.
 type PipelineOrchestrator struct {
 	opts             OrchestratorOptions
@@ -67,7 +120,7 @@ type PipelineOrchestrator struct {
 	scheduler        *scheduler
 
 	httpResultCh chan httpSpawnResult // buffered channel for goroutine pool results
-	httpPoolSem  chan struct{}        // semaphore: limits concurrent HTTP spawns
+	httpPool     *httpPool            // limits concurrent HTTP spawns
 
 	// F-PERF-008: dedupe inflight tryAttachSessionID goroutines.
 	// Key: stageRunID string; Value: struct{} (presence = goroutine in flight).
@@ -118,7 +171,6 @@ func NewOrchestrator(opts OrchestratorOptions) (*PipelineOrchestrator, error) {
 			return err
 		}
 	}
-	poolSize := defaultMaxParallel
 	cc := newConfigCache(opts.ConfigRepo)
 	o := &PipelineOrchestrator{
 		opts:             opts,
@@ -128,8 +180,8 @@ func NewOrchestrator(opts OrchestratorOptions) (*PipelineOrchestrator, error) {
 		modelResolver:    newModelResolver(cc, opts.ConfigRepo),
 		stageRuns:        newStageRunService(opts.StageRunRepo),
 		scheduler:        newScheduler(cc, opts.TaskRepo, opts.StageRunRepo, opts.DepRepo),
-		httpPoolSem:      make(chan struct{}, poolSize),
-		httpResultCh:     make(chan httpSpawnResult, poolSize*2),
+		httpPool:         newHTTPPool(cc),
+		httpResultCh:     make(chan httpSpawnResult, defaultMaxParallel*2),
 		startedAt:        time.Now(),
 	}
 	return o, nil

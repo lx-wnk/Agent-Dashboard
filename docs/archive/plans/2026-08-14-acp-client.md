@@ -1,5 +1,10 @@
 # ACP Client Implementation Plan
 
+> **Superseded — historical record only.** The ACP client shipped in PRs #358 (client), #360 (permission gate)
+> and #361 (pipeline stage on an ACP agent). The merged implementation has diverged from this plan; read
+> `server/internal/acp/` and `server/internal/llmadapter/llm_acp.go` for current behaviour. The body below is
+> kept unedited as the plan of record at the time it was written.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a `server/internal/acp` package that speaks the Agent Client Protocol as a client, so the dashboard can later drive agents over ACP instead of scraping a terminal.
