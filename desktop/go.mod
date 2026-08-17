@@ -16,6 +16,7 @@ require (
 	github.com/apparentlymart/go-textseg/v15 v15.0.0 // indirect
 	github.com/bep/debounce v1.2.1 // indirect
 	github.com/bmatcuk/doublestar v1.3.4 // indirect
+	github.com/coder/acp-go-sdk v0.13.5 // indirect
 	github.com/coder/websocket v1.8.15 // indirect
 	github.com/creack/pty v1.1.24 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
@@ -88,3 +89,5 @@ require (
 replace github.com/lx-wnk/agent-dashboard/server => ../server
 
 replace github.com/lx-wnk/agent-dashboard/sdk => ../sdk
+
+replace github.com/coder/acp-go-sdk => github.com/lx-wnk/acp-go-sdk v1.20.0-lxwnk.alpha.1

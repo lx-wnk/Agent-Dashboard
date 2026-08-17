@@ -340,7 +340,7 @@ export interface ProjectFolder {
   createdAt: string
 }
 
-export type SpawnerAdapterType = 'claude' | 'ollama' | 'openai' | 'custom'
+export type SpawnerAdapterType = 'claude' | 'ollama' | 'openai' | 'custom' | 'acp'
 
 export interface AdapterConfigKey {
   key: string

@@ -16,7 +16,7 @@ const envValueMaxLen = 4096
 // ValidAdapterTypes is the application-layer allow-list of adapter_type values.
 // The ent schema does not enforce this (string column with default "claude");
 // validation lives here and at the repo entry points.
-var ValidAdapterTypes = []string{"claude", "ollama", "openai", "custom"}
+var ValidAdapterTypes = []string{"claude", "ollama", "openai", "custom", "acp"}
 
 // allowedAdapterConfigKeys lists permitted adapter_config keys per adapter_type.
 // Required keys are listed in requiredAdapterConfigKeys below.
@@ -25,6 +25,7 @@ var ValidAdapterTypes = []string{"claude", "ollama", "openai", "custom"}
 // - ollama:  optional host, default_model.
 // - openai:  required api_key_env; optional base_url, default_model.
 // - custom:  no adapter_config keys; reuses the row's command/args/env.
+// - acp:     optional command, args.
 var allowedAdapterConfigKeys = map[string]map[string]struct{}{
 	"claude": {},
 	"ollama": {
@@ -37,6 +38,10 @@ var allowedAdapterConfigKeys = map[string]map[string]struct{}{
 		"default_model": {},
 	},
 	"custom": {},
+	"acp": {
+		"command": {},
+		"args":    {},
+	},
 }
 
 var requiredAdapterConfigKeys = map[string][]string{
@@ -51,7 +56,7 @@ func ValidateAdapterType(t string) (string, bool) {
 			return "", true
 		}
 	}
-	return "adapter_type must be one of claude|ollama|openai|custom", false
+	return "adapter_type must be one of claude|ollama|openai|custom|acp", false
 }
 
 // ValidateAdapterConfig enforces:
@@ -63,7 +68,7 @@ func ValidateAdapterType(t string) (string, bool) {
 func ValidateAdapterConfig(adapterType string, cfg map[string]string) (string, bool) {
 	allowed, ok := allowedAdapterConfigKeys[adapterType]
 	if !ok {
-		return "adapter_type must be one of claude|ollama|openai|custom", false
+		return "adapter_type must be one of claude|ollama|openai|custom|acp", false
 	}
 	for k, v := range cfg {
 		if k == "" {
