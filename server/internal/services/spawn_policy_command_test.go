@@ -93,6 +93,30 @@ func TestValidateSpawnerCommand_SymlinkIntoTempDenied(t *testing.T) {
 	}
 }
 
+// TestValidateSpawnerCommand_SymlinkFromTrustedDirAllowed covers a package
+// manager's own symlink indirection (Homebrew's npx -> .../npm/bin/npx-cli.js):
+// the named path's parent is trusted even though the resolved target's parent
+// is not, and the trusted party controls both ends.
+func TestValidateSpawnerCommand_SymlinkFromTrustedDirAllowed(t *testing.T) {
+	base := resolvedTmp(t)
+	trustedDir := filepath.Join(base, "trusted-bin")
+	untrustedDir := filepath.Join(base, "untrusted-target")
+	setAllowedCommands(t, trustedDir)
+
+	target := writeExecutable(t, filepath.Join(untrustedDir, "real"))
+	if err := os.MkdirAll(trustedDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	link := filepath.Join(trustedDir, "npx")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+
+	if ok, reason := ValidateSpawnerCommand(link); !ok {
+		t.Errorf("expected symlink named under a trusted dir allowed regardless of resolved target, got reason %q", reason)
+	}
+}
+
 func TestValidateSpawnerCommand_EnvTrustedDirAllowed(t *testing.T) {
 	dir := t.TempDir()
 	bin := writeExecutable(t, filepath.Join(dir, "claude"))

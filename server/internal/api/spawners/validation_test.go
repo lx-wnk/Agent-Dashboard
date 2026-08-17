@@ -45,6 +45,15 @@ func TestValidateAdapterConfig_AcpAcceptsAllowlistedBareCommand(t *testing.T) {
 	require.Empty(t, msg)
 }
 
+// TestValidateAdapterConfig_AcpAcceptsAbsoluteTrustedCommand covers the
+// absolute-path accept branch: a path that resolves and whose parent is a
+// trusted bin dir. /bin/sh exists on both macOS and Linux.
+func TestValidateAdapterConfig_AcpAcceptsAbsoluteTrustedCommand(t *testing.T) {
+	msg, ok := ValidateAdapterConfig("acp", map[string]string{"command": "/bin/sh"})
+	require.True(t, ok)
+	require.Empty(t, msg)
+}
+
 func TestValidateAdapterConfig_AcpAcceptsEmptyCommand(t *testing.T) {
 	msg, ok := ValidateAdapterConfig("acp", map[string]string{"command": ""})
 	require.True(t, ok)

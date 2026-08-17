@@ -138,6 +138,9 @@ func TestCreate_RejectsUnknownAcpAdapterConfigCommand(t *testing.T) {
 	if rr.Code != 400 {
 		t.Fatalf("create with unknown adapter_config.command: got %d, want 400; body=%s", rr.Code, rr.Body.String())
 	}
+	if !bytes.Contains(rr.Body.Bytes(), []byte("not in the allow-list")) {
+		t.Errorf("error body must explain the reason: %s", rr.Body.String())
+	}
 }
 
 func TestCreate_AcceptsAllowlistedAcpAdapterConfigCommand(t *testing.T) {
