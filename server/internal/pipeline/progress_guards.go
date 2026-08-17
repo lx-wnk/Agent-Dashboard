@@ -163,11 +163,18 @@ func (o *PipelineOrchestrator) runProgressTaskLocked(ctx context.Context, taskID
 		SystemPromptRepo:     o.opts.SystemPromptRepo,
 		ResolveSpawner:       o.opts.ResolveSpawner,
 		StageModelFn:         o.modelResolver.StageDefault,
-		DispatchHTTPSpawn: func(stageRunID, taskID string, spawn func() (string, error)) {
+		DispatchHTTPSpawn: func(stageRunID, taskID string, spawn func(context.Context) (string, error)) {
+			// context.WithoutCancel keeps values (logger, trace ids) but drops the
+			// HTTP request's cancellation, which fires the instant the handler
+			// returns. context.AfterFunc re-attaches orchestrator-shutdown cancellation.
+			detached := context.WithoutCancel(ctx)
 			go func() {
 				o.httpPool.acquire()
 				defer o.httpPool.release()
-				sessionFile, err := spawn()
+				spawnCtx, cancel := context.WithCancel(detached)
+				defer cancel()
+				defer context.AfterFunc(o.baseContext(), cancel)()
+				sessionFile, err := spawn(spawnCtx)
 				o.httpResultCh <- httpSpawnResult{
 					stageRunID:  stageRunID,
 					taskID:      taskID,

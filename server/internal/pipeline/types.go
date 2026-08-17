@@ -126,9 +126,11 @@ type StageContext struct {
 	// DispatchHTTPSpawn runs the given HTTP spawn function in the goroutine pool
 	// and returns immediately. The caller should return AsyncRunningTransition{PID:0}
 	// after calling this. Results are drained by the orchestrator on the next tick.
+	// The context passed to spawn is NOT the caller's (HTTP request) context — it
+	// outlives the request and is cancelled only when the orchestrator shuts down.
 	// When nil (e.g. in tests without a live orchestrator), callers must invoke the
 	// spawn function synchronously.
-	DispatchHTTPSpawn func(stageRunID, taskID string, spawn func() (string, error))
+	DispatchHTTPSpawn func(stageRunID, taskID string, spawn func(context.Context) (string, error))
 
 	RecordAudit       func(action string, details map[string]any)
 	RequestPermission func(tool, pattern, reason string) *ent.PermissionRequest

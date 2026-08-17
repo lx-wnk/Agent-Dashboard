@@ -134,6 +134,12 @@ type PipelineOrchestrator struct {
 	// run of the older one, so it would reap the older instance's live,
 	// PID-less HTTP-adapter runs on every tick.
 	startedAt time.Time
+
+	// baseCtx is the long-lived context passed to Run, used by the HTTP-spawn
+	// dispatch seam so a spawned adapter process is cancelled on orchestrator
+	// shutdown rather than when the triggering HTTP request ends.
+	baseCtxMu sync.Mutex
+	baseCtx   context.Context
 }
 
 // ProgressOpts carries optional parameters for ProgressTask.
@@ -192,6 +198,25 @@ func (o *PipelineOrchestrator) SetHandlerOverride(stage string, h StageHandler) 
 	o.handlerOverrides.Store(stage, h)
 }
 
+// baseContext returns the context passed to Run, or context.Background() when
+// Run has never been called (sync tests, DI without a live tick loop).
+func (o *PipelineOrchestrator) baseContext() context.Context {
+	o.baseCtxMu.Lock()
+	defer o.baseCtxMu.Unlock()
+	if o.baseCtx == nil {
+		return context.Background()
+	}
+	return o.baseCtx
+}
+
+// SetBaseContextForTest overrides the context returned by baseContext without
+// starting the tick loop — test seam only.
+func (o *PipelineOrchestrator) SetBaseContextForTest(ctx context.Context) {
+	o.baseCtxMu.Lock()
+	o.baseCtx = ctx
+	o.baseCtxMu.Unlock()
+}
+
 // ClearHandlerOverrides removes all test handler overrides.
 func (o *PipelineOrchestrator) ClearHandlerOverrides() {
 	o.handlerOverrides.Range(func(k, _ any) bool { o.handlerOverrides.Delete(k); return true })
@@ -231,6 +256,9 @@ func (o *PipelineOrchestrator) EffectiveStageModelForProject(ctx context.Context
 // Run starts the orchestrator tick loop. It blocks until ctx is cancelled.
 // Must be run in an errgroup goroutine alongside the HTTP server.
 func (o *PipelineOrchestrator) Run(ctx context.Context) error {
+	o.baseCtxMu.Lock()
+	o.baseCtx = ctx
+	o.baseCtxMu.Unlock()
 	o.recoverRunningStageRuns(ctx)
 	ticker := time.NewTicker(o.opts.PollInterval)
 	defer ticker.Stop()
