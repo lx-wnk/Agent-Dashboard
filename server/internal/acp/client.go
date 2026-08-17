@@ -5,6 +5,7 @@ package acp
 import (
 	"context"
 	"errors"
+	"strings"
 
 	sdkacp "github.com/coder/acp-go-sdk"
 )
@@ -23,6 +24,14 @@ type PermissionRequest struct {
 	SessionID  string
 	ToolCallID string
 	Title      string
+	ToolKind   string
+	ToolName   string
+	Locations  []string
+
+	// RawInput is agent-authored, untrusted display data reaching a human and
+	// later a UI; never interpolate it into a shell command, a query, or HTML
+	// without escaping at the point of use.
+	RawInput any
 }
 
 // Event is a normalized session update.
@@ -84,6 +93,9 @@ func (c *Client) SessionUpdate(ctx context.Context, params sdkacp.SessionNotific
 		}
 	case u.Plan != nil:
 		e.Kind = "plan"
+	case u.CurrentModeUpdate != nil:
+		e.Kind = "mode"
+		e.Text = string(u.CurrentModeUpdate.CurrentModeId)
 	}
 	c.OnEvent(e)
 	return nil
@@ -99,6 +111,16 @@ func (c *Client) RequestPermission(ctx context.Context, params sdkacp.RequestPer
 		if t := params.ToolCall.Title; t != nil {
 			req.Title = *t
 		}
+		if k := params.ToolCall.Kind; k != nil {
+			req.ToolKind = string(*k)
+		}
+		if n := params.ToolCall.Name; n != nil {
+			req.ToolName = *n
+		}
+		for _, loc := range params.ToolCall.Locations {
+			req.Locations = append(req.Locations, loc.Path)
+		}
+		req.RawInput = params.ToolCall.RawInput
 		// An unreachable gate must not widen access.
 		if d, err := c.OnPermission(ctx, req); err == nil {
 			decision = d
@@ -113,7 +135,7 @@ func (c *Client) RequestPermission(ctx context.Context, params sdkacp.RequestPer
 	}
 	for _, want := range wantKinds {
 		for _, o := range params.Options {
-			if o.Kind == want {
+			if o.Kind == want && !widensSession(o) {
 				return sdkacp.RequestPermissionResponse{Outcome: sdkacp.RequestPermissionOutcome{
 					Selected: &sdkacp.RequestPermissionOutcomeSelected{OptionId: o.OptionId},
 				}}, nil
@@ -123,6 +145,52 @@ func (c *Client) RequestPermission(ctx context.Context, params sdkacp.RequestPer
 	return sdkacp.RequestPermissionResponse{Outcome: sdkacp.RequestPermissionOutcome{
 		Cancelled: &sdkacp.RequestPermissionOutcomeCancelled{},
 	}}, nil
+}
+
+// An option may carry a mode change in its _meta, which grants for the rest of
+// the session rather than for this call. This fails closed: the top-level
+// _meta keys are matched against "permission" case-insensitively, and more
+// than one match is widening (ambiguous). A matched value that isn't a
+// map[string]any, or a map with more than one key, is widening. Recognized as
+// harmless: no match, an empty map, or a map whose only key is "changes"
+// holding an empty slice - everything else, including "changes" holding a
+// non-slice or non-empty value, counts as widening. The "changes" lookup
+// itself stays case-sensitive; only the top-level "permission" match folds
+// case.
+func widensSession(o sdkacp.PermissionOption) bool {
+	var permRaw any
+	matched := false
+	for k, v := range o.Meta {
+		if !strings.EqualFold(k, "permission") {
+			continue
+		}
+		if matched {
+			return true
+		}
+		permRaw, matched = v, true
+	}
+	if !matched {
+		return false
+	}
+	perm, ok := permRaw.(map[string]any)
+	if !ok {
+		return true
+	}
+	if len(perm) == 0 {
+		return false
+	}
+	if len(perm) != 1 {
+		return true
+	}
+	changesRaw, ok := perm["changes"]
+	if !ok {
+		return true
+	}
+	changes, ok := changesRaw.([]any)
+	if !ok {
+		return true
+	}
+	return len(changes) > 0
 }
 
 func (c *Client) ReadTextFile(ctx context.Context, params sdkacp.ReadTextFileRequest) (sdkacp.ReadTextFileResponse, error) {
