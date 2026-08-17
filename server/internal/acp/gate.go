@@ -17,9 +17,17 @@ const (
 )
 
 const (
-	defaultPollInterval = 500 * time.Millisecond
-	defaultPollTimeout  = 30 * time.Minute
-	withdrawTimeout     = 5 * time.Second
+	// acpGatePollInterval is how often Decide re-reads one filed permission
+	// request: 500ms, paced for a human clicking approve. Unrelated to the
+	// pipeline's defaultPollInterval (2s, pipeline/orchestrator.go), which
+	// paces stage-run sweeps.
+	acpGatePollInterval = 500 * time.Millisecond
+	// acpGatePollTimeout is how long Decide blocks the ACP call waiting for
+	// that request before denying: 30 minutes. Unrelated to the pipeline's
+	// defaultAwaitingUserTimeout (14400s, pipeline/orchestrator.go), which
+	// bounds a whole awaiting_user stage run rather than one blocked call.
+	acpGatePollTimeout = 30 * time.Minute
+	withdrawTimeout    = 5 * time.Second
 )
 
 // PollingGate answers an ACP permission request from the dashboard's
@@ -45,11 +53,11 @@ func (g *PollingGate) Decide(ctx context.Context, req PermissionRequest) (Permis
 
 	interval := g.Interval
 	if interval <= 0 {
-		interval = defaultPollInterval
+		interval = acpGatePollInterval
 	}
 	timeout := g.Timeout
 	if timeout <= 0 {
-		timeout = defaultPollTimeout
+		timeout = acpGatePollTimeout
 	}
 
 	id, err := g.File(ctx, req)
