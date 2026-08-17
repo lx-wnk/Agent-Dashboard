@@ -54,9 +54,25 @@ func runOn(ctx context.Context, cfg config.Config, cfgFile string, restartCtl *r
 		}
 		return err
 	}
+
+	return runComponents(runCtx, cancel, comps, restartCtl)
+}
+
+// runComponents wires comps' run-loop members into an errgroup and blocks
+// until runCtx is cancelled or a fatal error occurs. Split out of runOn so a
+// test can call initializeServer directly and then invoke this exact wiring
+// against the live ServerComponents it returned.
+func runComponents(runCtx context.Context, cancel context.CancelFunc, comps *ServerComponents, restartCtl *restart.Controller) error {
 	cleanup := comps.Cleanup
 
 	g, gCtx := errgroup.WithContext(runCtx)
+
+	// Orchestrator.Start sets the base context synchronously before returning
+	// the loop closure — a pre-bound listener can otherwise serve a request
+	// via the API.Run goroutine below before an Orchestrator.Run goroutine
+	// gets scheduled, and DispatchHTTPSpawn must never see baseContext() fall
+	// back to context.Background().
+	orchestratorLoop := comps.Orchestrator.Start(gCtx)
 
 	interval := time.Duration(comps.Settings.Int("sse.intervalMs")) * time.Millisecond
 	parser.SessionCacheTTL = max(interval, parser.SessionCacheTTL)
@@ -69,9 +85,7 @@ func runOn(ctx context.Context, cfg config.Config, cfgFile string, restartCtl *r
 		return comps.API.Run(gCtx)
 	})
 
-	g.Go(func() error {
-		return comps.Orchestrator.Run(gCtx)
-	})
+	g.Go(orchestratorLoop)
 
 	if comps.Scheduler != nil {
 		g.Go(func() error {
@@ -105,7 +119,7 @@ func runOn(ctx context.Context, cfg config.Config, cfgFile string, restartCtl *r
 		}
 	})
 
-	err = g.Wait()
+	err := g.Wait()
 	cleanup() // stop plugins etc. BEFORE any re-exec (deferred funcs won't run after Exec)
 	if restarting {
 		slog.Info("restart: relaunching", "mode", restartCtl.Mode())

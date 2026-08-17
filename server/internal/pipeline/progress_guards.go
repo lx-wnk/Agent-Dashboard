@@ -171,15 +171,23 @@ func (o *PipelineOrchestrator) runProgressTaskLocked(ctx context.Context, taskID
 			go func() {
 				o.httpPool.acquire()
 				defer o.httpPool.release()
+				base := o.baseContext()
 				spawnCtx, cancel := context.WithCancel(detached)
 				defer cancel()
-				defer context.AfterFunc(o.baseContext(), cancel)()
+				defer context.AfterFunc(base, cancel)()
 				sessionFile, err := spawn(spawnCtx)
-				o.httpResultCh <- httpSpawnResult{
+				// Abandon the send once the orchestrator is shutting down: at that
+				// point Run's select loop has already returned and nothing drains
+				// httpResultCh, so a blocking send here would leak this goroutine
+				// and hold its httpPool slot forever.
+				select {
+				case o.httpResultCh <- httpSpawnResult{
 					stageRunID:  stageRunID,
 					taskID:      taskID,
 					sessionFile: sessionFile,
 					err:         err,
+				}:
+				case <-base.Done():
 				}
 			}()
 		},

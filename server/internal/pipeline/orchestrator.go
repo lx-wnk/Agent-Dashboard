@@ -209,12 +209,41 @@ func (o *PipelineOrchestrator) baseContext() context.Context {
 	return o.baseCtx
 }
 
-// SetBaseContextForTest overrides the context returned by baseContext without
-// starting the tick loop — test seam only.
-func (o *PipelineOrchestrator) SetBaseContextForTest(ctx context.Context) {
+// SetBaseContext overrides the context returned by baseContext without
+// starting the tick loop. Callers that start the orchestrator via serverapp
+// must call this before any goroutine can reach DispatchHTTPSpawn — otherwise
+// baseContext falls back to context.Background(), against which
+// context.AfterFunc registers nothing (propagateCancel returns early when
+// parent.Done() == nil), so a spawn dispatched in that window is never
+// cancelled at shutdown.
+func (o *PipelineOrchestrator) SetBaseContext(ctx context.Context) {
 	o.baseCtxMu.Lock()
 	o.baseCtx = ctx
 	o.baseCtxMu.Unlock()
+}
+
+// BaseContext returns the context most recently supplied via SetBaseContext
+// or Run, or context.Background() if neither has been called yet. Exported
+// so a caller (e.g. serverapp's wiring test) can confirm shutdown
+// cancellation is attached before the HTTP-spawn seam can be reached.
+func (o *PipelineOrchestrator) BaseContext() context.Context {
+	return o.baseContext()
+}
+
+// Start sets the base context synchronously — before returning, not from
+// inside a goroutine — and returns a closure that runs the tick loop via Run.
+// A caller that dispatches the returned closure with go/errgroup instead of
+// calling Run directly gets a hard guarantee, not a race: by the Go memory
+// model, every statement in Start happens-before any goroutine the caller
+// starts afterward, so DispatchHTTPSpawn can never observe baseContext()
+// fall back to context.Background() no matter how those goroutines are
+// scheduled. Run is kept for existing tests and for callers that only run
+// the orchestrator on its own.
+func (o *PipelineOrchestrator) Start(ctx context.Context) func() error {
+	o.SetBaseContext(ctx)
+	return func() error {
+		return o.run(ctx)
+	}
 }
 
 // ClearHandlerOverrides removes all test handler overrides.
@@ -253,12 +282,12 @@ func (o *PipelineOrchestrator) EffectiveStageModelForProject(ctx context.Context
 	return o.modelResolver.StageDefault(ctx, stage, projectID)
 }
 
-// Run starts the orchestrator tick loop. It blocks until ctx is cancelled.
-// Must be run in an errgroup goroutine alongside the HTTP server.
-func (o *PipelineOrchestrator) Run(ctx context.Context) error {
-	o.baseCtxMu.Lock()
-	o.baseCtx = ctx
-	o.baseCtxMu.Unlock()
+// run drives the orchestrator tick loop until ctx is cancelled. Unexported so
+// the loop cannot be started without Start having supplied the base context
+// first: a caller that reached it directly would reintroduce the window in
+// which DispatchHTTPSpawn observes context.Background().
+func (o *PipelineOrchestrator) run(ctx context.Context) error {
+	o.SetBaseContext(ctx)
 	o.recoverRunningStageRuns(ctx)
 	ticker := time.NewTicker(o.opts.PollInterval)
 	defer ticker.Stop()

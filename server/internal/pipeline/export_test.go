@@ -96,3 +96,21 @@ func (o *PipelineOrchestrator) TaskLockHeldForTest(taskID string) bool {
 	_, ok := o.taskLocks.Load(taskID)
 	return ok
 }
+
+// FillHTTPResultChForTest saturates httpResultCh to its fixed construction
+// capacity without draining it, so a test can force a subsequent dispatch's
+// result send to contend with a full channel.
+func (o *PipelineOrchestrator) FillHTTPResultChForTest() {
+	for {
+		select {
+		case o.httpResultCh <- httpSpawnResult{}:
+		default:
+			return
+		}
+	}
+}
+
+// HTTPPoolInFlightForTest reports the current number of active httpPool slots.
+func (o *PipelineOrchestrator) HTTPPoolInFlightForTest() int {
+	return o.httpPool.inFlightForTest()
+}

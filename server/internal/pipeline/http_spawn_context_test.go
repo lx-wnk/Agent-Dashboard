@@ -100,7 +100,7 @@ func TestHTTPSpawnSeam_ShutdownCancelsSpawn(t *testing.T) {
 
 	baseCtx, baseCancel := context.WithCancel(context.Background())
 	t.Cleanup(baseCancel)
-	orch.SetBaseContextForTest(baseCtx)
+	orch.SetBaseContext(baseCtx)
 
 	taskID := newHTTPSpawnTestTask(t, taskRepo, "shutdown-cancels-spawn")
 
@@ -139,5 +139,83 @@ func TestHTTPSpawnSeam_ValuesSurvive(t *testing.T) {
 
 	spawnCtx := awaitSpawnCtx(t, handler.capturedCtx)
 	require.Equal(t, "trace-abc-123", spawnCtx.Value(traceIDKey))
+	close(handler.release)
+}
+
+// TestHTTPSpawnSeam_ResultSendAbandonedOnShutdown proves the dispatch
+// goroutine does not block forever when httpResultCh is full and the
+// orchestrator's base context is cancelled — and that the httpPool slot it
+// held is still released.
+func TestHTTPSpawnSeam_ResultSendAbandonedOnShutdown(t *testing.T) {
+	orch, taskRepo := makeOrchFromBundle(t, openSharedBundle(t))
+	orch.FillHTTPResultChForTest()
+
+	handler := newDispatchCaptureHandler("implementation")
+	orch.SetHandlerOverride("implementation", handler)
+
+	baseCtx, baseCancel := context.WithCancel(context.Background())
+	t.Cleanup(baseCancel)
+	orch.SetBaseContext(baseCtx)
+
+	taskID := newHTTPSpawnTestTask(t, taskRepo, "result-send-abandoned")
+
+	_, err := orch.ProgressTask(context.Background(), taskID, nil)
+	require.NoError(t, err)
+
+	awaitSpawnCtx(t, handler.capturedCtx)
+	// spawn returns immediately, so the dispatch goroutine reaches the result
+	// send while httpResultCh is still full and blocks there.
+	close(handler.release)
+
+	require.Eventually(t, func() bool {
+		return orch.HTTPPoolInFlightForTest() == 1
+	}, time.Second, 10*time.Millisecond, "dispatch goroutine never acquired its httpPool slot")
+
+	baseCancel()
+
+	require.Eventually(t, func() bool {
+		return orch.HTTPPoolInFlightForTest() == 0
+	}, 2*time.Second, 10*time.Millisecond,
+		"httpPool slot was never released — the goroutine is stuck sending on the full result channel")
+}
+
+// TestHTTPSpawnSeam_StartSetsBaseContextBeforeLoopRuns proves
+// Orchestrator.Start sets the base context synchronously — before the
+// returned loop closure is ever invoked, not merely before it is likely to
+// run. serverapp.go passes that closure straight to g.Go, so no sibling
+// goroutine started afterward (the API server included) can be scheduled
+// ahead of the base context being set. A wall-clock race between sibling
+// goroutines cannot be asserted on deterministically, so this checks the
+// ordering the language spec actually guarantees: everything in the caller
+// before a `go` statement happens-before that goroutine's body.
+func TestHTTPSpawnSeam_StartSetsBaseContextBeforeLoopRuns(t *testing.T) {
+	orch, taskRepo := makeOrchFromBundle(t, openSharedBundle(t))
+
+	baseCtx, baseCancel := context.WithCancel(context.Background())
+	t.Cleanup(baseCancel)
+
+	orch.Start(baseCtx) // return value intentionally unused — Run's tick loop is exercised elsewhere.
+
+	// Asserted before the loop is ever invoked: Start alone must have set it.
+	require.NotEqual(t, context.Background(), orch.BaseContext())
+	require.NotNil(t, orch.BaseContext().Done())
+
+	handler := newDispatchCaptureHandler("implementation")
+	orch.SetHandlerOverride("implementation", handler)
+	taskID := newHTTPSpawnTestTask(t, taskRepo, "start-sets-base-ctx")
+
+	_, err := orch.ProgressTask(context.Background(), taskID, nil)
+	require.NoError(t, err)
+
+	spawnCtx := awaitSpawnCtx(t, handler.capturedCtx)
+	require.NoError(t, spawnCtx.Err(), "spawn ctx must be alive — it must never fall back to context.Background()")
+
+	baseCancel()
+
+	select {
+	case <-spawnCtx.Done():
+	case <-time.After(2 * time.Second):
+		t.Fatal("spawn ctx was not cancelled — Start's base context was not wired")
+	}
 	close(handler.release)
 }
