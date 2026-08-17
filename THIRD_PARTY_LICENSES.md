@@ -19,6 +19,7 @@ The following third-party packages are used as transitive dependencies.
 | github.com/bahlo/generic-list-go | BSD-3-Clause | https://github.com/bahlo/generic-list-go/blob/v0.2.0/LICENSE |
 | github.com/bmatcuk/doublestar | MIT | https://github.com/bmatcuk/doublestar/blob/v1.3.4/LICENSE |
 | github.com/buger/jsonparser | MIT | https://github.com/buger/jsonparser/blob/v1.1.2/LICENSE |
+| github.com/coder/acp-go-sdk | Apache-2.0 | https://github.com/lx-wnk/acp-go-sdk/blob/v1.20.0-lxwnk.alpha.1/LICENSE |
 | github.com/coder/websocket | ISC | https://github.com/coder/websocket/blob/v1.8.15/LICENSE.txt |
 | github.com/creack/pty | MIT | https://github.com/creack/pty/blob/v1.1.24/LICENSE |
 | github.com/dustin/go-humanize | MIT | https://github.com/dustin/go-humanize/blob/v1.0.1/LICENSE |
