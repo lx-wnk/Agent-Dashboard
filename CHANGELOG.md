@@ -14,6 +14,9 @@ Preparing the first public release.
 
 ### Added
 
+- The running build names itself. `GET /api/system/health` reports a `version`, and the status bar's system panel shows it as **BUILD**. The dashboard reaches its user through three build paths — the `serve` CLI, the macOS desktop shell, and a release build — each embedding its own copy of the SPA, and only the CLI was ever version-stamped: a window from a months-old bundle was indistinguishable from a fresh one, which is how a rebuild can look like it did nothing. Both desktop build tasks now stamp the same `git describe` value the server binary gets. An unstamped local build reports `dev`, which is a useful answer in itself.
+- Subagents open like the session they belong to. A subagent used to be a read-only line in the agent modal's details drawer — id, type, last tool — with no way to see what it actually did. Clicking one now shows its full transcript in place of the session transcript, with the same rendering, and a **Back to session** control. The session-output endpoint resolves subagent transcripts too (they live one level deeper, under the parent session's own directory), so no new endpoint was needed. Read-only by design: a subagent has no channel to send to, and its transcript is not polled.
+- A **your turn** marker on live agents that have stopped on their own — the session is done for now and will not move again until you send it something. It reads the same `working` signal the animated **Working** badge does, so an agent blocked on a permission prompt or an open question is not marked (those wait for an answer and already surface in the needs-you band), and a finished agent is not marked either (its process is gone, so there is nothing to continue). Shown on both the card and the roster row.
 - Maskable PWA icon: the web-app manifest now declares a `purpose: 'maskable'` 512×512 icon, so installed-PWA launchers on Android/Chrome render the icon in their adaptive shape without letterboxing. Also added a `docs/launch-checklist.md` operator playbook for the public launch (release tag, README hero, `good-first-issue` labels, social preview, awesome-list submissions).
 - Guided first-run onboarding flow: opens automatically on first launch (until dismissed) and walks through detecting the Claude Code CLI (version or install command), one-click MCP registration to connect the dashboard to Claude (with a copy-the-command manual fallback), and discovering existing Claude sessions to make one controllable with one click via `--resume`. New endpoints: `GET /api/onboarding/status`, `POST /api/onboarding/register-mcp`, `PATCH /api/onboarding/status`; new `onboarding.completed` setting tracks whether the flow has been dismissed or finished.
 - **Re-run first-run setup** button under **Settings → Appearance**: re-opens the onboarding flow on demand without affecting the persisted `onboarding.completed` setting, so you can revisit the CLI/MCP/session steps after the initial run.
@@ -164,10 +167,55 @@ Preparing the first public release.
   below it. Addons with no mode remain independent siblings and are unaffected.
 
 ### Changed
+- The agent modal drops its bottom drawer. Five unrelated things — tool timeline, hook events, tasks, subagents, a token table — used to share one 200px scrolling panel behind a `<details>` summary, next to a **Waterfall** tab squeezed into 300px and a **Terminal** tab. Now: session context (tasks, subagents, tools, hooks) sits beside the transcript, because it is what you read *while* reading the transcript; transcript and waterfall are two equal views switched from the header, each with the full modal height; the token breakdown moved behind the same ⓘ affordance the agent card already uses; and the bottom is the prompt input alone.
+- The live terminal moved from that drawer to the agent card — a **⌨** action on any session the dashboard can drive, opening the terminal at full size instead of in a 320px tab.
+- The `docs/` tree separates documentation from history. It carried 93,589 lines, of which 93% were dated specs and implementation plans under `docs/superpowers/` — a directory named after the tool that produced them, listed nowhere in the docs index, sitting beside 4,600 lines of actual product documentation. Those plans and specs move to `docs/archive/`, which says what they are and states plainly that they are not maintained. The three live harness contracts move out of that archive to `docs/harness/`, and the single `docs/concepts/` page joins `docs/architecture/`. The docs index now lists everything the tree contains, including all twelve ADRs — it previously listed three. No document was deleted, and archived files keep their original internal links.
+- The **All clear** state of the needs-you band is a quiet line instead of a filled green banner. Nothing waiting on you is the normal case; a full-width banner made the band look equally loud whether or not anything actually needed attention, and it competed with the roster below it.
 - CI job matrices all derive from one place. The module list was hard-coded in six spots across `ci.yml`; a `matrix` job now holds `WORKSPACE_MODULES` and `PLUGINS` once and every other job's matrix reads its outputs, with the security list computed from the other two so it cannot drift. Adding a plugin means one entry in `PLUGINS`. (The lists live in a job output rather than a workflow-level `env:` because GitHub does not expose the `env` context to `strategy.matrix`.) Alongside it, the Go toolchain is pinned once in a new **`.go-version`** file that every `setup-go` step reads, and the `go` directives in the nine module files drop back to a plain `go 1.26` — a minimum requirement, as intended, instead of the de-facto build pin they had become. A toolchain bump is now a one-line change instead of nine, and a **Toolchain consistency** step fails the build if any module drifts from `.go-version` or grows a `toolchain` directive (Go has no mechanism to inherit the `go` directive, so agreement is checked rather than derived). `dependabot.yml` uses the globbing `directories` key for the same reason.
 - Go dependencies moved to their current minor/patch releases: `chi` 5.3.1, `go-sdk` 1.7.0, `fsnotify` 1.10.1, `sqlite` 1.55.0, `libc` 1.74.1, and `x/sync`/`x/sys`/`x/term`. Two consequences worth knowing: chi 5.3.1 registers the HTTP `QUERY` method on wildcard mounts, which adds `QUERY /*` and `QUERY /api/plugins/{id}/proxy/*` to the route set — both are covered by the existing guards, because `RequireSameOriginForMutations` allowlists `GET`/`HEAD`/`OPTIONS` and treats every other method as a mutation, and the plugin proxy is mounted inside the authenticated group. And go-sdk 1.7.0 deprecates MCP logging (SEP-2577), which is how the dashboard delivers messages to a connected agent; the deprecation removes the feature rather than replacing it, so the call is kept and the warning suppressed at the call site until a different transport is designed. The SDK keeps it working for at least twelve months.
 - Every dropdown in the app is now a custom listbox instead of a native `<select>`. WKWebView renders native select popups as macOS system chrome — system font, light background, no dark mode — and CSS cannot reach the option list, so the desktop app showed foreign-looking dropdowns throughout. The replacement builds the option list from real DOM (ARIA select-only combobox: `role="combobox"` trigger, teleported `role="listbox"` panel, full keyboard support including type-ahead), so it is themed like the rest of the app in both the browser and the desktop shell. The migration also removed the styling drift the 31 native elements had accumulated: hardcoded `blue-500` focus borders, `focus:` rings that fired on click rather than only on keyboard, ring widths that disagreed with the app's 3px, and one plugin enum field that carried no styling at all — replacing the four ad-hoc vertical paddings with two deliberate size variants, `default` and `compact`, so a select renders at the same height as whichever sibling control it's paired with (WorkflowsView's filter bar, TemplatePicker). The compact selects in TaskDependenciesTab's dependency row are an intentional exception: they match the row's other 11px controls, not the taller `AppInput` beside them.
 - Desktop-shell build tasks renamed to the `build:`/`dev:` prefix used by every other task: `desktop:build` → **`build:desktop`**, plus a new **`dev:desktop`** for wails hot-reload. `build:all` stays server-only — the Playwright suite builds through it and must not start needing Xcode CLT — and the new **`build:everything`** adds the desktop shell on top. `build:frontend` is now `run: once`, so a chained build cannot compile the SPA twice.
+- Remaining German UI strings in `ProjectSettings` and `RefinementChat` translated to English.
+- `AgentModal` is now lazy-loaded, reducing the initial JS bundle size.
+- `ProjectRepo.Create` and `Update` accept `setup_command` (nullable).
+- `worktree.force` setting now defaults to `true` — pipeline tasks automatically create a git worktree per task without requiring explicit `SourceBranch`. Set to `false` to restore the previous opt-in behaviour.
+- Plugin route extensions now serve under `/api/plugins/{id}/proxy/*` and enable/disable
+  live via the lifecycle endpoints (`POST /api/plugins/{id}/activate|deactivate` — no
+  server restart). The interim `PATCH /api/settings/plugins-enabled/{id}` and
+  per-plugin boot-mounted routes are removed.
+- Agent card redesign — prominent, readable project name; a compact
+  cost · tokens · uptime metric row with the full labeled detail (last activity,
+  burn rate, cache costs) moved into a hover ⓘ popover and the agent modal; the
+  prompt input is now always docked at the bottom with a larger output area.
+- Accessibility: clickable agent rows are now native `<button>` elements, and the
+  agent-modal summary uses a higher-contrast token.
+- SSE poll and retry intervals are centralized in `src/utils/sse.ts` instead of
+  being hard-coded at call sites.
+- **BREAKING — env vars moved to DB-backed settings.** These `DASHBOARD_*` variables
+  are **no longer read** from the environment; configure them in the Settings UI or
+  with `dashboard settings set <key> <value>` (a still-set env var is ignored and
+  logs a warning on boot): `DASHBOARD_AUTH` → `auth.mode`,
+  `DASHBOARD_PROVIDERS_ENABLED` → `providers.enabled`,
+  `DASHBOARD_ALLOW_GIT_PUSH` → `git.allowPush`,
+  `DASHBOARD_ALLOW_GIT_PULL` → `git.allowPull`,
+  `DASHBOARD_FORCE_WORKTREES` → `worktree.force`,
+  `DASHBOARD_SSE_INTERVAL_MS` → `sse.intervalMs`,
+  `DASHBOARD_SHUTDOWN_TIMEOUT_SECONDS` → `shutdown.timeoutSeconds`,
+  `DASHBOARD_HOOKS_DEBOUNCE_MS` → `hooks.debounceMs`,
+  `DASHBOARD_HOOK_EVENTS_PER_SESSION` → `hooks.eventsPerSession`,
+  `DASHBOARD_SPAWN_RATE_LIMIT` / `DASHBOARD_SPAWN_RATE_WINDOW_MS` →
+  `spawn.rateLimit` / `spawn.rateWindowMs`,
+  `DASHBOARD_SPAWNER_ALLOWED_COMMANDS` → `spawn.allowedCommands`,
+  `DASHBOARD_INJECT_RATE_LIMIT` / `DASHBOARD_INJECT_RATE_WINDOW_MS` →
+  `inject.rateLimit` / `inject.rateWindowMs`,
+  `DASHBOARD_COST_SCAN_INTERVAL_MS` → `cost.scanIntervalMs`, and the
+  `DASHBOARD_EVAL_*` family → `eval.scanIntervalMs` / `eval.windowHours` /
+  `eval.minSamples` / `eval.rateDropPP` / `eval.stddevK`.
+- **BREAKING — plugins now default to all-off.** Previously every plugin found in the
+  plugin directory loaded automatically; you must now enable each plugin explicitly
+  (Plugins settings panel or `plugins.enabled`).
+- Apply semantics: plugin and provider enablement apply **live**; all other settings —
+  **including `auth.mode`** — require a **server restart** to take effect.
 
 - Interactive question answering no longer reads the JSONL transcript: both the **Needs you** triage band card and the Terminal tab's overlay are driven by the session's live rendered screen (see Added, above). The old flow only worked for tmux-backed sessions and left non-tmux sessions read-only; the new one works for any live-injectable session.
 
@@ -175,6 +223,8 @@ Preparing the first public release.
 
 
 ### Fixed
+- Sessions that never ask for tool permission no longer report **Needs permission** while a tool runs. An unresolved `tool_use` in the transcript is the only signal a JSONL gives for "blocked on a prompt", and a long `Bash` looks exactly like a waiting one — so an agent started with `--dangerously-skip-permissions` or `--permission-mode bypassPermissions` raised the triage band for every tool it ran, burying the prompts that were real. Agents now carry `permissionsBypassed`, read from the process command line, and the inference is skipped for them. Task-driven permission requests are unaffected: those are real rows, not an inference. `acceptEdits` deliberately still counts as prompting — it only auto-accepts edits.
+- Spawning an agent into a project that already has one running now opens the **new** session instead of the running agent's. A dashboard-spawned agent is given its session id up front (`--session-id`), so the scanner binds it from the first tick. Previously the id only became known once claude had written `sessions/{pid}.json`, and until then the resolver fell back to "newest session file in this project with recent activity" — which is exactly the running agent's session. Resumed sessions and custom spawner adapters are untouched.
 - A project's **Name** and **Description** are now length-checked on update, not only on creation, and the forms stop the input before it becomes a request. `PATCH /api/projects/{id}` accepted any length, so the 200-character name limit and the 10,000-character description limit that both create paths (HTTP and the `create_project` MCP tool) enforce could be walked past by renaming the project a second later; a `PATCH` could also blank a name that creation requires. Both fields in **Settings → Projects** and in the compact **Create new project** panel now carry the matching `maxlength`, so the UI can no longer send a value it knows the server will reject with a 400 it does not render.
 - Choosing **No grouping** while a spawner filter is active now sticks. Filtering to one spawner takes **Spawner** out of the grouping options, and the control fell back to showing "No grouping" while still storing "Spawner" — so picking the value already displayed changed nothing, and clearing the filter brought spawner grouping back against the explicit choice. The hidden choice is parked instead: the stored grouping is always one the control can show, an explicit pick replaces what was parked, and clearing the filter restores a grouping only if it was never overridden.
 - Clearing a filter chip or **Clear all** no longer drops keyboard focus onto the page body. Focus moves to the chip that took the cleared one's place, and to the search field when the last chip goes — the one control that is always present.
@@ -241,50 +291,6 @@ Preparing the first public release.
 - The agent bash allow-list filter now also rejects output redirection (`>`/`>>`/`<`), single-`&` backgrounding, and newline command separators, closing allow-list-widening patterns that could append to shell startup files or chain an extra command past the first-token check.
 - Provider session discovery now skips symbolic links, so a crafted symlink placed under a provider directory can no longer be read as a session file (arbitrary-file-read guard).
 - The dashboard-channel plugin now validates the `dashboard_reply` message argument and caps inbound `POST /message` bodies (64 KiB).
-
-### Changed
-
-- Remaining German UI strings in `ProjectSettings` and `RefinementChat` translated to English.
-- `AgentModal` is now lazy-loaded, reducing the initial JS bundle size.
-- `ProjectRepo.Create` and `Update` accept `setup_command` (nullable).
-- `worktree.force` setting now defaults to `true` — pipeline tasks automatically create a git worktree per task without requiring explicit `SourceBranch`. Set to `false` to restore the previous opt-in behaviour.
-- Plugin route extensions now serve under `/api/plugins/{id}/proxy/*` and enable/disable
-  live via the lifecycle endpoints (`POST /api/plugins/{id}/activate|deactivate` — no
-  server restart). The interim `PATCH /api/settings/plugins-enabled/{id}` and
-  per-plugin boot-mounted routes are removed.
-- Agent card redesign — prominent, readable project name; a compact
-  cost · tokens · uptime metric row with the full labeled detail (last activity,
-  burn rate, cache costs) moved into a hover ⓘ popover and the agent modal; the
-  prompt input is now always docked at the bottom with a larger output area.
-- Accessibility: clickable agent rows are now native `<button>` elements, and the
-  agent-modal summary uses a higher-contrast token.
-- SSE poll and retry intervals are centralized in `src/utils/sse.ts` instead of
-  being hard-coded at call sites.
-- **BREAKING — env vars moved to DB-backed settings.** These `DASHBOARD_*` variables
-  are **no longer read** from the environment; configure them in the Settings UI or
-  with `dashboard settings set <key> <value>` (a still-set env var is ignored and
-  logs a warning on boot): `DASHBOARD_AUTH` → `auth.mode`,
-  `DASHBOARD_PROVIDERS_ENABLED` → `providers.enabled`,
-  `DASHBOARD_ALLOW_GIT_PUSH` → `git.allowPush`,
-  `DASHBOARD_ALLOW_GIT_PULL` → `git.allowPull`,
-  `DASHBOARD_FORCE_WORKTREES` → `worktree.force`,
-  `DASHBOARD_SSE_INTERVAL_MS` → `sse.intervalMs`,
-  `DASHBOARD_SHUTDOWN_TIMEOUT_SECONDS` → `shutdown.timeoutSeconds`,
-  `DASHBOARD_HOOKS_DEBOUNCE_MS` → `hooks.debounceMs`,
-  `DASHBOARD_HOOK_EVENTS_PER_SESSION` → `hooks.eventsPerSession`,
-  `DASHBOARD_SPAWN_RATE_LIMIT` / `DASHBOARD_SPAWN_RATE_WINDOW_MS` →
-  `spawn.rateLimit` / `spawn.rateWindowMs`,
-  `DASHBOARD_SPAWNER_ALLOWED_COMMANDS` → `spawn.allowedCommands`,
-  `DASHBOARD_INJECT_RATE_LIMIT` / `DASHBOARD_INJECT_RATE_WINDOW_MS` →
-  `inject.rateLimit` / `inject.rateWindowMs`,
-  `DASHBOARD_COST_SCAN_INTERVAL_MS` → `cost.scanIntervalMs`, and the
-  `DASHBOARD_EVAL_*` family → `eval.scanIntervalMs` / `eval.windowHours` /
-  `eval.minSamples` / `eval.rateDropPP` / `eval.stddevK`.
-- **BREAKING — plugins now default to all-off.** Previously every plugin found in the
-  plugin directory loaded automatically; you must now enable each plugin explicitly
-  (Plugins settings panel or `plugins.enabled`).
-- Apply semantics: plugin and provider enablement apply **live**; all other settings —
-  **including `auth.mode`** — require a **server restart** to take effect.
 
 ### Removed
 

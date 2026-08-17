@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -1360,4 +1361,52 @@ func TestBuildSpawnArgs_InteractivePositionalPrompt(t *testing.T) {
 	if args[len(args)-1] != "hello world" {
 		t.Errorf("last arg = %q, want the prompt positional", args[len(args)-1])
 	}
+}
+
+// A fresh spawn must name its own session. Without it, a second agent in a
+// project directory resolves to the first agent's session until claude writes
+// sessions/{pid}.json, and the dashboard opens the running agent's transcript.
+func TestBuildSpawnArgs_PinsAFreshSessionID(t *testing.T) {
+	m := &SpawnManager{}
+	_, args, err := m.buildSpawnArgs(&spawnRequest{permissionMode: "default"}, nil)
+	require.NoError(t, err)
+
+	id := flagValue(args, "--session-id")
+	require.NotEmpty(t, id, "expected --session-id in %v", args)
+	_, perr := uuid.Parse(id)
+	require.NoError(t, perr, "--session-id %q must be a UUID (claude rejects anything else)", id)
+
+	_, args2, err := m.buildSpawnArgs(&spawnRequest{permissionMode: "default"}, nil)
+	require.NoError(t, err)
+	require.NotEqual(t, id, flagValue(args2, "--session-id"), "each spawn needs its own session")
+}
+
+func TestBuildSpawnArgs_ResumeKeepsItsOwnSession(t *testing.T) {
+	m := &SpawnManager{}
+	_, args, err := m.buildSpawnArgs(&spawnRequest{resumeSessionID: "abc", permissionMode: "default"}, nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, "abc", flagValue(args, "--resume"))
+	assert.Empty(t, flagValue(args, "--session-id"), "--resume and --session-id together are contradictory")
+}
+
+// Custom adapters run an arbitrary binary that knows nothing about claude flags.
+func TestBuildSpawnArgs_NoSessionIDForCustomAdapter(t *testing.T) {
+	m := &SpawnManager{}
+	_, args, err := m.buildSpawnArgs(
+		&spawnRequest{permissionMode: "default"},
+		&ent.Spawner{AdapterType: "custom", Command: "npx"},
+	)
+	require.NoError(t, err)
+	assert.Empty(t, flagValue(args, "--session-id"), "got %v", args)
+}
+
+// flagValue returns the argument following name, or "".
+func flagValue(args []string, name string) string {
+	for i, a := range args {
+		if a == name && i+1 < len(args) {
+			return args[i+1]
+		}
+	}
+	return ""
 }

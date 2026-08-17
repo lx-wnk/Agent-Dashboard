@@ -33,6 +33,7 @@ const baseAgent: Agent = {
   toolCounts: {},
   channelAvailable: false,
   working: false,
+  permissionsBypassed: false,
   convergenceAlert: false,
   meta: null,
 }
@@ -197,5 +198,54 @@ describe('agentCard finished state', () => {
     await wrapper.find('[data-testid="agent-card-dismiss"]').trigger('click')
     expect(fetch).toHaveBeenCalledWith('/api/agents/4242/channel', expect.objectContaining({ method: 'DELETE' }))
     expect(wrapper.emitted('dismiss')?.[0]).toEqual([4242])
+  })
+})
+
+describe('agentCard your-turn marker', () => {
+  const badgeStubs = { MachineBadge: true, ProviderBadge: true, PromptInput: true }
+
+  it('marks a live agent that stopped on its own', () => {
+    const w = mount(AgentCard, { props: { agent: { ...baseAgent, status: 'idle', working: false } }, global: { stubs: badgeStubs } })
+    expect(w.get('[data-testid="agent-awaiting-input"]').text()).toBe('your turn')
+  })
+
+  it('shows nothing while the agent is working', () => {
+    const w = mount(AgentCard, { props: { agent: { ...baseAgent, status: 'active', working: true } }, global: { stubs: badgeStubs } })
+    expect(w.find('[data-testid="agent-awaiting-input"]').exists()).toBe(false)
+  })
+
+  it('shows nothing for a finished agent — there is nothing to continue', () => {
+    const w = mount(AgentCard, { props: { agent: { ...baseAgent, status: 'finished', working: false } }, global: { stubs: badgeStubs } })
+    expect(w.find('[data-testid="agent-awaiting-input"]').exists()).toBe(false)
+  })
+})
+
+describe('agentCard terminal access', () => {
+  const badgeStubs = { MachineBadge: true, ProviderBadge: true, PromptInput: true }
+
+  // The terminal used to live in the agent modal's bottom drawer. Removing that
+  // drawer must not remove the only way to reach a live session's terminal.
+  // AppModal teleports to <body>, so the overlay is asserted through the document.
+  it('offers a terminal for a live-injectable agent', async () => {
+    const w = mount(AgentCard, {
+      props: { agent: { ...baseAgent, liveInjectable: true } },
+      global: { stubs: badgeStubs },
+      attachTo: document.body,
+    })
+    expect(document.querySelector('[data-testid="agent-terminal-modal"]')).toBeNull()
+
+    await w.get('[data-testid="agent-card-terminal"]').trigger('click')
+    expect(document.querySelector('[data-testid="agent-terminal-modal"]')).not.toBeNull()
+
+    w.unmount()
+    document.body.innerHTML = ''
+  })
+
+  it('offers none when the session cannot be driven', () => {
+    const w = mount(AgentCard, {
+      props: { agent: { ...baseAgent, liveInjectable: false } },
+      global: { stubs: badgeStubs },
+    })
+    expect(w.find('[data-testid="agent-card-terminal"]').exists()).toBe(false)
   })
 })

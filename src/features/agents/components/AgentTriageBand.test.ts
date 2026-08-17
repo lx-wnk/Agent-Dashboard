@@ -78,3 +78,19 @@ describe('agentTriageBand pending tool use', () => {
     expect(wrapper.text()).toContain('Which colour?')
   })
 })
+
+describe('agentTriageBand all-clear state', () => {
+  // "Nothing needs you" is the normal case, so it must not read as loudly as a
+  // band full of blocked agents.
+  it('renders the all-clear line without a filled banner', () => {
+    const w = mount(AgentTriageBand, { props: { agents: [], permissionItems: [] } })
+    const line = w.get('[data-testid="triage-all-clear"]')
+    expect(line.text()).toContain('All clear')
+    expect(line.classes().join(' ')).not.toMatch(/bg-success-soft|border-success-line/)
+  })
+
+  it('drops the all-clear line as soon as an agent needs attention', () => {
+    const w = mountBand(makeAgent({ pendingToolUse: { tool: 'Bash', pattern: 'ls', id: 'tu_1' } }))
+    expect(w.find('[data-testid="triage-all-clear"]').exists()).toBe(false)
+  })
+})

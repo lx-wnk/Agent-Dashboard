@@ -298,6 +298,53 @@ func extractLastAssistantText(raw string) string {
 	return last
 }
 
+// locateTranscript finds the JSONL of a session across all candidate config
+// dirs: <projects>/<encoded>/<id>.jsonl for a main session, and
+// <projects>/<encoded>/<parent>/subagents/<id>.jsonl for a subagent, whose id is
+// its own file name (see merger.buildSubagents). Callers validate the id against
+// uuidRE first, so no caller-supplied text ever reaches a path segment.
+func locateTranscript(sessionID string) string {
+	name := sessionID + ".jsonl"
+	for _, configDir := range allClaudeConfigDirs() {
+		projectsDir := filepath.Join(configDir, "projects")
+		projects, err := os.ReadDir(projectsDir)
+		if err != nil {
+			continue
+		}
+		for _, p := range projects {
+			if !p.IsDir() {
+				continue
+			}
+			projectDir := filepath.Join(projectsDir, p.Name())
+			if candidate := filepath.Join(projectDir, name); fileExists(candidate) {
+				return candidate
+			}
+			// Subagent transcripts sit one level down, under the parent session's
+			// own directory. Reading it is cheap: these directories hold a handful
+			// of entries, and the scan stops at the first hit.
+			parents, err := os.ReadDir(projectDir)
+			if err != nil {
+				continue
+			}
+			for _, parent := range parents {
+				if !parent.IsDir() {
+					continue
+				}
+				candidate := filepath.Join(projectDir, parent.Name(), "subagents", name)
+				if fileExists(candidate) {
+					return candidate
+				}
+			}
+		}
+	}
+	return ""
+}
+
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
+}
+
 // ParseFullSession reads an entire session JSONL (capped at 10 MB) and returns
 // all messages in display order. If lastOnly is true, only the last assistant
 // message is returned. Searches all candidate Claude config directories.
@@ -306,25 +353,7 @@ func ParseFullSession(sessionID string, lastOnly bool) ([]OutputMessage, error) 
 		return nil, nil
 	}
 
-	var sessionPath string
-outer:
-	for _, configDir := range allClaudeConfigDirs() {
-		projectsDir := filepath.Join(configDir, "projects")
-		dirs, err := os.ReadDir(projectsDir)
-		if err != nil {
-			continue
-		}
-		for _, d := range dirs {
-			if !d.IsDir() {
-				continue
-			}
-			candidate := filepath.Join(projectsDir, d.Name(), sessionID+".jsonl")
-			if _, err := os.Stat(candidate); err == nil {
-				sessionPath = candidate
-				break outer
-			}
-		}
-	}
+	sessionPath := locateTranscript(sessionID)
 	if sessionPath == "" {
 		return nil, nil
 	}

@@ -1,9 +1,8 @@
 import type { Agent } from '@/types'
-import { flushPromises, mount } from '@vue/test-utils'
+import { mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 
 import AgentModal from './AgentModal.vue'
-import AgentTerminal from './AgentTerminal.vue'
 
 vi.mock('@/features/agents/composables/useAgentIdentity', () => ({
   useAgentIdentity: () => ({ getIdentity: () => ({ emoji: '🤖' }) }),
@@ -32,6 +31,7 @@ const baseAgent: Agent = {
   toolCounts: {},
   channelAvailable: false,
   working: false,
+  permissionsBypassed: false,
   convergenceAlert: false,
   meta: null,
 }
@@ -54,7 +54,7 @@ function mountModal(agent: Agent = baseAgent) {
   return mount(AgentModal, { props: { agent }, global: { stubs } })
 }
 
-describe('agentModal details tablist a11y', () => {
+describe('agentModal view tablist a11y', () => {
   it('renders a role=tablist with two role=tab buttons', () => {
     const wrapper = mountModal()
     expect(wrapper.find('[role="tablist"]').exists()).toBe(true)
@@ -70,13 +70,13 @@ describe('agentModal details tablist a11y', () => {
     expect(tabs[1].attributes('tabindex')).toBe('-1')
   })
 
-  it('clicking the Waterfall tab activates its panel', async () => {
+  it('clicking the Waterfall tab swaps the main area for the chart', async () => {
     const wrapper = mountModal()
     const tabs = wrapper.findAll('[role="tab"]')
     await tabs[1].trigger('click')
     expect(tabs[1].attributes('aria-selected')).toBe('true')
-    const panel = wrapper.find('[role="tabpanel"]')
-    expect(panel.attributes('aria-labelledby')).toBe(tabs[1].attributes('id'))
+    const panel = wrapper.findAll('[role="tabpanel"]').find(p => p.attributes('aria-labelledby') === tabs[1].attributes('id'))
+    expect(panel).toBeTruthy()
   })
 
   it('arrowRight on the tablist moves selection to the next tab', async () => {
@@ -87,67 +87,80 @@ describe('agentModal details tablist a11y', () => {
   })
 })
 
-describe('agentModal terminal tab', () => {
-  it('shows a Terminal tab for a live-injectable agent, mounting AgentTerminal with its pid once selected', async () => {
-    const wrapper = mountModal({ ...baseAgent, pid: 4321, liveInjectable: true })
+describe('agentModal subagent transcript', () => {
+  const subagent = {
+    id: '33333333-3333-3333-3333-333333333333',
+    type: 'subagent',
+    status: 'completed',
+    currentAction: '',
+    sessionFile: '/tmp/x.jsonl',
+    tokensUsed: 0,
+    durationSeconds: 0,
+    latestOutput: '',
+  }
 
-    const tabs = wrapper.findAll('[role="tab"]')
-    expect(tabs.length).toBe(3)
-    expect(tabs[2].text()).toBe('Terminal')
-    expect(wrapper.findComponent(AgentTerminal).exists()).toBe(false)
+  function mountWithSubagent() {
+    return mount(AgentModal, {
+      props: { agent: { ...baseAgent, subagents: [subagent] } as Agent },
+      global: { stubs: { ...stubs, SubAgentList: false, PromptInput: { template: '<div />', methods: { focus() {} } } } },
+    })
+  }
 
-    await tabs[2].trigger('click')
-    await flushPromises()
+  it('opens the subagent transcript in place of the session transcript', async () => {
+    const w = mountWithSubagent()
+    expect(w.find('[data-testid="subagent-transcript"]').exists()).toBe(false)
 
-    expect(tabs[2].attributes('aria-selected')).toBe('true')
-    expect(wrapper.findComponent(AgentTerminal).exists()).toBe(true)
-    // AgentTerminal is now lazy-loaded (defineAsyncComponent) — the auto-stub
-    // matched against the resolved async component only forwards `pid` as a
-    // fallthrough DOM attribute, not a declared prop.
-    expect(wrapper.findComponent(AgentTerminal).attributes('pid')).toBe('4321')
+    await w.get('[data-testid="subagent-open"]').trigger('click')
+    expect(w.get('[data-testid="subagent-transcript"]').attributes('sessionid')).toBe(subagent.id)
   })
 
-  it('unmounts AgentTerminal when switching away from the Terminal tab', async () => {
-    const wrapper = mountModal({ ...baseAgent, pid: 4321, liveInjectable: true })
-    const tabs = wrapper.findAll('[role="tab"]')
-
-    await tabs[2].trigger('click')
-    await flushPromises()
-    expect(wrapper.findComponent(AgentTerminal).exists()).toBe(true)
-
-    await tabs[0].trigger('click')
-    expect(wrapper.findComponent(AgentTerminal).exists()).toBe(false)
+  it('returns to the session transcript', async () => {
+    const w = mountWithSubagent()
+    await w.get('[data-testid="subagent-open"]').trigger('click')
+    await w.get('[data-testid="subagent-back"]').trigger('click')
+    expect(w.find('[data-testid="subagent-transcript"]').exists()).toBe(false)
   })
 
-  it('does not show a Terminal tab for a non-live-injectable agent', () => {
-    const wrapper = mountModal({ ...baseAgent, liveInjectable: false })
+  // The modal is reused across agents; a stale subagent would open on the wrong session.
+  it('drops the open subagent when the modal switches agents', async () => {
+    const w = mountWithSubagent()
+    await w.get('[data-testid="subagent-open"]').trigger('click')
 
-    const tabs = wrapper.findAll('[role="tab"]')
-    expect(tabs.length).toBe(2)
-    expect(tabs.some(tab => tab.text() === 'Terminal')).toBe(false)
-    expect(wrapper.findComponent(AgentTerminal).exists()).toBe(false)
+    await w.setProps({ agent: { ...baseAgent, sessionId: 'other-session', subagents: [] } as Agent })
+    expect(w.find('[data-testid="subagent-transcript"]').exists()).toBe(false)
+  })
+})
+
+describe('agentModal session context', () => {
+  const withContext = {
+    ...baseAgent,
+    tasks: [{ subject: 'Ship it', status: 'in_progress' }],
+    subagents: [],
+  } as unknown as Agent
+
+  // The bottom drawer is gone: what you read while reading the transcript sits
+  // beside it, and the modal keeps no tab bar at its foot.
+  it('renders session context beside the transcript, not in a drawer', () => {
+    const w = mount(AgentModal, { props: { agent: withContext }, global: { stubs: { ...stubs, TaskList: false } } })
+    expect(w.find('[data-testid="agent-context"]').exists()).toBe(true)
+    expect(w.find('details').exists()).toBe(false)
   })
 
-  it('remounts AgentTerminal bound to the new pid when the modal switches to a different agent without closing', async () => {
-    // Same sessionId — isolates the pid-remount behavior from the unrelated
-    // sessionId-driven prompt-focus watcher.
-    const agentA = { ...baseAgent, pid: 4321, liveInjectable: true }
-    const agentB = { ...baseAgent, pid: 9999, liveInjectable: true }
-    const wrapper = mountModal(agentA)
-    const tabs = wrapper.findAll('[role="tab"]')
+  it('omits the context block when the agent has none', () => {
+    const w = mountModal({ ...baseAgent, lastTools: [], tasks: [], subagents: [], recentHookEvents: [] } as unknown as Agent)
+    expect(w.find('[data-testid="agent-context"]').exists()).toBe(false)
+  })
 
-    await tabs[2].trigger('click')
-    await flushPromises()
-    expect(wrapper.findComponent(AgentTerminal).attributes('pid')).toBe('4321')
-    const elementBeforeSwitch = wrapper.find('[pid]').element
+  it('offers the token breakdown from the header instead of a token table', async () => {
+    const w = mountModal()
+    expect(w.findComponent({ name: 'MetricsPopover' }).exists()).toBe(false)
+    await w.get('[data-testid="agent-modal-metrics"]').trigger('click')
+    expect(w.findComponent({ name: 'MetricsPopover' }).exists()).toBe(true)
+  })
 
-    // Modal navigates to a different agent in place — no close/reopen.
-    await wrapper.setProps({ agent: agentB })
-    await flushPromises()
-
-    expect(wrapper.findComponent(AgentTerminal).attributes('pid')).toBe('9999')
-    // :key="agent.pid" forces a fresh DOM node (full teardown + rebuild),
-    // so the old WebSocket wired to pid 4321 is torn down rather than reused.
-    expect(wrapper.find('[pid]').element).not.toBe(elementBeforeSwitch)
+  // The terminal moved to the card; mounting xterm from the modal would defeat that.
+  it('mounts no terminal', () => {
+    const w = mountModal({ ...baseAgent, liveInjectable: true })
+    expect(w.html()).not.toContain('agent-terminal')
   })
 })

@@ -78,6 +78,36 @@ describe('attentionFor', () => {
     expect(att?.kind).toBe('question')
   })
 
+  // A session started with --dangerously-skip-permissions never stops for a
+  // prompt, so its unresolved tool_use means the tool is running.
+  it('does not read a running tool as a permission prompt when permissions are bypassed', () => {
+    const agent = makeAgent({
+      status: 'active',
+      permissionsBypassed: true,
+      pendingToolUse: { tool: 'Bash', pattern: 'sleep 60', id: 'tu_1' },
+    })
+    expect(attentionFor(agent, ACTIVE_SECS)).toBeNull()
+  })
+
+  it('still reports a pending tool use when permissions are not bypassed', () => {
+    const agent = makeAgent({
+      status: 'active',
+      permissionsBypassed: false,
+      pendingToolUse: { tool: 'Bash', pattern: 'rm -rf /', id: 'tu_1' },
+    })
+    expect(attentionFor(agent, ACTIVE_SECS)?.kind).toBe('permission')
+  })
+
+  // Task-driven grants are real DB rows, not an inference from the transcript.
+  it('still reports task permission requests for a bypassed session', () => {
+    const agent = makeAgent({
+      status: 'active',
+      permissionsBypassed: true,
+      pendingPermissions: [{ id: 'p1', tool: 'Bash', pattern: 'ls', requestedAt: new Date().toISOString() }],
+    })
+    expect(attentionFor(agent, ACTIVE_SECS)?.kind).toBe('permission')
+  })
+
   // A session parked on the review/submit screen is just as blocked as one
   // showing the modal — it waits for a keypress that only a human can give.
   it('returns question with top priority when pendingConfirm is set', () => {

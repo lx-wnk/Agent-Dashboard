@@ -80,6 +80,31 @@ func TestSessionIDFromArgs(t *testing.T) {
 	}
 }
 
+func TestPermissionsBypassedFromArgs(t *testing.T) {
+	tests := []struct {
+		name    string
+		command string
+		want    bool
+	}{
+		{"skip flag", "claude --dangerously-skip-permissions", true},
+		{"allow-skip spelling", "claude --allow-dangerously-skip-permissions", true},
+		{"bypass mode", "claude --permission-mode bypassPermissions", true},
+		{"bypass mode equals", "claude --permission-mode=bypassPermissions", true},
+		// acceptEdits still prompts for everything that is not an edit, so it must
+		// not count as bypassed — that would hide real prompts.
+		{"accept edits", "claude --permission-mode acceptEdits", false},
+		{"default mode", "claude --permission-mode default", false},
+		{"plain", "claude", false},
+		{"mode without value", "claude --permission-mode", false},
+		{"value only in a prompt", "claude 'explain --dangerously-skip-permissions to me'", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, PermissionsBypassedFromArgs(tt.command))
+		})
+	}
+}
+
 func TestReadPidSession(t *testing.T) {
 	cfg := t.TempDir()
 	writePidSessionFile(t, cfg, 4242, "75230ea5-031f-4adc-9b26-e5c17de98c21", "/some/cwd")

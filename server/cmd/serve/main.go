@@ -11,6 +11,7 @@ import (
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/channel"
 	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
+	versionpkg "github.com/lx-wnk/agent-dashboard/server/internal/version"
 	"github.com/lx-wnk/agent-dashboard/server/serverapp"
 )
 
@@ -19,6 +20,10 @@ import (
 var version = "dev"
 
 func main() {
+	// goreleaser stamps main.version; hand it to the shared package so the
+	// health endpoint reports the same string the CLI prints.
+	versionpkg.Set(version)
+
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	})))

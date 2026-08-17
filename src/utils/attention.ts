@@ -22,7 +22,11 @@ export function attentionFor(agent: Agent, secondsSinceActivity: number | null):
     return { kind: 'question', label: 'Confirm answers', tone: 'warning', weight: -1 }
   if (agent.pendingPermissions && agent.pendingPermissions.length > 0)
     return { kind: 'permission', label: 'Needs permission', tone: 'warning', weight: 0 }
-  if (agent.pendingToolUse)
+  // An unresolved tool_use is the only signal a plain JSONL gives for "blocked on
+  // a permission prompt" — but a session that never prompts produces the same
+  // shape while a tool is simply still running. Reporting that as attention
+  // buried the real prompts in noise.
+  if (agent.pendingToolUse && !agent.permissionsBypassed)
     return { kind: 'permission', label: 'Needs permission', tone: 'warning', weight: 0 }
   if (agent.errorState)
     return { kind: 'error', label: 'Run failed', tone: 'danger', weight: 1 }

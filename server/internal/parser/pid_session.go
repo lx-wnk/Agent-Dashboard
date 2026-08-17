@@ -64,6 +64,43 @@ func SessionIDFromArgs(command string) string {
 	return ""
 }
 
+// PermissionsBypassedFromArgs reports whether a process command line puts claude
+// in a posture where it never asks for tool permission: either
+// --dangerously-skip-permissions (both spellings) or
+// --permission-mode bypassPermissions.
+//
+// Other modes are deliberately not covered. acceptEdits still prompts for
+// everything that is not an edit, and plan/default prompt outright — treating
+// them as silent would hide real prompts.
+func PermissionsBypassedFromArgs(command string) bool {
+	fields := strings.Fields(command)
+	for i, f := range fields {
+		// The command line arrives flattened, so a quoted prompt is
+		// indistinguishable from argv once split. Stop at the first bare token
+		// that does not sit behind a flag: everything after it is prompt text,
+		// and matching a flag name inside a prompt would silence that agent's
+		// real permission prompts.
+		if i > 0 && !strings.HasPrefix(f, "-") && !strings.HasPrefix(fields[i-1], "-") {
+			return false
+		}
+		switch {
+		case f == "--dangerously-skip-permissions", f == "--allow-dangerously-skip-permissions":
+			return true
+		case f == "--permission-mode":
+			if i+1 < len(fields) && fields[i+1] == bypassPermissionsMode {
+				return true
+			}
+		case strings.HasPrefix(f, "--permission-mode="):
+			if strings.TrimPrefix(f, "--permission-mode=") == bypassPermissionsMode {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+const bypassPermissionsMode = "bypassPermissions"
+
 // SessionRequest carries everything needed to resolve the session bound to one
 // running process.
 type SessionRequest struct {

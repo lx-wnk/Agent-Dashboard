@@ -47,6 +47,20 @@ export function isStalled(status: string, secondsSinceActivity: number | null): 
   return status === 'active' && secondsSinceActivity != null && secondsSinceActivity > STALLED_THRESHOLD_SECONDS
 }
 
+/**
+ * True when a live session has stopped on its own and will not move again until
+ * someone types something.
+ *
+ * `working` is `TurnOpen || recentOutput` (server/internal/merger), so a session
+ * blocked on a permission prompt or an open question still counts as working —
+ * those wait for an answer, not for a new instruction, and the needs-you band
+ * already carries them. A finished agent is excluded: its process is gone, so
+ * there is nothing to continue.
+ */
+export function isAwaitingInput(agent: { status: string, working?: boolean }): boolean {
+  return agent.status !== 'finished' && agent.working === false
+}
+
 export function totalTokenCount(usage: TokenUsage): number {
   return usage.inputTokens + usage.outputTokens + usage.cacheReadTokens + usage.cacheCreationTokens
 }
