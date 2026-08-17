@@ -15,65 +15,103 @@ func TestClientSatisfiesSDKInterface(t *testing.T) {
 	require.True(t, ok, "Client must implement sdkacp.Client")
 }
 
-func TestSessionUpdateEmitsAgentMessage(t *testing.T) {
-	var got []Event
-	c := &Client{OnEvent: func(e Event) { got = append(got, e) }}
+func TestSessionUpdateMapsEveryKind(t *testing.T) {
+	inProgress := sdkacp.ToolCallStatusInProgress
 
-	err := c.SessionUpdate(context.Background(), sdkacp.SessionNotification{
-		SessionId: "sess-1",
-		Update: sdkacp.SessionUpdate{
-			AgentMessageChunk: &sdkacp.SessionUpdateAgentMessageChunk{
+	tests := []struct {
+		name   string
+		update sdkacp.SessionUpdate
+		want   Event
+	}{
+		{
+			"agent message",
+			sdkacp.SessionUpdate{AgentMessageChunk: &sdkacp.SessionUpdateAgentMessageChunk{
 				Content: sdkacp.TextBlock("hello"),
+			}},
+			Event{SessionID: "sess-1", Kind: KindAgentMessage, Text: "hello"},
+		},
+		{
+			"agent thought",
+			sdkacp.SessionUpdate{AgentThoughtChunk: &sdkacp.SessionUpdateAgentThoughtChunk{
+				Content: sdkacp.TextBlock("thinking"),
+			}},
+			Event{SessionID: "sess-1", Kind: KindAgentThought, Text: "thinking"},
+		},
+		{
+			"tool call",
+			sdkacp.SessionUpdate{ToolCall: &sdkacp.SessionUpdateToolCall{
+				ToolCallId: "tc-1", Title: "Write file", Status: sdkacp.ToolCallStatusPending,
+			}},
+			Event{
+				SessionID: "sess-1", Kind: KindToolCall, Text: "Write file",
+				ToolCallID: "tc-1", Status: sdkacp.ToolCallStatusPending,
 			},
 		},
-	})
-
-	require.NoError(t, err)
-	require.Len(t, got, 1)
-	require.Equal(t, "sess-1", got[0].SessionID)
-	require.Equal(t, "agent_message", got[0].Kind)
-	require.Equal(t, "hello", got[0].Text)
-}
-
-func TestSessionUpdateEmitsToolCall(t *testing.T) {
-	var got []Event
-	c := &Client{OnEvent: func(e Event) { got = append(got, e) }}
-
-	err := c.SessionUpdate(context.Background(), sdkacp.SessionNotification{
-		SessionId: "sess-1",
-		Update: sdkacp.SessionUpdate{
-			ToolCall: &sdkacp.SessionUpdateToolCall{
-				ToolCallId: "tc-1",
-				Title:      "Write file",
+		{
+			"tool call update",
+			sdkacp.SessionUpdate{ToolCallUpdate: &sdkacp.SessionToolCallUpdate{
+				ToolCallId: "tc-1", Status: &inProgress,
+			}},
+			Event{
+				SessionID: "sess-1", Kind: KindToolCallUpdate,
+				ToolCallID: "tc-1", Status: sdkacp.ToolCallStatusInProgress,
 			},
 		},
-	})
-
-	require.NoError(t, err)
-	require.Len(t, got, 1)
-	require.Equal(t, "tool_call", got[0].Kind)
-	require.Equal(t, "tc-1", got[0].ToolCallID)
-	require.Equal(t, "Write file", got[0].Text)
-}
-
-func TestSessionUpdateEmitsModeChange(t *testing.T) {
-	var got []Event
-	c := &Client{OnEvent: func(e Event) { got = append(got, e) }}
-
-	err := c.SessionUpdate(context.Background(), sdkacp.SessionNotification{
-		SessionId: "sess-1",
-		Update: sdkacp.SessionUpdate{
-			CurrentModeUpdate: &sdkacp.SessionCurrentModeUpdate{
+		{
+			"tool call update without status",
+			sdkacp.SessionUpdate{ToolCallUpdate: &sdkacp.SessionToolCallUpdate{ToolCallId: "tc-1"}},
+			Event{SessionID: "sess-1", Kind: KindToolCallUpdate, ToolCallID: "tc-1"},
+		},
+		{
+			"plan",
+			sdkacp.SessionUpdate{Plan: &sdkacp.SessionUpdatePlan{}},
+			Event{SessionID: "sess-1", Kind: KindPlan},
+		},
+		{
+			"mode",
+			sdkacp.SessionUpdate{CurrentModeUpdate: &sdkacp.SessionCurrentModeUpdate{
 				CurrentModeId: "acceptEdits",
-			},
+			}},
+			Event{SessionID: "sess-1", Kind: KindMode, Text: "acceptEdits"},
 		},
-	})
+		{
+			"unmapped variant",
+			sdkacp.SessionUpdate{UserMessageChunk: &sdkacp.SessionUpdateUserMessageChunk{
+				Content: sdkacp.TextBlock("typed by the user"),
+			}},
+			Event{SessionID: "sess-1", Kind: KindOther},
+		},
+	}
 
-	require.NoError(t, err)
-	require.Len(t, got, 1)
-	require.Equal(t, "sess-1", got[0].SessionID)
-	require.Equal(t, "mode", got[0].Kind)
-	require.Equal(t, "acceptEdits", got[0].Text)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got []Event
+			c := &Client{OnEvent: func(e Event) { got = append(got, e) }}
+
+			err := c.SessionUpdate(context.Background(), sdkacp.SessionNotification{
+				SessionId: "sess-1", Update: tt.update,
+			})
+
+			require.NoError(t, err)
+			require.Equal(t, []Event{tt.want}, got)
+		})
+	}
+}
+
+func TestSessionUpdateContainsAPanickingCallback(t *testing.T) {
+	c := &Client{OnEvent: func(Event) { panic("consumer bug") }}
+
+	require.NotPanics(t, func() {
+		err := c.SessionUpdate(context.Background(), sdkacp.SessionNotification{
+			SessionId: "sess-1",
+			Update: sdkacp.SessionUpdate{
+				AgentMessageChunk: &sdkacp.SessionUpdateAgentMessageChunk{
+					Content: sdkacp.TextBlock("hello"),
+				},
+			},
+		})
+		require.NoError(t, err)
+	})
 }
 
 func TestSessionUpdateWithoutCallbackDoesNotPanic(t *testing.T) {
@@ -243,6 +281,73 @@ func TestRequestPermissionDenyFallsBackToRejectAlways(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, resp.Outcome.Selected)
 	require.Equal(t, sdkacp.PermissionOptionId("reject-always"), resp.Outcome.Selected.OptionId)
+}
+
+func TestRequestPermissionPanickingGateDenies(t *testing.T) {
+	c := &Client{OnPermission: func(context.Context, PermissionRequest) (PermissionDecision, error) {
+		panic("gate bug")
+	}}
+
+	require.NotPanics(t, func() {
+		resp, err := c.RequestPermission(context.Background(), sdkacp.RequestPermissionRequest{
+			SessionId: "sess-1",
+			Options:   permissionOptions(),
+		})
+
+		require.NoError(t, err)
+		require.NotNil(t, resp.Outcome.Selected)
+		require.Equal(t, sdkacp.PermissionOptionId("reject"), resp.Outcome.Selected.OptionId)
+	})
+}
+
+// A gate that reached a verdict may be remembered for the session; a gate that
+// never answered must not be, so it takes reject_once or nothing.
+func TestRequestPermissionRejectAlwaysOnlyOnASubstantiveDeny(t *testing.T) {
+	denied := func(context.Context, PermissionRequest) (PermissionDecision, error) {
+		return DecisionDeny, nil
+	}
+	errored := func(context.Context, PermissionRequest) (PermissionDecision, error) {
+		return DecisionAllow, errors.New("gate unreachable")
+	}
+	panicking := func(context.Context, PermissionRequest) (PermissionDecision, error) {
+		panic("gate bug")
+	}
+	rejectAlwaysOnly := []sdkacp.PermissionOption{
+		{Kind: sdkacp.PermissionOptionKindAllowOnce, Name: "Allow", OptionId: "allow"},
+		{Kind: sdkacp.PermissionOptionKindRejectAlways, Name: "Always reject", OptionId: "reject-always"},
+	}
+
+	tests := []struct {
+		name    string
+		gate    func(context.Context, PermissionRequest) (PermissionDecision, error)
+		options []sdkacp.PermissionOption
+		want    sdkacp.PermissionOptionId // empty means the outcome must be Cancelled
+	}{
+		{"substantive deny takes reject_always", denied, rejectAlwaysOnly, "reject-always"},
+		{"gate error cancels rather than remembering", errored, rejectAlwaysOnly, ""},
+		{"gate panic cancels rather than remembering", panicking, rejectAlwaysOnly, ""},
+		{"gate error takes reject_once when offered", errored, permissionOptions(), "reject"},
+		{"substantive deny prefers reject_once", denied, permissionOptions(), "reject"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &Client{OnPermission: tt.gate}
+
+			resp, err := c.RequestPermission(context.Background(), sdkacp.RequestPermissionRequest{
+				SessionId: "sess-1", Options: tt.options,
+			})
+
+			require.NoError(t, err)
+			if tt.want == "" {
+				require.Nil(t, resp.Outcome.Selected)
+				require.NotNil(t, resp.Outcome.Cancelled)
+				return
+			}
+			require.NotNil(t, resp.Outcome.Selected)
+			require.Equal(t, tt.want, resp.Outcome.Selected.OptionId)
+		})
+	}
 }
 
 func TestRequestPermissionAllowDoesNotFallBackToAllowAlways(t *testing.T) {
