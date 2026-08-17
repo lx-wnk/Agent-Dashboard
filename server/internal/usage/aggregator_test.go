@@ -71,8 +71,8 @@ func TestAggregate_Windows(t *testing.T) {
 	outside5h := now.Add(-6 * time.Hour)
 
 	writeJSONL(t, filepath.Join(projDir, "aaaaaaaa-0000-0000-0000-000000000001.jsonl"), []string{
-		assistantLine(inside5h, "claude-sonnet-4-6", 1000, 500),  // 1500 tokens, inside 5h
-		assistantLine(outside5h, "claude-sonnet-4-6", 2000, 100), // 2100 tokens, 7d only
+		assistantLine(inside5h, "claude-sonnet-4-6", 1000, 500),                                     // 1500 tokens, inside 5h
+		assistantLine(outside5h, "claude-sonnet-4-6", 2000, 100),                                    // 2100 tokens, 7d only
 		`{"timestamp":"` + inside5h.UTC().Format(time.RFC3339Nano) + `","message":{"role":"user"}}`, // user msg: skip
 		`{this is not valid json}`, // malformed: skip
 	})

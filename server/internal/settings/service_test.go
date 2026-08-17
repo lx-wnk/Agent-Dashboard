@@ -14,7 +14,7 @@ func (f *fakeRepo) Get(_ context.Context, k string) (string, bool, error) {
 	v, ok := f.m[k]
 	return v, ok, nil
 }
-func (f *fakeRepo) Set(_ context.Context, k, v string) error { f.m[k] = v; return nil }
+func (f *fakeRepo) Set(_ context.Context, k, v string) error             { f.m[k] = v; return nil }
 func (f *fakeRepo) ListAll(_ context.Context) (map[string]string, error) { return f.m, nil }
 
 func TestService_DefaultsAndTypedAccess(t *testing.T) {

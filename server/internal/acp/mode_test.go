@@ -10,8 +10,8 @@ import (
 )
 
 type fakeModeSetter struct {
-	got  []sdkacp.SessionModeId
-	err  error
+	got []sdkacp.SessionModeId
+	err error
 }
 
 func (f *fakeModeSetter) SetSessionMode(ctx context.Context, p sdkacp.SetSessionModeRequest) (sdkacp.SetSessionModeResponse, error) {
