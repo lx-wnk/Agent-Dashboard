@@ -1,7 +1,7 @@
 # Remote Spawner Node — Design
 
 **Date:** 2026-08-16
-**Status:** Design, awaiting decisions (see *Open questions*). No implementation.
+**Status:** Design, decisions recorded (see *Decisions*). No implementation.
 **Decision record:** [ADR-0013](../../architecture/adr/0013-remote-spawner-nodes.md)
 
 ## Problem
@@ -47,6 +47,15 @@ The node is its own binary with its own store. It never reaches back into the da
 are dashboard → node, so the node needs no inbound knowledge of the operator's machine and the
 dashboard keeps its `127.0.0.1` bind.
 
+**`token_ref` has no home yet.** The dashboard sends the bearer token *outbound*, so it must be able
+to read it back in cleartext at call time. The nearest existing store cannot do that:
+`remote_registration.bearer_key` holds a SHA-256 hex digest, and its schema comment says so verbatim
+— "not usable as an outbound Authorization header"
+(`server/internal/db/ent/schema/remote_registration.go:20-21`). Hashing is correct there, because
+that column authenticates an *inbound* caller; an outbound credential is the opposite problem. Phase
+1 therefore stores the node token **encrypted but recoverable**, not hashed — see *Security model* §6
+for the primitive.
+
 ## Wire surface (proposed, minimal)
 
 | Endpoint | Purpose |
@@ -79,7 +88,11 @@ Non-negotiable, because this is the first component allowed off loopback:
    (`services.ValidateSpawnerCommand`) — a remote token must not become arbitrary remote code
    execution by way of a crafted spawner row.
 6. **Secrets.** Per-user API keys (Anthropic and friends) live on the node, encrypted at rest with
-   the existing `envsec` machinery, and are never returned by any endpoint.
+   `server/internal/secretbox/secretbox.go` (AES-256-GCM, master key bootstrapped by
+   `LoadOrGenerateMasterKey`), and are never returned by any endpoint. Not `envsec`:
+   `server/internal/envsec/envsec.go` is a 16-line deny-list of four environment-variable *names*
+   that must not be forwarded to a spawned process — it contains no cryptography at all. The same
+   `secretbox` primitive covers the dashboard side's recoverable `token_ref` (see *Components*).
 
 ## Administration
 
@@ -108,18 +121,125 @@ Each phase is independently useful and independently revertable:
    agents become as controllable as local ones and the "no prompt input" branches can relax.
 4. **Quota and cost attribution per user** — usage follows the account, not the host.
 
-## Open questions — need a decision before phase 1
+Not every decision below gates phase 1. Phase 1 ships a token store, an admin CLI and a config file
+and spawns nothing, so only the decisions that shape those artifacts bind it:
 
-1. **Who owns the pipeline for remote work?** Does the dashboard's orchestrator drive stage runs on
-   a node (node stays dumb), or may a node run its own pipeline? The first keeps ADR-0002's
-   single-owner runner slots true; the second is what makes a node useful when the laptop is shut.
-   *Recommendation: dashboard-owned first.*
-2. **Identity source.** Node-local users, or reuse of the OAuth plugins (`auth.mode=plugin`) so the
-   same accounts work in both places? *Recommendation: node-local first, plugin reuse later.*
-3. **Discovery.** Manual URL entry per spawner, or advertisement on the LAN? *Recommendation:
-   manual — it is one line of config and no attack surface.*
-4. **Filesystem expectations.** A remote agent works on the node's checkout, not the laptop's. Does
-   the node clone repositories itself, or is the working directory assumed to exist?
-5. **Does the desktop app ever become a node?** Running the node binary next to the dashboard on the
-   same laptop would let a second machine borrow it — cheap if the surface is identical, confusing
-   if it is not.
+| Decision | Gates |
+|---|---|
+| D2 identity — node-local users | Phase 1 (the token store and `user add` / `token issue` are its schema) |
+| D3 discovery — manual URL | Phase 1 (the config file and the connection test) |
+| D5 packaging — separate binary | Phase 1 (there is no phase 1 artifact until the binary exists) |
+| D1 pipeline ownership — dashboard-owned | Phase 2 (first stage run dispatched to a node) |
+| D4 filesystem — node clones on demand | Phase 2 (first `cwd` a remote agent has to work in) |
+
+## Decisions
+
+Recorded 2026-08-17. These refine [ADR-0013](../../architecture/adr/0013-remote-spawner-nodes.md);
+none of them contradicts it, and where one is forced by it that is said outright.
+
+### D1 — The dashboard owns the pipeline. A node never runs its own.
+
+Not a preference, and not a choice this spec was free to make. ADR-0013's Decision text already
+settles it: "Neither side shares a database, a runner-slot pool, or an SSE fan-out with the other."
+A node with its own pipeline is a second runner-slot pool by another name, and ADR-0013's
+Alternative 3 rejects exactly that shape ("control-plane / worker split") for a single-operator
+tool. A node-owned pipeline is therefore not an implementation option but a **new ADR superseding
+0013**.
+
+The mechanism to keep the pipeline dashboard-side already exists and is already load-bearing for the
+HTTP adapters. `server/internal/pipeline/stage_handlers.go:103-112` dispatches a stage
+asynchronously and returns `AsyncRunningTransition{PID: 0}` — a running stage run with no local
+process — and `server/internal/pipeline/sweeps.go:167-169` documents that a nil PID alone is not
+evidence of a zombie, so the orphan sweep does not reap it. A remote stage is that same shape with a
+longer wire.
+
+The cost is honest and accepted: when the laptop sleeps, remote work stops. Buying the other
+property would mean distributing orchestrator state, which is the thing ADR-0010 and ADR-0013 exist
+to avoid.
+
+### D2 — Identity is node-local. Several humans may share one node.
+
+The node keeps its own user table: an opaque id, a display name, and a hashed credential. It mirrors
+`server/internal/db/ent/schema/user.go` minus `provider_login` — there is no upstream identity
+provider to carry a login name from — with the credential stored the way
+`server/internal/db/ent/schema/api_key.go:20` stores `key_hash`: hashed, unique, `Sensitive()`. That
+a node serves several people is the requirement, not a side effect; per-user spawners exist so each
+human brings their own Claude account.
+
+The OAuth plugins are explicitly **not** reused. Two reasons, both structural:
+`server/internal/settings/registry.go:108` caps `auth.mode` at `none|plugin`, so there is no third
+mode to slot a node into without widening a settings enum that the dashboard's own auth depends on;
+and `plugin` means a browser redirect handled by the plugin subprocess runtime, which assumes a
+human at a browser on the same machine. A headless server has neither. Revisiting this later is
+cheap — the node's user row is the join point — but it is not phase 1.
+
+### D3 — Discovery is a manual URL. No LAN advertisement, no discovery code.
+
+This one is already built, and hardened past what a fresh implementation would get right.
+`server/internal/api/remotes/handler.go` stores a per-user remote (`url`, optional `name`, bearer
+key), validates the URL through `isSafeRemoteURL` (`handler.go:38-65`), probes connectivity under a
+15 s timeout (`handler.go:180`) with a client whose `DialContext` is `validation.SafeDialContext`
+(`handler.go:68-72`) so a DNS rebind cannot walk the resolved address back to loopback, strips
+`Authorization` on cross-origin redirects, and caps the table at 50 rows (`handler.go:193`). The UI
+is `src/features/settings/components/RemoteSettings.vue`. Broadcast discovery would add an
+unauthenticated network surface to a component whose entire justification is a narrow one.
+
+**One change, and only one:** the probe currently requests `{baseURL}/api/agents`
+(`handler.go:89-92`) — a dashboard route. A node speaks `/v1/*`, so the probe must target
+`/v1/health`, which the wire surface already lists for this purpose.
+
+**Known constraint, recorded so it is not discovered during phase 1:** `validation.IsBlockedIP`
+(`server/internal/validation/ssrf.go:26-36`) rejects `IsPrivate()` alongside loopback, link-local,
+CGNAT and multicast. A node on `192.168.x.x` or `10.x.x.x` is therefore *unreachable through this
+form today*. That is correct for the SSRF-prone use it was written for; it is wrong for a node
+deliberately placed on the operator's own LAN. Phase 1 must decide whether the node URL gets a
+separate, opt-in validation path or the operator is told to front the node with a public name.
+
+### D4 — The node clones repositories itself, on demand.
+
+Decided against the cheaper alternative ("the working directory must already exist"). The cheap
+option makes every node a hand-provisioned pet and defeats the point of pointing the dashboard at an
+arbitrary server.
+
+Nothing in the repo clones anything today, so this is net-new work in three parts, all of which
+belong to phase 2 and none of which should be discovered late:
+
+1. **Git credentials on the node**, stored in the same phase-1 secret store as the API keys — a
+   private repo is the normal case, not the exception.
+2. **A repo cache with a disk budget.** N users × M repositories on someone else's server fills a
+   disk; an eviction rule is part of the feature, not an operational afterthought.
+3. **A per-user authorization rule for which repositories a user may clone.** Without it, any token
+   on the node is a read primitive against every repo the node's git credentials can reach.
+
+There is one consequence that follows from D1 rather than from D4 itself, and it is the sharper one.
+Today the *dashboard* creates the worktree: `server/internal/pipeline/worktree.go:23`
+(`ensureTaskWorktree`) runs `git worktree add` in `task.Cwd` on the dashboard's filesystem
+(`worktree.go:46`), and `server/internal/pipeline/progress_guards.go:73-82` persists the resulting
+path to `task.WorktreePath`. `server/internal/pipeline/stage_handlers.go:77-80` then hands that path
+to the spawner as `cwd`. For a remote node that path names a directory that does not exist. Phase 2
+must therefore **delegate worktree creation to the node** — a `/v1/worktree` verb whose response is
+the node-side path — rather than pass the local one across the wire.
+
+The post-clone hook already exists and should be reused rather than reinvented: `project.setup_command`
+runs once in a freshly created worktree under a 5-minute timeout
+(`server/serverapp/di_pipeline.go:38-72`), wired as `SetupWorktreeFn` and invoked right after the
+worktree is persisted (`progress_guards.go:88-92`). "Clone, then run setup_command" is the same
+sequence with a different first step.
+
+### D5 — The desktop app never becomes a node. Separate binary only.
+
+A new `server/cmd/node/` alongside the existing `server/cmd/serve` and `server/cmd/cli`, plus its own
+Taskfile target next to `build:cli` and `build:desktop`. `desktop/main.go` stays what its own package
+comment says it is: a macOS wails shell that starts the dashboard in-process on loopback.
+
+The rationale is the security argument of ADR-0013 restated: the node is acceptable off loopback
+*because* `/v1/*` is a narrow, purpose-built surface. Letting the desktop app answer for a node would
+not expose that surface — it would expose the dashboard's.
+
+The trap this avoids is not hypothetical; the switch already exists.
+`server/internal/config/config.go:142-152` lets the dashboard bind a non-loopback address as long as
+`DASHBOARD_REMOTES_ENABLED=true` is set, with a warning and nothing else. Anyone who reaches for that
+flag to "make the laptop a node" publishes the *entire* dashboard API — including the terminal
+WebSocket, which `server/internal/api/agents/terminal.go:90` describes in its own words as giving
+"full read/write access to the spawned agent, i.e. remote code execution". Two binaries keep that
+flag from ever looking like the answer.
