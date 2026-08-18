@@ -2,6 +2,7 @@
 import type { PermissionItem } from '@/composables/usePendingPermissions'
 import type { Agent, PendingPermission, PermissionRequest } from '@/types'
 import type { AnswerIntent } from '@/utils/answerKeys'
+import type { Attention } from '@/utils/attention'
 import { computed, nextTick, ref, watch } from 'vue'
 import ConfirmCard from '@/components/ConfirmCard.vue'
 import QuestionCard from '@/components/QuestionCard.vue'
@@ -118,25 +119,30 @@ const isClear = computed(() => totalCount.value === 0 && props.permissionItems.l
 // terminal, not here.
 const ASK_USER_QUESTION_TOOL = 'AskUserQuestion'
 
-function isGrantableToolUse(agent: Agent): boolean {
-  return !!agent.pendingToolUse && agent.pendingToolUse.tool !== ASK_USER_QUESTION_TOOL
+// A stalled tool_use is only a dwell-time guess, not a resolved permission
+// prompt (see attentionFor) — so the grant control must not appear for it.
+function isGrantableToolUse(agent: Agent, attKind: Attention['kind'] | undefined): boolean {
+  return !!agent.pendingToolUse && agent.pendingToolUse.tool !== ASK_USER_QUESTION_TOOL && attKind !== 'stalled'
 }
 
 function blockedDetail(agent: Agent): string {
   if (agent.pendingToolUse?.tool === ASK_USER_QUESTION_TOOL)
     return 'Waiting for your answer — open the terminal to reply'
-  if (agent.pendingToolUse)
-    return agent.pendingToolUse.pattern ? `${agent.pendingToolUse.tool}(${agent.pendingToolUse.pattern})` : agent.pendingToolUse.tool
   const entry = agentAttentionMap.value.get(agent.sessionId)
   const att = entry?.att
   if (!att)
     return ''
+  if (att.kind === 'stalled') {
+    const activity = formatRelativeActivity(entry.secs)
+    return agent.pendingToolUse ? `${agent.pendingToolUse.tool} — running but silent, last output ${activity}` : `Running but silent — last output ${activity}`
+  }
+  if (agent.pendingToolUse)
+    return agent.pendingToolUse.pattern ? `${agent.pendingToolUse.tool}(${agent.pendingToolUse.pattern})` : agent.pendingToolUse.tool
   if (att.kind === 'permission')
     return agent.currentAction || 'Waiting for permission'
   if (att.kind === 'error')
     return agent.errorState ? formatErrorState(agent.errorState) : (agent.currentAction || 'Run failed')
-  // stalled
-  return `Running but silent — last output ${formatRelativeActivity(entry.secs)}`
+  return ''
 }
 
 function permissionLabel(p: PendingPermission | PermissionRequest): string {
@@ -586,7 +592,7 @@ watch(() => props.focusedSessionId, (id) => {
 
             <!-- Free agent: allow the paused tool for future runs -->
             <AppButton
-              v-if="isGrantableToolUse(agent) && !(agent.pipelineTaskId && agent.pendingPermissions?.length)"
+              v-if="isGrantableToolUse(agent, agentAttentionMap.get(agent.sessionId)?.att?.kind) && !(agent.pipelineTaskId && agent.pendingPermissions?.length)"
               variant="success"
               size="sm"
               class="ml-auto"
@@ -601,7 +607,7 @@ watch(() => props.focusedSessionId, (id) => {
             <AppButton
               variant="outline"
               size="sm"
-              :class="!(agent.pipelineTaskId && agent.pendingPermissions?.length) && !isGrantableToolUse(agent) ? 'ml-auto' : ''"
+              :class="!(agent.pipelineTaskId && agent.pendingPermissions?.length) && !isGrantableToolUse(agent, agentAttentionMap.get(agent.sessionId)?.att?.kind) ? 'ml-auto' : ''"
               :aria-label="`Open details for ${agent.projectName}`"
               @click="emit('select', agent)"
             >

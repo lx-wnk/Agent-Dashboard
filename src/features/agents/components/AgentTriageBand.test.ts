@@ -79,6 +79,28 @@ describe('agentTriageBand pending tool use', () => {
   })
 })
 
+describe('agentTriageBand stalled card', () => {
+  // A tool_use left unresolved for a long time is reclassified 'stalled' (nobody
+  // asked for approval, the run is just quiet) — the card must not imply an
+  // approval is pending or print the full command that was never submitted for review.
+  it('renders no approve control for a stalled agent', () => {
+    const wrapper = mountBand(makeAgent({
+      pendingToolUse: { id: 'tu_s', tool: 'Bash', pattern: 'rm -rf /tmp/build-cache && npm publish --access public' },
+      lastActivity: new Date(Date.now() - 300_000).toISOString(),
+    }))
+    expect(wrapper.text()).not.toContain('Allow Bash')
+    expect(wrapper.text()).not.toContain('rm -rf /tmp/build-cache')
+  })
+
+  it('still offers the approve control for a real pending permission', () => {
+    const wrapper = mountBand(makeAgent({
+      pipelineTaskId: 'task-1',
+      pendingPermissions: [{ id: 'perm_1', tool: 'Bash', pattern: 'npm publish', requestedAt: new Date().toISOString() }],
+    }))
+    expect(wrapper.text()).toContain('Approve')
+  })
+})
+
 describe('agentTriageBand all-clear state', () => {
   // "Nothing needs you" is the normal case, so it must not read as loudly as a
   // band full of blocked agents.
