@@ -6,16 +6,31 @@ import { scaleLinear, scalePoint } from 'd3-scale'
 import { select } from 'd3-selection'
 import { curveMonotoneX, line as d3line } from 'd3-shape'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import AppSelect from '@/components/ui/AppSelect.vue'
 import { toast } from '@/composables/useToast'
 import { useEvalMetrics } from '@/features/analytics/composables/useEvalMetrics'
-import { METRIC_KEYS, metricLabel } from '@/utils/evalMetrics'
+import { EVAL_RANGE_OPTIONS, formatWindowLabel, METRIC_KEYS, metricLabel } from '@/utils/evalMetrics'
 
-const { snapshots, openAlerts, isLoading, error, acknowledge, runScan, start } = useEvalMetrics()
+const { snapshots, openAlerts, isLoading, error, hours, lastDataAt, acknowledge, runScan, setHours, start } = useEvalMetrics()
 
-// Surface async load failures as toasts; the view keeps its empty/loading state.
+// Toast is a transient nudge; `error` itself drives the persistent banner
+// below so a broken backend doesn't look like legitimate emptiness once the
+// toast fades.
 watch(error, (msg) => {
   if (msg)
     toast.error(msg)
+})
+
+const windowLabel = computed(() => formatWindowLabel(hours.value))
+
+// Shared across all nine cards — the window is one setting, not per-metric.
+// Never implies "Run scan now" can back-fill a period nothing ran in: it
+// plots snapshot history by recordedAt and cannot reconstruct the past.
+const emptyReason = computed(() => {
+  const base = `No stage runs in the last ${windowLabel.value}.`
+  return lastDataAt.value
+    ? `${base} Last recorded ${new Date(lastDataAt.value).toLocaleDateString()}.`
+    : base
 })
 
 const isScanning = ref(false)
@@ -151,6 +166,14 @@ onUnmounted(() => {
         Eval / Drift Detection
       </h2>
       <div class="flex items-center gap-3">
+        <AppSelect
+          id="eval-range-select"
+          :model-value="hours"
+          :options="EVAL_RANGE_OPTIONS"
+          aria-label="Metric trend range"
+          size="compact"
+          @update:model-value="setHours"
+        />
         <button
           type="button"
           :disabled="isScanning"
@@ -162,6 +185,10 @@ onUnmounted(() => {
       </div>
     </header>
 
+    <div v-if="error" role="alert" class="rounded-md border border-danger-line bg-danger-soft text-danger-text text-sm px-3 py-2">
+      Failed to load eval data: {{ error }}
+    </div>
+
     <p v-if="isLoading" class="text-sm text-fg-mute">
       Loading eval metrics…
     </p>
@@ -169,7 +196,7 @@ onUnmounted(() => {
     <!-- Metric trend charts -->
     <section v-if="!isLoading" class="flex flex-col gap-4">
       <h3 class="text-sm font-semibold text-fg-soft">
-        Metric Trends (last 7 days)
+        Metric Trends (last {{ windowLabel }})
       </h3>
       <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         <div
@@ -180,11 +207,11 @@ onUnmounted(() => {
           <h4 class="text-xs font-semibold text-fg-soft mb-2">
             {{ metricLabel(key) }}
           </h4>
-          <div v-if="(snapshots[key] ?? []).length === 0" class="text-xs text-fg-mute py-4 text-center">
-            No data
+          <div v-if="!error && (snapshots[key] ?? []).length === 0" class="text-xs text-fg-mute py-4 text-center">
+            {{ emptyReason }}
           </div>
           <svg
-            v-else
+            v-else-if="(snapshots[key] ?? []).length > 0"
             :ref="el => setSvgRef(key as MetricKey, el as Element | null)"
             class="w-full text-fg"
             style="min-height: 140px;"

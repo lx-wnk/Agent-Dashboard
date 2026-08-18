@@ -1,7 +1,8 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { toast } from '@/composables/useToast'
 import EvalView from '@/features/analytics/components/EvalView.vue'
+import { openListbox, optionByLabel } from '@/utils/testSelect'
 
 const emptyAlerts: unknown[] = []
 
@@ -32,6 +33,10 @@ function mockFetchFactory(alerts: unknown[]) {
 
 beforeEach(() => {
   vi.stubGlobal('fetch', mockFetchFactory(emptyAlerts))
+})
+
+afterEach(() => {
+  document.body.innerHTML = ''
 })
 
 describe('evalView', () => {
@@ -123,13 +128,39 @@ describe('evalView', () => {
     expect(scanCall).toBeTruthy()
   })
 
-  it('surfaces a toast when fetch fails', async () => {
+  it('surfaces a toast and renders a persistent error banner on fetch failure, not the empty state', async () => {
     const errorSpy = vi.spyOn(toast, 'error')
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 503 }))
     const wrapper = mount(EvalView)
     await flushPromises()
     expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('503'))
-    expect(wrapper.find('.text-danger-text').exists()).toBe(false)
+    const banner = wrapper.find('[role="alert"]')
+    expect(banner.exists()).toBe(true)
+    expect(banner.text()).toContain('503')
+    expect(wrapper.text()).not.toContain('No stage runs in the last')
+  })
+
+  it('names the reason and window in the empty state when there is no error', async () => {
+    const wrapper = mount(EvalView)
+    await flushPromises()
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('No stage runs in the last 7 days.')
+  })
+
+  it('picking a wider range requests the widened hours value', async () => {
+    const mockFetch = mockFetchFactory(emptyAlerts)
+    vi.stubGlobal('fetch', mockFetch)
+    const wrapper = mount(EvalView, { attachTo: document.body })
+    await flushPromises()
+
+    const panel = await openListbox(wrapper.get('[role="combobox"]'))
+    optionByLabel(panel, 'Last 30 days').dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    const call = (mockFetch.mock.calls as [string][]).find(([url]) =>
+      String(url).includes('/api/eval/metrics') && String(url).includes('hours=720'),
+    )
+    expect(call).toBeTruthy()
   })
 
   it('renders dimension label grouping for alerts', async () => {

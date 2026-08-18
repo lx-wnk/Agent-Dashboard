@@ -29,3 +29,18 @@ export const METRIC_LABELS: Record<MetricKey, string> = {
 export function metricLabel(key: string): string {
   return METRIC_LABELS[key as MetricKey] ?? key
 }
+
+// Mirrors server/internal/api/eval/handler.go's maxLookbackHours — the ?hours=
+// cap on GET /api/eval/metrics.
+export const MAX_LOOKBACK_HOURS = 8760
+
+export const EVAL_RANGE_OPTIONS = [
+  { value: 168, label: 'Last 7 days' },
+  { value: 720, label: 'Last 30 days' },
+  { value: 2160, label: 'Last 90 days' },
+  { value: MAX_LOOKBACK_HOURS, label: 'Last 365 days' },
+] as const satisfies readonly { value: number, label: string }[]
+
+export function formatWindowLabel(hours: number): string {
+  return hours % 24 === 0 ? `${hours / 24} days` : `${hours} hours`
+}
