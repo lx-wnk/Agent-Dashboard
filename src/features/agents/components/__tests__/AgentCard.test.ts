@@ -52,7 +52,7 @@ describe('agentCard output body', () => {
     expect(w.text()).not.toContain('No output yet')
   })
   it('falls back to last tool when no output or action', () => {
-    const w = mount(AgentCard, { props: { agent: makeAgent({ lastOutput: '', currentAction: '', lastTools: ['Read'] }) }, global: { stubs } })
+    const w = mount(AgentCard, { props: { agent: makeAgent({ lastOutput: '', currentAction: '', lastTools: [{ name: 'Read' }] }) }, global: { stubs } })
     expect(w.text()).toContain('Read')
     expect(w.text()).not.toContain('No output yet')
   })

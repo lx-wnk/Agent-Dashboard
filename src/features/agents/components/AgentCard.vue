@@ -44,7 +44,7 @@ const { nowMs } = useNow()
 const totalTokens = computed(() => totalTokenCount(props.agent.tokenUsage))
 const projectLabel = computed(() => friendlyProjectName(props.agent.projectName))
 
-const activityFallback = computed(() => props.agent.currentAction || props.agent.lastTools?.at(-1) || '')
+const activityFallback = computed(() => props.agent.currentAction || props.agent.lastTools?.at(-1)?.name || '')
 
 const healthChipClass = computed(() => {
   const s = props.agent.healthScore

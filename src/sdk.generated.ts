@@ -240,6 +240,11 @@ export interface PendingPermission {
  * that tool call. Pattern is the command string (Bash), file path (Edit/Write),
  * or empty for other tools.
  */
+export interface RecentTool {
+  name: string
+  detail?: string
+}
+
 export interface PendingToolUse {
   id: string
   tool: string
@@ -317,7 +322,7 @@ export interface Agent {
   uptime: number
   lastActivity: string
   currentAction?: string
-  lastTools: string[]
+  lastTools: RecentTool[]
   tasks: TaskInfo[]
   subagents: SubAgent[]
   tokenUsage: TokenUsage

@@ -300,6 +300,26 @@ type pendingToolInput struct {
 	FilePath string `json:"file_path"` // Edit, Write
 }
 
+const toolDetailMaxLen = 120
+
+// toolDetail returns the tool's own human-readable argument, truncated so one
+// entry stays one line: a Bash command can run to many lines on its own.
+func toolDetail(raw json.RawMessage) string {
+	var inp pendingToolInput
+	_ = json.Unmarshal(raw, &inp)
+	d := inp.Command
+	if d == "" {
+		d = inp.FilePath
+	}
+	d = strings.Join(strings.Fields(d), " ")
+	if len(d) > toolDetailMaxLen {
+		// Mark the cut: a silently clipped command reads like a different,
+		// shorter one that was never run.
+		return d[:toolDetailMaxLen] + "…"
+	}
+	return d
+}
+
 // todoInput is the input shape for TodoWrite tool calls.
 type todoInput struct {
 	Todos []struct {
@@ -442,7 +462,7 @@ type SessionData struct {
 	Entrypoint          sdk.Entrypoint
 	LastActivity        time.Time
 	CurrentAction       string
-	LastTools           []string
+	LastTools           []sdk.RecentTool
 	Tasks               []sdk.TaskInfo
 	TokenUsage          sdk.TokenUsage
 	Model               string
@@ -723,7 +743,7 @@ func ParseSessionFile(path string) (*SessionData, error) {
 		LastActivity: time.Now().Add(-24 * time.Hour), // default: old
 	}
 
-	var recentToolNames []string
+	var recentTools []sdk.RecentTool
 
 	// pendingToolUses tracks assistant tool_use blocks (id → block) in order; the
 	// last one with no matching tool_result is the pending tool. Ordered slice
@@ -806,7 +826,7 @@ func ParseSessionFile(path string) (*SessionData, error) {
 					case "tool_use":
 						hasToolUse = true
 						data.ToolCounts[b.Name]++
-						recentToolNames = append(recentToolNames, b.Name)
+						recentTools = append(recentTools, sdk.RecentTool{Name: b.Name, Detail: toolDetail(b.Input)})
 						data.CurrentAction = b.Name
 						if b.ID != "" {
 							toolUseOrder = append(toolUseOrder, trackedToolUse{id: b.ID, name: b.Name, input: b.Input})
@@ -849,12 +869,7 @@ func ParseSessionFile(path string) (*SessionData, error) {
 	if n := len(toolUseOrder); n > 0 {
 		tu := toolUseOrder[n-1]
 		if !resolvedToolUseIDs[tu.id] {
-			var inp pendingToolInput
-			_ = json.Unmarshal(tu.input, &inp)
-			pattern := inp.Command
-			if pattern == "" {
-				pattern = inp.FilePath
-			}
+			pattern := toolDetail(tu.input)
 			data.PendingToolUse = &sdk.PendingToolUse{
 				ID:      tu.id,
 				Tool:    tu.name,
@@ -894,25 +909,26 @@ func ParseSessionFile(path string) (*SessionData, error) {
 		data.TokenUsage = full.TokenUsage
 	}
 
-	if len(recentToolNames) > 5 {
-		data.LastTools = recentToolNames[len(recentToolNames)-5:]
+	if len(recentTools) > 5 {
+		data.LastTools = recentTools[len(recentTools)-5:]
 	} else {
-		data.LastTools = recentToolNames
+		data.LastTools = recentTools
 	}
 
-	// Convergence detection: last 5 tools identical
-	if len(recentToolNames) >= 5 {
-		last5 := recentToolNames[len(recentToolNames)-5:]
+	// Convergence detection: last 5 tools identical. Compares names only -- the
+	// same tool with different arguments is progress, not a loop.
+	if len(recentTools) >= 5 {
+		last5 := recentTools[len(recentTools)-5:]
 		allSame := true
 		for _, t := range last5[1:] {
-			if t != last5[0] {
+			if t.Name != last5[0].Name {
 				allSame = false
 				break
 			}
 		}
 		if allSame {
 			data.ConvergenceAlert = true
-			data.ConvergenceToolName = last5[0]
+			data.ConvergenceToolName = last5[0].Name
 		}
 	}
 

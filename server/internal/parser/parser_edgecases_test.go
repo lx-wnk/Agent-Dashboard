@@ -190,7 +190,11 @@ func TestParseSessionFile_LastToolsCapped(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, data.LastTools, 5)
 	// LastTools must contain the last 5 tools in order
-	require.Equal(t, []string{"Bash", "Glob", "Grep", "Edit", "MultiEdit"}, data.LastTools)
+	names := make([]string, 0, len(data.LastTools))
+	for _, tl := range data.LastTools {
+		names = append(names, tl.Name)
+	}
+	require.Equal(t, []string{"Bash", "Glob", "Grep", "Edit", "MultiEdit"}, names)
 }
 
 // TestParseSessionFile_ToolCounts verifies that tool usage counts are tracked correctly.

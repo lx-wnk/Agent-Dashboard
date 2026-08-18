@@ -228,6 +228,15 @@ type PendingPermission struct {
 // tool_result yet. It indicates the agent is currently executing or blocked on
 // that tool call. Pattern is the command string (Bash), file path (Edit/Write),
 // or empty for other tools.
+// RecentTool is one entry of the recent-tool trail. Detail is the tool's own
+// human-readable argument -- a Bash command, an Edit/Write path -- and is
+// agent-authored text on its way to a UI: never interpolate it into a shell
+// command, a query or HTML without escaping at the point of use.
+type RecentTool struct {
+	Name   string `json:"name"`
+	Detail string `json:"detail,omitempty"`
+}
+
 type PendingToolUse struct {
 	ID      string `json:"id"`
 	Tool    string `json:"tool"`
@@ -331,7 +340,7 @@ type Agent struct {
 	Uptime                    int64          `json:"uptime"`
 	LastActivity              string         `json:"lastActivity"`
 	CurrentAction             *string        `json:"currentAction"`
-	LastTools                 []string       `json:"lastTools"`
+	LastTools                 []RecentTool   `json:"lastTools"`
 	Tasks                     []TaskInfo     `json:"tasks"`
 	Subagents                 []SubAgent     `json:"subagents"`
 	TokenUsage                TokenUsage     `json:"tokenUsage"`

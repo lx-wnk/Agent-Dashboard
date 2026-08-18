@@ -24,7 +24,7 @@ function agentWithTools() {
     cacheCreationCostEstimate: 0,
     cacheReadCostEstimate: 0,
     healthScore: 80,
-    lastTools: ['Read'],
+    lastTools: [{ name: 'Read', detail: 'src/main.ts' }],
     tasks: [],
     subagents: [],
   }

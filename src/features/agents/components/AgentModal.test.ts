@@ -19,7 +19,7 @@ const baseAgent: Agent = {
   status: 'active',
   uptime: 60,
   lastActivity: '2026-01-01T00:00:00Z',
-  lastTools: ['Read'],
+  lastTools: [{ name: 'Read', detail: 'src/main.ts' }],
   tasks: [],
   subagents: [],
   tokenUsage: { inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0 },
