@@ -27,6 +27,7 @@ func (c *CustomCommandSpawner) Spawn(ctx context.Context, args LLMSpawnArgs) (LL
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
+	// #nosec G204 -- c.Command is either the resolved anthropic-spawner path or a spawner row's command column, written by the /api/spawners CRUD (ValidateSpawnerCommand allow-list) or unchecked by the DASHBOARD_SPAWN_COMMAND seed in serverapp/di_seed.go (env-setting actor is already near-RCE), and not re-validated here; the CRUD routes are loopback-only and, with the default auth.mode=none, unauthenticated, so the actor is any local process reaching the loopback port with a matching Origin; exec.CommandContext passes argv without a shell.
 	cmd := exec.CommandContext(ctx, c.Command)
 	cmd.Stdin = bytes.NewReader(argsJSON)
 	var stderrBuf bytes.Buffer
@@ -51,6 +52,7 @@ func (c *CustomCommandSpawner) SpawnStream(ctx context.Context, args LLMSpawnArg
 	if err != nil {
 		return nil, fmt.Errorf("CustomCommandSpawner.SpawnStream: marshal args: %w", err)
 	}
+	// #nosec G204 -- c.Command is either the resolved anthropic-spawner path or a spawner row's command column, written by the /api/spawners CRUD (ValidateSpawnerCommand allow-list) or unchecked by the DASHBOARD_SPAWN_COMMAND seed in serverapp/di_seed.go (env-setting actor is already near-RCE), and not re-validated here; the CRUD routes are loopback-only and, with the default auth.mode=none, unauthenticated, so the actor is any local process reaching the loopback port with a matching Origin; exec.CommandContext passes argv without a shell.
 	cmd := exec.CommandContext(ctx, c.Command)
 	cmd.Stdin = bytes.NewReader(argsJSON)
 	stdout, err := cmd.StdoutPipe()

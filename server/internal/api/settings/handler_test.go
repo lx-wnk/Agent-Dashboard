@@ -100,4 +100,3 @@ func TestSettingsAPI_PatchPersistenceFailure(t *testing.T) {
 	r.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
-

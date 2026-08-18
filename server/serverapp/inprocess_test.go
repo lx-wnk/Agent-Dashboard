@@ -114,4 +114,3 @@ func TestRun_InProcess_HealthMutationShutdown(t *testing.T) {
 		t.Fatal("Run did not return within timeout after ctx cancellation")
 	}
 }
-

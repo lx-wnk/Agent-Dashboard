@@ -241,6 +241,7 @@ func buildExecCommand(sp *ent.Spawner, args []string) *exec.Cmd {
 	combined := make([]string, 0, len(sp.Args)+len(args))
 	combined = append(combined, sp.Args...)
 	combined = append(combined, args...)
+	// #nosec G204 -- sp.Command/sp.Args are not re-validated here; writers are the /api/spawners CRUD (ValidateSpawnerCommand allow-list) and the DASHBOARD_SPAWN_COMMAND seed in serverapp/di_seed.go, which skips that check but is reachable only by whoever sets the server environment (already near-RCE), and with the default auth.mode=none RequireAdminOrBypass is a pass-through, so the CRUD actor is any local process reaching the loopback port with a matching Origin; task data only reaches argv, which exec.Command passes without a shell.
 	return exec.Command(sp.Command, combined...)
 }
 

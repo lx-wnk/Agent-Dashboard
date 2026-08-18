@@ -26,7 +26,7 @@ func (f *fakeSettingsRepo) Get(_ context.Context, k string) (string, bool, error
 	v, ok := f.m[k]
 	return v, ok, nil
 }
-func (f *fakeSettingsRepo) Set(_ context.Context, k, v string) error { f.m[k] = v; return nil }
+func (f *fakeSettingsRepo) Set(_ context.Context, k, v string) error             { f.m[k] = v; return nil }
 func (f *fakeSettingsRepo) ListAll(_ context.Context) (map[string]string, error) { return f.m, nil }
 
 func setupHandler(t *testing.T) (*onboarding.Handler, *chi.Mux, repo.ApiKeyRepo) {

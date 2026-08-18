@@ -146,6 +146,7 @@ func TestLoad_HooksSecretFromEnv_UsedAsIs(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, secret, cfg.HooksSecret)
 }
+
 // -------------------------------------------------------------------
 // Native .env file loading (covers `task dev` via air and
 // `./bin/agent-dashboard serve`, both of which call config.Load)

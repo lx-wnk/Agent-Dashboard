@@ -22,6 +22,17 @@ linters:
           deny:
             - pkg: github.com/lx-wnk/agent-dashboard/server/internal/pluginmgmt
               desc: plugin is the runtime (registry, lifecycle, settings); it must not import the pluginmgmt control plane (one-way edge, ARCH-P2-2)
+    errcheck:
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - (io.Closer).Close
+        - (*os.File).Close
+        - (io.ReadCloser).Close
+        - (*compress/gzip.Writer).Close
+        - (*database/sql.Rows).Close
+        - (github.com/lx-wnk/agent-dashboard/server/internal/db/ent.Client).Close
     revive:
       rules:
         - name: exported
@@ -44,10 +55,24 @@ linters:
       - linters:
           - all
         path: ent/
+      - linters:
+          - staticcheck
+          - govet
+          - revive
+          - errcheck
+        path: internal/db/ent/
+      - linters:
+          - revive
+        text: stutters
     paths:
       - third_party$
       - builtin$
       - examples$
+issues:
+  # Defaults cap identical findings at 3 per linter, so a gate can look clean
+  # while duplicates of an already-reported issue stay hidden.
+  max-issues-per-linter: 0
+  max-same-issues: 0
 formatters:
   enable:
     - gofmt

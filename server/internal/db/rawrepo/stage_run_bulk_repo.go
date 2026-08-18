@@ -69,6 +69,7 @@ func (r *sqlStageRunBulkRepo) LatestPerTask(ctx context.Context, taskIDs []strin
 	}
 
 	placeholders, args := buildInArgs(taskIDs)
+	// #nosec G201 -- the query text is a compile-time constant; the only interpolation is buildInArgs' "?" placeholder list, and every id is bound as a query parameter.
 	q := fmt.Sprintf(`
 SELECT id, task_id, stage, session_id, session_name, pid, status, iteration,
        output, tokens_used, cost_cents, started_at, ended_at, last_grant_at, created_at,
@@ -111,6 +112,7 @@ func (r *sqlStageRunBulkRepo) AllForTaskIDs(ctx context.Context, taskIDs []strin
 	}
 
 	placeholders, args := buildInArgs(taskIDs)
+	// #nosec G201 -- the query text is a compile-time constant; the only interpolation is buildInArgs' "?" placeholder list, and every id is bound as a query parameter.
 	q := fmt.Sprintf(`
 SELECT id, task_id, stage, session_id, session_name, pid, status, iteration,
        output, tokens_used, cost_cents, started_at, ended_at, last_grant_at, created_at,
@@ -151,6 +153,7 @@ func (r *sqlStageRunBulkRepo) ChildSummariesByParent(ctx context.Context, parent
 	}
 
 	placeholders, args := buildInArgs(parentIDs)
+	// #nosec G201 -- the query text is a compile-time constant; the only interpolation is buildInArgs' "?" placeholder list, and every id is bound as a query parameter.
 	q := fmt.Sprintf(`
 SELECT t.parent_task_id, t.id, t.current_stage,
        lr.status, lr.pid, lr.tokens_used, lr.cost_cents, lr.output, lr.started_at, lr.ended_at, lr.created_at

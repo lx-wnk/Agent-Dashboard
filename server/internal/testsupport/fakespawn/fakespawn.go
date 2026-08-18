@@ -91,7 +91,7 @@ func (s *Spawner) Spawn(opts SpawnOpts) Agent {
 		`{"type":"assistant","sessionId":"` + sessionID + `","timestamp":"` + ts +
 		`","message":{"role":"assistant","model":"` + model + `","usage":{"input_tokens":10,"output_tokens":5}}}` + "\n"
 	jsonlPath := filepath.Join(projectDir, sessionID+".jsonl")
-	if err := os.WriteFile(jsonlPath, []byte(lines), 0o644); err != nil {
+	if err := os.WriteFile(jsonlPath, []byte(lines), 0o600); err != nil {
 		panic(err)
 	}
 
@@ -104,7 +104,7 @@ func (s *Spawner) Spawn(opts SpawnOpts) Agent {
 		if opts.LiveInjectable {
 			content = `{"port":1,"tmuxPane":"%1"}`
 		}
-		if err := os.WriteFile(channelconfig.DiscoveryFile(s.Home, pid), []byte(content), 0o644); err != nil {
+		if err := os.WriteFile(channelconfig.DiscoveryFile(s.Home, pid), []byte(content), 0o600); err != nil {
 			panic(err)
 		}
 	}
@@ -114,7 +114,7 @@ func (s *Spawner) Spawn(opts SpawnOpts) Agent {
 		if err := os.MkdirAll(discoveryDir, 0o755); err != nil {
 			panic(err)
 		}
-		if err := os.WriteFile(channelconfig.DiscoveryPtyFile(s.Home, pid), []byte(`{"port":1,"ptyInject":true}`), 0o644); err != nil {
+		if err := os.WriteFile(channelconfig.DiscoveryPtyFile(s.Home, pid), []byte(`{"port":1,"ptyInject":true}`), 0o600); err != nil {
 			panic(err)
 		}
 	}

@@ -57,9 +57,9 @@ Build the SPA **before** the binary — `go:embed` bakes the compiled frontend i
 | `task build:everything` | `build:all` plus, on macOS, the desktop shell |
 | `task dev:desktop` | macOS desktop shell with wails hot-reload (needs the wails CLI) |
 | `task test` | Run all tests with race detector |
-| `task lint` | Run golangci-lint |
+| `task lint` | Run golangci-lint and the formatter check (sdk, server, every plugin) |
 | `task generate` | Run ent schema + tygo TS code generation |
-| `task fmt` | Format with gofmt |
+| `task fmt` | Format with gofmt (sdk, server, plugins) |
 
 ### Frontend (Vue)
 

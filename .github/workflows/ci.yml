@@ -158,6 +158,11 @@ jobs:
             sleep 5
           done
           exit 1
+      - name: Check formatting
+        working-directory: ${{ matrix.module }}
+        # `golangci-lint run` reports only some formatting violations, so it
+        # cannot stand in for this step.
+        run: golangci-lint fmt --diff ./...
       - name: Lint
         working-directory: ${{ matrix.module }}
         run: golangci-lint run ./...
@@ -193,6 +198,11 @@ jobs:
             sleep 5
           done
           exit 1
+      - name: Check formatting
+        working-directory: plugins/${{ matrix.plugin }}
+        # `golangci-lint run` reports only some formatting violations, so it
+        # cannot stand in for this step.
+        run: GOWORK=off golangci-lint fmt --diff ./...
       - name: Lint
         working-directory: plugins/${{ matrix.plugin }}
         run: GOWORK=off golangci-lint run ./...

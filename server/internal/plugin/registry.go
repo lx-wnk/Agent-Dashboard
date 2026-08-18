@@ -193,6 +193,7 @@ func (r *Registry) startEntry(serverCtx, startupCtx context.Context, pluginDir s
 	}
 	entry := Entry{Descriptor: desc, BaseURL: "http://" + desc.Addr, pluginDir: pluginDir}
 	if len(desc.Command) > 0 {
+		// #nosec G204 -- desc.Command is read from a plugin.json in the local plugin directory at Load; no HTTP payload can define it, and argv is passed without a shell.
 		cmd := exec.CommandContext(serverCtx, desc.Command[0], desc.Command[1:]...)
 		disableContextKill(cmd)
 		cmd.Dir = pluginDir
@@ -713,6 +714,7 @@ func (r *Registry) watchPlugin(ctx context.Context, pluginDir string, desc Descr
 			return
 		}
 
+		// #nosec G204 -- same descriptor as the initial start: desc.Command comes from the on-disk plugin.json, not from any request.
 		newCmd := exec.CommandContext(ctx, desc.Command[0], desc.Command[1:]...)
 		disableContextKill(newCmd)
 		newCmd.Dir = pluginDir

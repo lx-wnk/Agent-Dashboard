@@ -120,9 +120,9 @@ func provideOrchestrator(
 		RemoveWorktreeFn: func(ctx context.Context, task *ent.Task, force bool) error {
 			return worktreeManager.RemoveWorktree(ctx, task.ID, force)
 		},
-		SetupWorktreeFn:       makeSetupWorktreeFn(projectRepo),
-		CheckpointerStartFn:   checkpointerStart,
-		CheckpointerStopFn:    checkpointerStop,
+		SetupWorktreeFn:     makeSetupWorktreeFn(projectRepo),
+		CheckpointerStartFn: checkpointerStart,
+		CheckpointerStopFn:  checkpointerStop,
 		HasUnpushedWorkFn: func(ctx context.Context, task *ent.Task) bool {
 			return worktreeManager.HasUnpushedWork(ctx, task)
 		},
