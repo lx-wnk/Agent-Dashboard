@@ -26,6 +26,53 @@ type ProcessInfo struct {
 	// False means unknown, not "default": ClaudeConfigDir is "" in both cases.
 	ClaudeConfigDirKnown bool
 	Provider             sdk.Provider // detected AI coding CLI provider; defaults to ProviderClaude
+	// InternalProcess is true when Command invokes one of Claude Code's own
+	// internal daemon/spare-pool subcommands (see internalCLISubcommands)
+	// rather than a user-addressable interactive session.
+	InternalProcess bool
+}
+
+// internalCLISubcommands lists Claude Code CLI subcommands that spawn internal
+// daemon/spare-pool machinery (introduced in Claude Code 2.1.234) rather than a
+// user-addressable session. A future upstream version may add more. Each entry
+// is matched against argv[1:] (the tokens right after the claude binary, see
+// IsInternalProcess) -- never a bare substring and never "anywhere in the
+// line" -- so a prompt or resume ID that merely contains these words later in
+// the command line does not produce a false positive.
+var internalCLISubcommands = [][]string{
+	{"bg-spare"},
+	{"bg-pty-host"},
+	{"daemon", "run"},
+}
+
+// IsInternalProcess reports whether comm -- a process's full command line as
+// reported by `ps -eo args` -- invokes one of internalCLISubcommands as its
+// subcommand, i.e. starting immediately at argv[1].
+func IsInternalProcess(comm string) bool {
+	tokens := strings.Fields(comm)
+	if len(tokens) < 2 {
+		return false
+	}
+	subcommand := tokens[1:]
+	for _, marker := range internalCLISubcommands {
+		if hasPrefix(subcommand, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasPrefix reports whether tokens begins with the exact sequence prefix.
+func hasPrefix(tokens, prefix []string) bool {
+	if len(tokens) < len(prefix) {
+		return false
+	}
+	for i, s := range prefix {
+		if tokens[i] != s {
+			return false
+		}
+	}
+	return true
 }
 
 var (
@@ -251,6 +298,7 @@ func ScanProcessesWithDetector(ctx context.Context, detector ProviderDetector) (
 			ClaudeConfigDir:      configDir,
 			ClaudeConfigDirKnown: configDirKnown,
 			Provider:             detectProviderVia(detector, r.command),
+			InternalProcess:      IsInternalProcess(r.command),
 		})
 	}
 	return result, nil

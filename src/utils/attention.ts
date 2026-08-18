@@ -1,10 +1,10 @@
 import type { Agent } from '../types'
-import { isStalled } from './format'
+import { isAwaitingInput, isStalled, STALLED_THRESHOLD_SECONDS } from './format'
 
 export interface Attention {
-  kind: 'question' | 'permission' | 'error' | 'stalled'
+  kind: 'question' | 'permission' | 'error' | 'stalled' | 'yourTurn'
   label: string
-  tone: 'warning' | 'danger'
+  tone: 'warning' | 'danger' | 'neutral'
   weight: number
 }
 
@@ -22,16 +22,25 @@ export function attentionFor(agent: Agent, secondsSinceActivity: number | null):
     return { kind: 'question', label: 'Confirm answers', tone: 'warning', weight: -1 }
   if (agent.pendingPermissions && agent.pendingPermissions.length > 0)
     return { kind: 'permission', label: 'Needs permission', tone: 'warning', weight: 0 }
-  // An unresolved tool_use is the only signal a plain JSONL gives for "blocked on
-  // a permission prompt" — but a session that never prompts produces the same
-  // shape while a tool is simply still running. Reporting that as attention
-  // buried the real prompts in noise.
-  if (agent.pendingToolUse && !agent.permissionsBypassed)
-    return { kind: 'permission', label: 'Needs permission', tone: 'warning', weight: 0 }
   if (agent.errorState)
     return { kind: 'error', label: 'Run failed', tone: 'danger', weight: 1 }
-  if (isStalled(agent.status, secondsSinceActivity))
+  // An unresolved tool_use is the only signal a plain JSONL gives for "blocked on
+  // a permission prompt" — but a session that never prompts produces the same
+  // shape while a tool is simply still running, and permissionsBypassed only
+  // catches the two flags that skip prompting outright: an allow-listed tool or
+  // a partial permission mode silences the real prompt just as completely, and
+  // neither reaches this payload. Naming the tool as if a prompt were on screen
+  // was the bug the report described. Past the same dwell used for a stalled
+  // session, the honest claim is just that nothing has happened in a while — not
+  // which tool, and not that anyone is waiting on it.
+  const toolUseStalled = Boolean(agent.pendingToolUse) && !agent.permissionsBypassed
+    && secondsSinceActivity != null && secondsSinceActivity > STALLED_THRESHOLD_SECONDS
+  if (isStalled(agent.status, secondsSinceActivity) || toolUseStalled)
     return { kind: 'stalled', label: 'No activity', tone: 'warning', weight: 2 }
+  // Turn finished, process alive: ready for the next instruction rather than
+  // blocked on one, so it ranks below every other attention kind.
+  if (isAwaitingInput(agent))
+    return { kind: 'yourTurn', label: 'Your turn', tone: 'neutral', weight: 3 }
   return null
 }
 

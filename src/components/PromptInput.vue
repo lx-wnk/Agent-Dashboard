@@ -156,8 +156,22 @@ const showStaleNote = computed(() => isSlashQuery.value && commandSet.value.buil
 
 // Only a live-injectable session (pty broker or tmux) can receive a live prompt.
 // Any other session resumes as a NEW session (claude --resume) on send — surface
-// that so it's not mistaken for live injection.
-const isResumeMode = computed(() => !!props.agent && !props.agent.liveInjectable)
+// that so it's not mistaken for live injection. The three causes are distinct:
+// an internal process is not a session at all, a disconnected agent has no
+// channel file yet, and a connected-but-not-injectable agent can only be
+// resumed as a new one.
+type ResumeReason = 'internal' | 'disconnected' | 'noLiveChannel'
+const resumeReason = computed<ResumeReason | null>(() => {
+  const a = props.agent
+  if (!a || a.liveInjectable)
+    return null
+  if (a.internalProcess)
+    return 'internal'
+  if (!a.channelAvailable)
+    return 'disconnected'
+  return 'noLiveChannel'
+})
+const isResumeMode = computed(() => resumeReason.value !== null)
 
 function selectSuggestion(cmd: { name: string, disabled?: boolean }) {
   if (cmd.disabled)
@@ -411,9 +425,19 @@ defineExpose({ focus })
       @keydown="onConfirmStripKeydown"
     >
       <p class="text-[11px] text-amber-800 dark:text-amber-300 mb-2">
-        ⤳ This session is <strong>not live-injectable</strong>. Confirming will resume it as a
-        <strong>new detached session</strong>. Start it via <code>agent-dashboard live</code> for
-        live injection.<br>
+        <template v-if="resumeReason === 'internal'">
+          ⚠ This is a Claude Code <strong>internal process</strong>, not a session — it cannot be messaged.
+        </template>
+        <template v-else-if="resumeReason === 'disconnected'">
+          ⚠ <strong>Not connected</strong> to the dashboard. Confirming will resume it as a
+          <strong>new detached session</strong> via <code>claude --resume</code>.
+        </template>
+        <template v-else>
+          ⤳ This session has <strong>no live input path</strong>. Confirming will resume it as a
+          <strong>new detached session</strong>. Start it via <code>agent-dashboard live</code> for
+          live injection.
+        </template>
+        <br>
         <span class="font-mono opacity-75">{{ truncate(resumeConfirm) }}</span>
       </p>
       <div class="flex gap-2">
@@ -439,10 +463,19 @@ defineExpose({ focus })
     </div>
     <p
       v-if="isResumeMode && !sendStatus"
+      data-testid="resume-hint"
       class="text-[11px] text-amber-700 dark:text-amber-400"
       :class="variant === 'full' ? 'px-4 pb-2' : 'px-3 pb-1.5 pt-0.5'"
     >
-      ⤳ Not live-injectable — sending resumes this session as a <strong>new</strong> session.
+      <template v-if="resumeReason === 'internal'">
+        ⚠ Internal Claude Code process — not a session you can message.
+      </template>
+      <template v-else-if="resumeReason === 'disconnected'">
+        ⚠ Not connected to the dashboard — sending will not reach this session.
+      </template>
+      <template v-else>
+        ⤳ No live input path — sending resumes this session as a <strong>new</strong> session.
+      </template>
     </p>
     <p
       v-if="sendStatus"

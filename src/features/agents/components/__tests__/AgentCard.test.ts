@@ -78,6 +78,49 @@ describe('agentCard interaction', () => {
     await w.get('[data-testid="agent-card-body"]').trigger('click')
     expect(w.emitted('select')).toBeTruthy()
   })
+  // Regression for the dead-zone bug: the subagent list used to carry its own
+  // @click.stop, so clicking anywhere in that panel (which grows large with the
+  // prompt panel hover-expanded below it) silently swallowed the open click.
+  it('emits select when the active-subagents panel is clicked, with the prompt panel present', async () => {
+    const agent = makeAgent({
+      subagents: [{
+        id: 'sa-1',
+        type: 'researcher',
+        status: 'active',
+        currentAction: 'Read',
+        sessionFile: '/tmp/sa-1.jsonl',
+        tokensUsed: 5000,
+        durationSeconds: 90,
+        latestOutput: 'Analyzing the codebase',
+      }],
+    })
+    const w = mount(AgentCard, { props: { agent }, global: { stubs } })
+    await w.get('[data-testid="active-subagents-block"]').trigger('click')
+    expect(w.emitted('select')).toBeTruthy()
+  })
+  it('keeps an expanded subagent output expanded after a fresh SSE-style prop object arrives', async () => {
+    const agent = makeAgent({
+      subagents: [{
+        id: 'sa-1',
+        type: 'researcher',
+        status: 'active',
+        currentAction: 'Read',
+        sessionFile: '/tmp/sa-1.jsonl',
+        tokensUsed: 5000,
+        durationSeconds: 90,
+        latestOutput: 'Analyzing the codebase for relevant patterns',
+      }],
+    })
+    const w = mount(AgentCard, { props: { agent }, global: { stubs } })
+    await w.get('[data-testid="subagent-expand-toggle"]').trigger('click')
+    expect(w.get('[data-testid="subagent-latest-output"]').classes()).toContain('whitespace-pre-wrap')
+
+    // Simulate an SSE frame: a structurally-equal but referentially-fresh agent object.
+    const freshAgent = JSON.parse(JSON.stringify(agent))
+    await w.setProps({ agent: freshAgent })
+
+    expect(w.get('[data-testid="subagent-latest-output"]').classes()).toContain('whitespace-pre-wrap')
+  })
   it('does not emit select when the dismiss button is clicked', async () => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({})))
     const w = mount(AgentCard, { props: { agent: makeAgent({ status: 'finished' }) }, global: { stubs } })

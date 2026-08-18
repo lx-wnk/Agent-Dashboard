@@ -352,6 +352,13 @@ export interface Agent {
    * resumes the session as a new one (MCP log delivery does not drive it).
    */
   liveInjectable?: boolean
+  /**
+   * InternalProcess is true when this is Claude Code's own internal
+   * daemon/spare-pool machinery (a grandchild of a real session, matched by
+   * scanner.IsInternalProcess), not a session the user can address --
+   * LiveInjectable is meaningless for it and no prompt can be sent to it.
+   */
+  internalProcess?: boolean
   lastOutput?: string
   convergenceAlert: boolean
   convergenceToolName?: string

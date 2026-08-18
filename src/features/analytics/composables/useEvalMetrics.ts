@@ -1,6 +1,6 @@
 import type { DriftAlert, EvalMetricSnapshot, MetricKey } from '@/types'
 import { onUnmounted, ref, shallowRef } from 'vue'
-import { METRIC_KEYS } from '@/utils/evalMetrics'
+import { MAX_LOOKBACK_HOURS, METRIC_KEYS } from '@/utils/evalMetrics'
 
 const POLL_INTERVAL_MS = 60_000
 
@@ -10,6 +10,10 @@ export function useEvalMetrics() {
   const openAlerts = shallowRef<DriftAlert[]>([])
   const isLoading = ref(true)
   const error = ref<string | null>(null)
+  const hours = ref(168)
+  // Most recent snapshot found outside the current window, or null when the
+  // window has data of its own (no hint needed) or none was ever recorded.
+  const lastDataAt = ref<string | null>(null)
 
   let intervalId: ReturnType<typeof setInterval> | null = null
   let aborter: AbortController | null = null
@@ -24,7 +28,7 @@ export function useEvalMetrics() {
     const grouped = emptySnapshots()
     await Promise.all(
       METRIC_KEYS.map(async (key) => {
-        const res = await fetch(`/api/eval/metrics?metric=${key}&hours=168`, { signal })
+        const res = await fetch(`/api/eval/metrics?metric=${key}&hours=${hours.value}`, { signal })
         if (!res.ok)
           throw new Error(`HTTP ${res.status}`)
         const data = await res.json() as EvalMetricSnapshot[]
@@ -32,6 +36,22 @@ export function useEvalMetrics() {
       }),
     )
     snapshots.value = grouped
+
+    const isEmpty = METRIC_KEYS.every(key => grouped[key].length === 0)
+    if (!isEmpty || hours.value >= MAX_LOOKBACK_HOURS) {
+      lastDataAt.value = null
+      return
+    }
+    // Best-effort hint only, probed off a single metric (all metrics are
+    // written by the same scan) — never lets a probe failure fail the load.
+    try {
+      const res = await fetch(`/api/eval/metrics?metric=${METRIC_KEYS[0]}&hours=${MAX_LOOKBACK_HOURS}`, { signal })
+      const data = res.ok ? await res.json() as EvalMetricSnapshot[] : []
+      lastDataAt.value = data.reduce<string | null>((max, d) => (!max || d.recordedAt > max ? d.recordedAt : max), null)
+    }
+    catch {
+      lastDataAt.value = null
+    }
   }
 
   async function fetchAlerts(signal: AbortSignal): Promise<void> {
@@ -117,6 +137,13 @@ export function useEvalMetrics() {
     await fetchAll()
   }
 
+  async function setHours(newHours: number): Promise<void> {
+    if (newHours === hours.value)
+      return
+    hours.value = newHours
+    await fetchAll()
+  }
+
   function start(): void {
     if (intervalId !== null)
       return
@@ -144,8 +171,11 @@ export function useEvalMetrics() {
     openAlerts,
     isLoading,
     error,
+    hours,
+    lastDataAt,
     acknowledge,
     runScan,
+    setHours,
     refresh: fetchAll,
     start,
     stop,

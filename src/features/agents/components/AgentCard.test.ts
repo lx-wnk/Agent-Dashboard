@@ -220,6 +220,20 @@ describe('agentCard your-turn marker', () => {
   })
 })
 
+describe('agentCard internal process badge', () => {
+  const badgeStubs = { MachineBadge: true, ProviderBadge: true, PromptInput: true }
+
+  it('shows the internal-process badge when agent.internalProcess is true', () => {
+    const w = mount(AgentCard, { props: { agent: { ...baseAgent, internalProcess: true } }, global: { stubs: badgeStubs } })
+    expect(w.find('[data-testid="agent-card-internal-badge"]').exists()).toBe(true)
+  })
+
+  it('hides the internal-process badge for a normal session', () => {
+    const w = mount(AgentCard, { props: { agent: { ...baseAgent, internalProcess: false } }, global: { stubs: badgeStubs } })
+    expect(w.find('[data-testid="agent-card-internal-badge"]').exists()).toBe(false)
+  })
+})
+
 describe('agentCard terminal access', () => {
   const badgeStubs = { MachineBadge: true, ProviderBadge: true, PromptInput: true }
 

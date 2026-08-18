@@ -1,6 +1,18 @@
-import type { PipelineStage, StageRunStatus } from '../types'
+import type { AgentStatus, PipelineStage, StageRunStatus } from '../types'
 
 export type ChipTone = 'success' | 'warning' | 'danger' | 'info' | 'neutral' | 'accent'
+
+export type AgentDisplayStatus = AgentStatus | 'working'
+
+/**
+ * The status the UI shows for an agent: live turn state (TurnOpen ||
+ * recentOutput, server/internal/merger) overrides the time-bucketed status
+ * the server sends, so the badge and any grouping stay in agreement about
+ * the same agent.
+ */
+export function agentDisplayStatus(agent: { status: AgentStatus, working: boolean }): AgentDisplayStatus {
+  return agent.working ? 'working' : agent.status
+}
 
 export function stageTone(stage: PipelineStage | string): ChipTone {
   switch (stage) {

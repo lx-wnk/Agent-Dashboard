@@ -7,13 +7,14 @@ let PromptInput: any
 // Only the fields PromptInput and useAgentPrompt actually read. A partial
 // fixture is safe here because neither path formats cost or tokens.
 let sessionCounter = 0
-function makeAgent(): Agent {
+function makeAgent(overrides: Partial<Agent> = {}): Agent {
   sessionCounter++
   return {
     pid: 4242,
     sessionId: `sess-${sessionCounter}`,
     cwd: '/repo',
     liveInjectable: true,
+    ...overrides,
   } as unknown as Agent
 }
 
@@ -45,6 +46,39 @@ beforeEach(async () => {
 afterEach(() => {
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
+})
+
+describe('promptInput resume-hint copy', () => {
+  it('marks an internal process as not a session you can message', async () => {
+    const w = mount(PromptInput, { props: { agent: makeAgent({ liveInjectable: false, internalProcess: true, channelAvailable: true }) } })
+    await flushPromises()
+    const hint = w.find('[data-testid="resume-hint"]')
+    expect(hint.exists()).toBe(true)
+    expect(hint.text()).toContain('not a session you can message')
+  })
+
+  it('says "not connected" when the channel is unavailable', async () => {
+    const w = mount(PromptInput, { props: { agent: makeAgent({ liveInjectable: false, internalProcess: false, channelAvailable: false }) } })
+    await flushPromises()
+    const hint = w.find('[data-testid="resume-hint"]')
+    expect(hint.exists()).toBe(true)
+    expect(hint.text()).toContain('Not connected to the dashboard')
+  })
+
+  it('says sending resumes as a new session when connected but not injectable', async () => {
+    const w = mount(PromptInput, { props: { agent: makeAgent({ liveInjectable: false, internalProcess: false, channelAvailable: true }) } })
+    await flushPromises()
+    const hint = w.find('[data-testid="resume-hint"]')
+    expect(hint.exists()).toBe(true)
+    expect(hint.text()).toContain('resumes this session as a')
+    expect(hint.text()).toContain('new')
+  })
+
+  it('shows no resume hint for a live-injectable session', async () => {
+    const w = mount(PromptInput, { props: { agent: makeAgent({ liveInjectable: true }) } })
+    await flushPromises()
+    expect(w.find('[data-testid="resume-hint"]').exists()).toBe(false)
+  })
 })
 
 describe('promptInput drift notice', () => {
