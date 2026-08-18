@@ -163,16 +163,37 @@ func (o *PipelineOrchestrator) runProgressTaskLocked(ctx context.Context, taskID
 		SystemPromptRepo:     o.opts.SystemPromptRepo,
 		ResolveSpawner:       o.opts.ResolveSpawner,
 		StageModelFn:         o.modelResolver.StageDefault,
-		DispatchHTTPSpawn: func(stageRunID, taskID string, spawn func() (string, error)) {
+		DispatchHTTPSpawn: func(stageRunID, taskID string, spawn func(context.Context) (string, error)) {
+			// context.WithoutCancel keeps values (logger, trace ids) but drops the
+			// HTTP request's cancellation, which fires the instant the handler
+			// returns. context.AfterFunc re-attaches orchestrator-shutdown cancellation.
+			detached := context.WithoutCancel(ctx)
 			go func() {
-				o.httpPool.acquire()
+				base := o.baseContext()
+				// A parked acquire abandons the wait when base ends first — no
+				// slot was taken, so spawn must not run and release must not
+				// be deferred. The stage_run stays "running"; recoverRunningStageRuns
+				// picks it up on the next start.
+				if !o.httpPool.acquire(base) {
+					return
+				}
 				defer o.httpPool.release()
-				sessionFile, err := spawn()
-				o.httpResultCh <- httpSpawnResult{
+				spawnCtx, cancel := context.WithCancel(detached)
+				defer cancel()
+				defer context.AfterFunc(base, cancel)()
+				sessionFile, err := spawn(spawnCtx)
+				// Abandon the send once the orchestrator is shutting down: at that
+				// point Run's select loop has already returned and nothing drains
+				// httpResultCh, so a blocking send here would leak this goroutine
+				// and hold its httpPool slot forever.
+				select {
+				case o.httpResultCh <- httpSpawnResult{
 					stageRunID:  stageRunID,
 					taskID:      taskID,
 					sessionFile: sessionFile,
 					err:         err,
+				}:
+				case <-base.Done():
 				}
 			}()
 		},

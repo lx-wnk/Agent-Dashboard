@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"context"
 	"fmt"
 	"maps"
 	"strings"
@@ -91,7 +92,6 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 		}
 		stageRunID := ctx.StageRun.ID
 		taskID := ctx.Task.ID
-		spawnCtx := ctx.Ctx
 
 		ctx.RecordAudit(h.stage+"_dispatched", map[string]any{
 			"spawner":     adapter.Name(),
@@ -101,8 +101,10 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 		})
 
 		if ctx.DispatchHTTPSpawn != nil {
-			// Async path: dispatch to goroutine pool and return immediately.
-			ctx.DispatchHTTPSpawn(stageRunID, taskID, func() (string, error) {
+			// Async path: dispatch to goroutine pool and return immediately. The
+			// seam supplies its own long-lived context — ctx.Ctx is the HTTP
+			// request context and is cancelled the instant the handler returns.
+			ctx.DispatchHTTPSpawn(stageRunID, taskID, func(spawnCtx context.Context) (string, error) {
 				result, err := adapter.Spawn(spawnCtx, spawnArgs)
 				if err != nil {
 					return "", fmt.Errorf("spawner %s: %w", adapter.Name(), err)
@@ -112,8 +114,9 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 			return AsyncRunningTransition{PID: 0}, nil
 		}
 
-		// Synchronous fallback for tests or environments without a live orchestrator.
-		llmResult, err := adapter.Spawn(spawnCtx, spawnArgs)
+		// Synchronous fallback for tests or environments without a live orchestrator:
+		// the caller blocks on this call, so ctx.Ctx is correct here.
+		llmResult, err := adapter.Spawn(ctx.Ctx, spawnArgs)
 		if err != nil {
 			return nil, fmt.Errorf("agentStageHandler.Execute(%s): spawner %s: %w", h.stage, adapter.Name(), err)
 		}
