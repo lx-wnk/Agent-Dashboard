@@ -3,7 +3,9 @@ package spawners
 
 import (
 	"regexp"
+	"strings"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/services"
 	"github.com/lx-wnk/agent-dashboard/server/internal/validation"
 )
 
@@ -48,6 +50,23 @@ var requiredAdapterConfigKeys = map[string][]string{
 	"openai": {"api_key_env"},
 }
 
+// adapterConfigCommandKeys lists, per adapter_type, the adapter_config keys whose
+// value is an executable and must pass the same trust check as the row's command
+// column (services.ValidateSpawnerCommand). Data-driven so a future adapter that
+// adds a command-valued key cannot silently skip the check.
+var adapterConfigCommandKeys = map[string]map[string]struct{}{
+	"acp": {"command": {}},
+}
+
+// adapterConfigArgsKeys lists, per adapter_type, the adapter_config key whose
+// value is a whitespace-separated argv appended to that type's command key
+// (see adapterConfigCommandKeys) at spawn time. Every token that looks like a
+// filesystem path is checked like a command; data-driven for the same reason
+// as adapterConfigCommandKeys.
+var adapterConfigArgsKeys = map[string]string{
+	"acp": "args",
+}
+
 // ValidateAdapterType returns "", true when t is one of ValidAdapterTypes,
 // otherwise an error message suitable for a 400 response.
 func ValidateAdapterType(t string) (string, bool) {
@@ -65,6 +84,10 @@ func ValidateAdapterType(t string) (string, bool) {
 //   - every required key must be present and non-empty
 //   - keys must be non-empty, free of shell metacharacters
 //   - values must be <= 4096 chars
+//   - command-valued keys (adapterConfigCommandKeys), if non-empty, must pass
+//     services.ValidateSpawnerCommand
+//   - the args key (adapterConfigArgsKeys), if non-empty, has every
+//     path-shaped token pass the same check (see validateArgsPathTokens)
 func ValidateAdapterConfig(adapterType string, cfg map[string]string) (string, bool) {
 	allowed, ok := allowedAdapterConfigKeys[adapterType]
 	if !ok {
@@ -83,10 +106,45 @@ func ValidateAdapterConfig(adapterType string, cfg map[string]string) (string, b
 		if len(v) > envValueMaxLen {
 			return "adapter_config value exceeds 4096 chars", false
 		}
+		if _, isCommand := adapterConfigCommandKeys[adapterType][k]; isCommand && v != "" {
+			if ok, reason := services.ValidateSpawnerCommand(v); !ok {
+				return "adapter_config." + k + ": " + reason, false
+			}
+		}
+		if argsKey, hasArgsKey := adapterConfigArgsKeys[adapterType]; hasArgsKey && k == argsKey && v != "" {
+			if reason, ok := validateArgsPathTokens(v); !ok {
+				return "adapter_config." + k + ": " + reason, false
+			}
+		}
 	}
 	for _, req := range requiredAdapterConfigKeys[adapterType] {
 		if v, ok := cfg[req]; !ok || v == "" {
 			return "adapter_config missing required key: " + req, false
+		}
+	}
+	return "", true
+}
+
+// looksLikeArgsPathToken reports whether tok is shaped like a filesystem path
+// (absolute or relative) rather than a flag or a package spec.
+func looksLikeArgsPathToken(tok string) bool {
+	return strings.HasPrefix(tok, "/") || strings.HasPrefix(tok, "./") || strings.HasPrefix(tok, "../")
+}
+
+// validateArgsPathTokens splits args the same way the spawner does
+// (strings.Fields) and runs every path-shaped token through
+// services.ValidateSpawnerCommand, the same trust check a command value gets.
+// ponytail: a bare filename (resolved against the child's cwd, which is
+// already operator-controlled) and a remote package spec such as `npx
+// <tarball-url>` (the shape the documented ACP default itself uses) are not
+// covered by this check.
+func validateArgsPathTokens(args string) (string, bool) {
+	for _, tok := range strings.Fields(args) {
+		if !looksLikeArgsPathToken(tok) {
+			continue
+		}
+		if ok, reason := services.ValidateSpawnerCommand(tok); !ok {
+			return reason, false
 		}
 	}
 	return "", true

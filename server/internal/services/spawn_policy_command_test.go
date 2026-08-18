@@ -93,6 +93,35 @@ func TestValidateSpawnerCommand_SymlinkIntoTempDenied(t *testing.T) {
 	}
 }
 
+// TestValidateSpawnerCommand_SymlinkFromTrustedDirAllowed covers a package
+// manager's own symlink indirection (Homebrew's npx -> .../npm/bin/npx-cli.js):
+// the named path's parent is trusted even though the resolved target's parent
+// is not, and the trusted party controls both ends.
+func TestValidateSpawnerCommand_SymlinkFromTrustedDirAllowed(t *testing.T) {
+	// t.TempDir, not the shared os.TempDir: this test creates a symlink under
+	// base, so a shared path makes the second run fail with "file exists".
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatalf("EvalSymlinks(TempDir): %v", err)
+	}
+	trustedDir := filepath.Join(base, "trusted-bin")
+	untrustedDir := filepath.Join(base, "untrusted-target")
+	setAllowedCommands(t, trustedDir)
+
+	target := writeExecutable(t, filepath.Join(untrustedDir, "real"))
+	if err := os.MkdirAll(trustedDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	link := filepath.Join(trustedDir, "npx")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+
+	if ok, reason := ValidateSpawnerCommand(link); !ok {
+		t.Errorf("expected symlink named under a trusted dir allowed regardless of resolved target, got reason %q", reason)
+	}
+}
+
 func TestValidateSpawnerCommand_EnvTrustedDirAllowed(t *testing.T) {
 	dir := t.TempDir()
 	bin := writeExecutable(t, filepath.Join(dir, "claude"))
@@ -110,5 +139,80 @@ func TestValidateSpawnerCommand_UnresolvableDenied(t *testing.T) {
 	}
 	if reason == "" {
 		t.Fatal("expected reason for unresolvable abs path")
+	}
+}
+
+// TestValidateSpawnerCommand_OtherWritableDirDenied covers a world-writable
+// trusted dir (e.g. a misconfigured /usr/local/bin): any local user could
+// unlink and replant the binary there, so the dir must not grant trust even
+// though it is on the configured allow-list.
+func TestValidateSpawnerCommand_OtherWritableDirDenied(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o777); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	bin := writeExecutable(t, filepath.Join(dir, "claude"))
+	setAllowedCommands(t, dir)
+
+	ok, reason := ValidateSpawnerCommand(bin)
+	if ok {
+		t.Fatal("expected command under an other-writable dir denied")
+	}
+	if reason == "" {
+		t.Fatal("expected reason for other-writable dir")
+	}
+}
+
+// TestValidateSpawnerCommand_OtherWritableFileDenied covers a tight (0o700)
+// dir holding a file with a loose mode: the dir alone is not enough, the
+// resolved file's own mode must also be checked.
+func TestValidateSpawnerCommand_OtherWritableFileDenied(t *testing.T) {
+	dir := t.TempDir()
+	bin := writeExecutable(t, filepath.Join(dir, "claude"))
+	// os.WriteFile's perm is masked by umask, so the other-write bit needs an
+	// explicit chmod (chmod bypasses umask).
+	if err := os.Chmod(bin, 0o777); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	setAllowedCommands(t, dir)
+
+	ok, reason := ValidateSpawnerCommand(bin)
+	if ok {
+		t.Fatal("expected other-writable file denied even in a tight dir")
+	}
+	if reason == "" {
+		t.Fatal("expected reason for other-writable file")
+	}
+}
+
+// TestValidateSpawnerCommand_GroupWritableDirAllowed pins the boundary: a
+// group-writable (but not other-writable) trusted dir -- e.g. Homebrew's
+// /opt/homebrew/bin -- must stay accepted. A group-writable rule would
+// re-break Homebrew acceptance.
+func TestValidateSpawnerCommand_GroupWritableDirAllowed(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o775); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	bin := writeExecutable(t, filepath.Join(dir, "claude"))
+	setAllowedCommands(t, dir)
+
+	if ok, reason := ValidateSpawnerCommand(bin); !ok {
+		t.Errorf("expected group-writable-but-not-other-writable dir allowed, got reason %q", reason)
+	}
+}
+
+// TestValidateSpawnerCommand_Mode0755DirAllowed pins the ordinary case: a
+// normal, non-writable-by-others trusted dir keeps working.
+func TestValidateSpawnerCommand_Mode0755DirAllowed(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o755); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	bin := writeExecutable(t, filepath.Join(dir, "claude"))
+	setAllowedCommands(t, dir)
+
+	if ok, reason := ValidateSpawnerCommand(bin); !ok {
+		t.Errorf("expected normal 0755 dir allowed, got reason %q", reason)
 	}
 }

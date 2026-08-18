@@ -26,3 +26,79 @@ func TestValidateAdapterConfig_AcpRejectsUnknownKey(t *testing.T) {
 	require.False(t, ok)
 	require.Equal(t, "unknown adapter_config key: host", msg)
 }
+
+func TestValidateAdapterConfig_AcpRejectsUntrustedCommand(t *testing.T) {
+	msg, ok := ValidateAdapterConfig("acp", map[string]string{"command": "/tmp/evil"})
+	require.False(t, ok)
+	require.Contains(t, msg, "could not be resolved")
+}
+
+func TestValidateAdapterConfig_AcpRejectsUnknownBareCommand(t *testing.T) {
+	msg, ok := ValidateAdapterConfig("acp", map[string]string{"command": "evil-binary"})
+	require.False(t, ok)
+	require.Contains(t, msg, "not in the allow-list")
+}
+
+func TestValidateAdapterConfig_AcpAcceptsAllowlistedBareCommand(t *testing.T) {
+	msg, ok := ValidateAdapterConfig("acp", map[string]string{"command": "npx"})
+	require.True(t, ok)
+	require.Empty(t, msg)
+}
+
+// TestValidateAdapterConfig_AcpAcceptsAbsoluteTrustedCommand covers the
+// absolute-path accept branch: a path that resolves and whose parent is a
+// trusted bin dir. /bin/sh exists on both macOS and Linux.
+func TestValidateAdapterConfig_AcpAcceptsAbsoluteTrustedCommand(t *testing.T) {
+	msg, ok := ValidateAdapterConfig("acp", map[string]string{"command": "/bin/sh"})
+	require.True(t, ok)
+	require.Empty(t, msg)
+}
+
+func TestValidateAdapterConfig_AcpAcceptsEmptyCommand(t *testing.T) {
+	msg, ok := ValidateAdapterConfig("acp", map[string]string{"command": ""})
+	require.True(t, ok)
+	require.Empty(t, msg)
+}
+
+func TestValidateAdapterConfig_OllamaUnaffectedByCommandCheck(t *testing.T) {
+	msg, ok := ValidateAdapterConfig("ollama", map[string]string{"host": "http://localhost:11434"})
+	require.True(t, ok)
+	require.Empty(t, msg)
+}
+
+func TestValidateAdapterConfig_AcpAcceptsTheDocumentedDefaultArgs(t *testing.T) {
+	// The bundled ACP default is npx WITH a package argument — the exact shape a
+	// naive path rule would wrongly reject.
+	msg, ok := ValidateAdapterConfig("acp", map[string]string{
+		"args": "-y @agentclientprotocol/claude-agent-acp@0.68.0",
+	})
+	require.True(t, ok, "documented ACP default args must stay valid, got %q", msg)
+}
+
+func TestValidateAdapterConfig_AcpRejectsAbsolutePathArg(t *testing.T) {
+	msg, ok := ValidateAdapterConfig("acp", map[string]string{
+		"command": "/bin/sh",
+		"args":    "/tmp/payload.sh",
+	})
+	require.False(t, ok)
+	require.Contains(t, msg, "adapter_config.args")
+}
+
+func TestValidateAdapterConfig_AcpRejectsRelativePathArg(t *testing.T) {
+	msg, ok := ValidateAdapterConfig("acp", map[string]string{
+		"command": "/bin/sh",
+		"args":    "./payload.sh",
+	})
+	require.False(t, ok)
+	require.Contains(t, msg, "adapter_config.args")
+}
+
+func TestValidateAdapterConfig_AcpAcceptsTrustedPathArg(t *testing.T) {
+	msg, ok := ValidateAdapterConfig("acp", map[string]string{"args": "/bin/sh"})
+	require.True(t, ok, "a path arg under a trusted bin dir must pass, got %q", msg)
+}
+
+func TestValidateAdapterConfig_AcpAcceptsEmptyArgs(t *testing.T) {
+	msg, ok := ValidateAdapterConfig("acp", map[string]string{"args": ""})
+	require.True(t, ok, "an empty args value must stay valid, got %q", msg)
+}

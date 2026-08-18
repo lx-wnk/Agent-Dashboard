@@ -50,10 +50,16 @@ func SetSpawnerAllowedCommands(cmds []string) {
 // Bare names: allowed only when listed in DefaultAllowedCommands or as a bare
 // entry of the spawn.allowedCommands setting.
 //
-// Absolute paths: must EvalSymlinks-resolve (the file must exist) and the
-// resolved binary's parent directory must lie under a trusted bin directory
-// (see trustedBinDirs). Resolving symlinks before the trust check closes the
-// symlink-into-/tmp bypass.
+// Absolute paths: must EvalSymlinks-resolve (the file must exist), and either
+// the resolved binary's parent OR the named path's own (pre-symlink) parent
+// must lie under a trusted bin directory (see trustedBinDirs). A trusted dir is
+// a statement about who could write the name found there -- a package manager's
+// own symlink indirection (Homebrew's `npx` resolves to
+// `../lib/node_modules/npm/bin/npx-cli.js`) is written by the same trusted party
+// as the name itself, so accepting on the named parent alone is correct there.
+// EvalSymlinks is still required: a name whose own parent is untrusted (e.g.
+// under /tmp) is only accepted if it resolves into a trusted dir, and a chain
+// where neither end is trusted is denied.
 func ValidateSpawnerCommand(command string) (bool, string) {
 	if command == "" {
 		return false, "command must not be empty"
@@ -64,14 +70,18 @@ func ValidateSpawnerCommand(command string) (bool, string) {
 		if err != nil {
 			return false, fmt.Sprintf("command path %q could not be resolved", command)
 		}
-		parent := filepath.Dir(resolved)
-		for _, dir := range trustedBinDirs() {
-			trusted, err := canonicalize(dir)
-			if err != nil {
-				continue
-			}
-			if isUnder(parent, trusted) {
-				return true, ""
+		if otherWritable(resolved) {
+			return false, fmt.Sprintf("command path %q resolves to an other-writable file", command)
+		}
+		if underTrustedBinDir(filepath.Dir(resolved)) || underTrustedBinDir(filepath.Dir(filepath.Clean(command))) {
+			return true, ""
+		}
+		// Name the exclusion rather than the generic miss: an operator reading
+		// "not under a trusted bin directory" would find the directory listed in
+		// trustedBinDirs and conclude the check is broken.
+		for _, parent := range []string{filepath.Dir(resolved), filepath.Dir(filepath.Clean(command))} {
+			if otherWritable(parent) {
+				return false, fmt.Sprintf("command path %q is under %q, which is other-writable and therefore not trusted", command, parent)
 			}
 		}
 		return false, fmt.Sprintf("command path %q is not under a trusted bin directory", command)
@@ -88,10 +98,29 @@ func ValidateSpawnerCommand(command string) (bool, string) {
 	return false, fmt.Sprintf("command %q is not in the allow-list", command)
 }
 
+// underTrustedBinDir reports whether parent lies under any configured trusted
+// bin directory (see trustedBinDirs).
+func underTrustedBinDir(parent string) bool {
+	for _, dir := range trustedBinDirs() {
+		trusted, err := canonicalize(dir)
+		if err != nil {
+			continue
+		}
+		if isUnder(parent, trusted) {
+			return true
+		}
+	}
+	return false
+}
+
 // trustedBinDirs returns the set of directories under which an absolute spawner
 // command is permitted: the standard system/Homebrew bin dirs, the user's
 // ~/.local/bin, the resolved directory of the `claude` binary on PATH, and any
-// absolute-path entries of the spawn.allowedCommands setting.
+// absolute-path entries of the spawn.allowedCommands setting. A directory that
+// is other-writable (mode&0o002) is dropped -- any local user could replace or
+// plant a binary there, which would make the allow-list decorative for that
+// path. Group-writable directories are kept: they are still only writable by
+// an owning group, not by every local user.
 func trustedBinDirs() []string {
 	dirs := []string{"/usr/bin", "/bin", "/usr/local/bin", "/opt/homebrew/bin"}
 	if home, err := os.UserHomeDir(); err == nil {
@@ -103,12 +132,60 @@ func trustedBinDirs() []string {
 		}
 		dirs = append(dirs, filepath.Dir(p))
 	}
+	extraDirs := make(map[string]bool)
 	for _, extra := range configuredExtraAllowedCommands() {
 		if strings.HasPrefix(extra, "/") {
 			dirs = append(dirs, extra)
+			extraDirs[extra] = true
 		}
 	}
-	return dirs
+
+	trusted := make([]string, 0, len(dirs))
+	for _, dir := range dirs {
+		if otherWritable(dir) {
+			if extraDirs[dir] {
+				warnOtherWritableTrustedDirOnce(dir)
+			}
+			continue
+		}
+		trusted = append(trusted, dir)
+	}
+	return trusted
+}
+
+// otherWritable reports whether path's file mode grants write access to
+// "others" (mode&0o002). A stat failure (missing path, permission denied)
+// is treated as not-writable -- existence and resolvability are already
+// enforced separately by EvalSymlinks in the callers.
+func otherWritable(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return info.Mode().Perm()&0o002 != 0
+}
+
+// warnedOtherWritableDirs tracks directories already reported by
+// warnOtherWritableTrustedDirOnce, so a configured trusted dir that stays
+// world-writable for the life of the process logs exactly once instead of on
+// every ValidateSpawnerCommand call (trustedBinDirs is on that hot path).
+var (
+	warnedOtherWritableMu   sync.Mutex
+	warnedOtherWritableDirs = map[string]struct{}{}
+)
+
+// warnOtherWritableTrustedDirOnce logs, at most once per distinct dir for the
+// process lifetime, that a configured spawn.allowedCommands directory was
+// excluded from the trusted-bin allow-list for being other-writable -- an
+// operator whose spawner validation starts failing needs to find out why.
+func warnOtherWritableTrustedDirOnce(dir string) {
+	warnedOtherWritableMu.Lock()
+	defer warnedOtherWritableMu.Unlock()
+	if _, done := warnedOtherWritableDirs[dir]; done {
+		return
+	}
+	warnedOtherWritableDirs[dir] = struct{}{}
+	slog.Warn("spawn policy: configured trusted bin dir is other-writable, excluding it from the allow-list", "dir", dir)
 }
 
 // configuredExtraAllowedCommands returns a copy of the configured extra spawner
