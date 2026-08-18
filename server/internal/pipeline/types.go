@@ -134,6 +134,11 @@ type StageContext struct {
 
 	RecordAudit       func(action string, details map[string]any)
 	RequestPermission func(tool, pattern, reason string) *ent.PermissionRequest
+
+	// PermissionStatus reads back the row a prior RequestPermission call filed,
+	// by its ID. Kept acp-agnostic: it returns the ent row, not an acp-package
+	// type, so this file does not need to import the acp adapter.
+	PermissionStatus func(ctx context.Context, id string) (*ent.PermissionRequest, error)
 }
 
 // StageHandler is implemented by each pipeline stage.

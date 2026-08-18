@@ -148,7 +148,7 @@ func runExecPath(ctx context.Context, cfg SpawnConfig, sp *ent.Spawner, prompt s
 }
 
 func runAdapterPath(ctx context.Context, cfg SpawnConfig, sp *ent.Spawner, prompt string) (<-chan string, error) {
-	adapter, err := llmadapter.NewLLMSpawnerFromSpawner(sp)
+	adapter, err := llmadapter.NewLLMSpawnerFromSpawner(sp, nil)
 	if err != nil {
 		return nil, fmt.Errorf("refine: build adapter: %w", err)
 	}

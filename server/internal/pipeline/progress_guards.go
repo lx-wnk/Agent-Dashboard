@@ -224,6 +224,11 @@ func (o *PipelineOrchestrator) runProgressTaskLocked(ctx context.Context, taskID
 			}
 			return req
 		},
+		PermissionStatus: func(pollCtx context.Context, id string) (*ent.PermissionRequest, error) {
+			// pollCtx, not the enclosing request ctx: an ACP gate polls while the
+			// spawn it belongs to outlives the HTTP response.
+			return o.opts.PermissionRepo.GetPermissionRequest(pollCtx, id)
+		},
 	}
 
 	transition, execErr := handler.Execute(stageCtx)

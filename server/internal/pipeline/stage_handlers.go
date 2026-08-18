@@ -2,7 +2,9 @@ package pipeline
 
 import (
 	"context"
+
 	"fmt"
+	"github.com/lx-wnk/agent-dashboard/server/internal/acp"
 	"maps"
 	"strings"
 
@@ -50,7 +52,7 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 	// custom-command abstraction. The adapter writes its own synthetic JSONL
 	// session file so the completion detector can read the output unchanged.
 	if resolved != nil && resolved.AdapterType != "" && resolved.AdapterType != "claude" {
-		adapter, err := llmadapter.NewLLMSpawnerFromSpawner(resolved)
+		adapter, err := llmadapter.NewLLMSpawnerFromSpawner(resolved, acpPermissionGate(ctx))
 		if err != nil {
 			return nil, fmt.Errorf("agentStageHandler.Execute(%s): build adapter: %w", h.stage, err)
 		}
@@ -311,4 +313,40 @@ var HandlersByStage = NewStageHandlers(syntheticSpawn)
 // GetHandlerForStage returns the handler for stage, or nil if unregistered.
 func GetHandlerForStage(stage string) StageHandler {
 	return HandlersByStage[stage]
+}
+
+// acpPermissionGate routes an ACP agent's permission requests into the same
+// approval flow the native Claude path uses. Returns nil when the stage context
+// carries no permission callbacks (tests without a live orchestrator); the
+// adapter then reports an unwired gate rather than silently refusing.
+func acpPermissionGate(ctx *StageContext) func(context.Context, acp.PermissionRequest) (acp.PermissionDecision, error) {
+	if ctx.RequestPermission == nil || ctx.PermissionStatus == nil {
+		return nil
+	}
+	gate := &acp.PollingGate{
+		File: func(_ context.Context, req acp.PermissionRequest) (string, error) {
+			row := ctx.RequestPermission(req.ToolName, "", req.Title)
+			if row == nil {
+				return "", fmt.Errorf("acp gate: filing permission request for %q returned no row", req.ToolName)
+			}
+			return row.ID, nil
+		},
+		Status: func(pollCtx context.Context, id string) (acp.RequestStatus, error) {
+			row, err := ctx.PermissionStatus(pollCtx, id)
+			if err != nil {
+				return acp.StatusPending, err
+			}
+			// outcome stays unset until a human resolves the request; "granted"
+			// is the only outcome that authorizes the call, and an expired one
+			// is a refusal like any other.
+			if row == nil || row.Outcome == nil || *row.Outcome == "" {
+				return acp.StatusPending, nil
+			}
+			if *row.Outcome == "granted" {
+				return acp.StatusGranted, nil
+			}
+			return acp.StatusDenied, nil
+		},
+	}
+	return gate.Decide
 }

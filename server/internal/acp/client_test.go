@@ -268,7 +268,11 @@ func TestRequestPermissionWithoutRejectOptionCancels(t *testing.T) {
 }
 
 func TestRequestPermissionDenyFallsBackToRejectAlways(t *testing.T) {
-	c := &Client{}
+	// A gate that reached a verdict: remembering it is accurate. The unwired
+	// case is a different thing and is covered separately.
+	c := &Client{OnPermission: func(context.Context, PermissionRequest) (PermissionDecision, error) {
+		return DecisionDeny, nil
+	}}
 
 	resp, err := c.RequestPermission(context.Background(), sdkacp.RequestPermissionRequest{
 		SessionId: "sess-1",
@@ -563,4 +567,25 @@ func TestRequestPermissionWideningMetaShapes(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRequestPermissionWithoutGateDeniesTransiently(t *testing.T) {
+	// A missing gate is a wiring fault, not a verdict: reject_always would let
+	// the agent remember it and stop asking for the rest of the session.
+	c := &Client{}
+
+	resp, err := c.RequestPermission(context.Background(), sdkacp.RequestPermissionRequest{
+		SessionId: "sess-1",
+		// Only reject_always is offered: a transient deny must refuse it and
+		// cancel, while a substantive one would take it. Offering reject_once
+		// too makes both classes pick that, which discriminates nothing.
+		Options: []sdkacp.PermissionOption{
+			{Kind: sdkacp.PermissionOptionKindRejectAlways, Name: "Always reject", OptionId: "reject-always"},
+		},
+		ToolCall: sdkacp.ToolCallUpdate{ToolCallId: "tc-1"},
+	})
+
+	require.NoError(t, err)
+	require.Nil(t, resp.Outcome.Selected, "a transient deny must not select reject_always")
+	require.NotNil(t, resp.Outcome.Cancelled)
 }

@@ -11,7 +11,7 @@ import (
 )
 
 func TestNewLLMSpawnerFromSpawner_Nil(t *testing.T) {
-	got, err := llmadapter.NewLLMSpawnerFromSpawner(nil)
+	got, err := llmadapter.NewLLMSpawnerFromSpawner(nil, nil)
 	require.NoError(t, err)
 	assert.Nil(t, got, "nil spawner row must yield nil adapter (caller falls back to native path)")
 }
@@ -20,7 +20,7 @@ func TestNewLLMSpawnerFromSpawner_ClaudeAndEmpty(t *testing.T) {
 	for _, adapterType := range []string{"", "claude"} {
 		t.Run("adapter_type="+adapterType, func(t *testing.T) {
 			row := &ent.Spawner{AdapterType: adapterType}
-			got, err := llmadapter.NewLLMSpawnerFromSpawner(row)
+			got, err := llmadapter.NewLLMSpawnerFromSpawner(row, nil)
 			require.NoError(t, err)
 			assert.Nil(t, got, "claude/empty adapter_type must yield nil adapter")
 		})
@@ -35,7 +35,7 @@ func TestNewLLMSpawnerFromSpawner_Ollama(t *testing.T) {
 			"default_model": "llama3:8b",
 		},
 	}
-	got, err := llmadapter.NewLLMSpawnerFromSpawner(row)
+	got, err := llmadapter.NewLLMSpawnerFromSpawner(row, nil)
 	require.NoError(t, err)
 	require.NotNil(t, got)
 	o, ok := got.(*llmadapter.OllamaSpawner)
@@ -54,7 +54,7 @@ func TestNewLLMSpawnerFromSpawner_OpenAI(t *testing.T) {
 			"default_model": "gpt-4o-mini",
 		},
 	}
-	got, err := llmadapter.NewLLMSpawnerFromSpawner(row)
+	got, err := llmadapter.NewLLMSpawnerFromSpawner(row, nil)
 	require.NoError(t, err)
 	require.NotNil(t, got)
 	o, ok := got.(*llmadapter.OpenAISpawner)
@@ -69,7 +69,7 @@ func TestNewLLMSpawnerFromSpawner_CustomWithCommand(t *testing.T) {
 		AdapterType: "custom",
 		Command:     "/usr/local/bin/my-llm-shim",
 	}
-	got, err := llmadapter.NewLLMSpawnerFromSpawner(row)
+	got, err := llmadapter.NewLLMSpawnerFromSpawner(row, nil)
 	require.NoError(t, err)
 	require.NotNil(t, got)
 	c, ok := got.(*llmadapter.CustomCommandSpawner)
@@ -82,7 +82,7 @@ func TestNewLLMSpawnerFromSpawner_CustomMissingCommand(t *testing.T) {
 		AdapterType: "custom",
 		Command:     "",
 	}
-	got, err := llmadapter.NewLLMSpawnerFromSpawner(row)
+	got, err := llmadapter.NewLLMSpawnerFromSpawner(row, nil)
 	require.Error(t, err)
 	assert.Nil(t, got)
 	assert.Contains(t, err.Error(), "custom adapter requires spawner.command")
@@ -90,7 +90,7 @@ func TestNewLLMSpawnerFromSpawner_CustomMissingCommand(t *testing.T) {
 
 func TestNewLLMSpawnerFromSpawner_UnknownType(t *testing.T) {
 	row := &ent.Spawner{AdapterType: "fancy-new-llm"}
-	got, err := llmadapter.NewLLMSpawnerFromSpawner(row)
+	got, err := llmadapter.NewLLMSpawnerFromSpawner(row, nil)
 	require.Error(t, err)
 	assert.Nil(t, got)
 	assert.Contains(t, err.Error(), "unknown adapter_type")
@@ -100,7 +100,7 @@ func TestFactoryBuildsTheACPAdapter(t *testing.T) {
 	s, err := llmadapter.NewLLMSpawnerFromSpawner(&ent.Spawner{
 		AdapterType:   "acp",
 		AdapterConfig: map[string]string{"command": "npx", "args": "-y @agentclientprotocol/claude-agent-acp@latest"},
-	})
+	}, nil)
 	require.NoError(t, err)
 	require.NotNil(t, s)
 	require.Equal(t, "acp", s.Name())
@@ -112,7 +112,7 @@ func TestFactoryBuildsTheACPAdapter(t *testing.T) {
 }
 
 func TestFactoryDefaultsTheACPCommand(t *testing.T) {
-	s, err := llmadapter.NewLLMSpawnerFromSpawner(&ent.Spawner{AdapterType: "acp"})
+	s, err := llmadapter.NewLLMSpawnerFromSpawner(&ent.Spawner{AdapterType: "acp"}, nil)
 	require.NoError(t, err)
 
 	a, ok := s.(*llmadapter.ACPSpawner)
