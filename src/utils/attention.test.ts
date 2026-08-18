@@ -89,13 +89,19 @@ describe('attentionFor', () => {
     expect(attentionFor(agent, ACTIVE_SECS)).toBeNull()
   })
 
-  it('still reports a pending tool use when permissions are not bypassed', () => {
+  // The symptom report: a still-running tool and a genuinely blocked one are
+  // the same JSONL shape, so a card claiming a permission prompt while the
+  // agent is simultaneously rendered "Working" elsewhere is always wrong.
+  it('a busy agent with an unresolved pendingToolUse produces no permission attention', () => {
     const agent = makeAgent({
       status: 'active',
+      working: true,
       permissionsBypassed: false,
-      pendingToolUse: { tool: 'Bash', pattern: 'rm -rf /', id: 'tu_1' },
+      pendingToolUse: { tool: 'WebSearch', pattern: '', id: 'tu_1' },
     })
-    expect(attentionFor(agent, ACTIVE_SECS)?.kind).toBe('permission')
+    const att = attentionFor(agent, ACTIVE_SECS)
+    expect(att?.kind).not.toBe('permission')
+    expect(att).toBeNull()
   })
 
   // Task-driven grants are real DB rows, not an inference from the transcript.
@@ -129,15 +135,18 @@ describe('attentionFor', () => {
     expect(needsAttention(agent, ACTIVE_SECS)).toBe(true)
   })
 
-  it('returns permission when pendingToolUse is set', () => {
+  // Past the dwell used for a stalled session, a still-unresolved tool_use is
+  // worth a nudge — but only the honest one: no tool name, no permission claim.
+  it('reports a long-unresolved pendingToolUse as stalled, not permission', () => {
     const agent = makeAgent({
       status: 'active',
+      permissionsBypassed: false,
       pendingToolUse: { tool: 'Bash', pattern: 'git push', id: 'tu_1' },
     })
-    const att = attentionFor(agent, ACTIVE_SECS)
-    expect(att?.kind).toBe('permission')
-    expect(att?.tone).toBe('warning')
-    expect(att?.weight).toBe(0)
+    const att = attentionFor(agent, STALLED_SECS)
+    expect(att?.kind).toBe('stalled')
+    expect(att?.label).toBe('No activity')
+    expect(att?.weight).toBe(2)
   })
 
   it('returns error when errorState is set', () => {
@@ -243,11 +252,18 @@ describe('needsAttention', () => {
     expect(needsAttention(agent, ACTIVE_SECS)).toBe(true)
   })
 
-  it('returns true for agent with pendingToolUse', () => {
+  it('returns false for a freshly-started pendingToolUse (indistinguishable from a running tool)', () => {
     const agent = makeAgent({
       pendingToolUse: { tool: 'Bash', pattern: 'rm -rf', id: 'tu_3' },
     })
-    expect(needsAttention(agent, ACTIVE_SECS)).toBe(true)
+    expect(needsAttention(agent, ACTIVE_SECS)).toBe(false)
+  })
+
+  it('returns true for a pendingToolUse that has sat unresolved past the stalled dwell', () => {
+    const agent = makeAgent({
+      pendingToolUse: { tool: 'Bash', pattern: 'rm -rf', id: 'tu_3' },
+    })
+    expect(needsAttention(agent, STALLED_SECS)).toBe(true)
   })
 
   it('returns false for idle agent', () => {
