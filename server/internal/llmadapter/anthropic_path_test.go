@@ -39,7 +39,7 @@ func TestFactory_AnthropicAdapter(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("DASHBOARD_ANTHROPIC_SPAWNER_CMD", bin)
-	sp, err := NewLLMSpawnerFromSpawner(&ent.Spawner{AdapterType: "anthropic"})
+	sp, err := NewLLMSpawnerFromSpawner(&ent.Spawner{AdapterType: "anthropic"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

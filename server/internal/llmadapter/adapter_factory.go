@@ -1,9 +1,11 @@
 package llmadapter
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/acp"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 )
 
@@ -15,7 +17,7 @@ import (
 // AdapterConfig keys are the same plain keys exposed by AvailableAdapters
 // (e.g. "host", "default_model", "base_url", "api_key_env") — NOT the legacy
 // dotted "adapters.ollama.*" form.
-func NewLLMSpawnerFromSpawner(s *ent.Spawner) (LLMSpawner, error) {
+func NewLLMSpawnerFromSpawner(s *ent.Spawner, permission func(context.Context, acp.PermissionRequest) (acp.PermissionDecision, error)) (LLMSpawner, error) {
 	if s == nil {
 		return nil, nil // legacy: caller falls back to native claude path
 	}
@@ -53,7 +55,7 @@ func NewLLMSpawnerFromSpawner(s *ent.Spawner) (LLMSpawner, error) {
 	case "acp":
 		// The ACP adapter owns the agent process for the whole stage, because
 		// an ACP agent blocks on permission requests until the client answers.
-		a := &ACPSpawner{Command: s.AdapterConfig["command"]}
+		a := &ACPSpawner{Command: s.AdapterConfig["command"], Permission: permission}
 		if a.Command == "" {
 			a.Command = "npx"
 			a.Args = []string{"-y", "@agentclientprotocol/claude-agent-acp@0.68.0"}

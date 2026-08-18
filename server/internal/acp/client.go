@@ -161,9 +161,14 @@ func (c *Client) ask(ctx context.Context, req PermissionRequest) (decision Permi
 
 func (c *Client) RequestPermission(ctx context.Context, params sdkacp.RequestPermissionRequest) (sdkacp.RequestPermissionResponse, error) {
 	decision := DecisionDeny
-	// A client without a gate refuses every call for the session's lifetime, so
-	// remembering that refusal loses nothing — it is a verdict, not an outage.
-	reason := denySubstantive
+	// An unwired gate is a wiring fault, not a verdict: treating it as
+	// substantive lets the agent remember the refusal and stop asking, which
+	// disables approvals for the rest of the session. Transient keeps it
+	// recoverable once the gate is supplied.
+	reason := denyTransient
+	if c.OnPermission == nil {
+		slog.Error("acp: no permission gate wired, denying transiently", "toolCallID", string(params.ToolCall.ToolCallId), "sessionID", string(params.SessionId))
+	}
 	if c.OnPermission != nil {
 		req := PermissionRequest{
 			SessionID:  string(params.SessionId),
