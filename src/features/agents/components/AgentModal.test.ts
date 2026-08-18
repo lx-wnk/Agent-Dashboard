@@ -45,7 +45,6 @@ const stubs = {
   SubAgentList: true,
   TaskList: true,
   ToolTimeline: true,
-  ExecutionWaterfall: true,
   AppBadge: true,
   AgentTerminal: true,
 }
@@ -53,39 +52,6 @@ const stubs = {
 function mountModal(agent: Agent = baseAgent) {
   return mount(AgentModal, { props: { agent }, global: { stubs } })
 }
-
-describe('agentModal view tablist a11y', () => {
-  it('renders a role=tablist with two role=tab buttons', () => {
-    const wrapper = mountModal()
-    expect(wrapper.find('[role="tablist"]').exists()).toBe(true)
-    expect(wrapper.findAll('[role="tab"]').length).toBe(2)
-  })
-
-  it('marks the active tab with aria-selected and roving tabindex', () => {
-    const wrapper = mountModal()
-    const tabs = wrapper.findAll('[role="tab"]')
-    expect(tabs[0].attributes('aria-selected')).toBe('true')
-    expect(tabs[0].attributes('tabindex')).toBe('0')
-    expect(tabs[1].attributes('aria-selected')).toBe('false')
-    expect(tabs[1].attributes('tabindex')).toBe('-1')
-  })
-
-  it('clicking the Waterfall tab swaps the main area for the chart', async () => {
-    const wrapper = mountModal()
-    const tabs = wrapper.findAll('[role="tab"]')
-    await tabs[1].trigger('click')
-    expect(tabs[1].attributes('aria-selected')).toBe('true')
-    const panel = wrapper.findAll('[role="tabpanel"]').find(p => p.attributes('aria-labelledby') === tabs[1].attributes('id'))
-    expect(panel).toBeTruthy()
-  })
-
-  it('arrowRight on the tablist moves selection to the next tab', async () => {
-    const wrapper = mountModal()
-    await wrapper.find('[role="tablist"]').trigger('keydown', { key: 'ArrowRight' })
-    const tabs = wrapper.findAll('[role="tab"]')
-    expect(tabs[1].attributes('aria-selected')).toBe('true')
-  })
-})
 
 describe('agentModal subagent transcript', () => {
   const subagent = {

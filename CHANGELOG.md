@@ -12,6 +12,10 @@ from [Conventional Commits](https://www.conventionalcommits.org/) by GoReleaser.
 
 Preparing the first public release.
 
+### Removed
+
+- The **Waterfall** view in the agent detail modal. It was broken and not worth repairing: it charted a session's tool calls on a d3 timeline that no longer matched the data it was given, and the transcript already answers the question it was meant to answer. The modal now shows the transcript directly instead of offering a two-way toggle with one working side. The d3 packages stay — the eval charts use them.
+
 ### Added
 
 - The running build names itself. `GET /api/system/health` reports a `version`, and the status bar's system panel shows it as **BUILD**. The dashboard reaches its user through three build paths — the `serve` CLI, the macOS desktop shell, and a release build — each embedding its own copy of the SPA, and only the CLI was ever version-stamped: a window from a months-old bundle was indistinguishable from a fresh one, which is how a rebuild can look like it did nothing. Both desktop build tasks now stamp the same `git describe` value the server binary gets. An unstamped local build reports `dev`, which is a useful answer in itself.
