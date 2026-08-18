@@ -98,7 +98,12 @@ func TestValidateSpawnerCommand_SymlinkIntoTempDenied(t *testing.T) {
 // the named path's parent is trusted even though the resolved target's parent
 // is not, and the trusted party controls both ends.
 func TestValidateSpawnerCommand_SymlinkFromTrustedDirAllowed(t *testing.T) {
-	base := resolvedTmp(t)
+	// t.TempDir, not the shared os.TempDir: this test creates a symlink under
+	// base, so a shared path makes the second run fail with "file exists".
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatalf("EvalSymlinks(TempDir): %v", err)
+	}
 	trustedDir := filepath.Join(base, "trusted-bin")
 	untrustedDir := filepath.Join(base, "untrusted-target")
 	setAllowedCommands(t, trustedDir)
