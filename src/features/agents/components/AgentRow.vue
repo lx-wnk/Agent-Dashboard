@@ -10,6 +10,7 @@ import { useAgentIdentity } from '@/features/agents/composables/useAgentIdentity
 import { attentionFor } from '@/utils/attention'
 import { formatBurnRate, formatCost, formatRelativeActivity, isAwaitingInput, isStalled, secondsSince, shortModel, totalTokenCount } from '@/utils/format'
 import { friendlyProjectName } from '@/utils/friendlyProjectName'
+import { agentDisplayStatus } from '@/utils/statusColors'
 
 const props = defineProps<{ agent: Agent }>()
 const emit = defineEmits<{
@@ -149,7 +150,14 @@ async function handleResolve(outcome: 'granted' | 'denied') {
         <span class="font-mono text-[11px] px-1.5 py-0.5 rounded bg-raised text-fg-mute">PID {{ agent.pid }}</span>
         <span class="font-mono text-[11px] px-1.5 py-0.5 rounded bg-raised text-fg-mute">{{ totalTokenCount(agent.tokenUsage).toLocaleString() }} tok</span>
         <span v-if="burnRate !== '—'" class="font-mono text-[11px] px-1.5 py-0.5 rounded bg-raised text-fg-mute">{{ burnRate }}</span>
-        <AppBadge :variant="agent.status" />
+        <AppBadge :variant="agentDisplayStatus(agent)" />
+        <AppBadge
+          v-if="agent.internalProcess"
+          variant="info"
+          label="internal"
+          title="Claude Code's own internal daemon process — not a session you can message"
+          data-testid="agent-row-internal-badge"
+        />
         <span
           v-if="stalled"
           class="text-[10px] font-medium px-1 py-0.5 rounded bg-warning-soft text-warning-text"

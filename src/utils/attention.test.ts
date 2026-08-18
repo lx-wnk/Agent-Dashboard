@@ -198,6 +198,36 @@ describe('attentionFor', () => {
   })
 })
 
+it('returns null for a finished agent even when it would otherwise read as your-turn', () => {
+  const agent = makeAgent({ status: 'finished', working: false })
+  expect(attentionFor(agent, ACTIVE_SECS)).toBeNull()
+})
+
+it('returns yourTurn when the turn is finished and the process is still alive', () => {
+  const agent = makeAgent({ status: 'idle', working: false })
+  const att = attentionFor(agent, ACTIVE_SECS)
+  expect(att?.kind).toBe('yourTurn')
+  expect(att?.label).toBe('Your turn')
+  expect(att?.tone).toBe('neutral')
+  expect(att?.weight).toBeGreaterThan(2)
+})
+
+it('a pending question outranks yourTurn when both apply', () => {
+  const agent = makeAgent({
+    status: 'idle',
+    working: false,
+    pendingQuestion: {
+      header: 'Choose',
+      question: 'Which one?',
+      multiSelect: false,
+      options: [{ index: 1, label: 'A' }],
+      typeSomethingIndex: 2,
+      chatAboutIndex: 3,
+    },
+  })
+  expect(attentionFor(agent, ACTIVE_SECS)?.kind).toBe('question')
+})
+
 describe('needsAttention', () => {
   it('returns true for agent with pendingQuestion', () => {
     const agent = makeAgent({
@@ -230,6 +260,29 @@ describe('needsAttention', () => {
 })
 
 describe('sortByTriage', () => {
+  it('places yourTurn after a pendingQuestion agent and after a pendingPermissions agent', () => {
+    const withQuestion = makeAgent({
+      status: 'active',
+      sessionId: 'question',
+      pendingQuestion: {
+        header: 'Choose',
+        question: 'Which one?',
+        multiSelect: false,
+        options: [{ index: 1, label: 'A' }],
+        typeSomethingIndex: 2,
+        chatAboutIndex: 3,
+      },
+    })
+    const withPermission = makeAgent({
+      status: 'active',
+      sessionId: 'permission',
+      pendingPermissions: [{ id: 'r1', tool: 'Bash', pattern: 'ls', requestedAt: new Date().toISOString() }],
+    })
+    const yourTurn = makeAgent({ status: 'idle', sessionId: 'your-turn', working: false })
+    const sorted = sortByTriage([yourTurn, withPermission, withQuestion], () => ACTIVE_SECS)
+    expect(sorted.map(a => a.sessionId)).toEqual(['question', 'permission', 'your-turn'])
+  })
+
   it('places attention agents before non-attention agents', () => {
     const withError = makeAgent({ status: 'active', sessionId: 'err', errorState: 'auth_failed' })
     const active = makeAgent({ status: 'active', sessionId: 'active' })

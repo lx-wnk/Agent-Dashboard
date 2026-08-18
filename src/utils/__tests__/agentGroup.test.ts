@@ -95,6 +95,13 @@ describe('groupAgents', () => {
     expect(groups[0].key).toBe('active')
   })
 
+  it('status: a working agent bucket-folds into active regardless of its idle/waiting time bucket', () => {
+    const workingIdle = makeAgent({ pid: 1, status: 'idle', working: true })
+    const groups = groupAgents([workingIdle], 'status')
+    expect(groups.map(g => g.key)).toEqual(['active'])
+    expect(groups[0].agents.map(a => a.pid)).toEqual([1])
+  })
+
   it('status: applies human-readable labels', () => {
     const a = makeAgent({ status: 'active' })
     const w = makeAgent({ status: 'waiting' })

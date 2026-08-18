@@ -3,6 +3,7 @@ import { AGENT_STATUSES, SPAWNER_SOURCE_ENV } from '../types'
 import { STATUS_ORDER } from './agentSort'
 import { secondsSince, shortModel } from './format'
 import { friendlyProjectName } from './friendlyProjectName'
+import { agentDisplayStatus } from './statusColors'
 
 export const AGENT_SORT_OPTIONS = [
   { value: 'latest', label: 'Latest active' },
@@ -97,7 +98,13 @@ export function groupAgents(list: Agent[], groupBy: AgentGroup): AgentGrouping[]
     return AGENT_STATUSES
       .slice()
       .sort((a, b) => STATUS_ORDER[a] - STATUS_ORDER[b])
-      .map(s => ({ key: s, label: STATUS_LABELS[s] ?? s, agents: list.filter(a => a.status === s) }))
+      .map(s => ({
+        key: s,
+        label: STATUS_LABELS[s] ?? s,
+        // A working agent is live regardless of its idle/waiting time bucket -
+        // folds into 'active' so the band can't disagree with the Working badge.
+        agents: list.filter(a => (agentDisplayStatus(a) === 'working' ? 'active' : a.status) === s),
+      }))
       .filter(g => g.agents.length > 0)
   }
 

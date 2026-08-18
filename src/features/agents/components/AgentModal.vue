@@ -15,6 +15,7 @@ import { toast } from '@/composables/useToast'
 import { useAgentIdentity } from '@/features/agents/composables/useAgentIdentity'
 import { PluginSlot } from '@/features/plugins'
 import { formatCost, formatTokens, formatUptime, shortModel, totalTokenCount } from '@/utils/format'
+import { agentDisplayStatus } from '@/utils/statusColors'
 import AgentChatStream from './AgentChatStream.vue'
 import MetricsPopover from './MetricsPopover.vue'
 import SubAgentList from './SubAgentList.vue'
@@ -93,7 +94,7 @@ watch(() => props.agent?.sessionId, (sessionId) => {
     <template v-if="agent">
       <div class="bg-raised px-4 py-2.5 flex justify-between items-center flex-shrink-0">
         <div class="flex items-center gap-2.5 min-w-0">
-          <AppBadge :variant="agent.working ? 'working' : agent.status" />
+          <AppBadge :variant="agentDisplayStatus(agent)" />
           <span class="mr-1" aria-hidden="true">{{ getIdentity(agent.projectPath).emoji }}</span>
           <span :id="`agent-modal-title-${agent.pid}`" class="font-semibold text-sm text-fg">{{ agent.projectName }}</span>
           <MachineBadge v-if="agent.machine" :machine="agent.machine" />

@@ -12,6 +12,7 @@ import MetricsPopover from '@/features/agents/components/MetricsPopover.vue'
 import { useAgentIdentity } from '@/features/agents/composables/useAgentIdentity'
 import { formatCost, formatDuration, formatTokens, formatUptime, isAwaitingInput, isStalled, secondsSince, shortModel, totalTokenCount } from '@/utils/format'
 import { friendlyProjectName } from '@/utils/friendlyProjectName'
+import { agentDisplayStatus } from '@/utils/statusColors'
 
 const props = defineProps<{ agent: Agent }>()
 const emit = defineEmits<{ select: [agent: Agent], dismiss: [pid: number] }>()
@@ -21,7 +22,7 @@ const isFinished = computed(() => props.agent.status === 'finished')
 // The 'waiting' relabel lives in statusLabel() (src/utils/statusColors.ts, SSOT),
 // so the card, the roster row and the modal cannot disagree about the same
 // agent. Only the explanatory tooltip is card-local.
-const displayStatus = computed(() => props.agent.working ? 'working' : props.agent.status)
+const displayStatus = computed(() => agentDisplayStatus(props.agent))
 const statusBadgeTitle = computed(() => displayStatus.value === 'waiting'
   ? 'No new activity for a bit — the agent process is still alive, not waiting on you'
   : undefined)
@@ -80,17 +81,22 @@ const AgentTerminal = defineAsyncComponent(() => import('./AgentTerminal.vue'))
 
 <template>
   <AppCard surface="card" radius="lg" interactive class="group relative flex flex-col h-[260px] overflow-hidden cursor-pointer" @click="emit('select', agent)">
-    <button
-      type="button"
-      class="absolute inset-0 w-full h-full focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-[-2px]"
-      :aria-label="`Open details for ${projectLabel}`"
-      data-testid="agent-card-open"
-      @click.stop="emit('select', agent)"
-    />
-
     <div class="bg-raised px-3 pt-2 pb-1.5 flex flex-col gap-1">
-      <div class="flex items-center gap-2 min-w-0">
+      <button
+        type="button"
+        data-testid="agent-card-open"
+        :aria-label="`Open details for ${projectLabel}`"
+        class="flex items-center gap-2 min-w-0 w-full bg-transparent border-none p-0 text-left cursor-pointer rounded focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-[-2px]"
+        @click.stop="emit('select', agent)"
+      >
         <AppBadge :variant="displayStatus" :title="statusBadgeTitle" />
+        <AppBadge
+          v-if="agent.internalProcess"
+          variant="info"
+          label="internal"
+          title="Claude Code's own internal daemon process — not a session you can message"
+          data-testid="agent-card-internal-badge"
+        />
         <span
           v-if="stalled"
           class="text-[10px] font-medium px-1 py-0.5 rounded bg-warning-soft text-warning-text whitespace-nowrap"
@@ -114,7 +120,7 @@ const AgentTerminal = defineAsyncComponent(() => import('./AgentTerminal.vue'))
           :title="agent.model ? `Model: ${agent.model}` : 'Model unknown'"
         >{{ shortModel(agent.model ?? null) }}</span>
         <MachineBadge v-if="agent.machine" :machine="agent.machine" />
-      </div>
+      </button>
 
       <div class="flex items-center gap-2 text-[11px] font-mono text-fg-mute min-w-0">
         <span class="whitespace-nowrap" title="Total estimated cost">
@@ -181,41 +187,42 @@ const AgentTerminal = defineAsyncComponent(() => import('./AgentTerminal.vue'))
     <div
       v-if="activeSubagents.length"
       data-testid="active-subagents-block"
-      class="relative z-10 border-t border-line px-3 py-2 flex flex-col gap-1 shrink-0"
-      @click.stop
+      class="border-t border-line px-3 py-2 flex flex-col gap-1 shrink-0"
     >
       <span class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">
         {{ activeSubagents.length }} active subagent{{ activeSubagents.length !== 1 ? 's' : '' }}
       </span>
-      <div v-for="sa in activeSubagents" :key="sa.id" class="flex flex-col gap-0.5">
-        <div class="flex items-center gap-1.5 flex-wrap">
-          <AppBadge variant="active" />
-          <span class="font-mono text-[11px] text-fg-soft">{{ sa.type }}</span>
-          <span v-if="sa.currentAction" class="text-[10px] text-fg-mute">· {{ sa.currentAction }}</span>
-          <span class="text-[10px] font-mono text-fg-mute ml-auto whitespace-nowrap">
-            {{ formatDuration(sa.durationSeconds) }} · {{ Math.round(sa.tokensUsed / 1000) }}k tok
-          </span>
-        </div>
-        <div v-if="sa.latestOutput" class="flex items-start gap-1">
-          <span
-            class="font-mono text-[11px] text-fg-mute leading-snug"
-            :class="expandedSubagentIds.has(sa.id) ? 'whitespace-pre-wrap break-words' : 'truncate'"
-            data-testid="subagent-latest-output"
-          >{{ sa.latestOutput }}</span>
-          <button
-            type="button"
-            class="inline-flex items-center justify-center min-w-6 min-h-6 flex-shrink-0 text-[10px] text-fg-mute hover:text-fg-soft focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-accent rounded"
-            :aria-label="expandedSubagentIds.has(sa.id) ? 'Collapse subagent output' : 'Expand subagent output'"
-            data-testid="subagent-expand-toggle"
-            @click.stop="toggleSubagentExpand(sa.id)"
-          >
-            {{ expandedSubagentIds.has(sa.id) ? '▲' : '▼' }}
-          </button>
+      <div class="flex flex-col gap-1 max-h-[120px] overflow-y-auto overflow-x-hidden">
+        <div v-for="sa in activeSubagents" :key="sa.id" class="flex flex-col gap-0.5">
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <AppBadge variant="active" />
+            <span class="font-mono text-[11px] text-fg-soft">{{ sa.type }}</span>
+            <span v-if="sa.currentAction" class="text-[10px] text-fg-mute">· {{ sa.currentAction }}</span>
+            <span class="text-[10px] font-mono text-fg-mute ml-auto whitespace-nowrap">
+              {{ formatDuration(sa.durationSeconds) }} · {{ Math.round(sa.tokensUsed / 1000) }}k tok
+            </span>
+          </div>
+          <div v-if="sa.latestOutput" class="flex items-start gap-1">
+            <span
+              class="font-mono text-[11px] text-fg-mute leading-snug"
+              :class="expandedSubagentIds.has(sa.id) ? 'whitespace-pre-wrap break-words' : 'truncate'"
+              data-testid="subagent-latest-output"
+            >{{ sa.latestOutput }}</span>
+            <button
+              type="button"
+              class="inline-flex items-center justify-center min-w-6 min-h-6 flex-shrink-0 text-[10px] text-fg-mute hover:text-fg-soft focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-accent rounded"
+              :aria-label="expandedSubagentIds.has(sa.id) ? 'Collapse subagent output' : 'Expand subagent output'"
+              data-testid="subagent-expand-toggle"
+              @click.stop="toggleSubagentExpand(sa.id)"
+            >
+              {{ expandedSubagentIds.has(sa.id) ? '▲' : '▼' }}
+            </button>
+          </div>
         </div>
       </div>
     </div>
 
-    <div v-if="agent.lastBtw" class="relative z-10 border-t border-line px-3 py-2 flex flex-col gap-1 text-[12px] font-mono shrink-0" @click.stop>
+    <div v-if="agent.lastBtw" class="border-t border-line px-3 py-2 flex flex-col gap-1 text-[12px] font-mono shrink-0">
       <div class="text-fg-mute border-l-2 border-warning-line pl-2 whitespace-nowrap overflow-hidden text-ellipsis">
         {{ agent.lastBtw.message }}
       </div>
@@ -229,7 +236,7 @@ const AgentTerminal = defineAsyncComponent(() => import('./AgentTerminal.vue'))
 
     <div
       v-if="!agent.machine"
-      class="relative z-10 shrink-0 max-h-0 opacity-0 overflow-hidden transition-[max-height,opacity] duration-150 ease-out group-hover:max-h-40 group-hover:opacity-100 focus-within:max-h-40 focus-within:opacity-100"
+      class="shrink-0 max-h-0 opacity-0 overflow-hidden transition-[max-height,opacity] duration-150 ease-out group-hover:max-h-40 group-hover:opacity-100 focus-within:max-h-40 focus-within:opacity-100"
       @click.stop
       @keydown.enter.stop
       @keydown.space.stop

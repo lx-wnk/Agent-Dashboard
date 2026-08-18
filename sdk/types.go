@@ -360,6 +360,11 @@ type Agent struct {
 	// broker (`agent-dashboard ptyhost`) or `tmux send-keys`. When false, sending
 	// resumes the session as a new one (MCP log delivery does not drive it).
 	LiveInjectable bool `json:"liveInjectable,omitempty"`
+	// InternalProcess is true when this is Claude Code's own internal
+	// daemon/spare-pool machinery (a grandchild of a real session, matched by
+	// scanner.IsInternalProcess), not a session the user can address —
+	// LiveInjectable is meaningless for it and no prompt can be sent to it.
+	InternalProcess bool `json:"internalProcess,omitempty"`
 	// PendingQuestion is the AskUserQuestion modal currently detected on this
 	// session's live terminal (render-sourced, via the pty broker's /question
 	// endpoint or a tmux capture-pane snapshot), or nil when no modal is open.

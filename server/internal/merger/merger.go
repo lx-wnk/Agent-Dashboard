@@ -472,6 +472,7 @@ func (m *Merger) buildAgent(proc scanner.ProcessInfo, session *parser.SessionDat
 		Working:                   session.TurnOpen || discovery.recentOutput,
 		ChannelAvailable:          discovery.channelAvailable,
 		LiveInjectable:            discovery.liveInjectable,
+		InternalProcess:           proc.InternalProcess,
 		PermissionsBypassed:       parser.PermissionsBypassedFromArgs(proc.Command),
 		PendingQuestion:           pendingQuestion,
 		PendingConfirm:            pendingConfirm,
@@ -502,8 +503,10 @@ func (m *Merger) buildAgent(proc scanner.ProcessInfo, session *parser.SessionDat
 }
 
 // buildSubagents reads <sessionDir>/subagents/*.jsonl and returns a populated
-// SubAgent slice. Returns an empty slice when the directory does not exist or
-// session.Path is unset.
+// SubAgent slice, sorted active-first then by most recent activity descending.
+// os.ReadDir sorts by filename (a content hash), which carries no relation to
+// activity, so callers cannot rely on directory order. Returns an empty slice
+// when the directory does not exist or session.Path is unset.
 func buildSubagents(session *parser.SessionData) []sdk.SubAgent {
 	out := []sdk.SubAgent{}
 	if session.Path == "" {
@@ -524,6 +527,7 @@ func buildSubagents(session *parser.SessionData) []sdk.SubAgent {
 	parser.PruneSubagentCache(livePaths)
 
 	now := time.Now()
+	lastActivity := make(map[string]time.Time, len(entries))
 	for _, e := range entries {
 		name := e.Name()
 		if e.IsDir() || !strings.HasSuffix(name, ".jsonl") {
@@ -538,8 +542,10 @@ func buildSubagents(session *parser.SessionData) []sdk.SubAgent {
 		if !parsed.LastActivity.IsZero() && now.Sub(parsed.LastActivity) < activeThreshold {
 			status = sdk.SubAgentStatusActive
 		}
+		id := strings.TrimSuffix(name, ".jsonl")
+		lastActivity[id] = parsed.LastActivity
 		out = append(out, sdk.SubAgent{
-			ID:              strings.TrimSuffix(name, ".jsonl"),
+			ID:              id,
 			Type:            "subagent",
 			Status:          status,
 			CurrentAction:   parsed.CurrentAction,
@@ -549,5 +555,12 @@ func buildSubagents(session *parser.SessionData) []sdk.SubAgent {
 			LatestOutput:    parsed.LatestOutput,
 		})
 	}
+	sort.SliceStable(out, func(i, j int) bool {
+		ai, aj := out[i], out[j]
+		if (ai.Status == sdk.SubAgentStatusActive) != (aj.Status == sdk.SubAgentStatusActive) {
+			return ai.Status == sdk.SubAgentStatusActive
+		}
+		return lastActivity[ai.ID].After(lastActivity[aj.ID])
+	})
 	return out
 }

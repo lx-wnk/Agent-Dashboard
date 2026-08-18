@@ -1,10 +1,10 @@
 import type { Agent } from '../types'
-import { isStalled } from './format'
+import { isAwaitingInput, isStalled } from './format'
 
 export interface Attention {
-  kind: 'question' | 'permission' | 'error' | 'stalled'
+  kind: 'question' | 'permission' | 'error' | 'stalled' | 'yourTurn'
   label: string
-  tone: 'warning' | 'danger'
+  tone: 'warning' | 'danger' | 'neutral'
   weight: number
 }
 
@@ -32,6 +32,10 @@ export function attentionFor(agent: Agent, secondsSinceActivity: number | null):
     return { kind: 'error', label: 'Run failed', tone: 'danger', weight: 1 }
   if (isStalled(agent.status, secondsSinceActivity))
     return { kind: 'stalled', label: 'No activity', tone: 'warning', weight: 2 }
+  // Turn finished, process alive: ready for the next instruction rather than
+  // blocked on one, so it ranks below every other attention kind.
+  if (isAwaitingInput(agent))
+    return { kind: 'yourTurn', label: 'Your turn', tone: 'neutral', weight: 3 }
   return null
 }
 
