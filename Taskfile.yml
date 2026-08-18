@@ -18,14 +18,28 @@ tasks:
     cmd: pnpm dev
 
   dev:desktop:
-    desc: Run the macOS desktop shell with wails hot-reload (rebuilds the Go shell on change; requires the wails CLI + Xcode CLT)
+    desc: Run the macOS desktop shell with Vite frontend HMR (owns the backend on :13120 itself -- do not also run `task dev`; requires the wails CLI + Xcode CLT)
     platforms: [darwin]
     cmds:
-      # Embed the current SPA first — the webview redirects to the in-process
-      # server on 127.0.0.1:13120, not wails' asset server, so the SPA is served
-      # from the Go embed. This task hot-reloads the Go shell; for frontend HMR
-      # use `task dev` (browser on :5173).
+      # One-shot embed so a plain (non-dev-tagged) build of this module always
+      # has a real SPA baked in; the dev run below never serves it, since the
+      # window is redirected to Vite instead (see desktop/target_dev.go).
       - task: build:frontend
+      - task: dev:desktop:run
+
+  dev:desktop:run:
+    internal: true
+    platforms: [darwin]
+    # Vite and wails are both long-running; deps run them concurrently and
+    # this task blocks until both exit, the same pattern `dev` uses for
+    # dev:go + dev:frontend.
+    deps: [dev:frontend, dev:desktop:wails]
+
+  dev:desktop:wails:
+    internal: true
+    platforms: [darwin]
+    cmds:
+      - echo "frontend now hot-reloads through Vite on :5173 -- the wails -assetdir/-reloaddirs warning below is expected in this flow, not a bug"
       # No -tags production here: `wails dev` always adds its own `dev` tag, and
       # dev+production together redeclare App.Run/CreateApp in wails' app package.
       # The two release paths (build:desktop, desktop:dist) pass the tag explicitly.

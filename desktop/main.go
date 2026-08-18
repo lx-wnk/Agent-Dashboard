@@ -75,12 +75,20 @@ func main() {
 		fatalf("dashboard server did not become ready: %v", err)
 	}
 
+	// Only the `dev` build tag (set by `wails dev`) redirects elsewhere; a
+	// production build waits on nothing extra and targets instance.Addr()
+	// exactly as before the dev-desktop redirect existed.
+	if err := waitForFrontend(ctx, serverErr); err != nil {
+		cancel()
+		fatalf("vite dev server not reachable — run `task dev:desktop`, which starts it for you: %v", err)
+	}
+
 	err = wails.Run(&options.App{
 		Title:  "Agent Dashboard",
 		Width:  1400,
 		Height: 900,
 		AssetServer: &assetserver.Options{
-			Handler: bootstrapHandler("http://" + instance.Addr() + "/?shell=desktop"),
+			Handler: bootstrapHandler("http://" + frontendAddr(instance.Addr()) + "/?shell=desktop"),
 		},
 		Mac: &mac.Options{},
 		OnShutdown: func(_ context.Context) {
