@@ -345,3 +345,29 @@ describe('sortByTriage', () => {
     expect(sorted.map(a => a.sessionId)).toEqual(['a1', 'a2'])
   })
 })
+
+describe('grantable is opt-in', () => {
+  // The band offers a permission grant only where a prompt is genuinely on
+  // screen. Expressing that as an exclusion ("not stalled") silently re-enables
+  // the control for every kind added later; this pins the positive form.
+  it('marks only genuine prompt evidence as grantable', () => {
+    const grantable = (a: Partial<Agent>) => attentionFor(makeAgent(a), ACTIVE_SECS)?.grantable
+
+    expect(grantable({ pendingQuestion: { prompt: 'q', options: [] } as never })).toBe(true)
+    expect(grantable({ pendingPermissions: [{ tool: 'Bash' }] as never })).toBe(true)
+
+    // A busy agent with an unresolved tool call is not attention at all yet, so
+    // there is nothing to grant against — the stronger statement than "not
+    // grantable", and the one the band relies on.
+    expect(attentionFor(makeAgent({ pendingToolUse: { id: 't', tool: 'Bash' } as never }), ACTIVE_SECS)).toBeNull()
+
+    expect(grantable({ errorState: 'auth_failed' as never })).toBe(false)
+    expect(grantable({ working: false })).toBe(false)
+  })
+
+  it('leaves a long-stalled tool call non-grantable', () => {
+    const att = attentionFor(makeAgent({ pendingToolUse: { id: 't', tool: 'Bash' } as never }), STALLED_SECS)
+    expect(att?.kind).toBe('stalled')
+    expect(att?.grantable).toBe(false)
+  })
+})

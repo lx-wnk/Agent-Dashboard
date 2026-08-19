@@ -347,6 +347,16 @@ jobs:
         # plain build omits. This is the same incantation as `task build:desktop`.
         run: CGO_ENABLED=1 go build -tags production -ldflags "-extldflags '-framework UniformTypeIdentifiers'" -o /dev/null .
 
+      - name: Build desktop shell (dev build tag)
+        working-directory: desktop
+        # -tags dev is what `wails dev` sets; nothing else compiles target_dev.go,
+        # so it and target_other.go can silently drift without this build.
+        run: CGO_ENABLED=1 go build -tags dev -ldflags "-extldflags '-framework UniformTypeIdentifiers'" -o /dev/null .
+
+      - name: Test desktop shell (dev build tag)
+        working-directory: desktop
+        run: CGO_ENABLED=1 go test -tags dev -ldflags "-extldflags '-framework UniformTypeIdentifiers'" ./...
+
   pr-checks:
     name: PR Validation
     runs-on: ubuntu-latest

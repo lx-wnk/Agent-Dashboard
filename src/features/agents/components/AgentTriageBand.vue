@@ -2,7 +2,6 @@
 import type { PermissionItem } from '@/composables/usePendingPermissions'
 import type { Agent, PendingPermission, PermissionRequest } from '@/types'
 import type { AnswerIntent } from '@/utils/answerKeys'
-import type { Attention } from '@/utils/attention'
 import { computed, nextTick, ref, watch } from 'vue'
 import ConfirmCard from '@/components/ConfirmCard.vue'
 import QuestionCard from '@/components/QuestionCard.vue'
@@ -73,12 +72,26 @@ const visibleAgentCards = computed(() =>
 // Total permission requests across all task-driven permission items
 const totalRequestCount = computed(() => props.permissionItems.reduce((s, i) => s + i.requests.length, 0))
 
-// Per-agent attention/secs, computed once per agent per tick (reused by breakdown, blockedDetail, template)
+// AskUserQuestion is never permission-gated: an unresolved one waits for an
+// ANSWER, not a grant. The parser still reports it as a pendingToolUse so a
+// session whose screen cannot be probed shows something at all, but offering
+// "Allow AskUserQuestion" would write a meaningless standing allow-rule for a
+// tool nobody has to approve — and it is answered in the question card or the
+// terminal, not here.
+const ASK_USER_QUESTION_TOOL = 'AskUserQuestion'
+
+// Per-agent attention/secs/grant-eligibility, computed once per agent per tick
+// (reused by breakdown, blockedDetail, template). grantableToolUse folds in
+// attention.ts's Attention.grantable — the single source for which attention
+// kinds are genuine prompt-on-screen evidence — so the template never
+// recomputes that decision per usage.
 const agentAttentionMap = computed(() => {
-  const map = new Map<string, { att: ReturnType<typeof attentionFor>, secs: number | null }>()
+  const map = new Map<string, { att: ReturnType<typeof attentionFor>, secs: number | null, grantableToolUse: boolean }>()
   for (const agent of props.agents) {
     const secs = secondsSince(agent.lastActivity, nowMs.value)
-    map.set(agent.sessionId, { att: attentionFor(agent, secs), secs })
+    const att = attentionFor(agent, secs)
+    const grantableToolUse = !!att?.grantable && !!agent.pendingToolUse && agent.pendingToolUse.tool !== ASK_USER_QUESTION_TOOL
+    map.set(agent.sessionId, { att, secs, grantableToolUse })
   }
   return map
 })
@@ -110,20 +123,6 @@ const breakdown = computed(() => {
 const totalCount = computed(() => props.permissionItems.length + visibleAgentCards.value.length)
 
 const isClear = computed(() => totalCount.value === 0 && props.permissionItems.length === 0)
-
-// AskUserQuestion is never permission-gated: an unresolved one waits for an
-// ANSWER, not a grant. The parser still reports it as a pendingToolUse so a
-// session whose screen cannot be probed shows something at all, but offering
-// "Allow AskUserQuestion" would write a meaningless standing allow-rule for a
-// tool nobody has to approve — and it is answered in the question card or the
-// terminal, not here.
-const ASK_USER_QUESTION_TOOL = 'AskUserQuestion'
-
-// A stalled tool_use is only a dwell-time guess, not a resolved permission
-// prompt (see attentionFor) — so the grant control must not appear for it.
-function isGrantableToolUse(agent: Agent, attKind: Attention['kind'] | undefined): boolean {
-  return !!agent.pendingToolUse && agent.pendingToolUse.tool !== ASK_USER_QUESTION_TOOL && attKind !== 'stalled'
-}
 
 function blockedDetail(agent: Agent): string {
   if (agent.pendingToolUse?.tool === ASK_USER_QUESTION_TOOL)
@@ -592,7 +591,7 @@ watch(() => props.focusedSessionId, (id) => {
 
             <!-- Free agent: allow the paused tool for future runs -->
             <AppButton
-              v-if="isGrantableToolUse(agent, agentAttentionMap.get(agent.sessionId)?.att?.kind) && !(agent.pipelineTaskId && agent.pendingPermissions?.length)"
+              v-if="agentAttentionMap.get(agent.sessionId)?.grantableToolUse && !(agent.pipelineTaskId && agent.pendingPermissions?.length)"
               variant="success"
               size="sm"
               class="ml-auto"
@@ -607,7 +606,7 @@ watch(() => props.focusedSessionId, (id) => {
             <AppButton
               variant="outline"
               size="sm"
-              :class="!(agent.pipelineTaskId && agent.pendingPermissions?.length) && !isGrantableToolUse(agent, agentAttentionMap.get(agent.sessionId)?.att?.kind) ? 'ml-auto' : ''"
+              :class="!(agent.pipelineTaskId && agent.pendingPermissions?.length) && !agentAttentionMap.get(agent.sessionId)?.grantableToolUse ? 'ml-auto' : ''"
               :aria-label="`Open details for ${agent.projectName}`"
               @click="emit('select', agent)"
             >

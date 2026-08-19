@@ -53,9 +53,20 @@ describe('agentTriageBand pending tool use', () => {
     expect(wrapper.text()).toContain('Waiting for your answer')
   })
 
-  it('still offers the grant for a genuinely blocked tool', () => {
+  // A bare pendingToolUse on an otherwise finished agent is a "your turn" card,
+  // not a blocked one: nothing is waiting for a grant. The exclusion form this
+  // replaced only ruled out 'stalled', so it offered the button here too.
+  it('offers no grant for a leftover tool use on a finished turn', () => {
     const wrapper = mountBand(makeAgent({
       pendingToolUse: { id: 'tu_b', tool: 'Bash', pattern: 'npm publish' },
+    }))
+    expect(wrapper.text()).not.toContain('Allow Bash')
+  })
+
+  it('still offers the grant when a prompt is genuinely on screen', () => {
+    const wrapper = mountBand(makeAgent({
+      pendingToolUse: { id: 'tu_b', tool: 'Bash', pattern: 'npm publish' },
+      pendingPermissions: [{ id: 'p1', tool: 'Bash', pattern: 'npm publish' }] as never,
     }))
     expect(wrapper.text()).toContain('Allow Bash')
   })

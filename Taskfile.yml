@@ -38,12 +38,16 @@ tasks:
   dev:desktop:wails:
     internal: true
     platforms: [darwin]
+    vars:
+      # Must match vite.config.ts's server.port; exported below so
+      # desktop/target_dev.go reads it instead of hardcoding its own copy.
+      VITE_DEV_PORT: '5173'
     cmds:
-      - echo "frontend now hot-reloads through Vite on :5173 -- the wails -assetdir/-reloaddirs warning below is expected in this flow, not a bug"
+      - echo "frontend now hot-reloads through Vite on :{{.VITE_DEV_PORT}} -- the wails -assetdir/-reloaddirs warning below is expected in this flow, not a bug"
       # No -tags production here: `wails dev` always adds its own `dev` tag, and
       # dev+production together redeclare App.Run/CreateApp in wails' app package.
       # The two release paths (build:desktop, desktop:dist) pass the tag explicitly.
-      - cd desktop && $(go env GOPATH)/bin/wails dev -ldflags "-extldflags '-framework UniformTypeIdentifiers'"
+      - cd desktop && VITE_DEV_PORT={{.VITE_DEV_PORT}} $(go env GOPATH)/bin/wails dev -ldflags "-extldflags '-framework UniformTypeIdentifiers'"
 
   setup:
     desc: Install the dev toolchain (air, golangci-lint, tygo, govulncheck) + frontend deps

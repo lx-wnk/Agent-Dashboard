@@ -6,6 +6,7 @@ import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 const DASHBOARD_PORT = process.env.DASHBOARD_PORT || '13120'
+const VITE_DEV_PORT = Number(process.env.VITE_DEV_PORT) || 5173
 
 const D3_MODULE_RE = /node_modules\/d3-/
 const VUE_MODULE_RE = /node_modules\/(?:@vue|vue)\//
@@ -98,7 +99,10 @@ export default defineConfig(({ mode }) => ({
   // Applied at build time only — `vite dev` keeps console output for debugging.
   esbuild: mode === 'production' ? { drop: ['console', 'debugger'] } : {},
   server: {
-    port: 5173,
+    port: VITE_DEV_PORT,
+    // A silently-moved port (Vite's default when the port is taken) would leave
+    // desktop/target_dev.go redirecting the webview at a foreign loopback origin.
+    strictPort: true,
     // Use 127.0.0.1 explicitly — on dual-stack IPv6 systems 'localhost' may resolve
     // to ::1 first, causing ECONNREFUSED when the server only binds to 127.0.0.1.
     proxy: {
