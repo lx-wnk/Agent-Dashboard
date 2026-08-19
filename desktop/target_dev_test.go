@@ -15,7 +15,7 @@ func TestFrontendAddrTargetsViteUnderDev(t *testing.T) {
 		}
 	})
 
-	t.Run("falls back when VITE_DEV_PORT is unset", func(t *testing.T) {
+	t.Run("falls back when VITE_DEV_PORT is empty", func(t *testing.T) {
 		t.Setenv("VITE_DEV_PORT", "")
 		// Asserted against the literal, not viteDevPortFallback: comparing the
 		// fallback constant to itself would pass even if the constant drifted

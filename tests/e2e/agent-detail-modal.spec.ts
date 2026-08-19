@@ -45,7 +45,7 @@ test.describe('agent detail modal', () => {
     await stubJson(page, '/api/agents/sess-xyz/replies', { replies: [] })
   })
 
-  test('opens from the card, switches views, and closes', async ({ page }) => {
+  test('opens from the card and closes', async ({ page }) => {
     await page.goto('/')
 
     // The card body paints over the full-card overlay button; clicking it
