@@ -338,22 +338,25 @@ func sanitizeForDisplay(s string) string {
 
 // toolDetail is the display form of toolArgument: stripped of characters that
 // can make a command render as a different one, collapsed to one line, and cut
-// so a single entry cannot dominate the list.
-func toolDetail(raw json.RawMessage) string {
+// so a single entry cannot dominate the list. The second return is how many
+// characters were cut, 0 when nothing was.
+//
+// The count is deliberately NOT formatted into the string. A marker inside the
+// payload is one the payload can forge -- an agent-authored command ending in
+// "… (+400 chars)" would read as a server-truncated prefix of something longer.
+// The client renders the count as its own element instead.
+func toolDetail(raw json.RawMessage) (string, int) {
 	d := sanitizeForDisplay(toolArgument(raw))
 	if len(d) <= toolDetailMaxLen {
-		return d // byte length >= rune count, so the cap cannot be exceeded
+		return d, 0 // byte length >= rune count, so the cap cannot be exceeded
 	}
 	r := []rune(d)
 	if len(r) > toolDetailMaxLen {
-		// Name the size of the cut: the client clips visually too, so a bare
-		// ellipsis is indistinguishable from CSS overflow, and a silently
-		// clipped command reads like a shorter one that was never run. Slice
-		// runes, not bytes -- a cut through a multi-byte character yields
+		// Slice runes, not bytes -- a cut through a multi-byte character yields
 		// U+FFFD on the wire.
-		return fmt.Sprintf("%s… (+%d chars)", string(r[:toolDetailMaxLen]), len(r)-toolDetailMaxLen)
+		return string(r[:toolDetailMaxLen]), len(r) - toolDetailMaxLen
 	}
-	return d
+	return d, 0
 }
 
 // todoInput is the input shape for TodoWrite tool calls.
@@ -914,9 +917,12 @@ func ParseSessionFile(path string) (*SessionData, error) {
 		if !resolvedToolUseIDs[tu.id] {
 			pattern := toolArgument(tu.input)
 			data.PendingToolUse = &sdk.PendingToolUse{
-				ID:      tu.id,
-				Tool:    tu.name,
-				Pattern: pattern,
+				ID:   tu.id,
+				Tool: tu.name,
+				// Verbatim: this is the grant identity, matched by exact
+				// equality. The sanitized twin is what a human is shown.
+				Pattern:        pattern,
+				PatternDisplay: sanitizeForDisplay(pattern),
 			}
 		}
 	}
@@ -958,7 +964,8 @@ func ParseSessionFile(path string) (*SessionData, error) {
 	}
 	data.LastTools = make([]sdk.RecentTool, len(kept))
 	for i, t := range kept {
-		data.LastTools[i] = sdk.RecentTool{Name: t.name, Detail: toolDetail(t.input)}
+		detail, elided := toolDetail(t.input)
+		data.LastTools[i] = sdk.RecentTool{Name: t.name, Detail: detail, Elided: elided}
 	}
 
 	// Convergence detection: last 5 tools identical. Compares names only -- the

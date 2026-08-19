@@ -1,3 +1,4 @@
+import type { PendingToolUse } from '@/sdk.generated'
 import type { Agent } from '@/types'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
@@ -36,6 +37,13 @@ function makeAgent(overrides: Partial<Agent>): Agent {
   } as unknown as Agent
 }
 
+// Typed so a fixture cannot silently drop a field the wire type requires.
+// patternDisplay defaults to pattern: these fixtures carry no deceptive runes,
+// and the two differing is what the sanitize tests are for.
+function toolUse(o: Partial<PendingToolUse> & Pick<PendingToolUse, 'tool'>): PendingToolUse {
+  return { id: 'tu_1', pattern: '', patternDisplay: o.pattern ?? '', ...o }
+}
+
 function mountBand(agent: Agent) {
   return mount(AgentTriageBand, { props: { agents: [agent], permissionItems: [] } })
 }
@@ -47,7 +55,7 @@ describe('agentTriageBand pending tool use', () => {
   // would write a standing rule for a tool nobody has to approve.
   it('offers no permission grant for AskUserQuestion', () => {
     const wrapper = mountBand(makeAgent({
-      pendingToolUse: { id: 'tu_q', tool: 'AskUserQuestion', pattern: '' },
+      pendingToolUse: toolUse({ id: 'tu_q', tool: 'AskUserQuestion', pattern: '' }),
     }))
     expect(wrapper.text()).not.toContain('Allow AskUserQuestion')
     expect(wrapper.text()).toContain('Waiting for your answer')
@@ -58,7 +66,7 @@ describe('agentTriageBand pending tool use', () => {
   // replaced only ruled out 'stalled', so it offered the button here too.
   it('offers no grant for a leftover tool use on a finished turn', () => {
     const wrapper = mountBand(makeAgent({
-      pendingToolUse: { id: 'tu_b', tool: 'Bash', pattern: 'npm publish' },
+      pendingToolUse: toolUse({ id: 'tu_b', tool: 'Bash', pattern: 'npm publish' }),
     }))
     expect(wrapper.text()).not.toContain('Allow Bash')
     // Positive anchor: without it the assertion above also passes when the card
@@ -68,7 +76,7 @@ describe('agentTriageBand pending tool use', () => {
 
   it('still offers the grant when a prompt is genuinely on screen', () => {
     const wrapper = mountBand(makeAgent({
-      pendingToolUse: { id: 'tu_b', tool: 'Bash', pattern: 'npm publish' },
+      pendingToolUse: toolUse({ id: 'tu_b', tool: 'Bash', pattern: 'npm publish' }),
       pendingPermissions: [{ id: 'p1', tool: 'Bash', pattern: 'npm publish' }] as never,
     }))
     expect(wrapper.text()).toContain('Allow Bash')
@@ -78,7 +86,7 @@ describe('agentTriageBand pending tool use', () => {
   // grant must stay away there too.
   it('offers no grant when the question is detected alongside the tool use', () => {
     const wrapper = mountBand(makeAgent({
-      pendingToolUse: { id: 'tu_q', tool: 'AskUserQuestion', pattern: '' },
+      pendingToolUse: toolUse({ id: 'tu_q', tool: 'AskUserQuestion', pattern: '' }),
       pendingQuestion: {
         header: 'chrome',
         question: 'Which colour?',
@@ -99,7 +107,7 @@ describe('agentTriageBand stalled card', () => {
   // approval is pending or print the full command that was never submitted for review.
   it('renders no approve control for a stalled agent', () => {
     const wrapper = mountBand(makeAgent({
-      pendingToolUse: { id: 'tu_s', tool: 'Bash', pattern: 'rm -rf /tmp/build-cache && npm publish --access public' },
+      pendingToolUse: toolUse({ id: 'tu_s', tool: 'Bash', pattern: 'rm -rf /tmp/build-cache && npm publish --access public' }),
       lastActivity: new Date(Date.now() - 300_000).toISOString(),
     }))
     expect(wrapper.text()).not.toContain('Allow Bash')
@@ -112,7 +120,7 @@ describe('agentTriageBand stalled card', () => {
   // that was interrupted — the badge already says the run failed.
   it('reports the error, not the interrupted command, on a failed run', () => {
     const wrapper = mountBand(makeAgent({
-      pendingToolUse: { id: 'tu_e', tool: 'Bash', pattern: 'npm publish --access public' },
+      pendingToolUse: toolUse({ id: 'tu_e', tool: 'Bash', pattern: 'npm publish --access public' }),
       errorState: 'rate_limited',
     }))
     expect(wrapper.text()).not.toContain('npm publish --access public')
@@ -139,7 +147,7 @@ describe('agentTriageBand all-clear state', () => {
   })
 
   it('drops the all-clear line as soon as an agent needs attention', () => {
-    const w = mountBand(makeAgent({ pendingToolUse: { tool: 'Bash', pattern: 'ls', id: 'tu_1' } }))
+    const w = mountBand(makeAgent({ pendingToolUse: toolUse({ tool: 'Bash', pattern: 'ls', id: 'tu_1' }) }))
     expect(w.find('[data-testid="triage-all-clear"]').exists()).toBe(false)
   })
 })

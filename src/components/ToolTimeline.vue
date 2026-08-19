@@ -18,10 +18,16 @@ defineProps<{ tools: RecentTool[] }>()
         <span class="px-2 py-0.5 rounded bg-raised text-fg-soft flex-shrink-0">{{ tool.name }}</span>
         <span
           v-if="tool.detail"
-          class="text-fg-mute truncate"
-          :title="tool.detail"
+          class="text-fg-mute break-all min-w-0"
           data-testid="tool-detail"
         >{{ tool.detail }}</span>
+        <!-- Own element, not a suffix in tool.detail: a marker inside the text
+             is one an agent-authored command could forge. -->
+        <span
+          v-if="tool.elided"
+          class="text-fg-mute/70 flex-shrink-0"
+          data-testid="tool-detail-elided"
+        >+{{ tool.elided }} more</span>
       </li>
     </ul>
   </div>

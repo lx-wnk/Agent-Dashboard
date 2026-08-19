@@ -20,10 +20,34 @@ describe('toolTimeline', () => {
     expect(w.find('[data-testid="tool-detail"]').exists()).toBe(false)
   })
 
-  it('keeps the full detail reachable on hover rather than only the clipped text', () => {
-    const detail = 'a'.repeat(200)
+  // The count is rendered as its own element, so an agent-authored command that
+  // merely ends in something cut-shaped cannot claim text was removed.
+  it('reports a server-side cut beside the text, never inside it', () => {
+    const w = mount(ToolTimeline, { props: { tools: [
+      { name: 'Bash', detail: 'a'.repeat(120), elided: 87 },
+    ] } })
+
+    expect(w.find('[data-testid="tool-detail"]').text()).not.toContain('87')
+    expect(w.find('[data-testid="tool-detail-elided"]').text()).toContain('87')
+  })
+
+  it('shows no cut marker for an uncut entry that looks cut', () => {
+    const w = mount(ToolTimeline, { props: { tools: [
+      { name: 'Bash', detail: 'echo done… (+400 chars)' },
+    ] } })
+
+    expect(w.find('[data-testid="tool-detail-elided"]').exists()).toBe(false)
+  })
+
+  // Nothing is hidden behind hover any more: the server already capped the
+  // string, so the visible text is everything the client was given.
+  it('does not hide any of the detail behind a tooltip', () => {
+    const detail = 'a'.repeat(120)
     const w = mount(ToolTimeline, { props: { tools: [{ name: 'Bash', detail }] } })
 
-    expect(w.find('[data-testid="tool-detail"]').attributes('title')).toBe(detail)
+    const span = w.find('[data-testid="tool-detail"]')
+    expect(span.attributes('title')).toBeUndefined()
+    expect(span.classes()).not.toContain('truncate')
+    expect(span.text()).toBe(detail)
   })
 })

@@ -50,6 +50,27 @@ const toneLabelClass: Record<string, string> = {
 // AND whose attention kind is error/stalled — or free agents with pendingToolUse.
 const orchestratedTaskIds = computed(() => new Set(props.permissionItems.map(i => i.taskId)))
 
+// "Allow AskUserQuestion" would write a meaningless standing allow-rule for a
+// tool nobody has to approve — and it is answered in the question card or the
+// terminal, not here.
+const ASK_USER_QUESTION_TOOL = 'AskUserQuestion'
+
+// Per-agent attention/secs/grant-eligibility, computed once per agent per tick
+// and reused by visibleAgentCards, breakdown, blockedDetail and the template.
+// grantableToolUse folds in attention.ts's Attention.grantable — the single
+// source for which attention kinds are genuine prompt-on-screen evidence — so
+// the template never recomputes that decision per usage.
+const agentAttentionMap = computed(() => {
+  const map = new Map<string, { att: ReturnType<typeof attentionFor>, secs: number | null, grantableToolUse: boolean }>()
+  for (const agent of props.agents) {
+    const secs = secondsSince(agent.lastActivity, nowMs.value)
+    const att = attentionFor(agent, secs)
+    const grantableToolUse = !!att?.grantable && !!agent.pendingToolUse && agent.pendingToolUse.tool !== ASK_USER_QUESTION_TOOL
+    map.set(agent.sessionId, { att, secs, grantableToolUse })
+  }
+  return map
+})
+
 const visibleAgentCards = computed(() =>
   props.agents.filter((agent) => {
     const att = agentAttentionMap.value.get(agent.sessionId)?.att
@@ -70,31 +91,6 @@ const visibleAgentCards = computed(() =>
 
 // Total permission requests across all task-driven permission items
 const totalRequestCount = computed(() => props.permissionItems.reduce((s, i) => s + i.requests.length, 0))
-
-// AskUserQuestion is never permission-gated: an unresolved one waits for an
-// ANSWER, not a grant. The parser still reports it as a pendingToolUse so a
-// session whose screen cannot be probed shows something at all, but offering
-// "Allow AskUserQuestion" would write a meaningless standing allow-rule for a
-// tool nobody has to approve — and it is answered in the question card or the
-// terminal, not here.
-const ASK_USER_QUESTION_TOOL = 'AskUserQuestion'
-
-// Per-agent attention/secs/grant-eligibility, computed once per agent per tick
-// (reused by visibleAgentCards, breakdown, blockedDetail, template).
-// grantableToolUse folds in
-// attention.ts's Attention.grantable — the single source for which attention
-// kinds are genuine prompt-on-screen evidence — so the template never
-// recomputes that decision per usage.
-const agentAttentionMap = computed(() => {
-  const map = new Map<string, { att: ReturnType<typeof attentionFor>, secs: number | null, grantableToolUse: boolean }>()
-  for (const agent of props.agents) {
-    const secs = secondsSince(agent.lastActivity, nowMs.value)
-    const att = attentionFor(agent, secs)
-    const grantableToolUse = !!att?.grantable && !!agent.pendingToolUse && agent.pendingToolUse.tool !== ASK_USER_QUESTION_TOOL
-    map.set(agent.sessionId, { att, secs, grantableToolUse })
-  }
-  return map
-})
 
 // Breakdown string: "2 permissions · 1 failed run · 1 stalled"
 const breakdown = computed(() => {
@@ -148,11 +144,14 @@ function blockedDetail(agent: Agent): string {
   }
 }
 
+// patternDisplay, never pattern: the raw value is the grant identity and is
+// agent-authored, so a bidi override in it would render one command while the
+// button writes another. allowTool() sends pattern; only this reads the twin.
 function toolUseLabel(agent: Agent): string {
   const t = agent.pendingToolUse
   if (!t)
     return ''
-  return t.pattern ? `${t.tool}(${t.pattern})` : t.tool
+  return t.patternDisplay ? `${t.tool}(${t.patternDisplay})` : t.tool
 }
 
 function permissionLabel(p: PendingPermission | PermissionRequest): string {

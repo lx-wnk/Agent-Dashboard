@@ -228,19 +228,31 @@ type PendingPermission struct {
 // human-readable argument -- a Bash command, an Edit/Write path -- and is
 // agent-authored text on its way to a UI: never interpolate it into a shell
 // command, a query or HTML without escaping at the point of use.
+//
+// Elided is how many characters Detail was cut by, 0 when it was not cut. It is
+// a separate field rather than a suffix inside Detail so the payload cannot
+// forge a cut that never happened: the client renders it as its own element.
 type RecentTool struct {
 	Name   string `json:"name"`
 	Detail string `json:"detail,omitempty"`
+	Elided int    `json:"elided,omitempty"`
 }
 
 // PendingToolUse is the last assistant tool_use block that has no matching
 // tool_result yet. It indicates the agent is currently executing or blocked on
-// that tool call. Pattern is the command string (Bash), file path (Edit/Write),
-// or empty for other tools.
+// that tool call.
+//
+// Pattern is the command string (Bash), file path (Edit/Write), or empty for
+// other tools. It is the grant identity: a permission preset is matched by
+// exact equality, so it is carried verbatim and must never be normalised.
+// PatternDisplay is the same value made safe to render -- deceptive runes
+// removed, whitespace collapsed, never truncated. Show PatternDisplay to a
+// human; send Pattern to the permission API.
 type PendingToolUse struct {
-	ID      string `json:"id"`
-	Tool    string `json:"tool"`
-	Pattern string `json:"pattern"`
+	ID             string `json:"id"`
+	Tool           string `json:"tool"`
+	Pattern        string `json:"pattern"`
+	PatternDisplay string `json:"patternDisplay"`
 }
 
 // HookEvent is one lifecycle-hook event recorded for a session when the opt-in
