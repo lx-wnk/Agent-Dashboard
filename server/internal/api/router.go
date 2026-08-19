@@ -265,7 +265,6 @@ func NewRouter(deps RouterDeps) http.Handler {
 		r.Get("/api/agents/{sessionId}/output", sessions.Output)
 
 		r.Get("/api/sessions", sessions.List)
-		r.Get("/api/sessions/{sessionId}/timeline", sessions.Timeline)
 		commandsHandler := sessions.NewCommandsHandler(deps.SpawnerRepo, getAgents)
 		r.Get("/api/slash-commands", commandsHandler.SlashCommands)
 

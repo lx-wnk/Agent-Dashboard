@@ -2,6 +2,7 @@ package parser
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -29,13 +30,19 @@ func TestToolDetail(t *testing.T) {
 }
 
 func TestToolDetailMarksTheCut(t *testing.T) {
-	long := strings.Repeat("x", toolDetailMaxLen+50)
+	// The client clips visually as well, so the marker must say how much is
+	// missing -- a bare ellipsis is indistinguishable from CSS overflow, and a
+	// command that merely looks clipped reads as a shorter one that was run.
+	extra := 37
+	long := strings.Repeat("x", toolDetailMaxLen+extra)
 	got := toolDetail(json.RawMessage(`{"command":"` + long + `"}`))
-	if !strings.HasSuffix(got, "…") {
-		t.Errorf("a truncated detail must be marked as cut, got %q", got[len(got)-10:])
+
+	want := fmt.Sprintf("… (+%d chars)", extra)
+	if !strings.HasSuffix(got, want) {
+		t.Errorf("cut is not self-describing:\n got  %q\n want suffix %q", got, want)
 	}
-	if len([]rune(got)) != toolDetailMaxLen+1 {
-		t.Errorf("truncated length = %d runes, want %d", len([]rune(got)), toolDetailMaxLen+1)
+	if !strings.HasPrefix(got, strings.Repeat("x", toolDetailMaxLen)) {
+		t.Errorf("kept text is not the first %d runes: %q", toolDetailMaxLen, got)
 	}
 }
 

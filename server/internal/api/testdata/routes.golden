@@ -55,7 +55,6 @@ GET /api/refine/{taskId}/turns
 GET /api/remotes
 GET /api/search
 GET /api/sessions
-GET /api/sessions/{sessionId}/timeline
 GET /api/settings/api-keys
 GET /api/settings/permission-presets
 GET /api/settings/system-prompts

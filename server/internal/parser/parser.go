@@ -338,10 +338,12 @@ func toolDetail(raw json.RawMessage) string {
 	d := strings.Join(strings.Fields(stripDeceptiveRunes(toolArgument(raw))), " ")
 	r := []rune(d)
 	if len(r) > toolDetailMaxLen {
-		// Mark the cut: a silently clipped command reads like a different,
-		// shorter one that was never run. Slice runes, not bytes -- a cut
-		// through a multi-byte character yields U+FFFD on the wire.
-		return string(r[:toolDetailMaxLen]) + "…"
+		// Name the size of the cut: the client clips visually too, so a bare
+		// ellipsis is indistinguishable from CSS overflow, and a silently
+		// clipped command reads like a shorter one that was never run. Slice
+		// runes, not bytes -- a cut through a multi-byte character yields
+		// U+FFFD on the wire.
+		return fmt.Sprintf("%s… (+%d chars)", string(r[:toolDetailMaxLen]), len(r)-toolDetailMaxLen)
 	}
 	return d
 }
