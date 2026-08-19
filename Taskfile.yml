@@ -1,6 +1,13 @@
 # Taskfile.yml
 version: '3'
 
+vars:
+  # The one place the Vite dev-server port is written down. vite.config.ts reads
+  # it from process.env and desktop/target_dev.go reads the same name, so both
+  # dev:desktop children below export it -- a parent task's `env:` does not
+  # reach its `deps`. Override per run: `task dev:desktop VITE_DEV_PORT=5199`.
+  VITE_DEV_PORT: '5173'
+
 tasks:
   default:
     cmds: [task --list]
@@ -15,16 +22,20 @@ tasks:
 
   dev:frontend:
     desc: Start Vite dev server with HMR on :5173
+    env:
+      VITE_DEV_PORT: '{{.VITE_DEV_PORT}}'
     cmd: pnpm dev
 
   dev:desktop:
     desc: Run the macOS desktop shell with Vite frontend HMR (owns the backend on :13120 itself -- do not also run `task dev`; requires the wails CLI + Xcode CLT)
     platforms: [darwin]
+    # No build:frontend here: `wails dev` always sets the dev build tag, under
+    # which the window is redirected to Vite and never serves the embed (see
+    # desktop/target_dev.go). Building it anyway cost a full SPA build per dev
+    # start and deleted the tracked server/frontend/dist/.gitkeep that
+    # //go:embed all:dist needs to compile in CI. build:desktop and
+    # desktop:dist still depend on build:frontend, which is where it belongs.
     cmds:
-      # One-shot embed so a plain (non-dev-tagged) build of this module always
-      # has a real SPA baked in; the dev run below never serves it, since the
-      # window is redirected to Vite instead (see desktop/target_dev.go).
-      - task: build:frontend
       - task: dev:desktop:run
 
   dev:desktop:run:
@@ -38,16 +49,14 @@ tasks:
   dev:desktop:wails:
     internal: true
     platforms: [darwin]
-    vars:
-      # Must match vite.config.ts's server.port; exported below so
-      # desktop/target_dev.go reads it instead of hardcoding its own copy.
-      VITE_DEV_PORT: '5173'
+    env:
+      VITE_DEV_PORT: '{{.VITE_DEV_PORT}}'
     cmds:
-      - echo "frontend now hot-reloads through Vite on :{{.VITE_DEV_PORT}} -- the wails -assetdir/-reloaddirs warning below is expected in this flow, not a bug"
+      - echo "frontend now hot-reloads through Vite on :$VITE_DEV_PORT -- the wails -assetdir/-reloaddirs warning below is expected in this flow, not a bug"
       # No -tags production here: `wails dev` always adds its own `dev` tag, and
       # dev+production together redeclare App.Run/CreateApp in wails' app package.
       # The two release paths (build:desktop, desktop:dist) pass the tag explicitly.
-      - cd desktop && VITE_DEV_PORT={{.VITE_DEV_PORT}} $(go env GOPATH)/bin/wails dev -ldflags "-extldflags '-framework UniformTypeIdentifiers'"
+      - cd desktop && $(go env GOPATH)/bin/wails dev -ldflags "-extldflags '-framework UniformTypeIdentifiers'"
 
   setup:
     desc: Install the dev toolchain (air, golangci-lint, tygo, govulncheck) + frontend deps

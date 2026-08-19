@@ -146,7 +146,21 @@ var healthPollClient = &http.Client{Timeout: 2 * time.Second}
 
 // waitForServer polls url until it returns 200, the timeout/ctx elapses, or
 // serverErr delivers a startup failure.
+//
+// A 200 only proves something serves this address, not that it is ours. That is
+// safe at the call sites that poll the in-process server, because
+// serverapp.Listen already holds the address: nothing else can be answering on
+// it. A caller polling an address this process does NOT hold must prove
+// ownership some other way -- see waitForServerFunc.
 func waitForServer(ctx context.Context, serverErr <-chan error, url string, timeout time.Duration) error {
+	return waitForServerFunc(ctx, serverErr, url, timeout, nil)
+}
+
+// waitForServerFunc is waitForServer with an extra acceptance test on the
+// response, so a caller can require evidence that the peer is the process it
+// expects rather than whatever happens to hold the port. A nil accept means
+// "200 is enough".
+func waitForServerFunc(ctx context.Context, serverErr <-chan error, url string, timeout time.Duration, accept func(*http.Response) bool) error {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		select {
@@ -158,12 +172,9 @@ func waitForServer(ctx context.Context, serverErr <-chan error, url string, time
 		}
 		resp, err := healthPollClient.Get(url)
 		if err == nil {
+			ok := resp.StatusCode == http.StatusOK && (accept == nil || accept(resp))
 			resp.Body.Close()
-			// A 200 only proves something serves this address, not that it is
-			// ours. That is safe here only because serverapp.Listen already
-			// holds the address: nothing else can be answering on it. This poll
-			// on its own would happily adopt a foreign server.
-			if resp.StatusCode == http.StatusOK {
+			if ok {
 				return nil
 			}
 		}

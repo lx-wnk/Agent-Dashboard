@@ -100,6 +100,14 @@ export default defineConfig(({ mode }) => ({
   esbuild: mode === 'production' ? { drop: ['console', 'debugger'] } : {},
   server: {
     port: VITE_DEV_PORT,
+    // Bind IPv4 loopback explicitly. Vite's default host is 'localhost', which
+    // Node resolves to ::1 first on a dual-stack machine — so the dev server
+    // ends up listening on [::1] only, and desktop/target_dev.go, which polls
+    // and redirects the webview to 127.0.0.1:<port>, gets ECONNREFUSED. The
+    // proxy targets below already spell 127.0.0.1 out for exactly this reason;
+    // the listen address needs the same treatment. Browsers reaching
+    // http://localhost:<port> still connect: they fall back to IPv4.
+    host: '127.0.0.1',
     // A silently-moved port (Vite's default when the port is taken) would leave
     // desktop/target_dev.go redirecting the webview at a foreign loopback origin.
     strictPort: true,
