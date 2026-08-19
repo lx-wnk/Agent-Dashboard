@@ -237,7 +237,6 @@ type RecentTool struct {
 // tool_result yet. It indicates the agent is currently executing or blocked on
 // that tool call. Pattern is the command string (Bash), file path (Edit/Write),
 // or empty for other tools.
-
 type PendingToolUse struct {
 	ID      string `json:"id"`
 	Tool    string `json:"tool"`
