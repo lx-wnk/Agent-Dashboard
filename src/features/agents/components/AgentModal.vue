@@ -24,9 +24,6 @@ const props = defineProps<{ agent: Agent | null }>()
 const emit = defineEmits<{ close: [], navigate: [taskId: string] }>()
 
 const localMessages = ref<OutputMessage[]>([])
-// The modal shows one thing at a time. Session context (tasks, subagents,
-// tools) sits beside the transcript rather than behind a tab, because it is
-// what you read *while* reading the transcript.
 const promptInputRef = ref<InstanceType<typeof PromptInput> | null>(null)
 const chatStreamRef = ref<InstanceType<typeof AgentChatStream> | null>(null)
 const showMetrics = ref(false)
