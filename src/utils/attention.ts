@@ -6,10 +6,12 @@ export interface Attention {
   label: string
   tone: 'warning' | 'danger' | 'neutral'
   weight: number
-  // Whether this kind is genuine evidence that a prompt is on screen — the
-  // only basis on which the triage band may offer a permission grant. A
-  // required field so a future kind must decide this explicitly instead of
-  // inheriting "grantable" by default.
+  // Whether this kind is evidence that a PERMISSION prompt is on screen — the
+  // only basis on which the triage band may offer a standing grant for the
+  // agent's pending tool call. A question is answered, never granted: its
+  // prompt is about something else entirely, so treating it as evidence would
+  // offer a rule for a tool nobody asked about. A required field so a future
+  // kind must decide this explicitly instead of inheriting it by default.
   grantable: boolean
 }
 
@@ -20,11 +22,11 @@ export function attentionFor(agent: Agent, secondsSinceActivity: number | null):
     return null
   // A real, answerable AskUserQuestion outranks a generic permission prompt.
   if (agent.pendingQuestion)
-    return { kind: 'question', label: 'Question', tone: 'warning', weight: -1, grantable: true }
+    return { kind: 'question', label: 'Question', tone: 'warning', weight: -1, grantable: false }
   // The review/submit screen is equally answerable and equally blocking: the
   // session sits there until someone presses a key.
   if (agent.pendingConfirm)
-    return { kind: 'question', label: 'Confirm answers', tone: 'warning', weight: -1, grantable: true }
+    return { kind: 'question', label: 'Confirm answers', tone: 'warning', weight: -1, grantable: false }
   if (agent.pendingPermissions && agent.pendingPermissions.length > 0)
     return { kind: 'permission', label: 'Needs permission', tone: 'warning', weight: 0, grantable: true }
   if (agent.errorState)

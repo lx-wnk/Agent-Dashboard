@@ -74,12 +74,36 @@ describe('agentTriageBand pending tool use', () => {
     expect(wrapper.text()).toContain('Bash')
   })
 
-  it('still offers the grant when a prompt is genuinely on screen', () => {
+  // A question is answered, not granted: the prompt on screen is about something
+  // other than the pending tool call, so it is not evidence for a standing rule.
+  it('offers no grant while a question is the only prompt on screen', () => {
     const wrapper = mountBand(makeAgent({
       pendingToolUse: toolUse({ id: 'tu_b', tool: 'Bash', pattern: 'npm publish' }),
-      pendingPermissions: [{ id: 'p1', tool: 'Bash', pattern: 'npm publish' }] as never,
+      pendingQuestion: {
+        header: 'branch',
+        question: 'Which branch?',
+        multiSelect: false,
+        options: [{ index: 1, label: 'main' }, { index: 2, label: 'dev' }],
+        typeSomethingIndex: 3,
+        chatAboutIndex: 4,
+      },
     }))
-    expect(wrapper.text()).toContain('Allow Bash')
+    expect(wrapper.text()).not.toContain('Allow Bash')
+    expect(wrapper.text()).toContain('Which branch?')
+  })
+
+  // The server sets PendingPermissions only together with PipelineTaskID
+  // (agentbroadcast/enricher.go), and an orchestrated agent is approved through
+  // the pipeline control, not through a standing project-wide rule. A fixture
+  // with permissions and no task id describes a payload that cannot be emitted.
+  it('routes an orchestrated permission to Approve, not to a standing grant', () => {
+    const wrapper = mountBand(makeAgent({
+      pipelineTaskId: 'task-1',
+      pendingToolUse: toolUse({ id: 'tu_b', tool: 'Bash', pattern: 'npm publish' }),
+      pendingPermissions: [{ id: 'p1', tool: 'Bash', pattern: 'npm publish', requestedAt: new Date().toISOString() }],
+    }))
+    expect(wrapper.text()).not.toContain('Allow Bash')
+    expect(wrapper.text()).toContain('Approve')
   })
 
   // With the question itself detected, the card renders the answer UI — and the

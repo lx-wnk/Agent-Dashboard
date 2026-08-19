@@ -356,11 +356,17 @@ describe('grantable is opt-in', () => {
   // The band offers a permission grant only where a prompt is genuinely on
   // screen. Expressing that as an exclusion ("not stalled") silently re-enables
   // the control for every kind added later; this pins the positive form.
-  it('marks only genuine prompt evidence as grantable', () => {
+  it('marks only a permission prompt as grantable', () => {
     const grantable = (a: Partial<Agent>) => attentionFor(makeAgent(a), ACTIVE_SECS)?.grantable
 
-    expect(grantable({ pendingQuestion: { prompt: 'q', options: [] } as never })).toBe(true)
     expect(grantable({ pendingPermissions: [{ tool: 'Bash' }] as never })).toBe(true)
+
+    // A question is answered, never granted. The tool call a grant would be
+    // written for is a different object from the prompt on screen, so treating
+    // a question as evidence writes a standing rule for something nobody asked
+    // about.
+    expect(grantable({ pendingQuestion: { prompt: 'q', options: [] } as never })).toBe(false)
+    expect(grantable({ pendingConfirm: { question: 'ready?', options: [] } as never })).toBe(false)
 
     // A busy agent with an unresolved tool call is not attention at all yet, so
     // there is nothing to grant against — the stronger statement than "not
