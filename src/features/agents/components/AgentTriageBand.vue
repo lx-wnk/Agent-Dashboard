@@ -52,8 +52,7 @@ const orchestratedTaskIds = computed(() => new Set(props.permissionItems.map(i =
 
 const visibleAgentCards = computed(() =>
   props.agents.filter((agent) => {
-    const secs = secondsSince(agent.lastActivity, nowMs.value)
-    const att = attentionFor(agent, secs)
+    const att = agentAttentionMap.value.get(agent.sessionId)?.att
     if (!att)
       return false
     // A pending, answerable question always surfaces — regardless of orchestration.
@@ -81,7 +80,8 @@ const totalRequestCount = computed(() => props.permissionItems.reduce((s, i) => 
 const ASK_USER_QUESTION_TOOL = 'AskUserQuestion'
 
 // Per-agent attention/secs/grant-eligibility, computed once per agent per tick
-// (reused by breakdown, blockedDetail, template). grantableToolUse folds in
+// (reused by visibleAgentCards, breakdown, blockedDetail, template).
+// grantableToolUse folds in
 // attention.ts's Attention.grantable — the single source for which attention
 // kinds are genuine prompt-on-screen evidence — so the template never
 // recomputes that decision per usage.
