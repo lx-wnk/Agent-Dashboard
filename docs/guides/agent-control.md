@@ -77,3 +77,46 @@ a hint as what the command's author suggests you type, not as advice from the da
 Stage agents run with an allow-list derived from `task_permissions` rows. Grants flow through a single validated path (`bulkGrantPermissions`) checked against an allow-list and a dangerous-bash block-list. Permission templates provide quick presets: `feature_implementation`, `research_only`, `test_only`, `review_only`.
 
 Spawned agents request anything missing via the channel's `request_permission` MCP tool — prefer the bulk form so the user grants everything as one batch decision. The full self-service flow is documented in [`.agent-context/permissions.md`](../../.agent-context/permissions.md).
+
+### Answering a permission prompt from the dashboard
+
+By default a session that needs approval stops and asks in its own terminal, and
+the dashboard can only watch. The **permission bridge** moves that decision into
+the dashboard for any session — including ones you started by hand — by
+registering two Claude Code hooks:
+
+```bash
+agent-dashboard hooks install
+```
+
+That writes a `PreToolUse` and a `Notification` entry into
+`~/.claude/settings.json` (or `$CLAUDE_CONFIG_DIR/settings.json`). Existing hooks
+are kept and re-running the command changes nothing. Settings are read when a
+session starts, so restart anything already running. `agent-dashboard hooks
+uninstall` removes exactly the two entries it added.
+
+With it installed:
+
+- Claude Code calls the hook **before** it draws its own prompt. The dashboard
+  holds that call open for 25 seconds and shows **Allow** / **Deny** on the
+  agent's card in the needs-you band.
+- Answering there releases the run immediately. The terminal never prompts.
+- If nobody answers in time, the hold lapses and the session falls back to
+  asking in its terminal exactly as it does without the bridge — the card then
+  reads **Answer in terminal** and offers a standing rule for future runs
+  instead of a live decision.
+
+The lapse is the important property: the hook answers "no decision", never
+"allow". A dashboard that is stopped, slow, or unreachable, a missing secret, a
+machine without `curl` — every one of those paths degrades to the behaviour you
+have today. Nothing is approved because something failed.
+
+The hook authenticates with the secret in `~/.claude/dashboard-hooks-secret`
+(mode `0600`, generated on first boot). It is deliberately not written into
+`settings.json`, which is a file people share and check in.
+
+Why hooks rather than ACP or the MCP endpoint: both of those are established
+when a session **starts**, so they cannot reach a session that is already
+running or one launched outside the dashboard. Hooks are ambient configuration —
+a file, not a handshake — which is what makes a foreign terminal session
+reachable at all.

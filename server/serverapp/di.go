@@ -28,6 +28,7 @@ import (
 	apicost "github.com/lx-wnk/agent-dashboard/server/internal/api/cost"
 	apieval "github.com/lx-wnk/agent-dashboard/server/internal/api/eval"
 	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/hooks"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/onboarding"
 	planapi "github.com/lx-wnk/agent-dashboard/server/internal/api/plan"
 	apiplugins "github.com/lx-wnk/agent-dashboard/server/internal/api/plugins"
@@ -571,9 +572,20 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	// config dir their process carries.
 	spawnerEnricher := agentbroadcast.NewSpawnerEnricher(spawnerRepo, taskRepoForResolver)
 
+	// Permission bridge: holds PreToolUse hook calls open so an approval prompt
+	// can be answered here instead of in the session's terminal. Built at this
+	// point rather than in the router because the enricher below reads the same
+	// instance, and the enricher has to exist before the router is constructed.
+	permissionBridge := hooks.NewPermissionBridge(nil)
+
 	// Combine the read-only crossings into one enricher applied at every GetAgents
 	// call site. A nil pipelineEnricher (no DB) composes away.
-	agentEnricher := merger.ChainEnrichers(pipelineEnricher, spawnerEnricher, agentbroadcast.NewHookEventEnricher(hookStore))
+	agentEnricher := merger.ChainEnrichers(
+		pipelineEnricher,
+		spawnerEnricher,
+		agentbroadcast.NewHookEventEnricher(hookStore),
+		agentbroadcast.NewPermissionBridgeEnricher(permissionBridge),
+	)
 
 	// Built here (not earlier) so it captures agentEnricher — admin agent search
 	// results carry the same pipeline-task and hook-event annotations as /api/agents.
@@ -642,6 +654,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		Merger:                 agentMerger,
 		Enricher:               agentEnricher,
 		HookStore:              hookStore,
+		PermissionBridge:       permissionBridge,
 		OAuthProvider:          oauthProvider,
 		UserRepo:               userRepo,
 		ApiKeyRepo:             apiKeyRepo,

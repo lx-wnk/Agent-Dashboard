@@ -5,6 +5,10 @@
 //   - POST /api/hooks/pre-tool — edit gate: holds a tool call pending user approval
 //   - POST /api/hooks/respond  — approve or reject a pending edit gate decision
 //   - GET  /api/hooks/pending  — list pending edit gate decisions
+//   - POST /api/hooks/permission — permission bridge: holds a PreToolUse call
+//     open so the prompt can be answered here instead of in the terminal
+//   - POST /api/hooks/permission/respond — allow or deny a held call
+//   - POST /api/hooks/notification — records that a terminal prompt is up
 package hooks
 
 import (
@@ -57,6 +61,11 @@ type Handler struct {
 
 	mu      sync.Mutex
 	pending map[string]*pendingEntry
+
+	// permissions holds PreToolUse calls open for a dashboard decision. Separate
+	// from the edit gate above: that one gates write tools with its own payload
+	// shape, this one speaks Claude Code's native hook protocol for every tool.
+	permissions *PermissionBridge
 }
 
 type pendingEntry struct {
@@ -72,15 +81,25 @@ type pendingEntry struct {
 //
 // store may be nil (per-event recording disabled); when non-nil, Event records a
 // truncated, secret-safe HookEvent per received payload.
-func New(secret string, store *hookstore.Store, onEvent OnEventFn) *Handler {
+// bridge may be nil, in which case the handler builds its own — convenient for
+// tests. Production passes the instance from the DI container, because the
+// agent enricher reads the same bridge and is constructed before the router.
+func New(secret string, store *hookstore.Store, onEvent OnEventFn, bridge *PermissionBridge) *Handler {
 	if secret == "" {
 		panic("hooks.Handler requires a non-empty secret")
 	}
+	if bridge == nil {
+		bridge = NewPermissionBridge(nil)
+	}
+	// onEvent already debounces a rescan; reuse it so a held or resolved
+	// permission reaches connected clients without waiting for the next tick.
+	bridge.SetOnChange(onEvent)
 	return &Handler{
-		secret:  secret,
-		store:   store,
-		onEvent: onEvent,
-		pending: make(map[string]*pendingEntry),
+		secret:      secret,
+		store:       store,
+		onEvent:     onEvent,
+		pending:     make(map[string]*pendingEntry),
+		permissions: bridge,
 	}
 }
 

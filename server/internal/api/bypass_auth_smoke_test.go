@@ -148,7 +148,8 @@ func bypassSkip(method, pattern string) bool {
 		return true
 	case pattern == "/*": // Vue SPA catch-all, not an API route
 		return true
-	case pattern == "/api/hooks/event", pattern == "/api/hooks/pre-tool": // hook-script ingress, bearer-secret auth
+	case pattern == "/api/hooks/event", pattern == "/api/hooks/pre-tool",
+		pattern == "/api/hooks/permission", pattern == "/api/hooks/notification": // hook-script ingress, bearer-secret auth
 		return true
 	case pattern == "/api/mcp", pattern == "/api/channel-reply",
 		pattern == "/api/channel-stage-output",

@@ -1,7 +1,7 @@
-import type { PendingToolUse } from '@/sdk.generated'
+import type { PendingPermission, PendingToolUse } from '@/sdk.generated'
 import type { Agent } from '@/types'
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import AgentTriageBand from './AgentTriageBand.vue'
 
 function makeAgent(overrides: Partial<Agent>): Agent {
@@ -173,5 +173,64 @@ describe('agentTriageBand all-clear state', () => {
   it('drops the all-clear line as soon as an agent needs attention', () => {
     const w = mountBand(makeAgent({ pendingToolUse: toolUse({ tool: 'Bash', pattern: 'ls', id: 'tu_1' }) }))
     expect(w.find('[data-testid="triage-all-clear"]').exists()).toBe(false)
+  })
+})
+
+describe('agentTriageBand permission bridge', () => {
+  function perm(o: Partial<PendingPermission> = {}): PendingPermission {
+    return { id: 'req-1', tool: 'Bash', pattern: 'npm publish', requestedAt: new Date().toISOString(), ...o }
+  }
+
+  // The bridge's own controls. Matched by test id rather than by label text:
+  // the pipeline bar and the standing-rule button both spell "Allow" too.
+  function bridgeButtons(wrapper: ReturnType<typeof mountBand>) {
+    return [
+      ...wrapper.findAll('[data-testid="permission-decide-allow"]'),
+      ...wrapper.findAll('[data-testid="permission-decide-deny"]'),
+    ]
+  }
+
+  // A held PreToolUse hook call is the live decision: answering it releases the
+  // run, so the card offers both directions rather than a rule for next time.
+  it('offers Allow and Deny for a free agent whose prompt the bridge holds', () => {
+    const wrapper = mountBand(makeAgent({ pendingPermissions: [perm()] }))
+    expect(bridgeButtons(wrapper).map(b => b.text())).toEqual(['Allow', 'Deny'])
+  })
+
+  // An orchestrated agent is approved through the pipeline control, which also
+  // records the decision against its task — the bridge must not shortcut that.
+  it('leaves an orchestrated agent to the pipeline approve control', () => {
+    const wrapper = mountBand(makeAgent({ pipelineTaskId: 'task-1', pendingPermissions: [perm()] }))
+    expect(wrapper.text()).toContain('Approve')
+    // The pipeline control has a Deny of its own, so the check is that the
+    // bridge added none — not that the word is absent from the card.
+    expect(bridgeButtons(wrapper)).toHaveLength(0)
+  })
+
+  // The terminal is already asking, so there is nothing here to answer — only a
+  // rule for future runs, which is what the older control always did.
+  it('offers the standing rule, not a live decision, once the prompt reached the terminal', () => {
+    const wrapper = mountBand(makeAgent({
+      awaitingTerminalPermission: true,
+      pendingToolUse: toolUse({ id: 'tu_b', tool: 'Bash', pattern: 'npm publish' }),
+    }))
+    expect(wrapper.text()).toContain('Allow Bash')
+    expect(bridgeButtons(wrapper)).toHaveLength(0)
+  })
+
+  it('posts the decision for the held request', async () => {
+    const calls: { url: string, body: unknown }[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
+      calls.push({ url, body: JSON.parse(String(init.body)) })
+      return { ok: true, status: 200 } as Response
+    }))
+
+    const wrapper = mountBand(makeAgent({ pendingPermissions: [perm({ id: 'req-42' })] }))
+    const allow = bridgeButtons(wrapper)[0]
+    expect(allow).toBeTruthy()
+    await allow.trigger('click')
+
+    expect(calls).toEqual([{ url: '/api/hooks/permission/respond', body: { id: 'req-42', decision: 'allow' } }])
+    vi.unstubAllGlobals()
   })
 })

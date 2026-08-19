@@ -395,7 +395,20 @@ export interface Agent {
   spawnerId?: string
   spawnerName?: string
   spawnerSource?: string
+  /**
+   * PendingPermissions are the approval requests this session is blocked on and
+   * that can be answered from the dashboard: either a pipeline stage run's
+   * stored requests, or a PreToolUse hook call the permission bridge is holding
+   * open. Both are answerable; the client tells them apart by PipelineTaskID.
+   */
   pendingPermissions?: PendingPermission[]
+  /**
+   * AwaitingTerminalPermission means the session is showing its own permission
+   * prompt, which the dashboard can report but not answer -- the bridge either
+   * lapsed before anyone decided, or is not installed for this session. Set from
+   * the Notification hook's typed notification_type, never from its prose.
+   */
+  awaitingTerminalPermission?: boolean
   pendingToolUse?: PendingToolUse
   /**
    * PendingQuestion is set when the session's terminal buffer currently shows

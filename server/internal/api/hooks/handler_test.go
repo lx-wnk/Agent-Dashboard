@@ -16,7 +16,7 @@ import (
 // hookstore so the record path is exercised; onEvent is a no-op since tests
 // verify HTTP behaviour and recorded state, not the rescan side effect.
 func newTestHandler(secret string) *Handler {
-	return New(secret, hookstore.New(50, 0), func() {})
+	return New(secret, hookstore.New(50, 0), func() {}, nil)
 }
 
 // -------------------------------------------------------------------
@@ -57,7 +57,7 @@ func TestNew_PanicsOnEmptySecret(t *testing.T) {
 			t.Error("New(\"\", ...) did not panic; expected panic on empty secret")
 		}
 	}()
-	New("", hookstore.New(50, 0), func() {})
+	New("", hookstore.New(50, 0), func() {}, nil)
 }
 
 // TestEvent_RecordsHookEvent verifies the payload is decoded (snake_case keys)

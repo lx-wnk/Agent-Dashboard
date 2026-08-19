@@ -27,8 +27,16 @@ export function attentionFor(agent: Agent, secondsSinceActivity: number | null):
   // session sits there until someone presses a key.
   if (agent.pendingConfirm)
     return { kind: 'question', label: 'Confirm answers', tone: 'warning', weight: -1, grantable: false }
+  // A held PreToolUse hook call, or a pipeline stage run's stored request:
+  // either way the session is blocked and the answer can be given from here.
   if (agent.pendingPermissions && agent.pendingPermissions.length > 0)
     return { kind: 'permission', label: 'Needs permission', tone: 'warning', weight: 0, grantable: true }
+  // The session is showing its own prompt: the bridge lapsed before anyone
+  // decided, or is not installed for it. Not answerable from here — but it is
+  // the one signal that positively means a permission prompt is on screen, so
+  // offering a standing rule for next time is honest.
+  if (agent.awaitingTerminalPermission)
+    return { kind: 'permission', label: 'Answer in terminal', tone: 'warning', weight: 0, grantable: true }
   if (agent.errorState)
     return { kind: 'error', label: 'Run failed', tone: 'danger', weight: 1, grantable: false }
   // An unresolved tool_use is the only signal a plain JSONL gives for "blocked on

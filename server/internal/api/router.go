@@ -120,7 +120,12 @@ type RouterDeps struct {
 	// HookStore records per-event hook granularity. The same instance is read by
 	// the Enricher (via the agentbroadcast hook enricher) so events POSTed to
 	// /api/hooks/event surface on the matching agent. May be nil (recording off).
-	HookStore         *hookstore.Store
+	HookStore *hookstore.Store
+	// PermissionBridge holds PreToolUse hook calls open for a dashboard decision.
+	// Built in the DI container because the agent enricher reads the same
+	// instance and is constructed before this router. May be nil, in which case
+	// the hooks handler builds its own and no agent is annotated.
+	PermissionBridge  *hooks.PermissionBridge
 	OAuthProvider     authpkg.OAuthProvider
 	UserRepo          repo.UserRepo
 	ApiKeyRepo        repo.ApiKeyRepo
@@ -213,9 +218,15 @@ func NewRouter(deps RouterDeps) http.Handler {
 	if debounceMs <= 0 {
 		debounceMs = 100
 	}
-	hooksHandler := hooks.New(deps.Config.HooksSecret, deps.HookStore, newDebouncedRescan(serverCtx, deps.AgentBroadcaster, debounceMs, getAgents))
+	hooksHandler := hooks.New(deps.Config.HooksSecret, deps.HookStore, newDebouncedRescan(serverCtx, deps.AgentBroadcaster, debounceMs, getAgents), deps.PermissionBridge)
 	r.Post("/api/hooks/event", hooksHandler.Event)
 	r.Post("/api/hooks/pre-tool", hooksHandler.PreTool)
+	// Permission bridge ingress, secret-authenticated like the two above. The
+	// request call is held open while a human decides, so it is deliberately a
+	// slow endpoint; every failure path answers "no decision" and Claude Code
+	// falls back to its own terminal prompt.
+	r.Post("/api/hooks/permission", hooksHandler.PermissionRequest)
+	r.Post("/api/hooks/notification", hooksHandler.PermissionNotify)
 	// NOTE: /api/hooks/respond and /api/hooks/pending are browser-facing (the edit
 	// gate UI reads pending edits and posts the user's decision). They carry the
 	// session cookie, not the hooks secret, so they are registered inside the
@@ -466,6 +477,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 		// auth), these are called by EditGateModal.vue with the session cookie.
 		r.Get("/api/hooks/pending", hooksHandler.Pending)
 		r.Post("/api/hooks/respond", hooksHandler.Respond)
+		r.Post("/api/hooks/permission/respond", hooksHandler.PermissionRespond)
 
 		// SP1 lifecycle + settings endpoints under the clean /api/plugins namespace.
 		// The read-only list is needed by non-admin users for slot discovery, so it

@@ -405,13 +405,22 @@ type Agent struct {
 	// SpawnerID/SpawnerName name the configured spawner this session belongs to,
 	// and SpawnerSource says how that was established (see SpawnerSource*).
 	// Empty when no spawner could be attributed.
-	SpawnerID          string              `json:"spawnerId,omitempty"`
-	SpawnerName        string              `json:"spawnerName,omitempty"`
-	SpawnerSource      string              `json:"spawnerSource,omitempty"`
+	SpawnerID     string `json:"spawnerId,omitempty"`
+	SpawnerName   string `json:"spawnerName,omitempty"`
+	SpawnerSource string `json:"spawnerSource,omitempty"`
+	// PendingPermissions are the approval requests this session is blocked on and
+	// that can be answered from the dashboard: either a pipeline stage run's
+	// stored requests, or a PreToolUse hook call the permission bridge is holding
+	// open. Both are answerable; the client tells them apart by PipelineTaskID.
 	PendingPermissions []PendingPermission `json:"pendingPermissions,omitempty"`
-	PendingToolUse     *PendingToolUse     `json:"pendingToolUse,omitempty"`
-	Machine            string              `json:"machine,omitempty"`
-	LastBtw            *BtwMessage         `json:"lastBtw"`
+	// AwaitingTerminalPermission means the session is showing its own permission
+	// prompt, which the dashboard can report but not answer -- the bridge either
+	// lapsed before anyone decided, or is not installed for this session. Set from
+	// the Notification hook's typed notification_type, never from its prose.
+	AwaitingTerminalPermission bool            `json:"awaitingTerminalPermission,omitempty"`
+	PendingToolUse             *PendingToolUse `json:"pendingToolUse,omitempty"`
+	Machine                    string          `json:"machine,omitempty"`
+	LastBtw                    *BtwMessage     `json:"lastBtw"`
 	// CostUnknown is true when the provider does not expose token counts and
 	// cost cannot be estimated. CostEstimate will be 0 in this case.
 	CostUnknown bool `json:"costUnknown,omitempty"`

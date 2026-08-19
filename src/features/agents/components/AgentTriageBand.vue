@@ -262,6 +262,48 @@ async function handleResolveAgent(agent: Agent, outcome: 'granted' | 'denied') {
   }
 }
 
+// A free agent's held permission request: the bridge is holding its PreToolUse
+// hook call open, so answering here resolves the call the session is blocked on.
+// Orchestrated agents are excluded — their requests are approved through the
+// pipeline control above, which also records the decision against the task.
+function bridgeRequest(agent: Agent): PendingPermission | null {
+  if (agent.pipelineTaskId)
+    return null
+  return agent.pendingPermissions?.[0] ?? null
+}
+
+const deciding = ref<Record<string, boolean>>({})
+async function decidePermission(agent: Agent, decision: 'allow' | 'deny') {
+  const request = bridgeRequest(agent)
+  if (!request)
+    return
+  deciding.value[agent.sessionId] = true
+  try {
+    const res = await fetch('/api/hooks/permission/respond', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: request.id, decision }),
+    })
+    if (res.status === 409) {
+      // The hold lapsed while the card was on screen: the session has already
+      // fallen back to asking in its own terminal.
+      toast.info('Too late — that run is now asking in its terminal')
+      return
+    }
+    if (!res.ok)
+      throw new Error(`HTTP ${res.status}`)
+    toast.success(decision === 'allow'
+      ? `Allowed ${permissionLabel(request)}`
+      : `Denied ${permissionLabel(request)}`)
+  }
+  catch (e) {
+    toast.error(`Could not answer the prompt: ${e instanceof Error ? e.message : String(e)}`)
+  }
+  finally {
+    deciding.value[agent.sessionId] = false
+  }
+}
+
 const allowing = ref<Record<string, boolean>>({})
 async function allowTool(agent: Agent) {
   const pending = agent.pendingToolUse
@@ -599,9 +641,37 @@ watch(() => props.focusedSessionId, (id) => {
               </label>
             </template>
 
+            <!-- Free agent, prompt held by the bridge: this decides the call the
+                 session is blocked on right now, not a rule for next time. -->
+            <template v-if="bridgeRequest(agent)">
+              <AppButton
+                variant="success"
+                size="sm"
+                class="ml-auto"
+                :disabled="deciding[agent.sessionId]"
+                :title="`Allow ${permissionLabel(bridgeRequest(agent)!)} once — the run continues immediately.`"
+                :aria-label="`Allow ${bridgeRequest(agent)!.tool} for ${friendlyProjectName(agent.projectName)}`"
+                data-testid="permission-decide-allow"
+                @click="decidePermission(agent, 'allow')"
+              >
+                Allow
+              </AppButton>
+              <AppButton
+                variant="outline"
+                size="sm"
+                :disabled="deciding[agent.sessionId]"
+                :title="`Deny ${permissionLabel(bridgeRequest(agent)!)} — the session is told no and carries on.`"
+                :aria-label="`Deny ${bridgeRequest(agent)!.tool} for ${friendlyProjectName(agent.projectName)}`"
+                data-testid="permission-decide-deny"
+                @click="decidePermission(agent, 'deny')"
+              >
+                Deny
+              </AppButton>
+            </template>
+
             <!-- Free agent: allow the paused tool for future runs -->
             <AppButton
-              v-if="agentAttentionMap.get(agent.sessionId)?.grantableToolUse && !(agent.pipelineTaskId && agent.pendingPermissions?.length)"
+              v-if="!bridgeRequest(agent) && agentAttentionMap.get(agent.sessionId)?.grantableToolUse && !(agent.pipelineTaskId && agent.pendingPermissions?.length)"
               variant="success"
               size="sm"
               class="ml-auto"
