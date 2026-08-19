@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lx-wnk/agent-dashboard/sdk"
 	"github.com/lx-wnk/agent-dashboard/server/internal/parser"
@@ -293,4 +294,42 @@ func TestAllClaudeConfigDirs_DashboardEnvOverride(t *testing.T) {
 	for d, count := range seen {
 		require.Equal(t, 1, count, "duplicate dir found: %s", d)
 	}
+}
+
+// TestParseSessionFile_PendingPatternIsRaw pins the seam, not the helper: the
+// pattern travels to /allow-tool and is stored as a permission preset matched by
+// exact equality, so a display-truncated value would create a rule that can
+// never fire. Asserting toolArgument() directly would pass even if the caller
+// went back to the display form.
+func TestParseSessionFile_PendingPatternIsRaw(t *testing.T) {
+	cmd := "go test ./...  " + strings.Repeat("-run Xyz ", 30)
+	raw, err := json.Marshal(cmd)
+	require.NoError(t, err)
+	path := writeSessionLines(t, []string{
+		`{"type":"assistant","sessionId":"s1","timestamp":"` + time.Now().UTC().Format(time.RFC3339) +
+			`","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":` + string(raw) + `}}]}}`,
+	})
+
+	data, err := parser.ParseSessionFile(path)
+	require.NoError(t, err)
+	require.NotNil(t, data.PendingToolUse)
+	require.Equal(t, cmd, data.PendingToolUse.Pattern, "the grant pattern must be the command itself")
+}
+
+// The trail entry for the same call is the display form: collapsed and capped.
+func TestParseSessionFile_LastToolDetailIsDisplayForm(t *testing.T) {
+	cmd := "go test ./...  " + strings.Repeat("-run Xyz ", 30)
+	raw, err := json.Marshal(cmd)
+	require.NoError(t, err)
+	path := writeSessionLines(t, []string{
+		`{"type":"assistant","sessionId":"s1","timestamp":"` + time.Now().UTC().Format(time.RFC3339) +
+			`","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":` + string(raw) + `}}]}}`,
+	})
+
+	data, err := parser.ParseSessionFile(path)
+	require.NoError(t, err)
+	require.Len(t, data.LastTools, 1)
+	require.NotEmpty(t, data.LastTools[0].Detail, "the trail must carry the argument")
+	require.NotEqual(t, cmd, data.LastTools[0].Detail, "the trail entry is the capped display form")
+	require.Contains(t, data.LastTools[0].Detail, "…")
 }

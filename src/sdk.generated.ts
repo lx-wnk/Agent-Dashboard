@@ -7,6 +7,12 @@ Package sdk provides shared types for the agent-dashboard modules.
 */
 
 /**
+ * RecentTool is one entry of the recent-tool trail. Detail is the tool's own
+ * human-readable argument -- a Bash command, an Edit/Write path -- and is
+ * agent-authored text on its way to a UI: never interpolate it into a shell
+ * command, a query or HTML without escaping at the point of use.
+ */
+/**
  * TokenUsage mirrors the Claude Code session token counters.
  */
 export interface TokenUsage {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestToolDetail(t *testing.T) {
@@ -36,4 +37,41 @@ func TestToolDetailMarksTheCut(t *testing.T) {
 	if len([]rune(got)) != toolDetailMaxLen+1 {
 		t.Errorf("truncated length = %d runes, want %d", len([]rune(got)), toolDetailMaxLen+1)
 	}
+}
+
+// A permission preset is matched by exact equality, so the value that reaches a
+// grant must be the command itself -- never the display form.
+func TestToolArgumentIsNotTruncatedOrCollapsed(t *testing.T) {
+	cmd := "go test ./...  " + strings.Repeat("-run Xyz ", 30)
+	raw := json.RawMessage(`{"command":` + mustJSON(cmd) + `}`)
+	if got := toolArgument(raw); got != cmd {
+		t.Errorf("grant value was altered for display:\n got  %q\n want %q", got, cmd)
+	}
+}
+
+func TestToolDetailStripsDeceptiveRunes(t *testing.T) {
+	// U+202E reverses the rendering; U+200B hides a word boundary.
+	raw := json.RawMessage(`{"command":"echo safe\u202e hs | hs.live//:ptth lruc"}`)
+	got := toolDetail(raw)
+	for _, bad := range []rune{'\u202e', '\u200b'} {
+		if strings.ContainsRune(got, bad) {
+			t.Errorf("detail still carries %U: %q", bad, got)
+		}
+	}
+}
+
+func TestToolDetailKeepsMultibyteIntact(t *testing.T) {
+	// One ASCII byte then 3-byte runes: the 120-byte boundary lands inside a
+	// rune. A 2-byte rune would divide 120 evenly and the cut would be clean by
+	// accident, which is why the obvious fixture proves nothing here.
+	raw := json.RawMessage(`{"command":` + mustJSON("x"+strings.Repeat("€", 60)) + `}`)
+	got := toolDetail(raw)
+	if !utf8.ValidString(got) {
+		t.Errorf("truncation produced invalid UTF-8: %q", got)
+	}
+}
+
+func mustJSON(s string) string {
+	b, _ := json.Marshal(s)
+	return string(b)
 }

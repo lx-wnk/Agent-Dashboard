@@ -224,10 +224,6 @@ type PendingPermission struct {
 	RequestedAt string  `json:"requestedAt"`
 }
 
-// PendingToolUse is the last assistant tool_use block that has no matching
-// tool_result yet. It indicates the agent is currently executing or blocked on
-// that tool call. Pattern is the command string (Bash), file path (Edit/Write),
-// or empty for other tools.
 // RecentTool is one entry of the recent-tool trail. Detail is the tool's own
 // human-readable argument -- a Bash command, an Edit/Write path -- and is
 // agent-authored text on its way to a UI: never interpolate it into a shell
@@ -236,6 +232,11 @@ type RecentTool struct {
 	Name   string `json:"name"`
 	Detail string `json:"detail,omitempty"`
 }
+
+// PendingToolUse is the last assistant tool_use block that has no matching
+// tool_result yet. It indicates the agent is currently executing or blocked on
+// that tool call. Pattern is the command string (Bash), file path (Edit/Write),
+// or empty for other tools.
 
 type PendingToolUse struct {
 	ID      string `json:"id"`

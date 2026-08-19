@@ -39,7 +39,6 @@ test.describe('agent detail modal', () => {
   test.beforeEach(async ({ page }) => {
     await stubAuthDisabled(page)
     await stubAgents(page)
-    await stubJson(page, '/api/sessions/sess-xyz/timeline', { toolCalls: [] })
     // The modal's chat stream polls these on mount; stub them so the panel stays
     // quiet (no error toast, no 503 noise) and the run is deterministic.
     await stubJson(page, '/api/agents/sess-xyz/output', { messages: [] })
@@ -57,17 +56,12 @@ test.describe('agent detail modal', () => {
     await expect(dialog).toBeVisible()
     await expect(dialog.getByText('agent-dashboard')).toBeVisible()
 
-    // The bottom drawer is gone: transcript and waterfall are the two views, and
-    // the terminal moved to the agent card.
-    const transcriptTab = dialog.getByRole('tab', { name: 'transcript' })
-    const waterfallTab = dialog.getByRole('tab', { name: 'waterfall' })
-
-    await expect(transcriptTab).toHaveAttribute('aria-selected', 'true')
-    await expect(dialog.getByRole('tab', { name: 'Terminal' })).toHaveCount(0)
-
-    await waterfallTab.click()
-    await expect(waterfallTab).toHaveAttribute('aria-selected', 'true')
-    await expect(dialog.getByRole('img', { name: 'Execution Waterfall' })).toBeVisible()
+    // The transcript is the modal's only view: the bottom drawer is gone, the
+    // terminal moved to the agent card, and with the waterfall removed there is
+    // no tablist left to switch between.
+    await expect(dialog.getByRole('tablist')).toHaveCount(0)
+    await expect(dialog.getByRole('tab')).toHaveCount(0)
+    await expect(dialog.getByLabel('Chat transcript')).toBeVisible()
 
     await page.keyboard.press('Escape')
     await expect(dialog).toBeHidden()
