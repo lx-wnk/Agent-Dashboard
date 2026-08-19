@@ -9,8 +9,8 @@ defineProps<{ tools: RecentTool[] }>()
     <h4 class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-2">
       Recent Tools
     </h4>
-    <div class="flex flex-col gap-1">
-      <div
+    <ul class="flex flex-col gap-1">
+      <li
         v-for="(tool, i) in tools"
         :key="`${i}-${tool.name}`"
         class="flex items-baseline gap-2 min-w-0 text-[11px] font-mono"
@@ -22,7 +22,7 @@ defineProps<{ tools: RecentTool[] }>()
           :title="tool.detail"
           data-testid="tool-detail"
         >{{ tool.detail }}</span>
-      </div>
-    </div>
+      </li>
+    </ul>
   </div>
 </template>
