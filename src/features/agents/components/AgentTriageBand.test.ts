@@ -61,6 +61,9 @@ describe('agentTriageBand pending tool use', () => {
       pendingToolUse: { id: 'tu_b', tool: 'Bash', pattern: 'npm publish' },
     }))
     expect(wrapper.text()).not.toContain('Allow Bash')
+    // Positive anchor: without it the assertion above also passes when the card
+    // stops rendering altogether.
+    expect(wrapper.text()).toContain('Bash')
   })
 
   it('still offers the grant when a prompt is genuinely on screen', () => {
@@ -101,6 +104,19 @@ describe('agentTriageBand stalled card', () => {
     }))
     expect(wrapper.text()).not.toContain('Allow Bash')
     expect(wrapper.text()).not.toContain('rm -rf /tmp/build-cache')
+    expect(wrapper.text()).toContain('Bash — running but silent, last output')
+  })
+
+  // errorState and pendingToolUse arrive together whenever an API error
+  // interrupts a tool call. The card must report the failure, not the command
+  // that was interrupted — the badge already says the run failed.
+  it('reports the error, not the interrupted command, on a failed run', () => {
+    const wrapper = mountBand(makeAgent({
+      pendingToolUse: { id: 'tu_e', tool: 'Bash', pattern: 'npm publish --access public' },
+      errorState: 'rate_limited',
+    }))
+    expect(wrapper.text()).not.toContain('npm publish --access public')
+    expect(wrapper.text()).toContain('Rate limited')
   })
 
   it('still offers the approve control for a real pending permission', () => {

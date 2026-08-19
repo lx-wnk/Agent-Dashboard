@@ -131,17 +131,28 @@ function blockedDetail(agent: Agent): string {
   const att = entry?.att
   if (!att)
     return ''
-  if (att.kind === 'stalled') {
-    const activity = formatRelativeActivity(entry.secs)
-    return agent.pendingToolUse ? `${agent.pendingToolUse.tool} — running but silent, last output ${activity}` : `Running but silent — last output ${activity}`
+  // Switch on the kind rather than on which fields happen to be set: an agent
+  // can carry a leftover pendingToolUse in any state, so a fallthrough chain
+  // let whichever branch came first answer for a kind it was not about.
+  switch (att.kind) {
+    case 'stalled': {
+      const activity = formatRelativeActivity(entry.secs)
+      return agent.pendingToolUse ? `${agent.pendingToolUse.tool} — running but silent, last output ${activity}` : `Running but silent — last output ${activity}`
+    }
+    case 'error':
+      return agent.errorState ? formatErrorState(agent.errorState) : (agent.currentAction || 'Run failed')
+    case 'permission':
+      return toolUseLabel(agent) || agent.currentAction || 'Waiting for permission'
+    default:
+      return toolUseLabel(agent)
   }
-  if (agent.pendingToolUse)
-    return agent.pendingToolUse.pattern ? `${agent.pendingToolUse.tool}(${agent.pendingToolUse.pattern})` : agent.pendingToolUse.tool
-  if (att.kind === 'permission')
-    return agent.currentAction || 'Waiting for permission'
-  if (att.kind === 'error')
-    return agent.errorState ? formatErrorState(agent.errorState) : (agent.currentAction || 'Run failed')
-  return ''
+}
+
+function toolUseLabel(agent: Agent): string {
+  const t = agent.pendingToolUse
+  if (!t)
+    return ''
+  return t.pattern ? `${t.tool}(${t.pattern})` : t.tool
 }
 
 function permissionLabel(p: PendingPermission | PermissionRequest): string {
