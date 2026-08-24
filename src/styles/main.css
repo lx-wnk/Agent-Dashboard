@@ -107,8 +107,11 @@
   --accent-soft: var(--color-indigo-100);
   --accent-contrast: #ffffff;
   --ring: var(--color-blue-500);
-  /* Status tokens — light values reproduce existing hardcoded Tailwind steps */
-  --success: var(--color-green-600);
+  /* Status tokens — light values reproduce existing hardcoded Tailwind steps.
+     --success darkened green-600 -> green-700: text-white on bg-success (AppButton
+     success variant, PromptInput approve button) was ~3.2:1, below WCAG 1.4.3's
+     4.5:1 for body text. Not overridden in .dark, so this covers both themes. */
+  --success: var(--color-green-700);
   --success-soft: #dcfce7;
   --success-text: var(--color-green-600);
   --success-dot: var(--color-green-400);

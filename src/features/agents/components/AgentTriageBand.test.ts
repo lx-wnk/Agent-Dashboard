@@ -312,4 +312,70 @@ describe('agentTriageBand permission bridge', () => {
     expect(calls).toEqual([{ url: '/api/hooks/permission/respond', body: { id: 'req-42', decision: 'allow' } }])
     vi.unstubAllGlobals()
   })
+
+  // F-16 (WCAG 2.4.3): the Allow/Deny row and the terminal-fallback control are
+  // separate v-if branches on the same card. A hold lapsing between SSE ticks
+  // must not dump a focused user on <body> mid-decision.
+  it('keeps focus inside the card when a held request lapses to terminal fallback', async () => {
+    const wrapper = mount(AgentTriageBand, {
+      props: { agents: [makeAgent({ heldPermissions: [perm()] })], permissionItems: [] },
+      attachTo: document.body,
+    })
+    const allow = wrapper.get('[data-testid="permission-decide-allow"]')
+    ;(allow.element as HTMLElement).focus()
+    expect(document.activeElement).toBe(allow.element)
+
+    await wrapper.setProps({
+      agents: [makeAgent({ heldPermissions: [], awaitingTerminalPermission: true })],
+    })
+    await wrapper.vm.$nextTick()
+    await wrapper.vm.$nextTick()
+
+    expect(document.activeElement).not.toBe(document.body)
+    wrapper.unmount()
+  })
+
+  // F-18 (WCAG 4.1.3): a live region announces net-new held requests so a
+  // screen-reader user away from the card still gets notice inside the 25s
+  // window — but it must not re-fire on a later tick that resends the same
+  // request as a fresh object.
+  it('announces a new held request once and never repeats it for the same request id', async () => {
+    const wrapper = mountBand(makeAgent({ heldPermissions: [] }))
+    const live = wrapper.get('[data-testid="triage-live-announcement"]')
+    expect(live.text()).toBe('')
+
+    await wrapper.setProps({
+      agents: [makeAgent({ heldPermissions: [perm({ id: 'req-99', pattern: 'npm publish' })] })],
+    })
+    expect(live.text()).toContain('npm publish')
+    const firstAnnouncement = live.text()
+
+    // Same request id, brand-new object identity — as a real SSE tick would
+    // send — but carrying different text, so a re-announcement would be visible
+    // rather than hidden behind an identical string.
+    await wrapper.setProps({
+      agents: [makeAgent({ heldPermissions: [perm({ id: 'req-99', pattern: 'rm -rf /tmp/x' })] })],
+    })
+    expect(live.text()).toBe(firstAnnouncement)
+    expect(live.text()).not.toContain('rm -rf')
+  })
+
+  // The bridge holds a whole batch at once. Overwriting the string per item
+  // announced only the last of them, so the rest passed in silence.
+  it('announces every request of a batch, not just the last', async () => {
+    const wrapper = mountBand(makeAgent({ heldPermissions: [] }))
+    const live = wrapper.get('[data-testid="triage-live-announcement"]')
+
+    await wrapper.setProps({
+      agents: [makeAgent({
+        heldPermissions: [
+          perm({ id: 'a', pattern: 'npm publish' }),
+          perm({ id: 'b', pattern: 'git push --force' }),
+        ],
+      })],
+    })
+
+    expect(live.text()).toContain('npm publish')
+    expect(live.text()).toContain('git push --force')
+  })
 })

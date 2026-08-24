@@ -394,6 +394,60 @@ function setCardRef(sessionId: string, el: HTMLElement | null) {
   cardRefs.value[sessionId] = el
 }
 
+// The bridge's Allow/Deny row and the terminal-fallback control sit in
+// different v-if branches on the same card. A hold lapsing between SSE ticks
+// unmounts whichever button held focus, dumping a keyboard/screen-reader user
+// on <body> mid-decision (WCAG 2.4.3). `agents` arrives as a fresh array each
+// SSE tick, so a plain (non-deep) watch already fires per tick; the diff below
+// only needs the old vs. new heldPermissions length per session.
+const pendingRefocus = new Set<string>()
+
+watch(() => props.agents, (agents, oldAgents) => {
+  const oldById = new Map((oldAgents ?? []).map(a => [a.sessionId, a]))
+  for (const agent of agents) {
+    const oldHeld = oldById.get(agent.sessionId)?.heldPermissions?.length ?? 0
+    const newHeld = agent.heldPermissions?.length ?? 0
+    if (oldHeld > 0 && newHeld === 0 && cardRefs.value[agent.sessionId]?.contains(document.activeElement))
+      pendingRefocus.add(agent.sessionId)
+  }
+  if (pendingRefocus.size) {
+    nextTick(() => {
+      for (const sessionId of pendingRefocus)
+        cardRefs.value[sessionId]?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus()
+      pendingRefocus.clear()
+    })
+  }
+})
+
+// Targeted announcement for net-new bridge requests only — aria-live on the
+// whole section would re-fire on every ~3s tick as unrelated fields (uptime,
+// token counts) churn. Keyed on sessionId+request id, never on object
+// identity: agents (and their heldPermissions) are fresh objects each tick.
+// ponytail: announcedRequestIds never evicts; bounded by requests seen in this
+// tab's lifetime, cleared on reload.
+const announcedRequestIds = new Set<string>()
+const liveAnnouncement = ref('')
+
+watch(() => props.agents, (agents) => {
+  const fresh: string[] = []
+  for (const agent of agents) {
+    for (const req of agent.heldPermissions ?? []) {
+      const key = `${agent.sessionId}:${req.id}`
+      if (announcedRequestIds.has(key))
+        continue
+      announcedRequestIds.add(key)
+      fresh.push(`${friendlyProjectName(agent.projectName)}: ${permissionLabel(req)}`)
+    }
+  }
+  if (!fresh.length)
+    return
+  // The bridge holds a whole batch of tool calls at once, and overwriting the
+  // string per item announced only the last of them.
+  liveAnnouncement.value = fresh.length === 1
+    ? `Permission needed for ${fresh[0]}`
+    : `${fresh.length} permissions needed — ${fresh.join('; ')}`
+}, { immediate: true })
+
 watch(() => props.focusedSessionId, (id) => {
   if (!id)
     return
@@ -405,6 +459,16 @@ watch(() => props.focusedSessionId, (id) => {
 
 <template>
   <section :class="isClear ? 'mb-2' : 'mb-4'" aria-label="Needs your attention">
+    <div
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      class="sr-only"
+      data-testid="triage-live-announcement"
+    >
+      {{ liveAnnouncement }}
+    </div>
+
     <!-- Empty state. Nothing to do is the normal case, so it stays a quiet line:
          a filled banner here competed with the roster it sits above, and made
          the band look equally loud whether or not anything needed attention. -->
