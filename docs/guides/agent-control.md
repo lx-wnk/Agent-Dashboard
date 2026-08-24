@@ -89,11 +89,24 @@ registering two Claude Code hooks:
 agent-dashboard hooks install
 ```
 
-That writes a `PreToolUse` and a `Notification` entry into
-`~/.claude/settings.json` (or `$CLAUDE_CONFIG_DIR/settings.json`). Existing hooks
-are kept and re-running the command changes nothing. Settings are read when a
-session starts, so restart anything already running. `agent-dashboard hooks
-uninstall` removes exactly the two entries it added.
+That writes the hook script to `~/.claude/dashboard-hooks/` (mode `0700`,
+extracted from the binary — nothing needs to stay in a checkout) and registers a
+`PreToolUse` and a `Notification` entry in `~/.claude/settings.json` (or
+`$CLAUDE_CONFIG_DIR/settings.json`). Existing hooks are kept; re-running the
+command rewrites the script and repairs the registered path if the binary moved.
+Settings are read when a session starts, so restart anything already running.
+`agent-dashboard hooks uninstall` removes the entries that point at that script
+and leaves every other hook alone.
+
+`docs/hooks-setup.md` describes registering hooks by hand for the notification
+receiver — that is a separate mechanism. `hooks install` manages only its own two
+entries and preserves whatever else is in the file.
+
+**Then arm the sessions you want intercepted.** Nothing is held by default: the
+`PreToolUse` hook fires *before* Claude Code decides whether to prompt at all, so
+holding every call would stall every session on the machine. Click the lock on an
+agent's card, or **Intercept next** on a card whose prompt already reached its
+terminal. Arming lasts 30 minutes per session.
 
 With it installed:
 

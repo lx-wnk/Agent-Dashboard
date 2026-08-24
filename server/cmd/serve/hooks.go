@@ -7,6 +7,9 @@ import (
 	"os"
 	"path/filepath"
 
+	"strings"
+
+	"github.com/lx-wnk/agent-dashboard/server/internal/hookscript"
 	"github.com/spf13/cobra"
 )
 
@@ -26,6 +29,14 @@ const notificationHookTimeoutSeconds = 5
 // TodoWrite call pay a round trip to the dashboard for a decision that was
 // never going to be asked for.
 const permissionGatedTools = "Bash|Write|Edit|MultiEdit|NotebookEdit|WebFetch"
+
+// notificationArg selects the script's fire-and-forget path.
+const notificationArg = "notification"
+
+// permissionPromptNotification narrows the Notification hook to the one type the
+// bridge acts on. Claude Code filters by matcher, so an idle reminder or an auth
+// success no longer spawns a process and a round trip to be discarded.
+const permissionPromptNotification = "permission_prompt"
 
 // newHooksCmd builds `agent-dashboard hooks`.
 //
@@ -57,17 +68,26 @@ func newHooksInstallCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			script, err := resolveHookScript(scriptPath)
-			if err != nil {
-				return err
-			}
-
 			settings, err := readSettings(path)
 			if err != nil {
 				return err
 			}
-			changed := applyPermissionHooks(settings, script)
-			if !changed {
+			script := scriptPath
+			if !dryRun || script == "" {
+				// A dry run still needs a path to print, but must not write the
+				// script out; fall back to the path it would use.
+				if dryRun {
+					script = filepath.Join(filepath.Dir(path), hookscript.Dir, hookscript.Name)
+				} else if script, err = materialiseHookScript(scriptPath, filepath.Dir(path)); err != nil {
+					return err
+				}
+			}
+
+			outcome, err := applyPermissionHooks(settings, script)
+			if err != nil {
+				return err
+			}
+			if outcome == hooksUnchanged {
 				fmt.Fprintf(cmd.OutOrStdout(), "already installed: %s\n", path)
 				return nil
 			}
@@ -79,14 +99,18 @@ func newHooksInstallCmd() *cobra.Command {
 			if err := writeSettings(path, settings); err != nil {
 				return err
 			}
+			verb := "installed"
+			if outcome == hooksRepaired {
+				verb = "updated"
+			}
 			fmt.Fprintf(cmd.OutOrStdout(),
-				"installed the permission bridge in %s\nscript: %s\nRestart any running session to pick it up.\n",
-				path, script)
+				"%s the permission bridge in %s\nscript: %s\nRestart any running session to pick it up.\n",
+				verb, path, script)
 			return nil
 		},
 	}
 	cmd.Flags().StringVar(&settingsPath, "settings", "", "settings file to edit (default ~/.claude/settings.json)")
-	cmd.Flags().StringVar(&scriptPath, "script", "", "path to dashboard-permission.sh (default: next to the binary, then the repo checkout)")
+	cmd.Flags().StringVar(&scriptPath, "script", "", "use this script instead of the embedded one (development)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print the resulting settings instead of writing them")
 	return cmd
 }
@@ -136,10 +160,10 @@ func resolveSettingsPath(override string) (string, error) {
 	return filepath.Join(home, ".claude", "settings.json"), nil
 }
 
-// resolveHookScript finds dashboard-permission.sh. It is looked up rather than
-// embedded because Claude Code executes it as a command: it has to exist as a
-// file on disk at a stable path for as long as the hook is registered.
-func resolveHookScript(override string) (string, error) {
+// materialiseHookScript writes the embedded script under the Claude config dir
+// and returns its path. An explicit override is honoured for development, where
+// pointing the hook at a working copy is the point.
+func materialiseHookScript(override, configDir string) (string, error) {
 	if override != "" {
 		abs, err := filepath.Abs(override)
 		if err != nil {
@@ -150,31 +174,7 @@ func resolveHookScript(override string) (string, error) {
 		}
 		return abs, nil
 	}
-
-	var candidates []string
-	if exe, err := os.Executable(); err == nil {
-		dir := filepath.Dir(exe)
-		candidates = append(candidates,
-			filepath.Join(dir, "hooks", "dashboard-permission.sh"),
-			filepath.Join(dir, "..", "scripts", "hooks", "dashboard-permission.sh"),
-		)
-	}
-	if wd, err := os.Getwd(); err == nil {
-		candidates = append(candidates,
-			filepath.Join(wd, "scripts", "hooks", "dashboard-permission.sh"),
-			filepath.Join(wd, "..", "scripts", "hooks", "dashboard-permission.sh"),
-		)
-	}
-	for _, c := range candidates {
-		abs, err := filepath.Abs(c)
-		if err != nil {
-			continue
-		}
-		if _, err := os.Stat(abs); err == nil {
-			return abs, nil
-		}
-	}
-	return "", errors.New("could not find dashboard-permission.sh — pass --script with its path")
+	return hookscript.Install(configDir)
 }
 
 func readSettings(path string) (map[string]any, error) {
@@ -197,29 +197,88 @@ func readSettings(path string) (map[string]any, error) {
 	return out, nil
 }
 
+// writeSettings replaces the file atomically. This is the user's own
+// configuration, often tracked in dotfiles; os.WriteFile truncates in place, so
+// a full disk or a signal between truncate and write left a stump behind — the
+// exact unparseable file readSettings then refuses to touch.
+//
+// 0700 on the directory, not 0755: it is the same ~/.claude that holds session
+// transcripts and the hooks secret, and the secret store already creates it 0700.
+// Whichever command ran first would otherwise decide the mode.
 func writeSettings(path string, settings map[string]any) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("create %s: %w", filepath.Dir(path), err)
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("create %s: %w", dir, err)
 	}
 	data, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, append(data, '\n'), 0o600)
+	data = append(data, '\n')
+
+	tmp, err := os.CreateTemp(dir, ".settings-*.json")
+	if err != nil {
+		return fmt.Errorf("create temp file in %s: %w", dir, err)
+	}
+	defer os.Remove(tmp.Name())
+
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return fmt.Errorf("write %s: %w", tmp.Name(), err)
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return fmt.Errorf("sync %s: %w", tmp.Name(), err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close %s: %w", tmp.Name(), err)
+	}
+	// Explicit chmod: os.CreateTemp makes the file 0600, but an existing target
+	// keeps its own mode across a rename, so tighten the replacement itself.
+	if err := os.Chmod(tmp.Name(), 0o600); err != nil {
+		return fmt.Errorf("chmod %s: %w", tmp.Name(), err)
+	}
+	if err := os.Rename(tmp.Name(), path); err != nil {
+		return fmt.Errorf("replace %s: %w", path, err)
+	}
+	return nil
 }
 
-// hookMarker identifies the entries this command owns, so uninstall removes
-// exactly them and install can recognise its own previous run.
-const hookMarker = "dashboard-permission.sh"
+// hookMarker identifies the entries this command owns. Matching is on the whole
+// resolved command, not on the filename: a basename match called an entry
+// pointing at a different checkout "ours", so uninstall deleted it and install
+// reported "already installed" for a path that no longer existed.
+const hookMarker = hookscript.Name
 
-// applyPermissionHooks adds the two entries idempotently and reports whether
-// anything changed.
-func applyPermissionHooks(settings map[string]any, script string) bool {
+type hooksOutcome int
+
+const (
+	hooksUnchanged hooksOutcome = iota
+	hooksInstalled
+	hooksRepaired
+)
+
+// applyPermissionHooks adds or repairs the two entries and reports what it did.
+// Repair matters because the command written into settings is an absolute path:
+// after a binary upgrade or a moved checkout it points at nothing, and Claude
+// Code then reports a non-blocking hook failure on every tool call while the CLI
+// happily said "already installed".
+func applyPermissionHooks(settings map[string]any, script string) (hooksOutcome, error) {
 	hooks, _ := settings["hooks"].(map[string]any)
 	if hooks == nil {
 		hooks = map[string]any{}
 	}
-	changed := addHookEntry(hooks, "PreToolUse", map[string]any{
+	for _, event := range []string{"PreToolUse", "Notification"} {
+		if v, present := hooks[event]; present {
+			if _, isArray := v.([]any); !isArray {
+				// Refuse rather than overwrite: this is a shape the command did
+				// not write, and readSettings already declines to discard what
+				// it cannot parse for the same reason.
+				return hooksUnchanged, fmt.Errorf("hooks.%s is not a list — fix or remove it first", event)
+			}
+		}
+	}
+	pre := upsertHookEntry(hooks, "PreToolUse", script, map[string]any{
 		"matcher": permissionGatedTools,
 		"hooks": []any{map[string]any{
 			"type":    "command",
@@ -227,32 +286,50 @@ func applyPermissionHooks(settings map[string]any, script string) bool {
 			"timeout": permissionHookTimeoutSeconds,
 		}},
 	})
-	// Not folded into the condition above: both entries must be attempted, and
-	// || would skip the second one whenever the first already reported a change.
-	if addHookEntry(hooks, "Notification", map[string]any{
+	// Not folded into one expression: both entries must be attempted, and || or
+	// && would skip the second whenever the first already decided the outcome.
+	notify := upsertHookEntry(hooks, "Notification", script+" "+notificationArg, map[string]any{
+		"matcher": permissionPromptNotification,
 		"hooks": []any{map[string]any{
 			"type":    "command",
-			"command": script + " notification",
+			"command": script + " " + notificationArg,
 			"timeout": notificationHookTimeoutSeconds,
 		}},
-	}) {
-		changed = true
-	}
-	if changed {
-		settings["hooks"] = hooks
-	}
-	return changed
-}
+	})
 
-func addHookEntry(hooks map[string]any, event string, entry map[string]any) bool {
-	existing, _ := hooks[event].([]any)
-	for _, e := range existing {
-		if entryMentionsMarker(e) {
-			return false
+	outcome := hooksUnchanged
+	for _, o := range []hooksOutcome{pre, notify} {
+		if o == hooksRepaired {
+			outcome = hooksRepaired
+		} else if o == hooksInstalled && outcome != hooksRepaired {
+			outcome = hooksInstalled
 		}
 	}
+	if outcome != hooksUnchanged {
+		settings["hooks"] = hooks
+	}
+	return outcome, nil
+}
+
+// upsertHookEntry adds the entry, or replaces an existing one of ours whose
+// command has drifted. wantCommand is the exact command line this install would
+// write, so an entry that already matches it is left untouched.
+func upsertHookEntry(hooks map[string]any, event, wantCommand string, entry map[string]any) hooksOutcome {
+	existing, _ := hooks[event].([]any)
+	for i, e := range existing {
+		cmd, ours := ourCommand(e)
+		if !ours {
+			continue
+		}
+		if cmd == wantCommand {
+			return hooksUnchanged
+		}
+		existing[i] = entry
+		hooks[event] = existing
+		return hooksRepaired
+	}
 	hooks[event] = append(existing, entry)
-	return true
+	return hooksInstalled
 }
 
 func removePermissionHooks(settings map[string]any) bool {
@@ -262,10 +339,16 @@ func removePermissionHooks(settings map[string]any) bool {
 	}
 	changed := false
 	for _, event := range []string{"PreToolUse", "Notification"} {
-		existing, _ := hooks[event].([]any)
-		kept := make([]any, 0, len(existing))
-		for _, e := range existing {
-			if entryMentionsMarker(e) {
+		raw, isArray := hooks[event].([]any)
+		if !isArray {
+			// Some other shape entirely: not something this command wrote, and
+			// not something it may discard. readSettings refuses to overwrite a
+			// file it cannot parse for the same reason.
+			continue
+		}
+		kept := make([]any, 0, len(raw))
+		for _, e := range raw {
+			if _, ours := ourCommand(e); ours {
 				changed = true
 				continue
 			}
@@ -283,10 +366,11 @@ func removePermissionHooks(settings map[string]any) bool {
 	return changed
 }
 
-func entryMentionsMarker(entry any) bool {
+// ourCommand reports the command line of an entry this command owns.
+func ourCommand(entry any) (string, bool) {
 	m, ok := entry.(map[string]any)
 	if !ok {
-		return false
+		return "", false
 	}
 	inner, _ := m["hooks"].([]any)
 	for _, h := range inner {
@@ -294,20 +378,10 @@ func entryMentionsMarker(entry any) bool {
 		if !ok {
 			continue
 		}
-		if cmd, _ := hm["command"].(string); cmd != "" && filepath.Base(firstField(cmd)) == hookMarker {
-			return true
+		cmd, _ := hm["command"].(string)
+		if cmd != "" && strings.Contains(cmd, hookMarker) {
+			return cmd, true
 		}
 	}
-	return false
-}
-
-// firstField returns the command word of a command line, so `…/x.sh notification`
-// is recognised by the same marker as `…/x.sh`.
-func firstField(s string) string {
-	for i := range len(s) {
-		if s[i] == ' ' {
-			return s[:i]
-		}
-	}
-	return s
+	return "", false
 }

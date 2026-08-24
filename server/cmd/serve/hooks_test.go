@@ -4,8 +4,13 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/lx-wnk/agent-dashboard/server/internal/hookscript"
 )
+
+const testScript = "/opt/dash/dashboard-hooks/dashboard-permission.sh"
 
 func writeJSON(t *testing.T, path string, v any) {
 	t.Helper()
@@ -21,11 +26,11 @@ func writeJSON(t *testing.T, path string, v any) {
 func TestApplyPermissionHooksIsIdempotent(t *testing.T) {
 	settings := map[string]any{}
 
-	if !applyPermissionHooks(settings, "/opt/dash/dashboard-permission.sh") {
-		t.Fatal("first install reported no change")
+	if got, err := applyPermissionHooks(settings, testScript); err != nil || got != hooksInstalled {
+		t.Fatalf("first install = (%v, %v), want (installed, nil)", got, err)
 	}
-	if applyPermissionHooks(settings, "/opt/dash/dashboard-permission.sh") {
-		t.Fatal("second install changed the settings again")
+	if got, err := applyPermissionHooks(settings, testScript); err != nil || got != hooksUnchanged {
+		t.Fatalf("second install = (%v, %v), want (unchanged, nil)", got, err)
 	}
 
 	hooks := settings["hooks"].(map[string]any)
@@ -34,6 +39,40 @@ func TestApplyPermissionHooksIsIdempotent(t *testing.T) {
 		if len(entries) != 1 {
 			t.Fatalf("%s has %d entries, want exactly 1", event, len(entries))
 		}
+	}
+}
+
+// The matcher must not be "*". PreToolUse fires before Claude Code evaluates
+// whether to prompt, so every Read and Grep would otherwise pay a round trip to
+// the dashboard for a decision that was never going to be asked for.
+func TestPreToolUseMatcherIsNarrowedToPromptingTools(t *testing.T) {
+	settings := map[string]any{}
+	mustApply(t, settings, testScript)
+
+	entry := settings["hooks"].(map[string]any)["PreToolUse"].([]any)[0].(map[string]any)
+	matcher, _ := entry["matcher"].(string)
+	if matcher == "*" || matcher == "" {
+		t.Fatalf("matcher = %q, want the prompting-tool set", matcher)
+	}
+	for _, tool := range []string{"Bash", "Write", "Edit", "WebFetch"} {
+		if !strings.Contains(matcher, tool) {
+			t.Errorf("matcher %q does not cover %s", matcher, tool)
+		}
+	}
+	if strings.Contains(matcher, "Read") || strings.Contains(matcher, "Grep") {
+		t.Errorf("matcher %q covers a tool that never prompts", matcher)
+	}
+}
+
+// The Notification hook filters by type in the settings file, so an idle
+// reminder or an auth success no longer spawns a process to be discarded.
+func TestNotificationHookIsFilteredByType(t *testing.T) {
+	settings := map[string]any{}
+	mustApply(t, settings, testScript)
+
+	entry := settings["hooks"].(map[string]any)["Notification"].([]any)[0].(map[string]any)
+	if matcher, _ := entry["matcher"].(string); matcher != "permission_prompt" {
+		t.Fatalf("Notification matcher = %q, want permission_prompt", matcher)
 	}
 }
 
@@ -50,7 +89,7 @@ func TestApplyPermissionHooksKeepsForeignHooks(t *testing.T) {
 		"permissions": map[string]any{"defaultMode": "auto"},
 	}
 
-	applyPermissionHooks(settings, "/opt/dash/dashboard-permission.sh")
+	mustApply(t, settings, testScript)
 
 	hooks := settings["hooks"].(map[string]any)
 	entries := hooks["PreToolUse"].([]any)
@@ -59,6 +98,32 @@ func TestApplyPermissionHooksKeepsForeignHooks(t *testing.T) {
 	}
 	if settings["permissions"] == nil {
 		t.Fatal("an unrelated settings key was dropped")
+	}
+}
+
+// The command written into settings is an absolute path. After a binary upgrade
+// or a moved checkout it points at nothing, and Claude Code then reports a
+// non-blocking hook failure on every tool call — while a basename-matching
+// install cheerfully said "already installed".
+func TestApplyPermissionHooksRepairsAStalePath(t *testing.T) {
+	settings := map[string]any{}
+	mustApply(t, settings, "/old/location/dashboard-hooks/dashboard-permission.sh")
+
+	got, err := applyPermissionHooks(settings, testScript)
+	if err != nil || got != hooksRepaired {
+		t.Fatalf("re-install after a move = (%v, %v), want (repaired, nil)", got, err)
+	}
+
+	hooks := settings["hooks"].(map[string]any)
+	for _, event := range []string{"PreToolUse", "Notification"} {
+		entries := hooks[event].([]any)
+		if len(entries) != 1 {
+			t.Fatalf("%s has %d entries — repair appended instead of replacing", event, len(entries))
+		}
+		cmd, ours := ourCommand(entries[0])
+		if !ours || !strings.HasPrefix(cmd, testScript) {
+			t.Fatalf("%s still points at %q", event, cmd)
+		}
 	}
 }
 
@@ -71,7 +136,7 @@ func TestRemovePermissionHooksLeavesForeignHooks(t *testing.T) {
 			}},
 		},
 	}
-	applyPermissionHooks(settings, "/opt/dash/dashboard-permission.sh")
+	mustApply(t, settings, testScript)
 
 	if !removePermissionHooks(settings) {
 		t.Fatal("uninstall reported no change")
@@ -83,6 +148,53 @@ func TestRemovePermissionHooksLeavesForeignHooks(t *testing.T) {
 	}
 	if _, ok := hooks["Notification"]; ok {
 		t.Fatal("an emptied event key was left behind")
+	}
+}
+
+// A hooks.<event> value that is not an array is something this command did not
+// write and may not discard — readSettings refuses to overwrite an unparseable
+// file for the same reason.
+func TestApplyPermissionHooksRefusesANonArrayValue(t *testing.T) {
+	settings := map[string]any{
+		"hooks": map[string]any{
+			"Notification": map[string]any{"handwritten": true},
+		},
+	}
+
+	if _, err := applyPermissionHooks(settings, testScript); err == nil {
+		t.Fatal("install overwrote a shape it did not write")
+	}
+	hooks := settings["hooks"].(map[string]any)
+	if _, ok := hooks["Notification"].(map[string]any); !ok {
+		t.Fatalf("Notification = %#v, want the hand-written object untouched", hooks["Notification"])
+	}
+}
+
+func TestRemovePermissionHooksLeavesANonArrayValueAlone(t *testing.T) {
+	settings := map[string]any{
+		"hooks": map[string]any{
+			"Notification": map[string]any{"handwritten": true},
+			"PreToolUse": []any{map[string]any{
+				"hooks": []any{map[string]any{"type": "command", "command": testScript}},
+			}},
+		},
+	}
+
+	removePermissionHooks(settings)
+
+	hooks, _ := settings["hooks"].(map[string]any)
+	if hooks == nil {
+		t.Fatal("the whole hooks key was deleted")
+	}
+	if _, ok := hooks["Notification"].(map[string]any); !ok {
+		t.Fatalf("Notification = %#v, want the hand-written object untouched", hooks["Notification"])
+	}
+}
+
+func mustApply(t *testing.T, settings map[string]any, script string) {
+	t.Helper()
+	if _, err := applyPermissionHooks(settings, script); err != nil {
+		t.Fatalf("applyPermissionHooks: %v", err)
 	}
 }
 
@@ -115,8 +227,15 @@ func TestReadSettingsTreatsAMissingFileAsEmpty(t *testing.T) {
 	}
 }
 
-func TestWriteSettingsIsOwnerOnly(t *testing.T) {
+// os.WriteFile's perm applies only on create, so the previous version of this
+// test proved nothing about the real target: an existing settings.json, often
+// 0644. Pre-create it loose and assert the write tightens it.
+func TestWriteSettingsTightensAnExistingFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")
+	if err := os.WriteFile(path, []byte("{}\n"), 0o644); err != nil {
+		t.Fatalf("pre-create: %v", err)
+	}
+
 	if err := writeSettings(path, map[string]any{"a": 1}); err != nil {
 		t.Fatalf("writeSettings: %v", err)
 	}
@@ -126,6 +245,45 @@ func TestWriteSettingsIsOwnerOnly(t *testing.T) {
 	}
 	if perm := info.Mode().Perm(); perm != 0o600 {
 		t.Fatalf("mode = %o, want 600 — the file sits next to the hooks secret", perm)
+	}
+}
+
+// A failed write must leave the original intact rather than a stump.
+func TestWriteSettingsLeavesTheOriginalOnFailure(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.json")
+	original := []byte(`{"permissions":{"defaultMode":"auto"}}` + "\n")
+	if err := os.WriteFile(path, original, 0o600); err != nil {
+		t.Fatalf("pre-create: %v", err)
+	}
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatalf("chmod dir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+
+	if err := writeSettings(path, map[string]any{"a": 1}); err == nil {
+		t.Fatal("writeSettings succeeded into a read-only directory")
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if string(got) != string(original) {
+		t.Fatalf("the original was damaged: %q", got)
+	}
+}
+
+func TestWriteSettingsCreatesTheDirectoryOwnerOnly(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "claude", "settings.json")
+	if err := writeSettings(path, map[string]any{"a": 1}); err != nil {
+		t.Fatalf("writeSettings: %v", err)
+	}
+	info, err := os.Stat(filepath.Dir(path))
+	if err != nil {
+		t.Fatalf("stat dir: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o700 {
+		t.Fatalf("dir mode = %o, want 700 — it holds transcripts and the hooks secret", perm)
 	}
 }
 
@@ -151,6 +309,54 @@ func TestResolveSettingsPathPrefersAnExplicitOverride(t *testing.T) {
 	}
 }
 
+// The script must land on the user's machine from the binary alone: the release
+// archive never carried it, so every install path except a git checkout failed.
+func TestMaterialiseHookScriptWritesTheEmbeddedScript(t *testing.T) {
+	dir := t.TempDir()
+
+	path, err := materialiseHookScript("", dir)
+	if err != nil {
+		t.Fatalf("materialiseHookScript: %v", err)
+	}
+	if want := filepath.Join(dir, hookscript.Dir, hookscript.Name); path != want {
+		t.Fatalf("path = %q, want %q", path, want)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o700 {
+		t.Fatalf("mode = %o, want 700 — it runs as the user on every gated tool call", perm)
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if !strings.Contains(string(body), "api/hooks/permission") {
+		t.Fatalf("the written file is not the bridge script:\n%s", body)
+	}
+}
+
+// An upgraded binary must replace a script an older one wrote.
+func TestMaterialiseHookScriptOverwrites(t *testing.T) {
+	dir := t.TempDir()
+	path, err := materialiseHookScript("", dir)
+	if err != nil {
+		t.Fatalf("first install: %v", err)
+	}
+	if err := os.WriteFile(path, []byte("#!/bin/sh\n# stale\n"), 0o700); err != nil {
+		t.Fatalf("stale write: %v", err)
+	}
+
+	if _, err := materialiseHookScript("", dir); err != nil {
+		t.Fatalf("second install: %v", err)
+	}
+	body, _ := os.ReadFile(path)
+	if strings.Contains(string(body), "# stale") {
+		t.Fatal("a stale script survived a re-install")
+	}
+}
+
 // Round-trip through the real file so the two commands agree on the format.
 func TestInstallThenUninstallRestoresTheFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")
@@ -161,7 +367,7 @@ func TestInstallThenUninstallRestoresTheFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
-	applyPermissionHooks(settings, "/opt/dash/dashboard-permission.sh")
+	mustApply(t, settings, testScript)
 	if err := writeSettings(path, settings); err != nil {
 		t.Fatalf("write: %v", err)
 	}
