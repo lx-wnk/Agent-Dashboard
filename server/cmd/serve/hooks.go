@@ -16,6 +16,17 @@ import (
 // to asking in the terminal -- it neither allows nor denies on its own.
 const permissionHookTimeoutSeconds = 30
 
+// notificationHookTimeoutSeconds bounds the fire-and-forget Notification hook.
+// It must stay at or above the script's own curl budget for that path.
+const notificationHookTimeoutSeconds = 5
+
+// permissionGatedTools is the PreToolUse matcher. Only tools Claude Code can
+// actually prompt about are worth intercepting: the hook fires before the
+// permission system runs, so a matcher of "*" makes every Read, Grep and
+// TodoWrite call pay a round trip to the dashboard for a decision that was
+// never going to be asked for.
+const permissionGatedTools = "Bash|Write|Edit|MultiEdit|NotebookEdit|WebFetch"
+
 // newHooksCmd builds `agent-dashboard hooks`.
 //
 // The permission bridge only reaches sessions whose settings name the hook, and
@@ -209,7 +220,7 @@ func applyPermissionHooks(settings map[string]any, script string) bool {
 		hooks = map[string]any{}
 	}
 	changed := addHookEntry(hooks, "PreToolUse", map[string]any{
-		"matcher": "*",
+		"matcher": permissionGatedTools,
 		"hooks": []any{map[string]any{
 			"type":    "command",
 			"command": script,
@@ -222,7 +233,7 @@ func applyPermissionHooks(settings map[string]any, script string) bool {
 		"hooks": []any{map[string]any{
 			"type":    "command",
 			"command": script + " notification",
-			"timeout": 5,
+			"timeout": notificationHookTimeoutSeconds,
 		}},
 	}) {
 		changed = true

@@ -478,6 +478,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 		r.Get("/api/hooks/pending", hooksHandler.Pending)
 		r.Post("/api/hooks/respond", hooksHandler.Respond)
 		r.Post("/api/hooks/permission/respond", hooksHandler.PermissionRespond)
+		r.Post("/api/hooks/permission/arm", hooksHandler.PermissionArm)
 
 		// SP1 lifecycle + settings endpoints under the clean /api/plugins namespace.
 		// The read-only list is needed by non-admin users for slot discovery, so it

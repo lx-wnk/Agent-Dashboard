@@ -109,6 +109,7 @@ POST /api/history/import
 POST /api/hooks/event
 POST /api/hooks/notification
 POST /api/hooks/permission
+POST /api/hooks/permission/arm
 POST /api/hooks/permission/respond
 POST /api/hooks/pre-tool
 POST /api/hooks/respond

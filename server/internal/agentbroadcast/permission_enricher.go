@@ -12,10 +12,14 @@ import (
 // api/hooks, which would point the layer arrow the wrong way (the API layer
 // already depends on the broadcast side).
 type PermissionBridgeReader interface {
-	// PendingForSession returns the requests currently answerable from the
-	// dashboard for one session, and whether that session's own terminal is
-	// showing a prompt nobody answered here.
-	PendingForSession(sessionID string) ([]sdk.PendingPermission, bool)
+	// StateForSession is a pure read of what the bridge knows about one session.
+	// It returns plain values rather than a bridge-owned struct so this package
+	// keeps importing nothing from the API layer.
+	StateForSession(sessionID string) (held []sdk.PendingPermission, atTerminal, armed bool)
+	// SweepExpired drops armed marks and notices that have aged out. Expiry is
+	// driven from this tick rather than from the read, so it does not depend on
+	// someone happening to look at a session.
+	SweepExpired()
 }
 
 // NewPermissionBridgeEnricher annotates each agent with the permission prompts
@@ -33,19 +37,21 @@ func NewPermissionBridgeEnricher(bridge PermissionBridgeReader) merger.Enricher 
 		return nil
 	}
 	return func(_ context.Context, agents []sdk.Agent) {
+		bridge.SweepExpired()
 		for i := range agents {
 			sid := agents[i].SessionID
 			if sid == "" {
 				continue
 			}
-			pending, atTerminal := bridge.PendingForSession(sid)
-			if len(pending) > 0 {
-				// Held calls only ever belong to a session that is blocked on
-				// this decision, so they append rather than replace: an
-				// orchestrated agent can carry a pipeline request as well.
-				agents[i].PendingPermissions = append(agents[i].PendingPermissions, pending...)
-			}
+			held, atTerminal, armed := bridge.StateForSession(sid)
+			// A held hook call goes in its own field, never into
+			// PendingPermissions: that one carries pipeline stage-run rows,
+			// which are database-backed and resolve through a different
+			// endpoint. Sharing the slice let a hook UUID ride along in the
+			// pipeline's bulk-resolve payload.
+			agents[i].HeldPermissions = held
 			agents[i].AwaitingTerminalPermission = atTerminal
+			agents[i].PermissionBridgeArmed = armed
 		}
 	}
 }

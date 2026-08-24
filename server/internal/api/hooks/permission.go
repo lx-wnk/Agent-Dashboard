@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,6 +27,16 @@ const (
 	// out rather than wait to be cleared.
 	permissionNoticeTTL = 2 * time.Minute
 
+	// armedTTL bounds how long a session stays armed without being renewed. An
+	// arm that is forgotten would otherwise keep holding that session's tool
+	// calls for the life of the process.
+	armedTTL = 30 * time.Minute
+
+	// maxHoldsPerSession caps concurrent holds for one session. Past the cap the
+	// answer is "no decision", which is the same fail-safe a lapse gives, so the
+	// overflow degrades to a terminal prompt rather than to unbounded goroutines.
+	maxHoldsPerSession = 8
+
 	maxPermissionBodyBytes = 64 * 1024
 	// maxPatternBytes bounds the tool argument taken from the hook payload. The
 	// value is agent-authored and is displayed next to an approve control.
@@ -37,7 +48,11 @@ type permissionRequest struct {
 	perm      sdk.PendingPermission
 	sessionID string
 	toolUseID string
-	ch        chan string // receives "allow" or "deny"
+	// seq orders holds within one session. RequestedAt has second precision, so
+	// two calls from the same batch would otherwise sort arbitrarily and the
+	// card could answer a different request than the one it rendered.
+	seq uint64
+	ch  chan string // receives "allow" or "deny"
 }
 
 // permissionNotice records that a session's terminal is showing its own
@@ -58,9 +73,17 @@ type permissionNotice struct {
 //     already lapsed (or never happened) and the terminal is now asking. That is
 //     no longer answerable from here — it is evidence that someone must go look.
 type PermissionBridge struct {
-	mu       sync.Mutex
-	pending  map[string]*permissionRequest // request id -> held call
-	notices  map[string]permissionNotice   // session id -> terminal is asking
+	mu      sync.Mutex
+	pending map[string]*permissionRequest // request id -> held call
+	notices map[string]permissionNotice   // session id -> terminal is asking
+	// armed holds the sessions whose prompts the dashboard should intercept,
+	// with the time each was armed. PreToolUse fires before Claude Code decides
+	// whether to prompt at all, so it carries no signal that a decision is
+	// pending -- holding every call would stall every session on the machine.
+	// A session is held only after someone asked for it.
+	armed map[string]time.Time
+	// seq orders holds within a session; see permissionRequest.seq.
+	seq      atomic.Uint64
 	nowFn    func() time.Time
 	holdFor  time.Duration
 	noticeFn func() // called when the pending set changes, to nudge a rescan
@@ -73,6 +96,7 @@ func NewPermissionBridge(onChange func()) *PermissionBridge {
 	return &PermissionBridge{
 		pending:  map[string]*permissionRequest{},
 		notices:  map[string]permissionNotice{},
+		armed:    map[string]time.Time{},
 		nowFn:    time.Now,
 		holdFor:  permissionHoldTimeout,
 		noticeFn: onChange,
@@ -195,9 +219,34 @@ func (h *Handler) PermissionRespond(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 }
 
+// PermissionArm handles POST /api/hooks/permission/arm — the browser.
+//
+// Arming is what makes the bridge hold anything at all. PreToolUse fires before
+// Claude Code evaluates whether to prompt, so it cannot say "a decision is
+// pending"; without an explicit opt-in the bridge would have to hold every tool
+// call of every session to catch the few that matter.
+func (h *Handler) PermissionArm(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		SessionID string `json:"sessionId"`
+		Armed     bool   `json:"armed"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxPermissionBodyBytes)).Decode(&body); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	if body.SessionID == "" {
+		writeJSONError(w, http.StatusBadRequest, "sessionId is required")
+		return
+	}
+	h.permissions.Arm(body.SessionID, body.Armed)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]bool{"armed": body.Armed})
+}
+
 // hold registers the request and blocks until a decision arrives, the hold
 // lapses, or the hook hangs up. The bool reports whether a decision was made.
 func (b *PermissionBridge) hold(ctx context.Context, p preToolPayload) (string, bool) {
+	seq := b.seq.Add(1)
 	id := uuid.New().String()
 	entry := &permissionRequest{
 		perm: sdk.PendingPermission{
@@ -209,10 +258,15 @@ func (b *PermissionBridge) hold(ctx context.Context, p preToolPayload) (string, 
 		},
 		sessionID: p.SessionID,
 		toolUseID: p.ToolUseID,
+		seq:       seq,
 		ch:        make(chan string, 1),
 	}
 
 	b.mu.Lock()
+	if !b.isArmedLocked(p.SessionID) || b.holdsForLocked(p.SessionID) >= maxHoldsPerSession {
+		b.mu.Unlock()
+		return "", false
+	}
 	b.pending[id] = entry
 	// A held call supersedes an older terminal notice for the same session: the
 	// decision is ours again.
@@ -237,19 +291,58 @@ func (b *PermissionBridge) hold(ctx context.Context, p preToolPayload) (string, 
 	}
 }
 
+// resolve delivers a decision to a held call. Look-up, removal and send happen
+// in one critical section: releasing the lock before the send let a hold time
+// out in the gap, so the send landed in an orphaned buffer while the caller was
+// told the decision had been delivered.
 func (b *PermissionBridge) resolve(id, decision string) bool {
 	b.mu.Lock()
 	entry, ok := b.pending[id]
+	if ok {
+		delete(b.pending, id)
+	}
 	b.mu.Unlock()
 	if !ok {
 		return false
 	}
-	select {
-	case entry.ch <- decision:
-		return true
-	default:
+	// Cap-1 buffer, sole sender, entry now unreachable to any other resolver.
+	entry.ch <- decision
+	return true
+}
+
+// Arm marks a session's prompts as ones the dashboard should intercept, or
+// clears that mark. Arming is per session and expires: see armedTTL.
+func (b *PermissionBridge) Arm(sessionID string, armed bool) {
+	b.mu.Lock()
+	if armed {
+		b.armed[sessionID] = b.nowFn()
+	} else {
+		delete(b.armed, sessionID)
+	}
+	b.mu.Unlock()
+	b.changed()
+}
+
+func (b *PermissionBridge) isArmedLocked(sessionID string) bool {
+	at, ok := b.armed[sessionID]
+	if !ok {
 		return false
 	}
+	if b.nowFn().Sub(at) > armedTTL {
+		delete(b.armed, sessionID)
+		return false
+	}
+	return true
+}
+
+func (b *PermissionBridge) holdsForLocked(sessionID string) int {
+	n := 0
+	for _, e := range b.pending {
+		if e.sessionID == sessionID {
+			n++
+		}
+	}
+	return n
 }
 
 func (b *PermissionBridge) noteTerminalPrompt(sessionID string) {
@@ -262,24 +355,62 @@ func (b *PermissionBridge) noteTerminalPrompt(sessionID string) {
 // PendingForSession returns the permission requests currently answerable from
 // the dashboard for one session, plus whether that session's own terminal is
 // showing a prompt nobody answered here.
-func (b *PermissionBridge) PendingForSession(sessionID string) ([]sdk.PendingPermission, bool) {
+// StateForSession is a pure read: it never mutates the bridge. Expiry is done
+// by SweepExpired, called from the same tick that scans agents -- driving it
+// from a getter made it observation-driven, so a session that raised a prompt
+// and then exited kept its notice for the life of the process.
+// Returns the requests answerable right now in arrival order, whether the
+// session is showing its own prompt instead, and whether it is armed.
+func (b *PermissionBridge) StateForSession(sessionID string) (held []sdk.PendingPermission, atTerminal, armed bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	var out []sdk.PendingPermission
+	type ordered struct {
+		perm sdk.PendingPermission
+		seq  uint64
+	}
+	var hs []ordered
 	for _, e := range b.pending {
 		if e.sessionID == sessionID {
-			out = append(out, e.perm)
+			hs = append(hs, ordered{perm: e.perm, seq: e.seq})
 		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].RequestedAt < out[j].RequestedAt })
-
-	notice, ok := b.notices[sessionID]
-	if ok && b.nowFn().Sub(notice.at) > permissionNoticeTTL {
-		delete(b.notices, sessionID)
-		ok = false
+	// By arrival, not by RequestedAt: that has second precision, so a batch of
+	// parallel tool calls would sort arbitrarily and the card could answer a
+	// different request than the one it rendered.
+	sort.Slice(hs, func(i, j int) bool { return hs[i].seq < hs[j].seq })
+	out := make([]sdk.PendingPermission, len(hs))
+	for i, h := range hs {
+		out[i] = h.perm
 	}
-	return out, ok
+
+	notice, hasNotice := b.notices[sessionID]
+	return out, hasNotice && b.nowFn().Sub(notice.at) <= permissionNoticeTTL, b.isArmedReadLocked(sessionID)
+}
+
+// SweepExpired drops armed marks and terminal notices that have aged out. It is
+// the only place either map shrinks on a timer, so it must be called
+// periodically -- the agent scan tick does.
+func (b *PermissionBridge) SweepExpired() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	now := b.nowFn()
+	for id, at := range b.armed {
+		if now.Sub(at) > armedTTL {
+			delete(b.armed, id)
+		}
+	}
+	for id, n := range b.notices {
+		if now.Sub(n.at) > permissionNoticeTTL {
+			delete(b.notices, id)
+		}
+	}
+}
+
+// isArmedReadLocked is the non-mutating half of isArmedLocked, for the read path.
+func (b *PermissionBridge) isArmedReadLocked(sessionID string) bool {
+	at, ok := b.armed[sessionID]
+	return ok && b.nowFn().Sub(at) <= armedTTL
 }
 
 // patternOf extracts the tool's own argument from the hook payload: the Bash

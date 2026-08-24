@@ -413,10 +413,21 @@ type Agent struct {
 	// stored requests, or a PreToolUse hook call the permission bridge is holding
 	// open. Both are answerable; the client tells them apart by PipelineTaskID.
 	PendingPermissions []PendingPermission `json:"pendingPermissions,omitempty"`
+	// HeldPermissions are PreToolUse hook calls the permission bridge is holding
+	// open for this session, in arrival order. Deliberately NOT merged into
+	// PendingPermissions: those are database-backed pipeline stage-run rows that
+	// resolve through a different endpoint, and sharing one slice let a hook id
+	// ride along in the pipeline's bulk-resolve payload.
+	HeldPermissions []PendingPermission `json:"heldPermissions,omitempty"`
+	// PermissionBridgeArmed means the dashboard intercepts this session's
+	// permission prompts. Off by default: PreToolUse fires before Claude Code
+	// decides whether to prompt at all, so holding every call would stall every
+	// session. A session is intercepted only after someone asked for it.
+	PermissionBridgeArmed bool `json:"permissionBridgeArmed,omitempty"`
 	// AwaitingTerminalPermission means the session is showing its own permission
 	// prompt, which the dashboard can report but not answer -- the bridge either
-	// lapsed before anyone decided, or is not installed for this session. Set from
-	// the Notification hook's typed notification_type, never from its prose.
+	// lapsed before anyone decided, or the session is not armed. Set from the
+	// Notification hook's typed notification_type, never from its prose.
 	AwaitingTerminalPermission bool            `json:"awaitingTerminalPermission,omitempty"`
 	PendingToolUse             *PendingToolUse `json:"pendingToolUse,omitempty"`
 	Machine                    string          `json:"machine,omitempty"`
