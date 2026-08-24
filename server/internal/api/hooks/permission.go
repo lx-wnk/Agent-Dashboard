@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lx-wnk/agent-dashboard/sdk"
+	"github.com/lx-wnk/agent-dashboard/server/internal/sanitize"
 )
 
 const (
@@ -38,9 +39,10 @@ const (
 	maxHoldsPerSession = 8
 
 	maxPermissionBodyBytes = 64 * 1024
-	// maxPatternBytes bounds the tool argument taken from the hook payload. The
-	// value is agent-authored and is displayed next to an approve control.
-	maxPatternBytes = 4096
+	// maxPatternRunes bounds the tool argument taken from the hook payload. The
+	// value is agent-authored and is displayed next to an approve control, so it
+	// is bounded for the eye rather than for the wire.
+	maxPatternRunes = 400
 )
 
 // permissionRequest is one PreToolUse call held open while a human decides.
@@ -414,9 +416,18 @@ func (b *PermissionBridge) isArmedReadLocked(sessionID string) bool {
 }
 
 // patternOf extracts the tool's own argument from the hook payload: the Bash
-// command, or the file path for a tool that names one. This is the same value
-// the parser derives from the transcript, but taken from the producer instead
-// of reconstructed — so it is the argument the session is actually asking about.
+// command, the file path for a tool that names one, or the URL. This is the same
+// value the parser derives from the transcript, but taken from the producer
+// instead of reconstructed — so it is the argument the session is actually
+// asking about.
+//
+// It is sanitized, unlike the parser's PendingToolUse.Pattern. That one is the
+// grant identity, matched against a stored preset by exact equality, so
+// normalising it would fold two distinct commands onto one rule. This one is
+// display-only: the client posts {id, decision} and never sends the pattern
+// anywhere. Leaving it raw put agent-authored text with a possible bidi override
+// straight into the title of the Allow button — the same gap this project
+// closed for the transcript path one layer up.
 func patternOf(p preToolPayload) *string {
 	var in struct {
 		Command  string `json:"command"`
@@ -436,10 +447,13 @@ func patternOf(p preToolPayload) *string {
 	if v == "" {
 		return nil
 	}
-	if len(v) > maxPatternBytes {
-		v = v[:maxPatternBytes]
+	// Rune-capped by the sanitizer, not sliced by bytes: a cut through a
+	// multi-byte character yields U+FFFD on the wire.
+	display, _ := sanitize.ForDisplayCapped(v, maxPatternRunes)
+	if display == "" {
+		return nil
 	}
-	return &v
+	return &display
 }
 
 func writeNoDecision(w http.ResponseWriter) {

