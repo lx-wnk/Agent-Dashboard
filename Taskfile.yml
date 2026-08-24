@@ -2,9 +2,11 @@
 version: '3'
 
 vars:
-  # The one place the Vite dev-server port is written down. vite.config.ts reads
-  # it from process.env and desktop/target_dev.go reads the same name, so both
-  # dev:desktop children below export it -- a parent task's `env:` does not
+  # Authoritative when the dev servers are started through Task, which is the
+  # supported flow. vite.config.ts and desktop/target_dev.go each keep a 5173
+  # fallback for a bare `pnpm dev` / `wails dev`; if this value changes, those
+  # two must change with it or the shell polls a port nothing serves.
+  # Both dev:desktop children below export it -- a parent task's `env:` does not
   # reach its `deps`. Override per run: `task dev:desktop VITE_DEV_PORT=5199`.
   VITE_DEV_PORT: '5173'
   # Generated once per `task` invocation and re-exported by the same two

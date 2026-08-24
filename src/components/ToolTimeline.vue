@@ -21,8 +21,6 @@ defineProps<{ tools: RecentTool[] }>()
           class="text-fg-mute break-all min-w-0"
           data-testid="tool-detail"
         >{{ tool.detail }}</span>
-        <!-- Own element, not a suffix in tool.detail: a marker inside the text
-             is one an agent-authored command could forge. -->
         <span
           v-if="tool.elided"
           class="text-fg-mute/70 flex-shrink-0"

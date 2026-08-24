@@ -1,1 +1,7 @@
-src/sdk.generated.ts linguist-generated=true -diff
+# linguist-generated collapses the file in a GitHub diff by default while
+# leaving it expandable. `-diff` was also set, which made git render it as
+# "Bin <n> -> <m> bytes" -- the file defining the client's entire wire contract
+# passed a review with zero visible lines. It is hand-kept rather than
+# reproducible from `tygo generate`, so its diff is the only place a change to
+# it can be seen at all.
+src/sdk.generated.ts linguist-generated=true

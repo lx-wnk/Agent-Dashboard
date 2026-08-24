@@ -7,14 +7,8 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/merger"
 )
 
-// PermissionBridgeReader is the read side of the hook permission bridge. It is
-// an interface rather than the concrete type so this package does not import
-// api/hooks, which would point the layer arrow the wrong way (the API layer
-// already depends on the broadcast side).
+// PermissionBridgeReader is the read side of the hook permission bridge.
 type PermissionBridgeReader interface {
-	// StateForSession is a pure read of what the bridge knows about one session.
-	// It returns plain values rather than a bridge-owned struct so this package
-	// keeps importing nothing from the API layer.
 	StateForSession(sessionID string) (held []sdk.PendingPermission, atTerminal bool, terminalToolUseID string, armed bool)
 	// SweepExpired drops armed marks and notices that have aged out. Expiry is
 	// driven from this tick rather than from the read, so it does not depend on

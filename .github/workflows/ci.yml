@@ -357,11 +357,11 @@ jobs:
         working-directory: desktop
         run: CGO_ENABLED=1 go test -tags dev -ldflags "-extldflags '-framework UniformTypeIdentifiers'" ./...
 
-      - name: Test desktop shell (production path)
+      - name: Test desktop shell (non-dev path)
         working-directory: desktop
         # target_test.go is `darwin && !dev`, so the dev run above never executes
-        # it. Without this step the shipping half of the build-tag pair compiles
-        # in CI but is never asserted.
+        # it. This asserts the non-dev half of that pair -- not the shipping tag
+        # set, which adds `-tags production` in the build step above.
         run: CGO_ENABLED=1 go test -ldflags "-extldflags '-framework UniformTypeIdentifiers'" ./...
 
   pr-checks:

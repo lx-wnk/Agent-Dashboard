@@ -99,8 +99,11 @@ Settings are read when a session starts, so restart anything already running.
 and leaves every other hook alone.
 
 `docs/hooks-setup.md` describes registering hooks by hand for the notification
-receiver — that is a separate mechanism. `hooks install` manages only its own two
-entries and preserves whatever else is in the file.
+receiver — that is a separate mechanism. `hooks install` manages only the two
+entries it wrote — the ones running the script out of `~/.claude/dashboard-hooks/`
+— and preserves whatever else is in the file. An entry running your own copy of
+the same script from somewhere else is left alone: install refuses rather than
+replacing it, and uninstall names it on stderr rather than deleting it.
 
 **Then arm the sessions you want intercepted.** Nothing is held by default: the
 `PreToolUse` hook fires *before* Claude Code decides whether to prompt at all, so

@@ -120,7 +120,7 @@ func TestApplyPermissionHooksRepairsAStalePath(t *testing.T) {
 		if len(entries) != 1 {
 			t.Fatalf("%s has %d entries — repair appended instead of replacing", event, len(entries))
 		}
-		cmd, ours := ourCommand(entries[0])
+		cmd, ours, _ := entryCommand(entries[0], testScript)
 		if !ours || !strings.HasPrefix(cmd, testScript) {
 			t.Fatalf("%s still points at %q", event, cmd)
 		}
@@ -138,7 +138,7 @@ func TestRemovePermissionHooksLeavesForeignHooks(t *testing.T) {
 	}
 	mustApply(t, settings, testScript)
 
-	if !removePermissionHooks(settings) {
+	if removed, _ := removePermissionHooks(settings); !removed {
 		t.Fatal("uninstall reported no change")
 	}
 	hooks := settings["hooks"].(map[string]any)
@@ -200,7 +200,7 @@ func mustApply(t *testing.T, settings map[string]any, script string) {
 
 func TestRemovePermissionHooksOnCleanSettings(t *testing.T) {
 	settings := map[string]any{}
-	if removePermissionHooks(settings) {
+	if removed, _ := removePermissionHooks(settings); removed {
 		t.Fatal("uninstall reported a change with nothing installed")
 	}
 }
@@ -384,5 +384,69 @@ func TestInstallThenUninstallRestoresTheFile(t *testing.T) {
 	perms, _ := settings["permissions"].(map[string]any)
 	if perms["defaultMode"] != "auto" {
 		t.Fatalf("settings = %v, want the original content back", settings)
+	}
+}
+
+// A hand-written entry running somebody's own copy of the script carries the
+// same filename. Deleting it was the old behaviour, and it is routine in a repo
+// that uses worktrees: the user's fork simply vanished on uninstall.
+func TestUninstallLeavesAForeignCopyOfTheScript(t *testing.T) {
+	foreignCmd := "/home/me/forks/dashboard-permission.sh"
+	settings := map[string]any{
+		"hooks": map[string]any{
+			"PreToolUse": []any{map[string]any{
+				"matcher": "Bash",
+				"hooks":   []any{map[string]any{"type": "command", "command": foreignCmd}},
+			}},
+		},
+	}
+
+	removed, foreign := removePermissionHooks(settings)
+
+	if removed {
+		t.Fatal("uninstall claimed to remove an entry this command never installed")
+	}
+	if len(foreign) != 1 || foreign[0] != foreignCmd {
+		t.Fatalf("foreign = %v, want the entry named so the user can act on it", foreign)
+	}
+	entries := settings["hooks"].(map[string]any)["PreToolUse"].([]any)
+	if len(entries) != 1 {
+		t.Fatalf("PreToolUse has %d entries, want the foreign one still there", len(entries))
+	}
+}
+
+// Two registrations would both fire on every tool call, and silently replacing
+// the user's is not this command's decision.
+func TestInstallRefusesWhenAForeignCopyIsRegistered(t *testing.T) {
+	settings := map[string]any{
+		"hooks": map[string]any{
+			"PreToolUse": []any{map[string]any{
+				"matcher": "Bash",
+				"hooks":   []any{map[string]any{"type": "command", "command": "/home/me/forks/dashboard-permission.sh"}},
+			}},
+		},
+	}
+
+	if _, err := applyPermissionHooks(settings, testScript); err == nil {
+		t.Fatal("install silently replaced an entry pointing at somebody else's script")
+	}
+	entries := settings["hooks"].(map[string]any)["PreToolUse"].([]any)
+	if len(entries) != 1 {
+		t.Fatalf("PreToolUse has %d entries, want the foreign one untouched", len(entries))
+	}
+}
+
+// An entry left by an older install still lives in the directory this command
+// owns, so it stays repairable rather than being reported as somebody else's.
+func TestAStaleEntryInTheOwnedDirectoryIsStillOurs(t *testing.T) {
+	settings := map[string]any{}
+	mustApply(t, settings, "/old/location/dashboard-hooks/dashboard-permission.sh")
+
+	if _, err := applyPermissionHooks(settings, testScript); err != nil {
+		t.Fatalf("re-install after a move: %v", err)
+	}
+	removed, foreign := removePermissionHooks(settings)
+	if !removed || len(foreign) != 0 {
+		t.Fatalf("uninstall = (%v, %v), want the repaired entry removed and nothing reported", removed, foreign)
 	}
 }
