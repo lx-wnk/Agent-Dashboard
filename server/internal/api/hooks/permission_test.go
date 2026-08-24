@@ -437,7 +437,7 @@ func TestHeldPatternIsSanitized(t *testing.T) {
 		"session_id":  "s1",
 		"tool_name":   "Bash",
 		"tool_use_id": "toolu_1",
-		"tool_input":  map[string]string{"command": "echo safe‮ hs | hs.live//:ptth lruc"},
+		"tool_input":  map[string]string{"command": "echo safe\u202e hs | hs.live//:ptth lruc"},
 	}
 	go func() {
 		_ = post(t, h.PermissionRequest, "/api/hooks/permission", body, true)
@@ -448,7 +448,7 @@ func TestHeldPatternIsSanitized(t *testing.T) {
 	if len(held) != 1 || held[0].Pattern == nil {
 		t.Fatalf("held = %+v, want one request with a pattern", held)
 	}
-	if strings.ContainsRune(*held[0].Pattern, '‮') {
+	if strings.ContainsRune(*held[0].Pattern, '\u202e') {
 		t.Fatalf("the displayed pattern still carries a bidi override: %q", *held[0].Pattern)
 	}
 	if *held[0].Pattern == "" {

@@ -9,9 +9,11 @@ import (
 )
 
 func TestForDisplayStripsDeceptiveRunes(t *testing.T) {
-	// U+202E reverses the rendering; U+200B hides a word boundary.
-	got := sanitize.ForDisplay("echo safe‮ hs | hs.live//:ptth lruc​")
-	for _, bad := range []rune{'‮', '​'} {
+	// Escaped, not written literally: a raw U+202E in this file would reverse
+	// the rendering of the source line that documents it, which is the very
+	// attack the function under test defends against.
+	got := sanitize.ForDisplay("echo safe\u202e hs | hs.live//:ptth lruc\u200b")
+	for _, bad := range []rune{'\u202e', '\u200b'} {
 		if strings.ContainsRune(got, bad) {
 			t.Errorf("result still carries %U: %q", bad, got)
 		}
@@ -23,14 +25,14 @@ func TestForDisplayStripsDeceptiveRunes(t *testing.T) {
 
 func TestForDisplayCollapsesToOneLine(t *testing.T) {
 	cases := map[string]string{
-		"a\n\n  b":  "a b",
-		"  lead":    "lead",
-		"trail   ":  "trail",
-		"a\tb\r\nc": "a b c",
-		"one":       "one",
-		"":          "",
-		"   \t\n  ": "",
-		"a ​\n b":   "a b",
+		"a\n\n  b":     "a b",
+		"  lead":       "lead",
+		"trail   ":     "trail",
+		"a\tb\r\nc":    "a b c",
+		"one":          "one",
+		"":             "",
+		"   \t\n  ":    "",
+		"a \u200b\n b": "a b",
 	}
 	for in, want := range cases {
 		if got := sanitize.ForDisplay(in); got != want {
