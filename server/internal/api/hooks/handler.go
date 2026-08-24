@@ -12,6 +12,7 @@
 package hooks
 
 import (
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"io"
@@ -66,7 +67,19 @@ type Handler struct {
 	// from the edit gate above: that one gates write tools with its own payload
 	// shape, this one speaks Claude Code's native hook protocol for every tool.
 	permissions *PermissionBridge
+	// sessionCWD resolves a session id against the live scan. Installed by the
+	// router, which owns the agent accessor. Nil disables the check, which is
+	// what a handler built without one gets.
+	sessionCWD SessionCWDFn
 }
+
+// SessionCWDFn returns the working directory the scanner reports for a session,
+// and whether that session is running at all.
+type SessionCWDFn func(ctx context.Context, sessionID string) (string, bool)
+
+// SetSessionCWD installs the live-session lookup used to vouch for a session at
+// arming time.
+func (h *Handler) SetSessionCWD(fn SessionCWDFn) { h.sessionCWD = fn }
 
 type pendingEntry struct {
 	edit PendingEdit
@@ -81,19 +94,22 @@ type pendingEntry struct {
 //
 // store may be nil (per-event recording disabled); when non-nil, Event records a
 // truncated, secret-safe HookEvent per received payload.
-// bridge may be nil, in which case the handler builds its own — convenient for
-// tests. Production passes the instance from the DI container, because the
-// agent enricher reads the same bridge and is constructed before the router.
+//
+// bridge is required. A nil-means-build-your-own branch would fail silently: the
+// endpoints would still answer 200 and hold calls, but the agent enricher reads
+// the DI instance, so the UI would show nothing while sessions stalled with no
+// control. Panicking is what the empty secret above already does.
+//
+// Installing the bridge's change callback is the ROUTER's job, not this
+// constructor's — see NewRouter. A constructor that reconfigures an injected
+// dependency makes "who owns the callback" a question with two answers.
 func New(secret string, store *hookstore.Store, onEvent OnEventFn, bridge *PermissionBridge) *Handler {
 	if secret == "" {
 		panic("hooks.Handler requires a non-empty secret")
 	}
 	if bridge == nil {
-		bridge = NewPermissionBridge(nil)
+		panic("hooks.Handler requires a permission bridge")
 	}
-	// onEvent already debounces a rescan; reuse it so a held or resolved
-	// permission reaches connected clients without waiting for the next tick.
-	bridge.SetOnChange(onEvent)
 	return &Handler{
 		secret:      secret,
 		store:       store,

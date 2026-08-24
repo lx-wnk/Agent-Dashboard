@@ -34,6 +34,52 @@ func TestFrontendAddrTargetsViteUnderDev(t *testing.T) {
 	})
 }
 
+// TestServesViteClient covers the nonce check that closes the ownership gap
+// the Content-Type fallback (kept for a plain `wails dev` run outside Task,
+// see servesViteClient's doc comment) leaves open for a deliberate squatter.
+func TestServesViteClient(t *testing.T) {
+	header := func(k, v string) *http.Response {
+		resp := &http.Response{Header: make(http.Header)}
+		resp.Header.Set(k, v)
+		return resp
+	}
+
+	t.Run("nonce set: matching header accepted", func(t *testing.T) {
+		t.Setenv("DESKTOP_DEV_NONCE", "abc123")
+		if !servesViteClient(header("x-dashboard-dev-nonce", "abc123")) {
+			t.Fatal("servesViteClient() = false, want true for a matching nonce")
+		}
+	})
+
+	t.Run("nonce set: missing header rejected", func(t *testing.T) {
+		t.Setenv("DESKTOP_DEV_NONCE", "abc123")
+		if servesViteClient(header("Content-Type", "text/javascript")) {
+			t.Fatal("servesViteClient() = true, want false: no nonce header, only a Content-Type a squatter could copy")
+		}
+	})
+
+	t.Run("nonce set: wrong header rejected", func(t *testing.T) {
+		t.Setenv("DESKTOP_DEV_NONCE", "abc123")
+		if servesViteClient(header("x-dashboard-dev-nonce", "wrong")) {
+			t.Fatal("servesViteClient() = true, want false: the nonce does not match")
+		}
+	})
+
+	t.Run("nonce unset: javascript Content-Type accepted", func(t *testing.T) {
+		t.Setenv("DESKTOP_DEV_NONCE", "")
+		if !servesViteClient(header("Content-Type", "text/javascript")) {
+			t.Fatal("servesViteClient() = false, want true: fallback for a plain `wails dev` run outside Task")
+		}
+	})
+
+	t.Run("nonce unset: non-javascript Content-Type rejected", func(t *testing.T) {
+		t.Setenv("DESKTOP_DEV_NONCE", "")
+		if servesViteClient(header("Content-Type", "text/html")) {
+			t.Fatal("servesViteClient() = true, want false: not Vite-shaped")
+		}
+	})
+}
+
 // serveOnLoopback starts h on a loopback port and points VITE_DEV_PORT at it,
 // so waitForFrontend polls this handler instead of a real Vite.
 func serveOnLoopback(t *testing.T, h http.Handler) {

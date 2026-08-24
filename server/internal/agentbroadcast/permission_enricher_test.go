@@ -9,14 +9,15 @@ import (
 )
 
 type fakeBridge struct {
-	pending    map[string][]sdk.PendingPermission
-	atTerminal map[string]bool
-	armed      map[string]bool
-	swept      int
+	pending      map[string][]sdk.PendingPermission
+	atTerminal   map[string]bool
+	terminalTool map[string]string
+	armed        map[string]bool
+	swept        int
 }
 
-func (f *fakeBridge) StateForSession(sessionID string) ([]sdk.PendingPermission, bool, bool) {
-	return f.pending[sessionID], f.atTerminal[sessionID], f.armed[sessionID]
+func (f *fakeBridge) StateForSession(sessionID string) ([]sdk.PendingPermission, bool, string, bool) {
+	return f.pending[sessionID], f.atTerminal[sessionID], f.terminalTool[sessionID], f.armed[sessionID]
 }
 
 func (f *fakeBridge) SweepExpired() { f.swept++ }
@@ -128,5 +129,24 @@ func TestPermissionBridgeEnricherSkipsSessionlessAgents(t *testing.T) {
 
 	if len(agents[0].HeldPermissions) != 0 || agents[0].AwaitingTerminalPermission {
 		t.Fatalf("a sessionless agent was annotated: %+v", agents[0])
+	}
+}
+
+// The client may only offer a standing grant for the call the prompt is about,
+// so the tool id the bridge correlated has to reach the agent.
+func TestPermissionBridgeEnricherCarriesTheTerminalToolUse(t *testing.T) {
+	bridge := &fakeBridge{
+		atTerminal:   map[string]bool{"s1": true},
+		terminalTool: map[string]string{"s1": "toolu_9"},
+	}
+	agents := []sdk.Agent{{SessionID: "s1"}, {SessionID: "s2"}}
+
+	agentbroadcast.NewPermissionBridgeEnricher(bridge)(context.Background(), agents)
+
+	if agents[0].TerminalPermissionToolUseID != "toolu_9" {
+		t.Fatalf("terminalPermissionToolUseId = %q, want toolu_9", agents[0].TerminalPermissionToolUseID)
+	}
+	if agents[1].TerminalPermissionToolUseID != "" {
+		t.Fatalf("agent s2 picked up %q from another session", agents[1].TerminalPermissionToolUseID)
 	}
 }

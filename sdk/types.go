@@ -434,10 +434,18 @@ type Agent struct {
 	// prompt, which the dashboard can report but not answer -- the bridge either
 	// lapsed before anyone decided, or the session is not armed. Set from the
 	// Notification hook's typed notification_type, never from its prose.
-	AwaitingTerminalPermission bool            `json:"awaitingTerminalPermission,omitempty"`
-	PendingToolUse             *PendingToolUse `json:"pendingToolUse,omitempty"`
-	Machine                    string          `json:"machine,omitempty"`
-	LastBtw                    *BtwMessage     `json:"lastBtw"`
+	AwaitingTerminalPermission bool `json:"awaitingTerminalPermission,omitempty"`
+	// TerminalPermissionToolUseID names the tool call that terminal prompt is
+	// about, when the bridge held that call and the hold lapsed. Empty for a
+	// session the bridge never held, because the Notification payload carries no
+	// tool id of its own. Without it a standing grant can only be offered for
+	// PendingToolUse below, which is derived independently from the transcript
+	// and can name a different call entirely -- so a notice that outlives its
+	// prompt would put a grant button next to a tool nobody asked about.
+	TerminalPermissionToolUseID string          `json:"terminalPermissionToolUseId,omitempty"`
+	PendingToolUse              *PendingToolUse `json:"pendingToolUse,omitempty"`
+	Machine                     string          `json:"machine,omitempty"`
+	LastBtw                     *BtwMessage     `json:"lastBtw"`
 	// CostUnknown is true when the provider does not expose token counts and
 	// cost cannot be estimated. CostEstimate will be 0 in this case.
 	CostUnknown bool `json:"costUnknown,omitempty"`

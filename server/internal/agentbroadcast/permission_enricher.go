@@ -15,7 +15,7 @@ type PermissionBridgeReader interface {
 	// StateForSession is a pure read of what the bridge knows about one session.
 	// It returns plain values rather than a bridge-owned struct so this package
 	// keeps importing nothing from the API layer.
-	StateForSession(sessionID string) (held []sdk.PendingPermission, atTerminal, armed bool)
+	StateForSession(sessionID string) (held []sdk.PendingPermission, atTerminal bool, terminalToolUseID string, armed bool)
 	// SweepExpired drops armed marks and notices that have aged out. Expiry is
 	// driven from this tick rather than from the read, so it does not depend on
 	// someone happening to look at a session.
@@ -43,7 +43,7 @@ func NewPermissionBridgeEnricher(bridge PermissionBridgeReader) merger.Enricher 
 			if sid == "" {
 				continue
 			}
-			held, atTerminal, armed := bridge.StateForSession(sid)
+			held, atTerminal, terminalToolUseID, armed := bridge.StateForSession(sid)
 			// A held hook call goes in its own field, never into
 			// PendingPermissions: that one carries pipeline stage-run rows,
 			// which are database-backed and resolve through a different
@@ -51,6 +51,7 @@ func NewPermissionBridgeEnricher(bridge PermissionBridgeReader) merger.Enricher 
 			// pipeline's bulk-resolve payload.
 			agents[i].HeldPermissions = held
 			agents[i].AwaitingTerminalPermission = atTerminal
+			agents[i].TerminalPermissionToolUseID = terminalToolUseID
 			agents[i].PermissionBridgeArmed = armed
 		}
 	}

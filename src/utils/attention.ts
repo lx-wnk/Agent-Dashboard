@@ -39,10 +39,20 @@ export function attentionFor(agent: Agent, secondsSinceActivity: number | null):
     return { kind: 'permission', label: 'Needs permission', tone: 'warning', weight: 0, grantable: true }
   // The session is showing its own prompt: the bridge lapsed before anyone
   // decided, or is not installed for it. Not answerable from here — but it is
-  // the one signal that positively means a permission prompt is on screen, so
-  // offering a standing rule for next time is honest.
-  if (agent.awaitingTerminalPermission)
-    return { kind: 'permission', label: 'Answer in terminal', tone: 'warning', weight: 0, grantable: true }
+  // the one signal that positively means a permission prompt is on screen.
+  //
+  // A standing rule for next time is only honest when the prompt and the tool
+  // the button would name are the same call. The notice fires once when the
+  // prompt opens and never when it is answered, so it outlives its prompt,
+  // while pendingToolUse is derived independently from the transcript — the
+  // pair drifts, and the grant would be for a tool nobody asked about. The
+  // bridge names the call when it held it; without that name there is no
+  // evidence to offer a rule on.
+  if (agent.awaitingTerminalPermission) {
+    const named = Boolean(agent.terminalPermissionToolUseId)
+      && agent.terminalPermissionToolUseId === agent.pendingToolUse?.id
+    return { kind: 'permission', label: 'Answer in terminal', tone: 'warning', weight: 0, grantable: named }
+  }
   if (agent.errorState)
     return { kind: 'error', label: 'Run failed', tone: 'danger', weight: 1, grantable: false }
   // An unresolved tool_use is the only signal a plain JSONL gives for "blocked on

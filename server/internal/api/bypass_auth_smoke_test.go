@@ -262,3 +262,38 @@ func TestBypassAuth_NoProtectedRouteReturnsAuthError(t *testing.T) {
 	}
 	t.Logf("bypass-auth smoke: %d protected routes checked, none returned 401/403", checked)
 }
+
+// The permission bridge is not mounted under DASHBOARD_AUTH=none. Its premise is
+// that a human weighs a tool call before it runs; with JWT off, the remaining
+// gates are loopback and an Origin header any non-browser process sets for
+// itself — and a hook allow short-circuits Claude Code's own evaluation,
+// including the user's deny rules. The golden route file records the absence,
+// but only as a list; this says why it is there.
+func TestBypassAuth_DoesNotMountThePermissionBridgeDecisions(t *testing.T) {
+	// Asserted against the route table, not a response code: an unregistered
+	// POST falls through to the SPA catch-all, which answers 301, so driving a
+	// request cannot tell "absent" from "mounted and redirecting".
+	routes, ok := buildBypassRouter(t).(chi.Routes)
+	if !ok {
+		t.Fatal("NewRouter did not return a chi.Routes")
+	}
+	mounted := map[string]bool{}
+	if err := chi.Walk(routes, func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
+		mounted[method+" "+route] = true
+		return nil
+	}); err != nil {
+		t.Fatalf("chi.Walk: %v", err)
+	}
+
+	for _, route := range []string{"POST /api/hooks/permission/respond", "POST /api/hooks/permission/arm"} {
+		if mounted[route] {
+			t.Errorf("%s is mounted under bypass — any local process could answer a prompt", route)
+		}
+	}
+	// The ingress stays: without arming nothing is held, so it answers "no
+	// decision" and the session falls back to its terminal prompt, which the
+	// dashboard still reports.
+	if !mounted["POST /api/hooks/permission"] {
+		t.Error("the PreToolUse ingress was removed too; the bridge must degrade, not disappear")
+	}
+}

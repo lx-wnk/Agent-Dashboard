@@ -28,7 +28,19 @@ const (
 	// survives without a refresh. The Notification hook fires once when the
 	// prompt opens and never again when it is answered, so the notice has to age
 	// out rather than wait to be cleared.
-	permissionNoticeTTL = 2 * time.Minute
+	//
+	// Sized for the situation it reports: someone stepped away from a prompt.
+	// Two minutes dropped the agent out of the band while it was still blocked,
+	// which is the one case the terminal fallback exists for. A stale notice
+	// costs a label that is out of date -- it no longer offers a standing grant
+	// on its own, which needs the correlation below.
+	permissionNoticeTTL = 15 * time.Minute
+
+	// lapseCorrelationWindow is how long after a hold lapses its tool call still
+	// explains an incoming terminal-prompt notice. Claude Code draws the prompt
+	// as soon as the hook returns no decision, so the Notification follows within
+	// a moment; past that the two are unrelated events.
+	lapseCorrelationWindow = 10 * time.Second
 
 	// armedTTL bounds how long a session stays armed without being renewed. An
 	// arm that is forgotten would otherwise keep holding that session's tool
@@ -59,11 +71,40 @@ type permissionRequest struct {
 	ch  chan string // receives "allow" or "deny"
 }
 
+// armedSession is one session someone asked the dashboard to intercept.
+//
+// cwd is the working directory the scanner reported for that session when it
+// was armed, and it is the bridge's only identity check: session_id arrives in
+// a POST body, so the shared secret alone would let any local process holding
+// it raise a card under a trusted agent's name, with an attacker-chosen command
+// next to the Allow button. Empty when the scan reported none, in which case
+// there is nothing to compare and the check is skipped rather than faked.
+type armedSession struct {
+	at  time.Time
+	cwd string
+}
+
 // permissionNotice records that a session's terminal is showing its own
 // permission prompt — which happens when no dashboard decision arrived in time,
 // or when the bridge hook is not installed at all.
+//
+// toolUseID names the call the prompt is about, when a hold for this session
+// lapsed just before the notice arrived. The Notification payload itself does
+// not carry one, so it is empty for a session the bridge never held. It is what
+// lets the client offer a standing grant for that call and no other: the trail's
+// own pending tool use is derived independently from the transcript and can name
+// a different call entirely, so a notice that outlives its prompt would
+// otherwise put a grant button next to a tool nobody asked about.
 type permissionNotice struct {
-	at time.Time
+	at        time.Time
+	toolUseID string
+}
+
+// lapse records a hold that ended without a decision, so an incoming notice can
+// be attributed to the call that caused it.
+type lapse struct {
+	at        time.Time
+	toolUseID string
 }
 
 // PermissionBridge holds PreToolUse hook calls open so a permission prompt can
@@ -80,12 +121,13 @@ type PermissionBridge struct {
 	mu      sync.Mutex
 	pending map[string]*permissionRequest // request id -> held call
 	notices map[string]permissionNotice   // session id -> terminal is asking
-	// armed holds the sessions whose prompts the dashboard should intercept,
-	// with the time each was armed. PreToolUse fires before Claude Code decides
-	// whether to prompt at all, so it carries no signal that a decision is
-	// pending -- holding every call would stall every session on the machine.
-	// A session is held only after someone asked for it.
-	armed map[string]time.Time
+	lapsed  map[string]lapse              // session id -> last hold that timed out
+	// armed holds the sessions whose prompts the dashboard should intercept.
+	// PreToolUse fires before Claude Code decides whether to prompt at all, so
+	// it carries no signal that a decision is pending -- holding every call
+	// would stall every session on the machine. A session is held only after
+	// someone asked for it.
+	armed map[string]armedSession
 	// seq orders holds within a session; see permissionRequest.seq.
 	seq      atomic.Uint64
 	nowFn    func() time.Time
@@ -103,7 +145,8 @@ func NewPermissionBridge(onChange func()) *PermissionBridge {
 	return &PermissionBridge{
 		pending:  map[string]*permissionRequest{},
 		notices:  map[string]permissionNotice{},
-		armed:    map[string]time.Time{},
+		lapsed:   map[string]lapse{},
+		armed:    map[string]armedSession{},
 		nowFn:    time.Now,
 		holdFor:  permissionHoldTimeout,
 		noticeFn: onChange,
@@ -140,12 +183,13 @@ func (b *PermissionBridge) changed() {
 
 // preToolPayload is the subset of Claude Code's PreToolUse payload the bridge uses.
 type preToolPayload struct {
-	SessionID      string          `json:"session_id"`
-	ToolName       string          `json:"tool_name"`
-	ToolUseID      string          `json:"tool_use_id"`
-	ToolInput      json.RawMessage `json:"tool_input"`
-	PermissionMode string          `json:"permission_mode"`
-	CWD            string          `json:"cwd"`
+	SessionID string          `json:"session_id"`
+	ToolName  string          `json:"tool_name"`
+	ToolUseID string          `json:"tool_use_id"`
+	ToolInput json.RawMessage `json:"tool_input"`
+	// CWD is the session's working directory. It is an identity check, not
+	// decoration: see armedSession.
+	CWD string `json:"cwd"`
 }
 
 // notificationPayload is the subset of Claude Code's Notification payload the
@@ -244,6 +288,10 @@ func (h *Handler) PermissionRespond(w http.ResponseWriter, r *http.Request) {
 // Claude Code evaluates whether to prompt, so it cannot say "a decision is
 // pending"; without an explicit opt-in the bridge would have to hold every tool
 // call of every session to catch the few that matter.
+//
+// It is also where the bridge learns what a session IS. Arming resolves the
+// session against the live scan and records the directory found there; a
+// session the scanner does not know cannot be armed at all. See armedSession.
 func (h *Handler) PermissionArm(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		SessionID string `json:"sessionId"`
@@ -257,7 +305,16 @@ func (h *Handler) PermissionArm(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, "sessionId is required")
 		return
 	}
-	h.permissions.Arm(body.SessionID, body.Armed)
+	var cwd string
+	if body.Armed && h.sessionCWD != nil {
+		found, ok := h.sessionCWD(r.Context(), body.SessionID)
+		if !ok {
+			writeJSONError(w, http.StatusNotFound, "no live session with that id")
+			return
+		}
+		cwd = found
+	}
+	h.permissions.Arm(body.SessionID, cwd, body.Armed)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]bool{"armed": body.Armed})
 }
@@ -284,7 +341,7 @@ func (b *PermissionBridge) hold(ctx context.Context, p preToolPayload) (string, 
 	}
 
 	b.mu.Lock()
-	if !b.isArmedLocked(p.SessionID) || b.holdsForLocked(p.SessionID) >= maxHoldsPerSession {
+	if !b.mayHoldLocked(p.SessionID, p.CWD) || b.holdsForLocked(p.SessionID) >= maxHoldsPerSession {
 		b.mu.Unlock()
 		return "", false
 	}
@@ -306,10 +363,19 @@ func (b *PermissionBridge) hold(ctx context.Context, p preToolPayload) (string, 
 	case decision := <-entry.ch:
 		return decision, true
 	case <-time.After(b.holdFor):
+		// Claude Code draws its own prompt for this exact call next; the
+		// Notification that follows is attributed to it.
+		b.noteLapse(p.SessionID, p.ToolUseID)
 		return "", false
 	case <-ctx.Done():
 		return "", false
 	}
+}
+
+func (b *PermissionBridge) noteLapse(sessionID, toolUseID string) {
+	b.mu.Lock()
+	b.lapsed[sessionID] = lapse{at: b.nowFn(), toolUseID: toolUseID}
+	b.mu.Unlock()
 }
 
 // errNotPending means the request lapsed into the terminal prompt, or someone
@@ -372,11 +438,12 @@ func (b *PermissionBridge) deniedBy(p preToolPayload, raw string) *string {
 }
 
 // Arm marks a session's prompts as ones the dashboard should intercept, or
-// clears that mark. Arming is per session and expires: see armedTTL.
-func (b *PermissionBridge) Arm(sessionID string, armed bool) {
+// clears that mark. Arming is per session and expires: see armedTTL. cwd is the
+// working directory the scanner reported for the session; see armedSession.
+func (b *PermissionBridge) Arm(sessionID, cwd string, armed bool) {
 	b.mu.Lock()
 	if armed {
-		b.armed[sessionID] = b.nowFn()
+		b.armed[sessionID] = armedSession{at: b.nowFn(), cwd: cwd}
 	} else {
 		delete(b.armed, sessionID)
 	}
@@ -384,16 +451,19 @@ func (b *PermissionBridge) Arm(sessionID string, armed bool) {
 	b.changed()
 }
 
-func (b *PermissionBridge) isArmedLocked(sessionID string) bool {
-	at, ok := b.armed[sessionID]
+// mayHoldLocked reports whether a payload claiming this session may be held.
+func (b *PermissionBridge) mayHoldLocked(sessionID, cwd string) bool {
+	a, ok := b.armed[sessionID]
 	if !ok {
 		return false
 	}
-	if b.nowFn().Sub(at) > armedTTL {
+	if b.nowFn().Sub(a.at) > armedTTL {
 		delete(b.armed, sessionID)
 		return false
 	}
-	return true
+	// Nothing to compare when either side reported no directory: a scan that
+	// found none must not turn into a rejection of every call.
+	return a.cwd == "" || cwd == "" || a.cwd == cwd
 }
 
 func (b *PermissionBridge) holdsForLocked(sessionID string) int {
@@ -408,7 +478,15 @@ func (b *PermissionBridge) holdsForLocked(sessionID string) int {
 
 func (b *PermissionBridge) noteTerminalPrompt(sessionID string) {
 	b.mu.Lock()
-	b.notices[sessionID] = permissionNotice{at: b.nowFn()}
+	now := b.nowFn()
+	notice := permissionNotice{at: now}
+	if l, ok := b.lapsed[sessionID]; ok {
+		delete(b.lapsed, sessionID)
+		if now.Sub(l.at) <= lapseCorrelationWindow {
+			notice.toolUseID = l.toolUseID
+		}
+	}
+	b.notices[sessionID] = notice
 	b.mu.Unlock()
 	b.changed()
 }
@@ -422,7 +500,7 @@ func (b *PermissionBridge) noteTerminalPrompt(sessionID string) {
 // and then exited kept its notice for the life of the process.
 // Returns the requests answerable right now in arrival order, whether the
 // session is showing its own prompt instead, and whether it is armed.
-func (b *PermissionBridge) StateForSession(sessionID string) (held []sdk.PendingPermission, atTerminal, armed bool) {
+func (b *PermissionBridge) StateForSession(sessionID string) (held []sdk.PendingPermission, atTerminal bool, terminalToolUseID string, armed bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -446,7 +524,11 @@ func (b *PermissionBridge) StateForSession(sessionID string) (held []sdk.Pending
 	}
 
 	notice, hasNotice := b.notices[sessionID]
-	return out, hasNotice && b.nowFn().Sub(notice.at) <= permissionNoticeTTL, b.isArmedReadLocked(sessionID)
+	fresh := hasNotice && b.nowFn().Sub(notice.at) <= permissionNoticeTTL
+	if !fresh {
+		return out, false, "", b.isArmedReadLocked(sessionID)
+	}
+	return out, true, notice.toolUseID, b.isArmedReadLocked(sessionID)
 }
 
 // SweepExpired drops armed marks and terminal notices that have aged out. It is
@@ -456,8 +538,8 @@ func (b *PermissionBridge) SweepExpired() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	now := b.nowFn()
-	for id, at := range b.armed {
-		if now.Sub(at) > armedTTL {
+	for id, a := range b.armed {
+		if now.Sub(a.at) > armedTTL {
 			delete(b.armed, id)
 		}
 	}
@@ -466,12 +548,18 @@ func (b *PermissionBridge) SweepExpired() {
 			delete(b.notices, id)
 		}
 	}
+	// A lapse nothing followed up on explains nothing.
+	for id, l := range b.lapsed {
+		if now.Sub(l.at) > lapseCorrelationWindow {
+			delete(b.lapsed, id)
+		}
+	}
 }
 
-// isArmedReadLocked is the non-mutating half of isArmedLocked, for the read path.
+// isArmedReadLocked is the non-mutating half of mayHoldLocked, for the read path.
 func (b *PermissionBridge) isArmedReadLocked(sessionID string) bool {
-	at, ok := b.armed[sessionID]
-	return ok && b.nowFn().Sub(at) <= armedTTL
+	a, ok := b.armed[sessionID]
+	return ok && b.nowFn().Sub(a.at) <= armedTTL
 }
 
 // argumentOf extracts the tool's own argument from the hook payload: the Bash

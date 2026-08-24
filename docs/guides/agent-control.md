@@ -116,8 +116,15 @@ With it installed:
 - Answering there releases the run immediately. The terminal never prompts.
 - If nobody answers in time, the hold lapses and the session falls back to
   asking in its terminal exactly as it does without the bridge — the card then
-  reads **Answer in terminal** and offers a standing rule for future runs
-  instead of a live decision.
+  reads **Answer in terminal** for up to 15 minutes, which is how long someone
+  who stepped away is given before the dashboard stops claiming a prompt is on
+  screen.
+- The standing rule for future runs is offered beside that only when the bridge
+  can name the call the prompt is about, which it can when it held that call.
+  The terminal notice fires once when a prompt opens and never when it is
+  answered, and the trail's own pending tool call is reconstructed separately —
+  so without a name, the rule would be written for whichever tool the trail
+  happens to show, not the one on screen.
 
 **Your own deny rules stay the floor.** A hook answering "allow" short-circuits
 Claude Code's permission evaluation entirely, deny rules included — so the bridge
@@ -127,6 +134,14 @@ your user or project `settings.json`, the card shows the rule instead of an
 such a call regardless of what the client sends. A rule shape the bridge cannot
 parse is treated as a match: it declines to offer rather than release something
 it did not understand.
+
+**The bridge is off under `DASHBOARD_AUTH=none`.** That mode drops JWT, leaving
+loopback and an `Origin` header any non-browser process sets for itself — so
+"a human decided" would reduce to "any local process decided", while a hook
+allow short-circuits Claude Code's own evaluation. The arm and respond endpoints
+are not mounted at all in that mode. Nothing is held, sessions prompt in their
+terminals as they do without the bridge, and the dashboard still reports that
+one is waiting there.
 
 The lapse is the important property: the hook answers "no decision", never
 "allow". A dashboard that is stopped, slow, or unreachable, a missing secret, a

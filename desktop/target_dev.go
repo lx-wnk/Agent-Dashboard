@@ -35,9 +35,18 @@ func viteDevServerAddr() string {
 // the rest of the session.
 func frontendAddr(_ string) string { return viteDevServerAddr() }
 
-// servesViteClient reports whether the peer is a Vite dev server. Only Vite
-// serves /@vite/client, and it serves it as a JavaScript module.
+// servesViteClient reports whether the peer answering /@vite/client is OUR
+// Vite dev server. When DESKTOP_DEV_NONCE is set, a matching
+// x-dashboard-dev-nonce header is proof of that: `task dev:desktop` generates
+// the nonce once and hands it to both this process and the Vite child (see
+// Taskfile.yml), so only a process sharing that parent can echo it back.
+// Without the env var (a plain `wails dev` run outside Task) it falls back to
+// the JavaScript Content-Type only Vite serves here, which proves merely that
+// something Vite-shaped answered, not that it is ours.
 func servesViteClient(resp *http.Response) bool {
+	if nonce := os.Getenv("DESKTOP_DEV_NONCE"); nonce != "" {
+		return resp.Header.Get("x-dashboard-dev-nonce") == nonce
+	}
 	return strings.Contains(resp.Header.Get("Content-Type"), "javascript")
 }
 
@@ -49,6 +58,10 @@ func servesViteClient(resp *http.Response) bool {
 // does not hold here, and a foreign process holding the port would otherwise
 // become the desktop window's origin. strictPort only makes OUR Vite refuse to
 // move off the port; it says nothing about who answers when it cannot start.
+// servesViteClient closes that gap when DESKTOP_DEV_NONCE is set: a matching
+// header proves the peer shares a parent with this process. Run outside Task
+// (no nonce), it falls back to a Content-Type sniff, which proves only that
+// something Vite-shaped answered, not that it is ours.
 func waitForFrontend(ctx context.Context, serverErr <-chan error) error {
 	addr := viteDevServerAddr()
 	if err := waitForServerFunc(ctx, serverErr, "http://"+addr+"/@vite/client", 30*time.Second, servesViteClient); err != nil {

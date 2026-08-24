@@ -432,6 +432,16 @@ export interface Agent {
    * Notification hook's typed notification_type, never from its prose.
    */
   awaitingTerminalPermission?: boolean
+  /**
+   * TerminalPermissionToolUseID names the tool call that terminal prompt is
+   * about, when the bridge held that call and the hold lapsed. Empty for a
+   * session the bridge never held, because the Notification payload carries no
+   * tool id of its own. Without it a standing grant can only be offered for
+   * PendingToolUse below, which is derived independently from the transcript
+   * and can name a different call entirely -- so a notice that outlives its
+   * prompt would put a grant button next to a tool nobody asked about.
+   */
+  terminalPermissionToolUseId?: string
   pendingToolUse?: PendingToolUse
   /**
    * PendingQuestion is set when the session's terminal buffer currently shows

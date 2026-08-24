@@ -256,10 +256,23 @@ describe('agentTriageBand permission bridge', () => {
   it('offers the standing rule, not a live decision, once the prompt reached the terminal', () => {
     const wrapper = mountBand(makeAgent({
       awaitingTerminalPermission: true,
+      terminalPermissionToolUseId: 'tu_b',
       pendingToolUse: toolUse({ id: 'tu_b', tool: 'Bash', pattern: 'npm publish' }),
     }))
     expect(wrapper.text()).toContain('Allow Bash')
     expect(bridgeButtons(wrapper)).toHaveLength(0)
+  })
+
+  // The notice fires once when the prompt opens and never when it is answered,
+  // so it outlives its prompt; pendingToolUse is reconstructed separately and
+  // drifts on its own. Without the bridge naming the call, a rule written from
+  // the pair names whatever the trail happens to show.
+  it('offers no standing rule when the bridge cannot name the call on screen', () => {
+    const wrapper = mountBand(makeAgent({
+      awaitingTerminalPermission: true,
+      pendingToolUse: toolUse({ id: 'tu_b', tool: 'Bash', pattern: 'npm publish' }),
+    }))
+    expect(wrapper.text()).not.toContain('Allow Bash')
   })
 
   // A hook "allow" short-circuits Claude Code's own permission evaluation, deny

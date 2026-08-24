@@ -7,6 +7,7 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 const DASHBOARD_PORT = process.env.DASHBOARD_PORT || '13120'
 const VITE_DEV_PORT = Number(process.env.VITE_DEV_PORT) || 5173
+const DESKTOP_DEV_NONCE = process.env.DESKTOP_DEV_NONCE || ''
 
 const D3_MODULE_RE = /node_modules\/d3-/
 const VUE_MODULE_RE = /node_modules\/(?:@vue|vue)\//
@@ -20,6 +21,20 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     tailwindcss(),
     vue(),
+    // Lets desktop/target_dev.go tell OUR Vite dev server (started by `task
+    // dev:desktop:wails`, which shares this nonce through Taskfile.yml) apart
+    // from another process squatting the same loopback port.
+    DESKTOP_DEV_NONCE
+      ? {
+          name: 'desktop-dev-nonce',
+          configureServer(server) {
+            server.middlewares.use((_req, res, next) => {
+              res.setHeader('x-dashboard-dev-nonce', DESKTOP_DEV_NONCE)
+              next()
+            })
+          },
+        }
+      : null,
     // PWA intent: offline capability is limited to precached static assets only;
     // HTML navigation fallback is not handled (no NavigationRoute in injectManifest strategy).
     // API calls (SSE, /api/*) always require a live server connection.

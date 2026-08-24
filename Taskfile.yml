@@ -7,6 +7,12 @@ vars:
   # dev:desktop children below export it -- a parent task's `env:` does not
   # reach its `deps`. Override per run: `task dev:desktop VITE_DEV_PORT=5199`.
   VITE_DEV_PORT: '5173'
+  # Generated once per `task` invocation and re-exported by the same two
+  # children as VITE_DEV_PORT above. vite.config.ts echoes it on a response
+  # header and desktop/target_dev.go requires that header to match before
+  # trusting the peer on the port is our Vite, not a squatter.
+  DESKTOP_DEV_NONCE:
+    sh: head -c 16 /dev/urandom | xxd -p | tr -d '\n'
 
 tasks:
   default:
@@ -24,6 +30,7 @@ tasks:
     desc: Start Vite dev server with HMR on :5173
     env:
       VITE_DEV_PORT: '{{.VITE_DEV_PORT}}'
+      DESKTOP_DEV_NONCE: '{{.DESKTOP_DEV_NONCE}}'
     cmd: pnpm dev
 
   dev:desktop:
@@ -51,6 +58,7 @@ tasks:
     platforms: [darwin]
     env:
       VITE_DEV_PORT: '{{.VITE_DEV_PORT}}'
+      DESKTOP_DEV_NONCE: '{{.DESKTOP_DEV_NONCE}}'
     cmds:
       - echo "frontend now hot-reloads through Vite on :$VITE_DEV_PORT -- the wails -assetdir/-reloaddirs warning below is expected in this flow, not a bug"
       # No -tags production here: `wails dev` always adds its own `dev` tag, and

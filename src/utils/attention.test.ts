@@ -377,6 +377,39 @@ describe('grantable is opt-in', () => {
     expect(grantable({ working: false })).toBe(false)
   })
 
+  // The terminal notice fires once when the prompt opens and never when it is
+  // answered, so it outlives its prompt; pendingToolUse is derived independently
+  // from the transcript and drifts on its own. A grant offered on the pair alone
+  // names a tool nobody asked about — the bug this repeats through a new door.
+  it('grants against a terminal prompt only when the bridge named the call', () => {
+    const att = (a: Partial<Agent>) => attentionFor(makeAgent(a), ACTIVE_SECS)
+
+    const named = att({
+      awaitingTerminalPermission: true,
+      terminalPermissionToolUseId: 'tu_9',
+      pendingToolUse: toolUse({ id: 'tu_9', tool: 'Bash' }),
+    })
+    expect(named?.label).toBe('Answer in terminal')
+    expect(named?.grantable).toBe(true)
+
+    const mismatched = att({
+      awaitingTerminalPermission: true,
+      terminalPermissionToolUseId: 'tu_9',
+      pendingToolUse: toolUse({ id: 'tu_other', tool: 'Read' }),
+    })
+    expect(mismatched?.label).toBe('Answer in terminal')
+    expect(mismatched?.grantable).toBe(false)
+
+    // A session the bridge never held names nothing, so there is no evidence to
+    // offer a rule on — it still reports that the terminal is asking.
+    const unnamed = att({
+      awaitingTerminalPermission: true,
+      pendingToolUse: toolUse({ id: 'tu_9', tool: 'Bash' }),
+    })
+    expect(unnamed?.label).toBe('Answer in terminal')
+    expect(unnamed?.grantable).toBe(false)
+  })
+
   it('leaves a long-stalled tool call non-grantable', () => {
     const att = attentionFor(makeAgent({ pendingToolUse: toolUse({ id: 't', tool: 'Bash' }) }), STALLED_SECS)
     expect(att?.kind).toBe('stalled')
