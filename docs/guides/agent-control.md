@@ -119,6 +119,15 @@ With it installed:
   reads **Answer in terminal** and offers a standing rule for future runs
   instead of a live decision.
 
+**Your own deny rules stay the floor.** A hook answering "allow" short-circuits
+Claude Code's permission evaluation entirely, deny rules included — so the bridge
+checks them first. When a held call is covered by a `permissions.deny` entry in
+your user or project `settings.json`, the card shows the rule instead of an
+**Allow** button and only **Deny** is offered. The server refuses an allow for
+such a call regardless of what the client sends. A rule shape the bridge cannot
+parse is treated as a match: it declines to offer rather than release something
+it did not understand.
+
 The lapse is the important property: the hook answers "no decision", never
 "allow". A dashboard that is stopped, slow, or unreachable, a missing secret, a
 machine without `curl` — every one of those paths degrades to the behaviour you

@@ -47,6 +47,7 @@ import (
 	apiwp "github.com/lx-wnk/agent-dashboard/server/internal/api/wphandler"
 	authpkg "github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/checkpoint"
+	"github.com/lx-wnk/agent-dashboard/server/internal/claudesettings"
 	"github.com/lx-wnk/agent-dashboard/server/internal/config"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/rawrepo"
@@ -55,6 +56,7 @@ import (
 	histsvc "github.com/lx-wnk/agent-dashboard/server/internal/history"
 	"github.com/lx-wnk/agent-dashboard/server/internal/hookstore"
 	"github.com/lx-wnk/agent-dashboard/server/internal/merger"
+	"github.com/lx-wnk/agent-dashboard/server/internal/parser"
 	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
@@ -577,6 +579,9 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	// point rather than in the router because the enricher below reads the same
 	// instance, and the enricher has to exist before the router is constructed.
 	permissionBridge := hooks.NewPermissionBridge(nil)
+	// Every config dir, not just the server's own: a session can run under a
+	// custom CLAUDE_CONFIG_DIR and its deny rules live there.
+	permissionBridge.SetDenyReader(claudesettings.NewReader(parser.AllClaudeConfigDirs()...))
 
 	// Combine the read-only crossings into one enricher applied at every GetAgents
 	// call site. A nil pipelineEnricher (no DB) composes away.

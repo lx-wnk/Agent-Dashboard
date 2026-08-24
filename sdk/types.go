@@ -217,9 +217,15 @@ type WorktreeStatusDTO struct {
 // PendingPermission is a permission request an orchestrated agent is currently
 // blocked on, surfaced on the agent so it can be resolved from the roster.
 type PendingPermission struct {
-	ID          string  `json:"id"`
-	Tool        string  `json:"tool"`
-	Pattern     *string `json:"pattern"`
+	ID      string  `json:"id"`
+	Tool    string  `json:"tool"`
+	Pattern *string `json:"pattern"`
+	// DeniedBy is the user's own permissions.deny rule forbidding this call,
+	// verbatim, or nil when no rule covers it. A hook "allow" short-circuits
+	// Claude Code's own evaluation, so a dashboard approval would otherwise
+	// release a restriction the user believes is absolute. The client offers no
+	// Allow when this is set; the server refuses one regardless.
+	DeniedBy    *string `json:"deniedBy,omitempty"`
 	Reason      *string `json:"reason"`
 	RequestedAt string  `json:"requestedAt"`
 }

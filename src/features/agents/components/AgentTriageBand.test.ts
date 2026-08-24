@@ -262,6 +262,28 @@ describe('agentTriageBand permission bridge', () => {
     expect(bridgeButtons(wrapper)).toHaveLength(0)
   })
 
+  // A hook "allow" short-circuits Claude Code's own permission evaluation, deny
+  // rules included, so a click here would release a restriction the user wrote
+  // by hand and reasonably believes is absolute.
+  it('offers no Allow for a call the user\'s own rules deny', () => {
+    const wrapper = mountBand(makeAgent({
+      heldPermissions: [perm({ deniedBy: 'Bash(rm:*)', pattern: 'rm -rf /tmp/x' })],
+    }))
+    expect(wrapper.findAll('[data-testid="permission-decide-allow"]')).toHaveLength(0)
+    expect(wrapper.findAll('[data-testid="permission-decide-deny"]')).toHaveLength(1)
+    expect(wrapper.get('[data-testid="permission-denied-by-rule"]').text()).toContain('Bash(rm:*)')
+  })
+
+  // Only the covered request loses its Allow: a batch holds several calls and
+  // the others are still ordinary decisions.
+  it('keeps Allow for the sibling requests no rule covers', () => {
+    const wrapper = mountBand(makeAgent({
+      heldPermissions: [perm({ id: 'a', deniedBy: 'Bash(rm:*)' }), perm({ id: 'b' })],
+    }))
+    expect(wrapper.findAll('[data-testid="permission-decide-allow"]')).toHaveLength(1)
+    expect(wrapper.findAll('[data-testid="permission-decide-deny"]')).toHaveLength(2)
+  })
+
   it('posts the decision for the held request', async () => {
     const calls: { url: string, body: unknown }[] = []
     vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {

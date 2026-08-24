@@ -299,6 +299,12 @@ async function decidePermission(agent: Agent, request: PendingPermission, decisi
       toast.info('Too late — that run is now asking in its terminal')
       return
     }
+    if (res.status === 403) {
+      // A rule appeared between paint and click, or something posted past the
+      // hidden button. Either way the server is the gate, not this template.
+      toast.error('Your own permission rules deny this — answer it in the terminal')
+      return
+    }
     if (!res.ok)
       throw new Error(`HTTP ${res.status}`)
     toast.success(decision === 'allow'
@@ -683,7 +689,17 @@ watch(() => props.focusedSessionId, (id) => {
                 class="flex items-center gap-2 justify-end"
               >
                 <span class="text-[11px] font-mono text-fg-mute truncate max-w-[22rem]">{{ permissionLabel(request) }}</span>
+                <!-- No Allow when the user's own permissions.deny covers the
+                     call: a hook "allow" short-circuits the evaluation that
+                     would otherwise apply the rule, so one click here would
+                     release a restriction the user believes is absolute. -->
+                <span
+                  v-if="request.deniedBy"
+                  class="text-[11px] text-fg-mute"
+                  data-testid="permission-denied-by-rule"
+                >Denied by your rule <span class="font-mono">{{ request.deniedBy }}</span></span>
                 <AppButton
+                  v-else
                   variant="success"
                   size="sm"
                   :disabled="deciding[request.id]"

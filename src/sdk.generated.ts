@@ -231,6 +231,14 @@ export interface PendingPermission {
   id: string
   tool: string
   pattern?: string
+  /**
+   * DeniedBy is the user's own permissions.deny rule forbidding this call,
+   * verbatim, or nil when no rule covers it. A hook "allow" short-circuits
+   * Claude Code's own evaluation, so a dashboard approval would otherwise
+   * release a restriction the user believes is absolute. The client offers no
+   * Allow when this is set; the server refuses one regardless.
+   */
+  deniedBy?: string
   reason?: string
   requestedAt: string
 }

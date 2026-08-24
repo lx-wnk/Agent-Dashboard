@@ -5,12 +5,15 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 	"unicode/utf8"
 
 	"github.com/lx-wnk/agent-dashboard/sdk"
+	"github.com/lx-wnk/agent-dashboard/server/internal/claudesettings"
 )
 
 const testSecret = "s3cret"
@@ -468,5 +471,128 @@ func TestHeldPatternCutsOnARuneBoundary(t *testing.T) {
 	}
 	if n := utf8.RuneCountInString(got); n != maxPatternRunes {
 		t.Fatalf("kept %d runes, want the %d-rune cap", n, maxPatternRunes)
+	}
+}
+
+// withDenyRules points the bridge at a settings file carrying the given rules
+// and returns the working directory a hook payload should claim.
+func withDenyRules(t *testing.T, h *Handler, rules ...string) {
+	t.Helper()
+	dir := t.TempDir()
+	body, err := json.Marshal(map[string]any{"permissions": map[string]any{"deny": rules}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "settings.json"), body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	h.permissions.SetDenyReader(claudesettings.NewReader(dir))
+}
+
+// A PreToolUse "allow" short-circuits Claude Code's own evaluation, deny rules
+// included. The card must therefore never offer Allow for a call the user's own
+// settings forbid — it names the rule instead.
+func TestHeldCallCarriesTheDenyRuleThatForbidsIt(t *testing.T) {
+	h := newBridgeHandler(t)
+	h.permissions.holdFor = 3 * time.Second
+	withDenyRules(t, h, "Bash(rm:*)")
+	go func() {
+		_ = post(t, h.PermissionRequest, "/api/hooks/permission", preToolBody("s1", "Bash", "rm -rf /tmp/x"), true)
+	}()
+	waitForPendingID(t, h, "s1")
+
+	pending, _ := pendingOf(t, h, "s1")
+	if pending[0].DeniedBy == nil {
+		t.Fatal("no rule reported; the dashboard would offer Allow for a call the user denied")
+	}
+	if *pending[0].DeniedBy != "Bash(rm:*)" {
+		t.Fatalf("deniedBy = %q, want the rule verbatim so the card can name it", *pending[0].DeniedBy)
+	}
+}
+
+func TestHeldCallNoRuleCoversIsUnmarked(t *testing.T) {
+	h := newBridgeHandler(t)
+	h.permissions.holdFor = 3 * time.Second
+	withDenyRules(t, h, "Bash(rm:*)")
+	go func() {
+		_ = post(t, h.PermissionRequest, "/api/hooks/permission", preToolBody("s1", "Bash", "ls -la"), true)
+	}()
+	waitForPendingID(t, h, "s1")
+
+	if pending, _ := pendingOf(t, h, "s1"); pending[0].DeniedBy != nil {
+		t.Fatalf("deniedBy = %q for a call no rule covers", *pending[0].DeniedBy)
+	}
+}
+
+// Hiding the button is presentation. The rule has to hold at the endpoint too,
+// because the client is not the gate.
+func TestRespondRefusesToAllowADeniedCall(t *testing.T) {
+	h := newBridgeHandler(t)
+	h.permissions.holdFor = 3 * time.Second
+	withDenyRules(t, h, "Bash(rm:*)")
+	done := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		done <- post(t, h.PermissionRequest, "/api/hooks/permission", preToolBody("s1", "Bash", "rm -rf /"), true)
+	}()
+	id := waitForPendingID(t, h, "s1")
+
+	rr := post(t, h.PermissionRespond, "/api/hooks/permission/respond",
+		map[string]string{"id": id, "decision": "allow"}, false)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403 — an allow released a rule the user configured", rr.Code)
+	}
+
+	// The request stays answerable: Deny is still a valid decision for it.
+	rr = post(t, h.PermissionRespond, "/api/hooks/permission/respond",
+		map[string]string{"id": id, "decision": "deny"}, false)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("deny status = %d, want 200: %s", rr.Code, rr.Body.String())
+	}
+	var out struct {
+		HookSpecificOutput struct {
+			PermissionDecision string `json:"permissionDecision"`
+		} `json:"hookSpecificOutput"`
+	}
+	if err := json.Unmarshal((<-done).Body.Bytes(), &out); err != nil {
+		t.Fatalf("hook body is not JSON: %v", err)
+	}
+	if out.HookSpecificOutput.PermissionDecision != "deny" {
+		t.Fatalf("permissionDecision = %q, want deny", out.HookSpecificOutput.PermissionDecision)
+	}
+}
+
+// The matcher sees the raw argument, not the display copy: sanitizing collapses
+// whitespace, and "rm  -rf /" would otherwise stop matching a Bash(rm:*) prefix
+// that Claude Code's own evaluation still applies.
+func TestDenyMatchingUsesTheRawArgument(t *testing.T) {
+	h := newBridgeHandler(t)
+	h.permissions.holdFor = 3 * time.Second
+	withDenyRules(t, h, "Bash(rm\t-rf:*)")
+	go func() {
+		_ = post(t, h.PermissionRequest, "/api/hooks/permission", preToolBody("s1", "Bash", "rm\t-rf /tmp/x"), true)
+	}()
+	waitForPendingID(t, h, "s1")
+
+	if pending, _ := pendingOf(t, h, "s1"); pending[0].DeniedBy == nil {
+		t.Fatal("the tab was collapsed before matching, so the rule missed")
+	}
+}
+
+// Without a reader the bridge behaves as it does on a machine with no settings
+// file at all: every held call is offered.
+func TestNoDenyReaderOffersEveryCall(t *testing.T) {
+	h := newBridgeHandler(t)
+	h.permissions.holdFor = 3 * time.Second
+	go func() {
+		_ = post(t, h.PermissionRequest, "/api/hooks/permission", preToolBody("s1", "Bash", "rm -rf /"), true)
+	}()
+	id := waitForPendingID(t, h, "s1")
+
+	if pending, _ := pendingOf(t, h, "s1"); pending[0].DeniedBy != nil {
+		t.Fatalf("deniedBy = %q with no reader configured", *pending[0].DeniedBy)
+	}
+	if rr := post(t, h.PermissionRespond, "/api/hooks/permission/respond",
+		map[string]string{"id": id, "decision": "allow"}, false); rr.Code != http.StatusOK {
+		t.Fatalf("allow status = %d, want 200", rr.Code)
 	}
 }

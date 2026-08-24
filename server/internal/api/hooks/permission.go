@@ -3,6 +3,7 @@ package hooks
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"sort"
 	"sync"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lx-wnk/agent-dashboard/sdk"
+	"github.com/lx-wnk/agent-dashboard/server/internal/claudesettings"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sanitize"
 )
 
@@ -89,6 +91,9 @@ type PermissionBridge struct {
 	nowFn    func() time.Time
 	holdFor  time.Duration
 	noticeFn func() // called when the pending set changes, to nudge a rescan
+	// deny reads the permission rules the user configured for Claude Code
+	// itself. A held call those rules forbid is offered without an Allow.
+	deny *claudesettings.Reader
 }
 
 // NewPermissionBridge builds a bridge. onChange may be nil; when set it is
@@ -113,6 +118,15 @@ func (b *PermissionBridge) SetOnChange(fn func()) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.noticeFn = fn
+}
+
+// SetDenyReader installs the source of the user's own permission rules. Until
+// one is set the bridge offers every held call for approval, which is the
+// behaviour a machine without a settings file has anyway.
+func (b *PermissionBridge) SetDenyReader(r *claudesettings.Reader) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.deny = r
 }
 
 func (b *PermissionBridge) changed() {
@@ -212,9 +226,12 @@ func (h *Handler) PermissionRespond(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, `decision must be "allow" or "deny"`)
 		return
 	}
-	if !h.permissions.resolve(body.ID, body.Decision) {
-		// Already lapsed into the terminal prompt, or answered by someone else.
-		writeJSONError(w, http.StatusConflict, "this request is no longer waiting for a decision")
+	switch err := h.permissions.resolve(body.ID, body.Decision); {
+	case errors.Is(err, errDeniedByRule):
+		writeJSONError(w, http.StatusForbidden, err.Error())
+		return
+	case err != nil:
+		writeJSONError(w, http.StatusConflict, err.Error())
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -250,11 +267,13 @@ func (h *Handler) PermissionArm(w http.ResponseWriter, r *http.Request) {
 func (b *PermissionBridge) hold(ctx context.Context, p preToolPayload) (string, bool) {
 	seq := b.seq.Add(1)
 	id := uuid.New().String()
+	raw := argumentOf(p)
 	entry := &permissionRequest{
 		perm: sdk.PendingPermission{
 			ID:          id,
 			Tool:        p.ToolName,
-			Pattern:     patternOf(p),
+			Pattern:     displayPattern(raw),
+			DeniedBy:    b.deniedBy(p, raw),
 			Reason:      nil,
 			RequestedAt: b.nowFn().UTC().Format(time.RFC3339),
 		},
@@ -293,23 +312,63 @@ func (b *PermissionBridge) hold(ctx context.Context, p preToolPayload) (string, 
 	}
 }
 
+// errNotPending means the request lapsed into the terminal prompt, or someone
+// else already answered it.
+var errNotPending = errors.New("this request is no longer waiting for a decision")
+
+// errDeniedByRule means the call is covered by the user's own permissions.deny.
+// The client hides Allow for such a request, but the rule has to hold here too:
+// the client is not the gate, and a hook "allow" would short-circuit the very
+// evaluation that would otherwise apply the rule.
+var errDeniedByRule = errors.New("your own permission rules deny this call")
+
 // resolve delivers a decision to a held call. Look-up, removal and send happen
 // in one critical section: releasing the lock before the send let a hold time
 // out in the gap, so the send landed in an orphaned buffer while the caller was
 // told the decision had been delivered.
-func (b *PermissionBridge) resolve(id, decision string) bool {
+func (b *PermissionBridge) resolve(id, decision string) error {
 	b.mu.Lock()
 	entry, ok := b.pending[id]
+	if ok && decision == "allow" && entry.perm.DeniedBy != nil {
+		b.mu.Unlock()
+		// Left pending on purpose: Deny is still a valid answer for it.
+		return errDeniedByRule
+	}
 	if ok {
 		delete(b.pending, id)
 	}
 	b.mu.Unlock()
 	if !ok {
-		return false
+		return errNotPending
 	}
 	// Cap-1 buffer, sole sender, entry now unreachable to any other resolver.
 	entry.ch <- decision
-	return true
+	return nil
+}
+
+// deniedBy names the first configured rule forbidding this call, or nil.
+//
+// The RAW argument is matched, never the display copy: sanitizing collapses
+// whitespace, so "rm  -rf /" would stop matching a `Bash(rm:*)` prefix that the
+// session's own evaluation still applies.
+func (b *PermissionBridge) deniedBy(p preToolPayload, raw string) *string {
+	b.mu.Lock()
+	reader := b.deny
+	b.mu.Unlock()
+	if reader == nil {
+		return nil
+	}
+	rule := claudesettings.FirstMatch(reader.DenyRules(p.CWD), p.ToolName, raw)
+	if rule == nil {
+		return nil
+	}
+	// The rule text is the user's own, from their own settings file — but it is
+	// rendered next to a decision, and the same display contract applies.
+	shown, _ := sanitize.ForDisplayCapped(rule.Raw, maxPatternRunes)
+	if shown == "" {
+		return nil
+	}
+	return &shown
 }
 
 // Arm marks a session's prompts as ones the dashboard should intercept, or
@@ -415,11 +474,34 @@ func (b *PermissionBridge) isArmedReadLocked(sessionID string) bool {
 	return ok && b.nowFn().Sub(at) <= armedTTL
 }
 
-// patternOf extracts the tool's own argument from the hook payload: the Bash
+// argumentOf extracts the tool's own argument from the hook payload: the Bash
 // command, the file path for a tool that names one, or the URL. This is the same
 // value the parser derives from the transcript, but taken from the producer
 // instead of reconstructed — so it is the argument the session is actually
 // asking about.
+//
+// It is returned verbatim. Two consumers want opposite things from it: the deny
+// matcher needs the exact bytes Claude Code will itself evaluate, and the card
+// needs something safe to render. displayPattern is the second half.
+func argumentOf(p preToolPayload) string {
+	var in struct {
+		Command  string `json:"command"`
+		FilePath string `json:"file_path"`
+		URL      string `json:"url"`
+	}
+	if json.Unmarshal(p.ToolInput, &in) != nil {
+		return ""
+	}
+	if in.Command != "" {
+		return in.Command
+	}
+	if in.FilePath != "" {
+		return in.FilePath
+	}
+	return in.URL
+}
+
+// displayPattern is the render-safe form of a tool argument.
 //
 // It is sanitized, unlike the parser's PendingToolUse.Pattern. That one is the
 // grant identity, matched against a stored preset by exact equality, so
@@ -428,28 +510,13 @@ func (b *PermissionBridge) isArmedReadLocked(sessionID string) bool {
 // anywhere. Leaving it raw put agent-authored text with a possible bidi override
 // straight into the title of the Allow button — the same gap this project
 // closed for the transcript path one layer up.
-func patternOf(p preToolPayload) *string {
-	var in struct {
-		Command  string `json:"command"`
-		FilePath string `json:"file_path"`
-		URL      string `json:"url"`
-	}
-	if json.Unmarshal(p.ToolInput, &in) != nil {
-		return nil
-	}
-	v := in.Command
-	if v == "" {
-		v = in.FilePath
-	}
-	if v == "" {
-		v = in.URL
-	}
-	if v == "" {
+func displayPattern(raw string) *string {
+	if raw == "" {
 		return nil
 	}
 	// Rune-capped by the sanitizer, not sliced by bytes: a cut through a
 	// multi-byte character yields U+FFFD on the wire.
-	display, _ := sanitize.ForDisplayCapped(v, maxPatternRunes)
+	display, _ := sanitize.ForDisplayCapped(raw, maxPatternRunes)
 	if display == "" {
 		return nil
 	}
