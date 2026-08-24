@@ -192,23 +192,67 @@ describe('agentTriageBand permission bridge', () => {
 
   // A held PreToolUse hook call is the live decision: answering it releases the
   // run, so the card offers both directions rather than a rule for next time.
-  it('offers Allow and Deny for a free agent whose prompt the bridge holds', () => {
-    const wrapper = mountBand(makeAgent({ pendingPermissions: [perm()] }))
+  it('offers Allow and Deny for an agent whose prompt the bridge holds', () => {
+    const wrapper = mountBand(makeAgent({ heldPermissions: [perm()] }))
     expect(bridgeButtons(wrapper).map(b => b.text())).toEqual(['Allow', 'Deny'])
   })
 
-  // An orchestrated agent is approved through the pipeline control, which also
-  // records the decision against its task — the bridge must not shortcut that.
-  it('leaves an orchestrated agent to the pipeline approve control', () => {
+  // A held hook call is answerable however the session was started. Orchestration
+  // decides how a PIPELINE request is resolved, not whether a blocked session can
+  // be released.
+  it('offers the decision for an orchestrated agent too', () => {
+    const wrapper = mountBand(makeAgent({ pipelineTaskId: 'task-1', heldPermissions: [perm()] }))
+    expect(bridgeButtons(wrapper)).toHaveLength(2)
+  })
+
+  // Pipeline requests live in a different field and resolve through a different
+  // endpoint; the bridge must not offer to answer them.
+  it('offers no bridge decision for a pipeline request', () => {
     const wrapper = mountBand(makeAgent({ pipelineTaskId: 'task-1', pendingPermissions: [perm()] }))
     expect(wrapper.text()).toContain('Approve')
-    // The pipeline control has a Deny of its own, so the check is that the
-    // bridge added none — not that the word is absent from the card.
     expect(bridgeButtons(wrapper)).toHaveLength(0)
+  })
+
+  // The bridge can hold several calls at once when the agent batches tool calls.
+  // Answering only the first left the rest to lapse with nothing on screen.
+  it('renders one decision row per held request', () => {
+    const wrapper = mountBand(makeAgent({
+      heldPermissions: [perm({ id: 'a' }), perm({ id: 'b', pattern: 'rm -rf /tmp/x' })],
+    }))
+    expect(wrapper.findAll('[data-testid="permission-decide-allow"]')).toHaveLength(2)
+    expect(wrapper.text()).toContain('rm -rf /tmp/x')
+  })
+
+  // The body must describe what the buttons below it answer. pendingToolUse is
+  // reconstructed from the transcript and can name a different call entirely.
+  it('describes the held call, not the transcript\'s pending tool use', () => {
+    const wrapper = mountBand(makeAgent({
+      heldPermissions: [perm({ pattern: 'npm publish' })],
+      pendingToolUse: toolUse({ id: 'tu_other', tool: 'Read', pattern: '/etc/passwd' }),
+    }))
+    expect(wrapper.text()).toContain('npm publish')
+    expect(wrapper.text()).not.toContain('/etc/passwd')
   })
 
   // The terminal is already asking, so there is nothing here to answer — only a
   // rule for future runs, which is what the older control always did.
+  it('offers to intercept the next prompt once this one reached the terminal', () => {
+    const wrapper = mountBand(makeAgent({
+      awaitingTerminalPermission: true,
+      pendingToolUse: toolUse({ id: 'tu_b', tool: 'Bash', pattern: 'npm publish' }),
+    }))
+    expect(wrapper.find('[data-testid="permission-arm"]').exists()).toBe(true)
+  })
+
+  it('offers no interception control for a session already armed', () => {
+    const wrapper = mountBand(makeAgent({
+      awaitingTerminalPermission: true,
+      permissionBridgeArmed: true,
+      pendingToolUse: toolUse({ id: 'tu_b', tool: 'Bash', pattern: 'npm publish' }),
+    }))
+    expect(wrapper.find('[data-testid="permission-arm"]').exists()).toBe(false)
+  })
+
   it('offers the standing rule, not a live decision, once the prompt reached the terminal', () => {
     const wrapper = mountBand(makeAgent({
       awaitingTerminalPermission: true,
@@ -225,7 +269,7 @@ describe('agentTriageBand permission bridge', () => {
       return { ok: true, status: 200 } as Response
     }))
 
-    const wrapper = mountBand(makeAgent({ pendingPermissions: [perm({ id: 'req-42' })] }))
+    const wrapper = mountBand(makeAgent({ heldPermissions: [perm({ id: 'req-42' })] }))
     const allow = bridgeButtons(wrapper)[0]
     expect(allow).toBeTruthy()
     await allow.trigger('click')

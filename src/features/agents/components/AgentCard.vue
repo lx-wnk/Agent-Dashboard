@@ -8,6 +8,7 @@ import AppBadge from '@/components/ui/AppBadge.vue'
 import AppCard from '@/components/ui/AppCard.vue'
 import AppModal from '@/components/ui/AppModal.vue'
 import { useNow } from '@/composables/useNow'
+import { toast } from '@/composables/useToast'
 import MetricsPopover from '@/features/agents/components/MetricsPopover.vue'
 import { useAgentIdentity } from '@/features/agents/composables/useAgentIdentity'
 import { formatCost, formatDuration, formatTokens, formatUptime, isAwaitingInput, isStalled, secondsSince, shortModel, totalTokenCount } from '@/utils/format'
@@ -75,6 +76,29 @@ const showMetrics = ref(false)
 // The live terminal used to be a tab at the bottom of the agent modal. It is
 // reached from the card now, so the modal stays a place to read and reply.
 // xterm.js is ~490KB — keep it in its own chunk, loaded on first open.
+const arming = ref(false)
+// Arming is per session and lives on the bridge, not in the client: the hook
+// asks the server on every gated tool call, and the server has to know before
+// the card is even on screen.
+async function toggleArmed() {
+  arming.value = true
+  try {
+    const res = await fetch('/api/hooks/permission/arm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: props.agent.sessionId, armed: !props.agent.permissionBridgeArmed }),
+    })
+    if (!res.ok)
+      throw new Error(`HTTP ${res.status}`)
+  }
+  catch (e) {
+    toast.error(`Could not change interception: ${e instanceof Error ? e.message : String(e)}`)
+  }
+  finally {
+    arming.value = false
+  }
+}
+
 const showTerminal = ref(false)
 const AgentTerminal = defineAsyncComponent(() => import('./AgentTerminal.vue'))
 </script>
@@ -163,6 +187,22 @@ const AgentTerminal = defineAsyncComponent(() => import('./AgentTerminal.vue'))
             data-testid="agent-card-terminal"
             @click.stop="showTerminal = true"
           >⌨</button>
+          <button
+            v-if="!isFinished"
+            type="button"
+            class="inline-flex items-center justify-center min-w-6 min-h-6 text-[11px] leading-none focus-visible:outline-2 focus-visible:outline-ring rounded"
+            :class="agent.permissionBridgeArmed ? 'text-warning-text' : 'text-fg-mute hover:text-fg-soft'"
+            :aria-pressed="agent.permissionBridgeArmed ? 'true' : 'false'"
+            :aria-label="agent.permissionBridgeArmed
+              ? 'Stop answering this session\'s permission prompts here'
+              : 'Answer this session\'s permission prompts here instead of in its terminal'"
+            :title="agent.permissionBridgeArmed
+              ? 'Permission prompts from this session are answered here. Click to hand them back to its terminal.'
+              : 'Answer this session\'s permission prompts here instead of in its terminal. Requires the hooks to be installed.'"
+            :disabled="arming"
+            data-testid="agent-card-arm-permissions"
+            @click.stop="toggleArmed"
+          >{{ agent.permissionBridgeArmed ? '🔒' : '🔓' }}</button>
           <button
             v-if="isFinished"
             type="button"

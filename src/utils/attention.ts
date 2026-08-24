@@ -27,8 +27,14 @@ export function attentionFor(agent: Agent, secondsSinceActivity: number | null):
   // session sits there until someone presses a key.
   if (agent.pendingConfirm)
     return { kind: 'question', label: 'Confirm answers', tone: 'warning', weight: -1, grantable: false }
-  // A held PreToolUse hook call, or a pipeline stage run's stored request:
-  // either way the session is blocked and the answer can be given from here.
+  // A PreToolUse hook call the bridge is holding open: the session is blocked
+  // right now and one click releases or refuses it. Ranked above a pipeline
+  // request because it expires — nobody answering means the run falls back to
+  // its terminal, where the dashboard can no longer help.
+  if (agent.heldPermissions && agent.heldPermissions.length > 0)
+    return { kind: 'permission', label: 'Awaiting your decision', tone: 'warning', weight: 0, grantable: true }
+  // A pipeline stage run's stored request: answered through the task's approve
+  // control, which also records the decision against the task.
   if (agent.pendingPermissions && agent.pendingPermissions.length > 0)
     return { kind: 'permission', label: 'Needs permission', tone: 'warning', weight: 0, grantable: true }
   // The session is showing its own prompt: the bridge lapsed before anyone
