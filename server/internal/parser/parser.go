@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/lx-wnk/agent-dashboard/sdk"
+	"github.com/lx-wnk/agent-dashboard/server/internal/sanitize"
 )
 
 const tailBytes = 32768 // 32KB from end
@@ -300,6 +301,43 @@ type pendingToolInput struct {
 	FilePath string `json:"file_path"` // Edit, Write
 }
 
+const toolDetailMaxLen = 120
+
+// toolArgument returns the tool's own argument verbatim: the Bash command, or
+// the Edit/Write path. A permission preset is matched by exact equality, so
+// anything that reaches a grant must use this and never the display form.
+func toolArgument(raw json.RawMessage) string {
+	var inp pendingToolInput
+	_ = json.Unmarshal(raw, &inp)
+	if inp.Command != "" {
+		return inp.Command
+	}
+	return inp.FilePath
+}
+
+// toolDetail is the display form of toolArgument: stripped of characters that
+// can make a command render as a different one, collapsed to one line, and cut
+// so a single entry cannot dominate the list. The second return is how many
+// characters were cut, 0 when nothing was.
+//
+// The count is deliberately NOT formatted into the string. A marker inside the
+// payload is one the payload can forge -- an agent-authored command ending in
+// "… (+400 chars)" would read as a server-truncated prefix of something longer.
+// The client renders the count as its own element instead.
+func toolDetail(raw json.RawMessage) (string, int) {
+	return sanitize.ForDisplayCapped(toolArgument(raw), toolDetailMaxLen)
+}
+
+// patternDisplayMaxLen bounds the human-facing twin of a grant pattern. Longer
+// than the recent-tool trail's cap because this one is the text someone reads
+// while deciding, but still bounded: it rides on every SSE tick.
+const patternDisplayMaxLen = 400
+
+func patternDisplayOf(pattern string) string {
+	d, _ := sanitize.ForDisplayCapped(pattern, patternDisplayMaxLen)
+	return d
+}
+
 // todoInput is the input shape for TodoWrite tool calls.
 type todoInput struct {
 	Todos []struct {
@@ -442,7 +480,7 @@ type SessionData struct {
 	Entrypoint          sdk.Entrypoint
 	LastActivity        time.Time
 	CurrentAction       string
-	LastTools           []string
+	LastTools           []sdk.RecentTool
 	Tasks               []sdk.TaskInfo
 	TokenUsage          sdk.TokenUsage
 	Model               string
@@ -723,7 +761,14 @@ func ParseSessionFile(path string) (*SessionData, error) {
 		LastActivity: time.Now().Add(-24 * time.Hour), // default: old
 	}
 
-	var recentToolNames []string
+	// Name and raw input only: the display form costs a JSON unmarshal, a rune
+	// scan and two string copies, and all but the last five entries are dropped
+	// below. Deriving it here would compute it for every tool_use in the tail.
+	type trackedRecentTool struct {
+		name  string
+		input json.RawMessage
+	}
+	var recentTools []trackedRecentTool
 
 	// pendingToolUses tracks assistant tool_use blocks (id → block) in order; the
 	// last one with no matching tool_result is the pending tool. Ordered slice
@@ -806,7 +851,7 @@ func ParseSessionFile(path string) (*SessionData, error) {
 					case "tool_use":
 						hasToolUse = true
 						data.ToolCounts[b.Name]++
-						recentToolNames = append(recentToolNames, b.Name)
+						recentTools = append(recentTools, trackedRecentTool{name: b.Name, input: b.Input})
 						data.CurrentAction = b.Name
 						if b.ID != "" {
 							toolUseOrder = append(toolUseOrder, trackedToolUse{id: b.ID, name: b.Name, input: b.Input})
@@ -849,16 +894,17 @@ func ParseSessionFile(path string) (*SessionData, error) {
 	if n := len(toolUseOrder); n > 0 {
 		tu := toolUseOrder[n-1]
 		if !resolvedToolUseIDs[tu.id] {
-			var inp pendingToolInput
-			_ = json.Unmarshal(tu.input, &inp)
-			pattern := inp.Command
-			if pattern == "" {
-				pattern = inp.FilePath
-			}
+			pattern := toolArgument(tu.input)
 			data.PendingToolUse = &sdk.PendingToolUse{
-				ID:      tu.id,
-				Tool:    tu.name,
+				ID:   tu.id,
+				Tool: tu.name,
+				// Verbatim: this is the grant identity, matched by exact
+				// equality. The sanitized twin is what a human is shown.
 				Pattern: pattern,
+				// Capped as well as sanitized: the display twin is not the
+				// grant identity, and shipping a multi-kilobyte command twice
+				// on every SSE tick buys nothing a human can read.
+				PatternDisplay: patternDisplayOf(pattern),
 			}
 		}
 	}
@@ -894,25 +940,30 @@ func ParseSessionFile(path string) (*SessionData, error) {
 		data.TokenUsage = full.TokenUsage
 	}
 
-	if len(recentToolNames) > 5 {
-		data.LastTools = recentToolNames[len(recentToolNames)-5:]
-	} else {
-		data.LastTools = recentToolNames
+	kept := recentTools
+	if len(kept) > 5 {
+		kept = kept[len(kept)-5:]
+	}
+	data.LastTools = make([]sdk.RecentTool, len(kept))
+	for i, t := range kept {
+		detail, elided := toolDetail(t.input)
+		data.LastTools[i] = sdk.RecentTool{Name: t.name, Detail: detail, Elided: elided}
 	}
 
-	// Convergence detection: last 5 tools identical
-	if len(recentToolNames) >= 5 {
-		last5 := recentToolNames[len(recentToolNames)-5:]
+	// Convergence detection: last 5 tools identical. Compares names only -- the
+	// same tool with different arguments is progress, not a loop.
+	if len(recentTools) >= 5 {
+		last5 := recentTools[len(recentTools)-5:]
 		allSame := true
 		for _, t := range last5[1:] {
-			if t != last5[0] {
+			if t.name != last5[0].name {
 				allSame = false
 				break
 			}
 		}
 		if allSame {
 			data.ConvergenceAlert = true
-			data.ConvergenceToolName = last5[0]
+			data.ConvergenceToolName = last5[0].name
 		}
 	}
 

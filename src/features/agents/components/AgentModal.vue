@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Agent, OutputMessage, SubAgent } from '@/types'
-import { computed, defineAsyncComponent, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import CrossLinkBanner from '@/components/CrossLinkBanner.vue'
 import HookEventList from '@/components/HookEventList.vue'
 import MachineBadge from '@/components/MachineBadge.vue'
@@ -10,7 +10,6 @@ import ToolTimeline from '@/components/ToolTimeline.vue'
 import AppBadge from '@/components/ui/AppBadge.vue'
 import AppModal from '@/components/ui/AppModal.vue'
 import { usePermissionResolve } from '@/composables/usePermissionResolve'
-import { useRovingTabList } from '@/composables/useRovingTabList'
 import { toast } from '@/composables/useToast'
 import { useAgentIdentity } from '@/features/agents/composables/useAgentIdentity'
 import { PluginSlot } from '@/features/plugins'
@@ -24,18 +23,7 @@ const props = defineProps<{ agent: Agent | null }>()
 
 const emit = defineEmits<{ close: [], navigate: [taskId: string] }>()
 
-// Waterfall chart is heavy (d3) — split into its own chunk, loaded when the view is first opened.
-const ExecutionWaterfall = defineAsyncComponent(() => import('@/components/ExecutionWaterfall.vue'))
-
 const localMessages = ref<OutputMessage[]>([])
-// The modal shows one thing at a time. Session context (tasks, subagents,
-// tools) sits beside the transcript rather than behind a tab, because it is
-// what you read *while* reading the transcript.
-const viewTabs = computed(() => ['transcript', 'waterfall'])
-const { activeTab: activeView, tabAttrs, panelAttrs, onKeydown, select } = useRovingTabList(
-  viewTabs,
-  { idPrefix: 'agent-view' },
-)
 const promptInputRef = ref<InstanceType<typeof PromptInput> | null>(null)
 const chatStreamRef = ref<InstanceType<typeof AgentChatStream> | null>(null)
 const showMetrics = ref(false)
@@ -119,19 +107,6 @@ watch(() => props.agent?.sessionId, (sessionId) => {
           </span>
         </div>
         <div class="flex items-center gap-2 flex-shrink-0">
-          <div role="tablist" aria-label="Agent view" class="flex bg-app rounded-lg p-0.5 gap-0.5" @keydown="onKeydown">
-            <button
-              v-for="view in viewTabs"
-              :key="view"
-              v-bind="tabAttrs(view)"
-              type="button"
-              class="px-2.5 py-1 text-xs rounded-md capitalize transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent"
-              :class="activeView === view ? 'bg-card text-fg font-medium' : 'text-fg-mute hover:text-fg'"
-              @click="select(view)"
-            >
-              {{ view }}
-            </button>
-          </div>
           <button type="button" aria-label="Close" class="bg-transparent border-none text-fg-mute text-base cursor-pointer px-2 py-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-fg" @click="emit('close')">
             ✕
           </button>
@@ -177,16 +152,11 @@ watch(() => props.agent?.sessionId, (sessionId) => {
           <HookEventList v-if="(agent.recentHookEvents?.length ?? 0) > 0" :events="agent.recentHookEvents ?? []" />
         </div>
         <AgentChatStream
-          v-show="activeView === 'transcript'"
           ref="chatStreamRef"
-          v-bind="panelAttrs('transcript')"
           :agent="agent"
           :local-messages="localMessages"
           class="flex-1 min-h-0 overflow-y-auto p-4"
         />
-        <div v-if="activeView === 'waterfall'" v-bind="panelAttrs('waterfall')" class="flex-1 min-h-0 overflow-y-auto p-4">
-          <ExecutionWaterfall :session-id="agent.sessionId" />
-        </div>
       </template>
       <PromptInput v-if="!agent.machine" ref="promptInputRef" :agent="agent" variant="full" :approve-handler="approveHandler" @message-sent="onMessageSent" />
       <PluginSlot name="agent-modal-footer" :ctx="{ agent }" />

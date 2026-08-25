@@ -479,7 +479,7 @@ func (m *Merger) buildAgent(proc scanner.ProcessInfo, session *parser.SessionDat
 		Uptime:                    proc.Uptime,
 		LastActivity:              session.LastActivity.Format(time.RFC3339),
 		CurrentAction:             strPtr(session.CurrentAction),
-		LastTools:                 append(make([]string, 0), session.LastTools...),
+		LastTools:                 append(make([]sdk.RecentTool, 0), session.LastTools...),
 		Tasks:                     append(make([]sdk.TaskInfo, 0), session.Tasks...),
 		Subagents:                 buildSubagents(session),
 		TokenUsage:                session.TokenUsage,

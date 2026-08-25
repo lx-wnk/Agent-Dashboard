@@ -120,7 +120,13 @@ type RouterDeps struct {
 	// HookStore records per-event hook granularity. The same instance is read by
 	// the Enricher (via the agentbroadcast hook enricher) so events POSTed to
 	// /api/hooks/event surface on the matching agent. May be nil (recording off).
-	HookStore         *hookstore.Store
+	HookStore *hookstore.Store
+	// PermissionBridge holds PreToolUse hook calls open for a dashboard decision.
+	// Built in the DI container because the agent enricher reads the same
+	// instance and is constructed before this router. May be nil, in which case
+	// this router builds an unobserved one so the endpoints still answer — no
+	// agent is annotated, because nothing else holds a reference to it.
+	PermissionBridge  *hooks.PermissionBridge
 	OAuthProvider     authpkg.OAuthProvider
 	UserRepo          repo.UserRepo
 	ApiKeyRepo        repo.ApiKeyRepo
@@ -213,9 +219,25 @@ func NewRouter(deps RouterDeps) http.Handler {
 	if debounceMs <= 0 {
 		debounceMs = 100
 	}
-	hooksHandler := hooks.New(deps.Config.HooksSecret, deps.HookStore, newDebouncedRescan(serverCtx, deps.AgentBroadcaster, debounceMs, getAgents))
+	rescan := newDebouncedRescan(serverCtx, deps.AgentBroadcaster, debounceMs, getAgents)
+	permissionBridge := deps.PermissionBridge
+	if permissionBridge == nil {
+		permissionBridge = hooks.NewPermissionBridge(nil)
+	}
+	// The rescan is this router's; installing it on the bridge is therefore this
+	// router's call. A held or resolved permission then reaches connected clients
+	// without waiting for the next scan tick.
+	permissionBridge.SetOnChange(rescan)
+	hooksHandler := hooks.New(deps.Config.HooksSecret, deps.HookStore, rescan, permissionBridge)
+	hooksHandler.SetSessionCWD(newSessionCWDLookup(getAgents))
 	r.Post("/api/hooks/event", hooksHandler.Event)
 	r.Post("/api/hooks/pre-tool", hooksHandler.PreTool)
+	// Permission bridge ingress, secret-authenticated like the two above. The
+	// request call is held open while a human decides, so it is deliberately a
+	// slow endpoint; every failure path answers "no decision" and Claude Code
+	// falls back to its own terminal prompt.
+	r.Post("/api/hooks/permission", hooksHandler.PermissionRequest)
+	r.Post("/api/hooks/notification", hooksHandler.PermissionNotify)
 	// NOTE: /api/hooks/respond and /api/hooks/pending are browser-facing (the edit
 	// gate UI reads pending edits and posts the user's decision). They carry the
 	// session cookie, not the hooks secret, so they are registered inside the
@@ -265,7 +287,6 @@ func NewRouter(deps RouterDeps) http.Handler {
 		r.Get("/api/agents/{sessionId}/output", sessions.Output)
 
 		r.Get("/api/sessions", sessions.List)
-		r.Get("/api/sessions/{sessionId}/timeline", sessions.Timeline)
 		commandsHandler := sessions.NewCommandsHandler(deps.SpawnerRepo, getAgents)
 		r.Get("/api/slash-commands", commandsHandler.SlashCommands)
 
@@ -467,6 +488,18 @@ func NewRouter(deps RouterDeps) http.Handler {
 		// auth), these are called by EditGateModal.vue with the session cookie.
 		r.Get("/api/hooks/pending", hooksHandler.Pending)
 		r.Post("/api/hooks/respond", hooksHandler.Respond)
+		// Not mounted under DASHBOARD_AUTH=none. The bridge's premise is that a
+		// human weighs a tool call before it runs; with JWT off, the remaining
+		// gates are loopback and an Origin header any non-browser process sets
+		// for itself, so "a human decided" reduces to "any local process
+		// decided" — and a hook allow short-circuits Claude Code's own
+		// evaluation. Without arming nothing is ever held, so the bridge
+		// degrades to the terminal prompt it already falls back to, and the
+		// dashboard still reports that a session is waiting there.
+		if !deps.Config.BypassAuth {
+			r.Post("/api/hooks/permission/respond", hooksHandler.PermissionRespond)
+			r.Post("/api/hooks/permission/arm", hooksHandler.PermissionArm)
+		}
 
 		// SP1 lifecycle + settings endpoints under the clean /api/plugins namespace.
 		// The read-only list is needed by non-admin users for slot discovery, so it
@@ -618,6 +651,26 @@ func gzipMiddleware(next http.Handler) http.Handler {
 // newDebouncedRescan returns an OnEventFn that triggers an agent rescan after debounceMs.
 // Multiple calls within the window collapse into one rescan.
 // ctx should be the server-lifetime context so the rescan is cancelled on shutdown.
+// newSessionCWDLookup answers "is this session live, and where does it run"
+// from the same scan the roster is built from. The permission bridge vouches
+// for a session at arming time with it: session_id otherwise arrives only in a
+// POST body, so any local process holding the hook secret could raise a card
+// under a trusted agent's name.
+func newSessionCWDLookup(getAgents func(context.Context) ([]sdk.Agent, error)) hooks.SessionCWDFn {
+	return func(ctx context.Context, sessionID string) (string, bool) {
+		agents, err := getAgents(ctx)
+		if err != nil {
+			return "", false
+		}
+		for _, a := range agents {
+			if a.SessionID == sessionID {
+				return a.CWD, true
+			}
+		}
+		return "", false
+	}
+}
+
 func newDebouncedRescan(ctx context.Context, broadcaster *sse.Broadcaster, debounceMs int, getAgents func(context.Context) ([]sdk.Agent, error)) hooks.OnEventFn {
 	var mu sync.Mutex
 	var timer *time.Timer

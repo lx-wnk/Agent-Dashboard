@@ -50,10 +50,30 @@ const toneLabelClass: Record<string, string> = {
 // AND whose attention kind is error/stalled — or free agents with pendingToolUse.
 const orchestratedTaskIds = computed(() => new Set(props.permissionItems.map(i => i.taskId)))
 
-const visibleAgentCards = computed(() =>
-  props.agents.filter((agent) => {
+// "Allow AskUserQuestion" would write a meaningless standing allow-rule for a
+// tool nobody has to approve — and it is answered in the question card or the
+// terminal, not here.
+const ASK_USER_QUESTION_TOOL = 'AskUserQuestion'
+
+// Per-agent attention/secs/grant-eligibility, computed once per agent per tick
+// and reused by visibleAgentCards, breakdown, blockedDetail and the template.
+// grantableToolUse folds in attention.ts's Attention.grantable — the single
+// source for which attention kinds are genuine prompt-on-screen evidence — so
+// the template never recomputes that decision per usage.
+const agentAttentionMap = computed(() => {
+  const map = new Map<string, { att: ReturnType<typeof attentionFor>, secs: number | null, grantableToolUse: boolean }>()
+  for (const agent of props.agents) {
     const secs = secondsSince(agent.lastActivity, nowMs.value)
     const att = attentionFor(agent, secs)
+    const grantableToolUse = !!att?.grantable && !!agent.pendingToolUse && agent.pendingToolUse.tool !== ASK_USER_QUESTION_TOOL
+    map.set(agent.sessionId, { att, secs, grantableToolUse })
+  }
+  return map
+})
+
+const visibleAgentCards = computed(() =>
+  props.agents.filter((agent) => {
+    const att = agentAttentionMap.value.get(agent.sessionId)?.att
     if (!att)
       return false
     // A pending, answerable question always surfaces — regardless of orchestration.
@@ -71,16 +91,6 @@ const visibleAgentCards = computed(() =>
 
 // Total permission requests across all task-driven permission items
 const totalRequestCount = computed(() => props.permissionItems.reduce((s, i) => s + i.requests.length, 0))
-
-// Per-agent attention/secs, computed once per agent per tick (reused by breakdown, blockedDetail, template)
-const agentAttentionMap = computed(() => {
-  const map = new Map<string, { att: ReturnType<typeof attentionFor>, secs: number | null }>()
-  for (const agent of props.agents) {
-    const secs = secondsSince(agent.lastActivity, nowMs.value)
-    map.set(agent.sessionId, { att: attentionFor(agent, secs), secs })
-  }
-  return map
-})
 
 // Breakdown string: "2 permissions · 1 failed run · 1 stalled"
 const breakdown = computed(() => {
@@ -110,33 +120,45 @@ const totalCount = computed(() => props.permissionItems.length + visibleAgentCar
 
 const isClear = computed(() => totalCount.value === 0 && props.permissionItems.length === 0)
 
-// AskUserQuestion is never permission-gated: an unresolved one waits for an
-// ANSWER, not a grant. The parser still reports it as a pendingToolUse so a
-// session whose screen cannot be probed shows something at all, but offering
-// "Allow AskUserQuestion" would write a meaningless standing allow-rule for a
-// tool nobody has to approve — and it is answered in the question card or the
-// terminal, not here.
-const ASK_USER_QUESTION_TOOL = 'AskUserQuestion'
-
-function isGrantableToolUse(agent: Agent): boolean {
-  return !!agent.pendingToolUse && agent.pendingToolUse.tool !== ASK_USER_QUESTION_TOOL
-}
-
 function blockedDetail(agent: Agent): string {
   if (agent.pendingToolUse?.tool === ASK_USER_QUESTION_TOOL)
     return 'Waiting for your answer — open the terminal to reply'
-  if (agent.pendingToolUse)
-    return agent.pendingToolUse.pattern ? `${agent.pendingToolUse.tool}(${agent.pendingToolUse.pattern})` : agent.pendingToolUse.tool
   const entry = agentAttentionMap.value.get(agent.sessionId)
   const att = entry?.att
   if (!att)
     return ''
-  if (att.kind === 'permission')
-    return agent.currentAction || 'Waiting for permission'
-  if (att.kind === 'error')
-    return agent.errorState ? formatErrorState(agent.errorState) : (agent.currentAction || 'Run failed')
-  // stalled
-  return `Running but silent — last output ${formatRelativeActivity(entry.secs)}`
+  // Switch on the kind rather than on which fields happen to be set: an agent
+  // can carry a leftover pendingToolUse in any state, so a fallthrough chain
+  // let whichever branch came first answer for a kind it was not about.
+  switch (att.kind) {
+    case 'stalled': {
+      const activity = formatRelativeActivity(entry.secs)
+      return agent.pendingToolUse ? `${agent.pendingToolUse.tool} — running but silent, last output ${activity}` : `Running but silent — last output ${activity}`
+    }
+    case 'error':
+      return agent.errorState ? formatErrorState(agent.errorState) : (agent.currentAction || 'Run failed')
+    case 'permission': {
+      // The held call, not the transcript's pendingToolUse: with parallel tool
+      // calls those describe different things, and the body must describe what
+      // the buttons below it answer.
+      const held = agent.heldPermissions?.[0]
+      if (held)
+        return permissionLabel(held)
+      return toolUseLabel(agent) || agent.currentAction || 'Waiting for permission'
+    }
+    default:
+      return toolUseLabel(agent)
+  }
+}
+
+// patternDisplay, never pattern: the raw value is the grant identity and is
+// agent-authored, so a bidi override in it would render one command while the
+// button writes another. allowTool() sends pattern; only this reads the twin.
+function toolUseLabel(agent: Agent): string {
+  const t = agent.pendingToolUse
+  if (!t)
+    return ''
+  return t.patternDisplay ? `${t.tool}(${t.patternDisplay})` : t.tool
 }
 
 function permissionLabel(p: PendingPermission | PermissionRequest): string {
@@ -247,6 +269,79 @@ async function handleResolveAgent(agent: Agent, outcome: 'granted' | 'denied') {
   }
 }
 
+// A free agent's held permission request: the bridge is holding its PreToolUse
+// hook call open, so answering here resolves the call the session is blocked on.
+// Orchestrated agents are excluded — their requests are approved through the
+// pipeline control above, which also records the decision against the task.
+// The requests the bridge is holding open for this agent, in arrival order.
+// Orchestrated agents are included: a held hook call is answerable whichever
+// way the session was started, and the pipeline's own Approve control resolves
+// a different thing through a different endpoint.
+function heldRequests(agent: Agent): PendingPermission[] {
+  return agent.heldPermissions ?? []
+}
+
+const deciding = ref<Record<string, boolean>>({})
+// The request id is captured where the control was rendered, not re-derived at
+// click time: an SSE tick between paint and click can reorder or replace the
+// list, and re-deriving would answer a request the user was never shown.
+async function decidePermission(agent: Agent, request: PendingPermission, decision: 'allow' | 'deny') {
+  deciding.value[request.id] = true
+  try {
+    const res = await fetch('/api/hooks/permission/respond', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: request.id, decision }),
+    })
+    if (res.status === 409) {
+      // The hold lapsed while the card was on screen: the session has already
+      // fallen back to asking in its own terminal.
+      toast.info('Too late — that run is now asking in its terminal')
+      return
+    }
+    if (res.status === 403) {
+      // A rule appeared between paint and click, or something posted past the
+      // hidden button. Either way the server is the gate, not this template.
+      toast.error('Your own permission rules deny this — answer it in the terminal')
+      return
+    }
+    if (!res.ok)
+      throw new Error(`HTTP ${res.status}`)
+    toast.success(decision === 'allow'
+      ? `Allowed ${permissionLabel(request)}`
+      : `Denied ${permissionLabel(request)}`)
+  }
+  catch (e) {
+    toast.error(`Could not answer the prompt: ${e instanceof Error ? e.message : String(e)}`)
+  }
+  finally {
+    deciding.value[request.id] = false
+  }
+}
+
+const arming = ref<Record<string, boolean>>({})
+async function setArmed(agent: Agent, armed: boolean) {
+  arming.value[agent.sessionId] = true
+  try {
+    const res = await fetch('/api/hooks/permission/arm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: agent.sessionId, armed }),
+    })
+    if (!res.ok)
+      throw new Error(`HTTP ${res.status}`)
+    toast.success(armed
+      ? 'Next prompts from this session will be answerable here'
+      : 'This session will ask in its own terminal again')
+  }
+  catch (e) {
+    toast.error(`Could not change interception: ${e instanceof Error ? e.message : String(e)}`)
+  }
+  finally {
+    arming.value[agent.sessionId] = false
+  }
+}
+
 const allowing = ref<Record<string, boolean>>({})
 async function allowTool(agent: Agent) {
   const pending = agent.pendingToolUse
@@ -299,6 +394,60 @@ function setCardRef(sessionId: string, el: HTMLElement | null) {
   cardRefs.value[sessionId] = el
 }
 
+// The bridge's Allow/Deny row and the terminal-fallback control sit in
+// different v-if branches on the same card. A hold lapsing between SSE ticks
+// unmounts whichever button held focus, dumping a keyboard/screen-reader user
+// on <body> mid-decision (WCAG 2.4.3). `agents` arrives as a fresh array each
+// SSE tick, so a plain (non-deep) watch already fires per tick; the diff below
+// only needs the old vs. new heldPermissions length per session.
+const pendingRefocus = new Set<string>()
+
+watch(() => props.agents, (agents, oldAgents) => {
+  const oldById = new Map((oldAgents ?? []).map(a => [a.sessionId, a]))
+  for (const agent of agents) {
+    const oldHeld = oldById.get(agent.sessionId)?.heldPermissions?.length ?? 0
+    const newHeld = agent.heldPermissions?.length ?? 0
+    if (oldHeld > 0 && newHeld === 0 && cardRefs.value[agent.sessionId]?.contains(document.activeElement))
+      pendingRefocus.add(agent.sessionId)
+  }
+  if (pendingRefocus.size) {
+    nextTick(() => {
+      for (const sessionId of pendingRefocus)
+        cardRefs.value[sessionId]?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus()
+      pendingRefocus.clear()
+    })
+  }
+})
+
+// Targeted announcement for net-new bridge requests only — aria-live on the
+// whole section would re-fire on every ~3s tick as unrelated fields (uptime,
+// token counts) churn. Keyed on sessionId+request id, never on object
+// identity: agents (and their heldPermissions) are fresh objects each tick.
+// ponytail: announcedRequestIds never evicts; bounded by requests seen in this
+// tab's lifetime, cleared on reload.
+const announcedRequestIds = new Set<string>()
+const liveAnnouncement = ref('')
+
+watch(() => props.agents, (agents) => {
+  const fresh: string[] = []
+  for (const agent of agents) {
+    for (const req of agent.heldPermissions ?? []) {
+      const key = `${agent.sessionId}:${req.id}`
+      if (announcedRequestIds.has(key))
+        continue
+      announcedRequestIds.add(key)
+      fresh.push(`${friendlyProjectName(agent.projectName)}: ${permissionLabel(req)}`)
+    }
+  }
+  if (!fresh.length)
+    return
+  // The bridge holds a whole batch of tool calls at once, and overwriting the
+  // string per item announced only the last of them.
+  liveAnnouncement.value = fresh.length === 1
+    ? `Permission needed for ${fresh[0]}`
+    : `${fresh.length} permissions needed — ${fresh.join('; ')}`
+}, { immediate: true })
+
 watch(() => props.focusedSessionId, (id) => {
   if (!id)
     return
@@ -310,6 +459,16 @@ watch(() => props.focusedSessionId, (id) => {
 
 <template>
   <section :class="isClear ? 'mb-2' : 'mb-4'" aria-label="Needs your attention">
+    <div
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      class="sr-only"
+      data-testid="triage-live-announcement"
+    >
+      {{ liveAnnouncement }}
+    </div>
+
     <!-- Empty state. Nothing to do is the normal case, so it stays a quiet line:
          a filled banner here competed with the roster it sits above, and made
          the band look equally loud whether or not anything needed attention. -->
@@ -584,9 +743,70 @@ watch(() => props.focusedSessionId, (id) => {
               </label>
             </template>
 
+            <!-- One row per held call. The bridge can hold several at once when
+                 the agent batches tool calls, and answering only the first left
+                 the rest to lapse with nothing on screen to say so. -->
+            <div v-if="heldRequests(agent).length" class="ml-auto flex flex-col gap-1 items-stretch">
+              <div
+                v-for="request in heldRequests(agent)"
+                :key="request.id"
+                class="flex items-center gap-2 justify-end"
+              >
+                <span class="text-[11px] font-mono text-fg-mute truncate max-w-[22rem]">{{ permissionLabel(request) }}</span>
+                <!-- No Allow when the user's own permissions.deny covers the
+                     call: a hook "allow" short-circuits the evaluation that
+                     would otherwise apply the rule, so one click here would
+                     release a restriction the user believes is absolute. -->
+                <span
+                  v-if="request.deniedBy"
+                  class="text-[11px] text-fg-mute"
+                  data-testid="permission-denied-by-rule"
+                >Denied by your rule <span class="font-mono">{{ request.deniedBy }}</span></span>
+                <AppButton
+                  v-else
+                  variant="success"
+                  size="sm"
+                  :disabled="deciding[request.id]"
+                  :aria-busy="deciding[request.id] ? 'true' : undefined"
+                  :aria-label="`Allow ${permissionLabel(request)} once for ${friendlyProjectName(agent.projectName)} — the run continues immediately`"
+                  data-testid="permission-decide-allow"
+                  @click="decidePermission(agent, request, 'allow')"
+                >
+                  Allow
+                </AppButton>
+                <AppButton
+                  variant="outline"
+                  size="sm"
+                  :disabled="deciding[request.id]"
+                  :aria-busy="deciding[request.id] ? 'true' : undefined"
+                  :aria-label="`Deny ${permissionLabel(request)} for ${friendlyProjectName(agent.projectName)} — the session is told no and carries on`"
+                  data-testid="permission-decide-deny"
+                  @click="decidePermission(agent, request, 'deny')"
+                >
+                  Deny
+                </AppButton>
+              </div>
+            </div>
+
+            <!-- The prompt already reached the terminal, so it cannot be
+                 answered here — but arming catches the next one. -->
+            <AppButton
+              v-if="agent.awaitingTerminalPermission && !agent.permissionBridgeArmed && !heldRequests(agent).length"
+              variant="outline"
+              size="sm"
+              class="ml-auto"
+              :disabled="arming[agent.sessionId]"
+              :aria-busy="arming[agent.sessionId] ? 'true' : undefined"
+              aria-label="Answer this session's next permission prompt here instead of in its terminal"
+              data-testid="permission-arm"
+              @click="setArmed(agent, true)"
+            >
+              Intercept next
+            </AppButton>
+
             <!-- Free agent: allow the paused tool for future runs -->
             <AppButton
-              v-if="isGrantableToolUse(agent) && !(agent.pipelineTaskId && agent.pendingPermissions?.length)"
+              v-if="!heldRequests(agent).length && agentAttentionMap.get(agent.sessionId)?.grantableToolUse && !(agent.pipelineTaskId && agent.pendingPermissions?.length)"
               variant="success"
               size="sm"
               class="ml-auto"
@@ -601,7 +821,7 @@ watch(() => props.focusedSessionId, (id) => {
             <AppButton
               variant="outline"
               size="sm"
-              :class="!(agent.pipelineTaskId && agent.pendingPermissions?.length) && !isGrantableToolUse(agent) ? 'ml-auto' : ''"
+              :class="!(agent.pipelineTaskId && agent.pendingPermissions?.length) && !agentAttentionMap.get(agent.sessionId)?.grantableToolUse ? 'ml-auto' : ''"
               :aria-label="`Open details for ${agent.projectName}`"
               @click="emit('select', agent)"
             >

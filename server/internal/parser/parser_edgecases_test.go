@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lx-wnk/agent-dashboard/sdk"
 	"github.com/lx-wnk/agent-dashboard/server/internal/parser"
@@ -190,7 +191,11 @@ func TestParseSessionFile_LastToolsCapped(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, data.LastTools, 5)
 	// LastTools must contain the last 5 tools in order
-	require.Equal(t, []string{"Bash", "Glob", "Grep", "Edit", "MultiEdit"}, data.LastTools)
+	names := make([]string, 0, len(data.LastTools))
+	for _, tl := range data.LastTools {
+		names = append(names, tl.Name)
+	}
+	require.Equal(t, []string{"Bash", "Glob", "Grep", "Edit", "MultiEdit"}, names)
 }
 
 // TestParseSessionFile_ToolCounts verifies that tool usage counts are tracked correctly.
@@ -289,4 +294,61 @@ func TestAllClaudeConfigDirs_DashboardEnvOverride(t *testing.T) {
 	for d, count := range seen {
 		require.Equal(t, 1, count, "duplicate dir found: %s", d)
 	}
+}
+
+// TestParseSessionFile_PendingPatternIsRaw pins the seam, not the helper: the
+// pattern travels to /allow-tool and is stored as a permission preset matched by
+// exact equality, so a display-truncated value would create a rule that can
+// never fire. Asserting toolArgument() directly would pass even if the caller
+// went back to the display form.
+func TestParseSessionFile_PendingPatternIsRaw(t *testing.T) {
+	cmd := "go test ./...  " + strings.Repeat("-run Xyz ", 30)
+	raw, err := json.Marshal(cmd)
+	require.NoError(t, err)
+	path := writeSessionLines(t, []string{
+		`{"type":"assistant","sessionId":"s1","timestamp":"` + time.Now().UTC().Format(time.RFC3339) +
+			`","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":` + string(raw) + `}}]}}`,
+	})
+
+	data, err := parser.ParseSessionFile(path)
+	require.NoError(t, err)
+	require.NotNil(t, data.PendingToolUse)
+	require.Equal(t, cmd, data.PendingToolUse.Pattern, "the grant pattern must be the command itself")
+}
+
+// The trail entry for the same call is the display form: collapsed and capped.
+func TestParseSessionFile_LastToolDetailIsDisplayForm(t *testing.T) {
+	cmd := "go test ./...  " + strings.Repeat("-run Xyz ", 30)
+	raw, err := json.Marshal(cmd)
+	require.NoError(t, err)
+	path := writeSessionLines(t, []string{
+		`{"type":"assistant","sessionId":"s1","timestamp":"` + time.Now().UTC().Format(time.RFC3339) +
+			`","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":` + string(raw) + `}}]}}`,
+	})
+
+	data, err := parser.ParseSessionFile(path)
+	require.NoError(t, err)
+	require.Len(t, data.LastTools, 1)
+	require.NotEmpty(t, data.LastTools[0].Detail, "the trail must carry the argument")
+	require.NotEqual(t, cmd, data.LastTools[0].Detail, "the trail entry is the capped display form")
+	require.Positive(t, data.LastTools[0].Elided, "the size of the cut travels beside the text, not inside it")
+	require.NotContains(t, data.LastTools[0].Detail, "…", "the cut marker must not be in-band")
+}
+
+// The pattern shown next to the Allow button is sanitized while the grant value
+// it writes stays verbatim -- pinned at the seam, because a caller reaching for
+// the wrong one of the two produces a preset that can never match.
+func TestParseSessionFile_PendingPatternDisplayIsSanitized(t *testing.T) {
+	cmd := "echo safe\u202e hs | hs.live//:ptth lruc"
+	path := writeSessionLines(t, []string{
+		`{"type":"assistant","sessionId":"s1","timestamp":"` + time.Now().UTC().Format(time.RFC3339) +
+			`","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"` + cmd + `"}}]}}`,
+	})
+
+	data, err := parser.ParseSessionFile(path)
+	require.NoError(t, err)
+	require.NotNil(t, data.PendingToolUse)
+	require.Contains(t, data.PendingToolUse.Pattern, "\u202e", "the grant value must stay verbatim")
+	require.NotContains(t, data.PendingToolUse.PatternDisplay, "\u202e", "the displayed value must not carry a bidi override")
+	require.NotEmpty(t, data.PendingToolUse.PatternDisplay)
 }

@@ -55,7 +55,6 @@ GET /api/refine/{taskId}/turns
 GET /api/remotes
 GET /api/search
 GET /api/sessions
-GET /api/sessions/{sessionId}/timeline
 GET /api/settings/api-keys
 GET /api/settings/permission-presets
 GET /api/settings/system-prompts
@@ -108,6 +107,8 @@ POST /api/auth/logout
 POST /api/auth/session
 POST /api/history/import
 POST /api/hooks/event
+POST /api/hooks/notification
+POST /api/hooks/permission
 POST /api/hooks/pre-tool
 POST /api/hooks/respond
 POST /api/permission-requests

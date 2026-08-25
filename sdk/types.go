@@ -217,21 +217,48 @@ type WorktreeStatusDTO struct {
 // PendingPermission is a permission request an orchestrated agent is currently
 // blocked on, surfaced on the agent so it can be resolved from the roster.
 type PendingPermission struct {
-	ID          string  `json:"id"`
-	Tool        string  `json:"tool"`
-	Pattern     *string `json:"pattern"`
+	ID      string  `json:"id"`
+	Tool    string  `json:"tool"`
+	Pattern *string `json:"pattern"`
+	// DeniedBy is the user's own permissions.deny rule forbidding this call,
+	// verbatim, or nil when no rule covers it. A hook "allow" short-circuits
+	// Claude Code's own evaluation, so a dashboard approval would otherwise
+	// release a restriction the user believes is absolute. The client offers no
+	// Allow when this is set; the server refuses one regardless.
+	DeniedBy    *string `json:"deniedBy,omitempty"`
 	Reason      *string `json:"reason"`
 	RequestedAt string  `json:"requestedAt"`
 }
 
+// RecentTool is one entry of the recent-tool trail. Detail is the tool's own
+// human-readable argument -- a Bash command, an Edit/Write path -- and is
+// agent-authored text on its way to a UI: never interpolate it into a shell
+// command, a query or HTML without escaping at the point of use.
+//
+// Elided is how many characters Detail was cut by, 0 when it was not cut. It is
+// a separate field rather than a suffix inside Detail so the payload cannot
+// forge a cut that never happened: the client renders it as its own element.
+type RecentTool struct {
+	Name   string `json:"name"`
+	Detail string `json:"detail,omitempty"`
+	Elided int    `json:"elided,omitempty"`
+}
+
 // PendingToolUse is the last assistant tool_use block that has no matching
 // tool_result yet. It indicates the agent is currently executing or blocked on
-// that tool call. Pattern is the command string (Bash), file path (Edit/Write),
-// or empty for other tools.
+// that tool call.
+//
+// Pattern is the command string (Bash), file path (Edit/Write), or empty for
+// other tools. It is the grant identity: a permission preset is matched by
+// exact equality, so it is carried verbatim and must never be normalised.
+// PatternDisplay is the same value made safe to render -- deceptive runes
+// removed, whitespace collapsed, never truncated. Show PatternDisplay to a
+// human; send Pattern to the permission API.
 type PendingToolUse struct {
-	ID      string `json:"id"`
-	Tool    string `json:"tool"`
-	Pattern string `json:"pattern"`
+	ID             string `json:"id"`
+	Tool           string `json:"tool"`
+	Pattern        string `json:"pattern"`
+	PatternDisplay string `json:"patternDisplay"`
 }
 
 // HookEvent is one lifecycle-hook event recorded for a session when the opt-in
@@ -331,7 +358,7 @@ type Agent struct {
 	Uptime                    int64          `json:"uptime"`
 	LastActivity              string         `json:"lastActivity"`
 	CurrentAction             *string        `json:"currentAction"`
-	LastTools                 []string       `json:"lastTools"`
+	LastTools                 []RecentTool   `json:"lastTools"`
 	Tasks                     []TaskInfo     `json:"tasks"`
 	Subagents                 []SubAgent     `json:"subagents"`
 	TokenUsage                TokenUsage     `json:"tokenUsage"`
@@ -384,13 +411,41 @@ type Agent struct {
 	// SpawnerID/SpawnerName name the configured spawner this session belongs to,
 	// and SpawnerSource says how that was established (see SpawnerSource*).
 	// Empty when no spawner could be attributed.
-	SpawnerID          string              `json:"spawnerId,omitempty"`
-	SpawnerName        string              `json:"spawnerName,omitempty"`
-	SpawnerSource      string              `json:"spawnerSource,omitempty"`
+	SpawnerID     string `json:"spawnerId,omitempty"`
+	SpawnerName   string `json:"spawnerName,omitempty"`
+	SpawnerSource string `json:"spawnerSource,omitempty"`
+	// PendingPermissions are the approval requests this session is blocked on and
+	// that can be answered from the dashboard: either a pipeline stage run's
+	// stored requests, or a PreToolUse hook call the permission bridge is holding
+	// open. Both are answerable; the client tells them apart by PipelineTaskID.
 	PendingPermissions []PendingPermission `json:"pendingPermissions,omitempty"`
-	PendingToolUse     *PendingToolUse     `json:"pendingToolUse,omitempty"`
-	Machine            string              `json:"machine,omitempty"`
-	LastBtw            *BtwMessage         `json:"lastBtw"`
+	// HeldPermissions are PreToolUse hook calls the permission bridge is holding
+	// open for this session, in arrival order. Deliberately NOT merged into
+	// PendingPermissions: those are database-backed pipeline stage-run rows that
+	// resolve through a different endpoint, and sharing one slice let a hook id
+	// ride along in the pipeline's bulk-resolve payload.
+	HeldPermissions []PendingPermission `json:"heldPermissions,omitempty"`
+	// PermissionBridgeArmed means the dashboard intercepts this session's
+	// permission prompts. Off by default: PreToolUse fires before Claude Code
+	// decides whether to prompt at all, so holding every call would stall every
+	// session. A session is intercepted only after someone asked for it.
+	PermissionBridgeArmed bool `json:"permissionBridgeArmed,omitempty"`
+	// AwaitingTerminalPermission means the session is showing its own permission
+	// prompt, which the dashboard can report but not answer -- the bridge either
+	// lapsed before anyone decided, or the session is not armed. Set from the
+	// Notification hook's typed notification_type, never from its prose.
+	AwaitingTerminalPermission bool `json:"awaitingTerminalPermission,omitempty"`
+	// TerminalPermissionToolUseID names the tool call that terminal prompt is
+	// about, when the bridge held that call and the hold lapsed. Empty for a
+	// session the bridge never held, because the Notification payload carries no
+	// tool id of its own. Without it a standing grant can only be offered for
+	// PendingToolUse below, which is derived independently from the transcript
+	// and can name a different call entirely -- so a notice that outlives its
+	// prompt would put a grant button next to a tool nobody asked about.
+	TerminalPermissionToolUseID string          `json:"terminalPermissionToolUseId,omitempty"`
+	PendingToolUse              *PendingToolUse `json:"pendingToolUse,omitempty"`
+	Machine                     string          `json:"machine,omitempty"`
+	LastBtw                     *BtwMessage     `json:"lastBtw"`
 	// CostUnknown is true when the provider does not expose token counts and
 	// cost cannot be estimated. CostEstimate will be 0 in this case.
 	CostUnknown bool `json:"costUnknown,omitempty"`

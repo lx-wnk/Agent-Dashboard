@@ -3,6 +3,14 @@
 Claude Code lifecycle hooks let the dashboard receive push notifications on every
 tool call rather than waiting for the next SSE poll interval (default 3 s).
 
+
+> **Not the permission bridge.** Answering a session's permission prompts from
+> the dashboard is a different feature with its own installer —
+> `agent-dashboard hooks install`, described in
+> [agent-control.md](guides/agent-control.md#answering-a-permission-prompt-from-the-dashboard).
+> It manages its own entries in the same `hooks` object and preserves the ones
+> below, but both write to the same file: edit by hand with that in mind.
+
 ## How it works
 
 `scripts/hooks/notify.js` is a fire-and-forget Node.js script. Claude Code runs it
