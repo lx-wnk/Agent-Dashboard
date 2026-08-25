@@ -6,6 +6,8 @@ import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 const DASHBOARD_PORT = process.env.DASHBOARD_PORT || '13120'
+const VITE_DEV_PORT = Number(process.env.VITE_DEV_PORT) || 5173
+const DESKTOP_DEV_NONCE = process.env.DESKTOP_DEV_NONCE || ''
 
 const D3_MODULE_RE = /node_modules\/d3-/
 const VUE_MODULE_RE = /node_modules\/(?:@vue|vue)\//
@@ -19,6 +21,20 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     tailwindcss(),
     vue(),
+    // Lets desktop/target_dev.go tell OUR Vite dev server (started by `task
+    // dev:desktop:wails`, which shares this nonce through Taskfile.yml) apart
+    // from another process squatting the same loopback port.
+    DESKTOP_DEV_NONCE
+      ? {
+          name: 'desktop-dev-nonce',
+          configureServer(server) {
+            server.middlewares.use((_req, res, next) => {
+              res.setHeader('x-dashboard-dev-nonce', DESKTOP_DEV_NONCE)
+              next()
+            })
+          },
+        }
+      : null,
     // PWA intent: offline capability is limited to precached static assets only;
     // HTML navigation fallback is not handled (no NavigationRoute in injectManifest strategy).
     // API calls (SSE, /api/*) always require a live server connection.
@@ -98,7 +114,18 @@ export default defineConfig(({ mode }) => ({
   // Applied at build time only — `vite dev` keeps console output for debugging.
   esbuild: mode === 'production' ? { drop: ['console', 'debugger'] } : {},
   server: {
-    port: 5173,
+    port: VITE_DEV_PORT,
+    // Bind IPv4 loopback explicitly. Vite's default host is 'localhost', which
+    // Node resolves to ::1 first on a dual-stack machine — so the dev server
+    // ends up listening on [::1] only, and desktop/target_dev.go, which polls
+    // and redirects the webview to 127.0.0.1:<port>, gets ECONNREFUSED. The
+    // proxy targets below already spell 127.0.0.1 out for exactly this reason;
+    // the listen address needs the same treatment. Browsers reaching
+    // http://localhost:<port> still connect: they fall back to IPv4.
+    host: '127.0.0.1',
+    // A silently-moved port (Vite's default when the port is taken) would leave
+    // desktop/target_dev.go redirecting the webview at a foreign loopback origin.
+    strictPort: true,
     // Use 127.0.0.1 explicitly — on dual-stack IPv6 systems 'localhost' may resolve
     // to ::1 first, causing ECONNREFUSED when the server only binds to 127.0.0.1.
     proxy: {

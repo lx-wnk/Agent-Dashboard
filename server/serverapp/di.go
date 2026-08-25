@@ -28,6 +28,7 @@ import (
 	apicost "github.com/lx-wnk/agent-dashboard/server/internal/api/cost"
 	apieval "github.com/lx-wnk/agent-dashboard/server/internal/api/eval"
 	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/hooks"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/onboarding"
 	planapi "github.com/lx-wnk/agent-dashboard/server/internal/api/plan"
 	apiplugins "github.com/lx-wnk/agent-dashboard/server/internal/api/plugins"
@@ -46,6 +47,7 @@ import (
 	apiwp "github.com/lx-wnk/agent-dashboard/server/internal/api/wphandler"
 	authpkg "github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/checkpoint"
+	"github.com/lx-wnk/agent-dashboard/server/internal/claudesettings"
 	"github.com/lx-wnk/agent-dashboard/server/internal/config"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/rawrepo"
@@ -54,6 +56,7 @@ import (
 	histsvc "github.com/lx-wnk/agent-dashboard/server/internal/history"
 	"github.com/lx-wnk/agent-dashboard/server/internal/hookstore"
 	"github.com/lx-wnk/agent-dashboard/server/internal/merger"
+	"github.com/lx-wnk/agent-dashboard/server/internal/parser"
 	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
@@ -571,9 +574,23 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	// config dir their process carries.
 	spawnerEnricher := agentbroadcast.NewSpawnerEnricher(spawnerRepo, taskRepoForResolver)
 
+	// Permission bridge: holds PreToolUse hook calls open so an approval prompt
+	// can be answered here instead of in the session's terminal. Built at this
+	// point rather than in the router because the enricher below reads the same
+	// instance, and the enricher has to exist before the router is constructed.
+	permissionBridge := hooks.NewPermissionBridge(nil)
+	// Every config dir, not just the server's own: a session can run under a
+	// custom CLAUDE_CONFIG_DIR and its deny rules live there.
+	permissionBridge.SetDenyReader(claudesettings.NewReader(parser.AllClaudeConfigDirs()...))
+
 	// Combine the read-only crossings into one enricher applied at every GetAgents
 	// call site. A nil pipelineEnricher (no DB) composes away.
-	agentEnricher := merger.ChainEnrichers(pipelineEnricher, spawnerEnricher, agentbroadcast.NewHookEventEnricher(hookStore))
+	agentEnricher := merger.ChainEnrichers(
+		pipelineEnricher,
+		spawnerEnricher,
+		agentbroadcast.NewHookEventEnricher(hookStore),
+		agentbroadcast.NewPermissionBridgeEnricher(permissionBridge),
+	)
 
 	// Built here (not earlier) so it captures agentEnricher — admin agent search
 	// results carry the same pipeline-task and hook-event annotations as /api/agents.
@@ -642,6 +659,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		Merger:                 agentMerger,
 		Enricher:               agentEnricher,
 		HookStore:              hookStore,
+		PermissionBridge:       permissionBridge,
 		OAuthProvider:          oauthProvider,
 		UserRepo:               userRepo,
 		ApiKeyRepo:             apiKeyRepo,

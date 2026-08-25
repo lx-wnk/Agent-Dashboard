@@ -81,7 +81,7 @@ func main() {
 	}
 	root.AddCommand(ptyhostCmd)
 
-	root.AddCommand(newLiveCmd(), newPtyHostCmd())
+	root.AddCommand(newLiveCmd(), newPtyHostCmd(), newHooksCmd())
 
 	root.AddCommand(serve)
 

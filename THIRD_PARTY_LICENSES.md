@@ -151,7 +151,7 @@ The following third-party packages are used as transitive dependencies.
 | debug | 4.4.3 | MIT |
 | depd | 2.0.0 | MIT |
 | diff | 9.0.0 | BSD-3-Clause |
-| dompurify | 3.4.11 | (MPL-2.0 OR Apache-2.0) |
+| dompurify | 3.4.14 | (MPL-2.0 OR Apache-2.0) |
 | dunder-proto | 1.0.1 | MIT |
 | ee-first | 1.1.1 | MIT |
 | encodeurl | 2.0.0 | MIT |

@@ -16,7 +16,7 @@ import (
 // hookstore so the record path is exercised; onEvent is a no-op since tests
 // verify HTTP behaviour and recorded state, not the rescan side effect.
 func newTestHandler(secret string) *Handler {
-	return New(secret, hookstore.New(50, 0), func() {})
+	return New(secret, hookstore.New(50, 0), func() {}, NewPermissionBridge(nil))
 }
 
 // -------------------------------------------------------------------
@@ -57,7 +57,7 @@ func TestNew_PanicsOnEmptySecret(t *testing.T) {
 			t.Error("New(\"\", ...) did not panic; expected panic on empty secret")
 		}
 	}()
-	New("", hookstore.New(50, 0), func() {})
+	New("", hookstore.New(50, 0), func() {}, nil)
 }
 
 // TestEvent_RecordsHookEvent verifies the payload is decoded (snake_case keys)
@@ -327,5 +327,34 @@ func TestPending_WithSecret_ReturnsEmptyEditsWhenNoPending(t *testing.T) {
 	}
 	if len(resp.Edits) != 0 {
 		t.Errorf("Pending with no active gates: got %d edits, want 0", len(resp.Edits))
+	}
+}
+
+// A nil bridge used to mean "build your own", which fails silently: the
+// endpoints answer and hold calls, but the agent enricher reads the DI
+// instance, so the UI shows nothing while sessions stall with no control.
+func TestNewRequiresAPermissionBridge(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("no panic; a disconnected bridge would have been served as a working one")
+		}
+	}()
+	New("s", nil, func() {}, nil)
+}
+
+// The constructor is handed a bridge, not asked to reconfigure one. Installing
+// the change callback belongs to the router, which owns the rescan it wraps.
+func TestNewLeavesTheBridgeCallbackAlone(t *testing.T) {
+	bridge := NewPermissionBridge(nil)
+	fired := make(chan struct{}, 1)
+	bridge.SetOnChange(func() { fired <- struct{}{} })
+
+	New("s", nil, func() { t.Error("the constructor's onEvent replaced the installed callback") }, bridge)
+
+	bridge.Arm("s1", "", true)
+	select {
+	case <-fired:
+	case <-time.After(time.Second):
+		t.Fatal("the callback installed before construction stopped firing")
 	}
 }

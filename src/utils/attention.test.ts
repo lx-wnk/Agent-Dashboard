@@ -1,7 +1,13 @@
+import type { PendingToolUse } from '../sdk.generated'
 import type { Agent } from '../types'
 import { describe, expect, it } from 'vitest'
 import { attentionFor, needsAttention, sortByTriage } from './attention'
 import { STALLED_THRESHOLD_SECONDS } from './format'
+
+// Typed so a fixture cannot silently drop a field the wire type requires.
+function toolUse(o: Partial<PendingToolUse> & Pick<PendingToolUse, 'tool'>): PendingToolUse {
+  return { id: 'tu_1', pattern: '', patternDisplay: o.pattern ?? '', ...o }
+}
 
 function makeAgent(overrides: Partial<Agent>): Agent {
   return {
@@ -72,7 +78,7 @@ describe('attentionFor', () => {
         chatAboutIndex: 3,
       },
       pendingPermissions: [{ id: 'r1', tool: 'Bash', pattern: 'ls', requestedAt: new Date().toISOString() }],
-      pendingToolUse: { tool: 'Bash', pattern: 'ls', id: 'tu_1' },
+      pendingToolUse: toolUse({ tool: 'Bash', pattern: 'ls', id: 'tu_1' }),
     })
     const att = attentionFor(agent, ACTIVE_SECS)
     expect(att?.kind).toBe('question')
@@ -84,7 +90,7 @@ describe('attentionFor', () => {
     const agent = makeAgent({
       status: 'active',
       permissionsBypassed: true,
-      pendingToolUse: { tool: 'Bash', pattern: 'sleep 60', id: 'tu_1' },
+      pendingToolUse: toolUse({ tool: 'Bash', pattern: 'sleep 60', id: 'tu_1' }),
     })
     expect(attentionFor(agent, ACTIVE_SECS)).toBeNull()
   })
@@ -97,7 +103,7 @@ describe('attentionFor', () => {
       status: 'active',
       working: true,
       permissionsBypassed: false,
-      pendingToolUse: { tool: 'WebSearch', pattern: '', id: 'tu_1' },
+      pendingToolUse: toolUse({ tool: 'WebSearch', pattern: '', id: 'tu_1' }),
     })
     const att = attentionFor(agent, ACTIVE_SECS)
     expect(att?.kind).not.toBe('permission')
@@ -141,7 +147,7 @@ describe('attentionFor', () => {
     const agent = makeAgent({
       status: 'active',
       permissionsBypassed: false,
-      pendingToolUse: { tool: 'Bash', pattern: 'git push', id: 'tu_1' },
+      pendingToolUse: toolUse({ tool: 'Bash', pattern: 'git push', id: 'tu_1' }),
     })
     const att = attentionFor(agent, STALLED_SECS)
     expect(att?.kind).toBe('stalled')
@@ -158,7 +164,7 @@ describe('attentionFor', () => {
   })
 
   it('returns null for a finished agent even with a reconstructed errorState', () => {
-    const agent = makeAgent({ status: 'finished', errorState: 'auth_failed', pendingToolUse: { tool: 'Bash', pattern: 'ls', id: 'tu_3' } })
+    const agent = makeAgent({ status: 'finished', errorState: 'auth_failed', pendingToolUse: toolUse({ tool: 'Bash', pattern: 'ls', id: 'tu_3' }) })
     expect(attentionFor(agent, ACTIVE_SECS)).toBeNull()
   })
 
@@ -194,7 +200,7 @@ describe('attentionFor', () => {
     const agent = makeAgent({
       status: 'active',
       pendingPermissions: [{ id: 'r1', tool: 'Bash', pattern: 'ls', requestedAt: new Date().toISOString() }],
-      pendingToolUse: { tool: 'WebFetch', pattern: '', id: 'tu_2' },
+      pendingToolUse: toolUse({ tool: 'WebFetch', pattern: '', id: 'tu_2' }),
     })
     const att = attentionFor(agent, ACTIVE_SECS)
     expect(att?.kind).toBe('permission')
@@ -254,14 +260,14 @@ describe('needsAttention', () => {
 
   it('returns false for a freshly-started pendingToolUse (indistinguishable from a running tool)', () => {
     const agent = makeAgent({
-      pendingToolUse: { tool: 'Bash', pattern: 'rm -rf', id: 'tu_3' },
+      pendingToolUse: toolUse({ tool: 'Bash', pattern: 'rm -rf', id: 'tu_3' }),
     })
     expect(needsAttention(agent, ACTIVE_SECS)).toBe(false)
   })
 
   it('returns true for a pendingToolUse that has sat unresolved past the stalled dwell', () => {
     const agent = makeAgent({
-      pendingToolUse: { tool: 'Bash', pattern: 'rm -rf', id: 'tu_3' },
+      pendingToolUse: toolUse({ tool: 'Bash', pattern: 'rm -rf', id: 'tu_3' }),
     })
     expect(needsAttention(agent, STALLED_SECS)).toBe(true)
   })
@@ -343,5 +349,70 @@ describe('sortByTriage', () => {
     const active2 = makeAgent({ status: 'active', sessionId: 'a2' })
     const sorted = sortByTriage([active1, active2], () => ACTIVE_SECS)
     expect(sorted.map(a => a.sessionId)).toEqual(['a1', 'a2'])
+  })
+})
+
+describe('grantable is opt-in', () => {
+  // The band offers a permission grant only where a prompt is genuinely on
+  // screen. Expressing that as an exclusion ("not stalled") silently re-enables
+  // the control for every kind added later; this pins the positive form.
+  it('marks only a permission prompt as grantable', () => {
+    const grantable = (a: Partial<Agent>) => attentionFor(makeAgent(a), ACTIVE_SECS)?.grantable
+
+    expect(grantable({ pendingPermissions: [{ tool: 'Bash' }] as never })).toBe(true)
+
+    // A question is answered, never granted. The tool call a grant would be
+    // written for is a different object from the prompt on screen, so treating
+    // a question as evidence writes a standing rule for something nobody asked
+    // about.
+    expect(grantable({ pendingQuestion: { prompt: 'q', options: [] } as never })).toBe(false)
+    expect(grantable({ pendingConfirm: { question: 'ready?', options: [] } as never })).toBe(false)
+
+    // A busy agent with an unresolved tool call is not attention at all yet, so
+    // there is nothing to grant against — the stronger statement than "not
+    // grantable", and the one the band relies on.
+    expect(attentionFor(makeAgent({ pendingToolUse: toolUse({ id: 't', tool: 'Bash' }) }), ACTIVE_SECS)).toBeNull()
+
+    expect(grantable({ errorState: 'auth_failed' as never })).toBe(false)
+    expect(grantable({ working: false })).toBe(false)
+  })
+
+  // The terminal notice fires once when the prompt opens and never when it is
+  // answered, so it outlives its prompt; pendingToolUse is derived independently
+  // from the transcript and drifts on its own. A grant offered on the pair alone
+  // names a tool nobody asked about — the bug this repeats through a new door.
+  it('grants against a terminal prompt only when the bridge named the call', () => {
+    const att = (a: Partial<Agent>) => attentionFor(makeAgent(a), ACTIVE_SECS)
+
+    const named = att({
+      awaitingTerminalPermission: true,
+      terminalPermissionToolUseId: 'tu_9',
+      pendingToolUse: toolUse({ id: 'tu_9', tool: 'Bash' }),
+    })
+    expect(named?.label).toBe('Answer in terminal')
+    expect(named?.grantable).toBe(true)
+
+    const mismatched = att({
+      awaitingTerminalPermission: true,
+      terminalPermissionToolUseId: 'tu_9',
+      pendingToolUse: toolUse({ id: 'tu_other', tool: 'Read' }),
+    })
+    expect(mismatched?.label).toBe('Answer in terminal')
+    expect(mismatched?.grantable).toBe(false)
+
+    // A session the bridge never held names nothing, so there is no evidence to
+    // offer a rule on — it still reports that the terminal is asking.
+    const unnamed = att({
+      awaitingTerminalPermission: true,
+      pendingToolUse: toolUse({ id: 'tu_9', tool: 'Bash' }),
+    })
+    expect(unnamed?.label).toBe('Answer in terminal')
+    expect(unnamed?.grantable).toBe(false)
+  })
+
+  it('leaves a long-stalled tool call non-grantable', () => {
+    const att = attentionFor(makeAgent({ pendingToolUse: toolUse({ id: 't', tool: 'Bash' }) }), STALLED_SECS)
+    expect(att?.kind).toBe('stalled')
+    expect(att?.grantable).toBe(false)
   })
 })
