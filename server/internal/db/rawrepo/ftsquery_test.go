@@ -1,10 +1,10 @@
-package search
+package rawrepo
 
 import (
 	"testing"
 )
 
-func TestSanitizeFtsQuery(t *testing.T) {
+func TestSanitizeFTSQuery(t *testing.T) {
 	cases := []struct {
 		name  string
 		input string
@@ -45,13 +45,18 @@ func TestSanitizeFtsQuery(t *testing.T) {
 			input: "foo\tbar",
 			want:  `"foo"* "bar"*`,
 		},
+		{
+			name:  "punctuation only",
+			input: "***",
+			want:  `"***"*`,
+		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := sanitizeFtsQuery(tc.input)
+			got := SanitizeFTSQuery(tc.input)
 			if got != tc.want {
-				t.Errorf("sanitizeFtsQuery(%q) = %q, want %q", tc.input, got, tc.want)
+				t.Errorf("SanitizeFTSQuery(%q) = %q, want %q", tc.input, got, tc.want)
 			}
 		})
 	}
