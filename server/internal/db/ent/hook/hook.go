@@ -57,6 +57,18 @@ func (f AuditEventFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, 
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AuditEventMutation", m)
 }
 
+// The CapabilityFunc type is an adapter to allow the use of ordinary
+// function as Capability mutator.
+type CapabilityFunc func(context.Context, *ent.CapabilityMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f CapabilityFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.CapabilityMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.CapabilityMutation", m)
+}
+
 // The CheckpointFunc type is an adapter to allow the use of ordinary
 // function as Checkpoint mutator.
 type CheckpointFunc func(context.Context, *ent.CheckpointMutation) (ent.Value, error)

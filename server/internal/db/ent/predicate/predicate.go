@@ -18,6 +18,9 @@ type AppSetting func(*sql.Selector)
 // AuditEvent is the predicate function for auditevent builders.
 type AuditEvent func(*sql.Selector)
 
+// Capability is the predicate function for capability builders.
+type Capability func(*sql.Selector)
+
 // Checkpoint is the predicate function for checkpoint builders.
 type Checkpoint func(*sql.Selector)
 

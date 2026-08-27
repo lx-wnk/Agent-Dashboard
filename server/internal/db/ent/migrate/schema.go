@@ -116,6 +116,24 @@ var (
 			},
 		},
 	}
+	// CapabilitiesColumns holds the columns for the "capabilities" table.
+	CapabilitiesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "name", Type: field.TypeString, Unique: true},
+		{Name: "class", Type: field.TypeString},
+		{Name: "enforceable_by", Type: field.TypeJSON, Default: "[]"},
+		{Name: "requires_pattern", Type: field.TypeBool, Default: false},
+		{Name: "reversible", Type: field.TypeBool, Default: false},
+		{Name: "description", Type: field.TypeString, Default: ""},
+	}
+	// CapabilitiesTable holds the schema information for the "capabilities" table.
+	CapabilitiesTable = &schema.Table{
+		Name:       "capabilities",
+		Columns:    CapabilitiesColumns,
+		PrimaryKey: []*schema.Column{CapabilitiesColumns[0]},
+	}
 	// CheckpointsColumns holds the columns for the "checkpoints" table.
 	CheckpointsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -897,6 +915,7 @@ var (
 		APIKeysTable,
 		AppSettingsTable,
 		AuditEventsTable,
+		CapabilitiesTable,
 		CheckpointsTable,
 		CoordLocksTable,
 		DriftAlertsTable,

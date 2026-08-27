@@ -9,6 +9,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/apikey"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/appsetting"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/auditevent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/capability"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/checkpoint"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/coordlock"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/driftalert"
@@ -94,6 +95,37 @@ func init() {
 	auditeventDescTs := auditeventFields[1].Descriptor()
 	// auditevent.DefaultTs holds the default value on creation for the ts field.
 	auditevent.DefaultTs = auditeventDescTs.Default.(func() time.Time)
+	capabilityMixin := schema.Capability{}.Mixin()
+	capabilityMixinFields0 := capabilityMixin[0].Fields()
+	_ = capabilityMixinFields0
+	capabilityFields := schema.Capability{}.Fields()
+	_ = capabilityFields
+	// capabilityDescCreatedAt is the schema descriptor for created_at field.
+	capabilityDescCreatedAt := capabilityMixinFields0[1].Descriptor()
+	// capability.DefaultCreatedAt holds the default value on creation for the created_at field.
+	capability.DefaultCreatedAt = capabilityDescCreatedAt.Default.(func() time.Time)
+	// capabilityDescUpdatedAt is the schema descriptor for updated_at field.
+	capabilityDescUpdatedAt := capabilityMixinFields0[2].Descriptor()
+	// capability.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	capability.DefaultUpdatedAt = capabilityDescUpdatedAt.Default.(func() time.Time)
+	// capability.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	capability.UpdateDefaultUpdatedAt = capabilityDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// capabilityDescEnforceableBy is the schema descriptor for enforceable_by field.
+	capabilityDescEnforceableBy := capabilityFields[2].Descriptor()
+	// capability.DefaultEnforceableBy holds the default value on creation for the enforceable_by field.
+	capability.DefaultEnforceableBy = capabilityDescEnforceableBy.Default.([]string)
+	// capabilityDescRequiresPattern is the schema descriptor for requires_pattern field.
+	capabilityDescRequiresPattern := capabilityFields[3].Descriptor()
+	// capability.DefaultRequiresPattern holds the default value on creation for the requires_pattern field.
+	capability.DefaultRequiresPattern = capabilityDescRequiresPattern.Default.(bool)
+	// capabilityDescReversible is the schema descriptor for reversible field.
+	capabilityDescReversible := capabilityFields[4].Descriptor()
+	// capability.DefaultReversible holds the default value on creation for the reversible field.
+	capability.DefaultReversible = capabilityDescReversible.Default.(bool)
+	// capabilityDescDescription is the schema descriptor for description field.
+	capabilityDescDescription := capabilityFields[5].Descriptor()
+	// capability.DefaultDescription holds the default value on creation for the description field.
+	capability.DefaultDescription = capabilityDescDescription.Default.(string)
 	checkpointFields := schema.Checkpoint{}.Fields()
 	_ = checkpointFields
 	// checkpointDescFilesChanged is the schema descriptor for files_changed field.

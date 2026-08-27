@@ -15,6 +15,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/apikey"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/appsetting"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/auditevent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/capability"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/checkpoint"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/coordlock"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/driftalert"
@@ -56,6 +57,7 @@ const (
 	TypeApiKey             = "ApiKey"
 	TypeAppSetting         = "AppSetting"
 	TypeAuditEvent         = "AuditEvent"
+	TypeCapability         = "Capability"
 	TypeCheckpoint         = "Checkpoint"
 	TypeCoordLock          = "CoordLock"
 	TypeDriftAlert         = "DriftAlert"
@@ -2910,6 +2912,732 @@ func (m *AuditEventMutation) ClearEdge(name string) error {
 // It returns an error if the edge is not defined in the schema.
 func (m *AuditEventMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown AuditEvent edge %s", name)
+}
+
+// CapabilityMutation represents an operation that mutates the Capability nodes in the graph.
+type CapabilityMutation struct {
+	config
+	op                   Op
+	typ                  string
+	id                   *string
+	created_at           *time.Time
+	updated_at           *time.Time
+	name                 *string
+	class                *string
+	enforceable_by       *[]string
+	appendenforceable_by []string
+	requires_pattern     *bool
+	reversible           *bool
+	description          *string
+	clearedFields        map[string]struct{}
+	done                 bool
+	oldValue             func(context.Context) (*Capability, error)
+	predicates           []predicate.Capability
+}
+
+var _ ent.Mutation = (*CapabilityMutation)(nil)
+
+// capabilityOption allows management of the mutation configuration using functional options.
+type capabilityOption func(*CapabilityMutation)
+
+// newCapabilityMutation creates new mutation for the Capability entity.
+func newCapabilityMutation(c config, op Op, opts ...capabilityOption) *CapabilityMutation {
+	m := &CapabilityMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeCapability,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withCapabilityID sets the ID field of the mutation.
+func withCapabilityID(id string) capabilityOption {
+	return func(m *CapabilityMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *Capability
+		)
+		m.oldValue = func(ctx context.Context) (*Capability, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().Capability.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withCapability sets the old Capability of the mutation.
+func withCapability(node *Capability) capabilityOption {
+	return func(m *CapabilityMutation) {
+		m.oldValue = func(context.Context) (*Capability, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m CapabilityMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m CapabilityMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of Capability entities.
+func (m *CapabilityMutation) SetID(id string) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *CapabilityMutation) ID() (id string, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *CapabilityMutation) IDs(ctx context.Context) ([]string, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []string{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().Capability.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *CapabilityMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *CapabilityMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the Capability entity.
+// If the Capability object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *CapabilityMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *CapabilityMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *CapabilityMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *CapabilityMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the Capability entity.
+// If the Capability object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *CapabilityMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *CapabilityMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// SetName sets the "name" field.
+func (m *CapabilityMutation) SetName(s string) {
+	m.name = &s
+}
+
+// Name returns the value of the "name" field in the mutation.
+func (m *CapabilityMutation) Name() (r string, exists bool) {
+	v := m.name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldName returns the old "name" field's value of the Capability entity.
+// If the Capability object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *CapabilityMutation) OldName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldName: %w", err)
+	}
+	return oldValue.Name, nil
+}
+
+// ResetName resets all changes to the "name" field.
+func (m *CapabilityMutation) ResetName() {
+	m.name = nil
+}
+
+// SetClass sets the "class" field.
+func (m *CapabilityMutation) SetClass(s string) {
+	m.class = &s
+}
+
+// Class returns the value of the "class" field in the mutation.
+func (m *CapabilityMutation) Class() (r string, exists bool) {
+	v := m.class
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldClass returns the old "class" field's value of the Capability entity.
+// If the Capability object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *CapabilityMutation) OldClass(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldClass is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldClass requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldClass: %w", err)
+	}
+	return oldValue.Class, nil
+}
+
+// ResetClass resets all changes to the "class" field.
+func (m *CapabilityMutation) ResetClass() {
+	m.class = nil
+}
+
+// SetEnforceableBy sets the "enforceable_by" field.
+func (m *CapabilityMutation) SetEnforceableBy(s []string) {
+	m.enforceable_by = &s
+	m.appendenforceable_by = nil
+}
+
+// EnforceableBy returns the value of the "enforceable_by" field in the mutation.
+func (m *CapabilityMutation) EnforceableBy() (r []string, exists bool) {
+	v := m.enforceable_by
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEnforceableBy returns the old "enforceable_by" field's value of the Capability entity.
+// If the Capability object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *CapabilityMutation) OldEnforceableBy(ctx context.Context) (v []string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEnforceableBy is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEnforceableBy requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEnforceableBy: %w", err)
+	}
+	return oldValue.EnforceableBy, nil
+}
+
+// AppendEnforceableBy adds s to the "enforceable_by" field.
+func (m *CapabilityMutation) AppendEnforceableBy(s []string) {
+	m.appendenforceable_by = append(m.appendenforceable_by, s...)
+}
+
+// AppendedEnforceableBy returns the list of values that were appended to the "enforceable_by" field in this mutation.
+func (m *CapabilityMutation) AppendedEnforceableBy() ([]string, bool) {
+	if len(m.appendenforceable_by) == 0 {
+		return nil, false
+	}
+	return m.appendenforceable_by, true
+}
+
+// ResetEnforceableBy resets all changes to the "enforceable_by" field.
+func (m *CapabilityMutation) ResetEnforceableBy() {
+	m.enforceable_by = nil
+	m.appendenforceable_by = nil
+}
+
+// SetRequiresPattern sets the "requires_pattern" field.
+func (m *CapabilityMutation) SetRequiresPattern(b bool) {
+	m.requires_pattern = &b
+}
+
+// RequiresPattern returns the value of the "requires_pattern" field in the mutation.
+func (m *CapabilityMutation) RequiresPattern() (r bool, exists bool) {
+	v := m.requires_pattern
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRequiresPattern returns the old "requires_pattern" field's value of the Capability entity.
+// If the Capability object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *CapabilityMutation) OldRequiresPattern(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRequiresPattern is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRequiresPattern requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRequiresPattern: %w", err)
+	}
+	return oldValue.RequiresPattern, nil
+}
+
+// ResetRequiresPattern resets all changes to the "requires_pattern" field.
+func (m *CapabilityMutation) ResetRequiresPattern() {
+	m.requires_pattern = nil
+}
+
+// SetReversible sets the "reversible" field.
+func (m *CapabilityMutation) SetReversible(b bool) {
+	m.reversible = &b
+}
+
+// Reversible returns the value of the "reversible" field in the mutation.
+func (m *CapabilityMutation) Reversible() (r bool, exists bool) {
+	v := m.reversible
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldReversible returns the old "reversible" field's value of the Capability entity.
+// If the Capability object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *CapabilityMutation) OldReversible(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldReversible is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldReversible requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldReversible: %w", err)
+	}
+	return oldValue.Reversible, nil
+}
+
+// ResetReversible resets all changes to the "reversible" field.
+func (m *CapabilityMutation) ResetReversible() {
+	m.reversible = nil
+}
+
+// SetDescription sets the "description" field.
+func (m *CapabilityMutation) SetDescription(s string) {
+	m.description = &s
+}
+
+// Description returns the value of the "description" field in the mutation.
+func (m *CapabilityMutation) Description() (r string, exists bool) {
+	v := m.description
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDescription returns the old "description" field's value of the Capability entity.
+// If the Capability object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *CapabilityMutation) OldDescription(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDescription is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDescription requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDescription: %w", err)
+	}
+	return oldValue.Description, nil
+}
+
+// ResetDescription resets all changes to the "description" field.
+func (m *CapabilityMutation) ResetDescription() {
+	m.description = nil
+}
+
+// Where appends a list predicates to the CapabilityMutation builder.
+func (m *CapabilityMutation) Where(ps ...predicate.Capability) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the CapabilityMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *CapabilityMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.Capability, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *CapabilityMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *CapabilityMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (Capability).
+func (m *CapabilityMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *CapabilityMutation) Fields() []string {
+	fields := make([]string, 0, 8)
+	if m.created_at != nil {
+		fields = append(fields, capability.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, capability.FieldUpdatedAt)
+	}
+	if m.name != nil {
+		fields = append(fields, capability.FieldName)
+	}
+	if m.class != nil {
+		fields = append(fields, capability.FieldClass)
+	}
+	if m.enforceable_by != nil {
+		fields = append(fields, capability.FieldEnforceableBy)
+	}
+	if m.requires_pattern != nil {
+		fields = append(fields, capability.FieldRequiresPattern)
+	}
+	if m.reversible != nil {
+		fields = append(fields, capability.FieldReversible)
+	}
+	if m.description != nil {
+		fields = append(fields, capability.FieldDescription)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *CapabilityMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case capability.FieldCreatedAt:
+		return m.CreatedAt()
+	case capability.FieldUpdatedAt:
+		return m.UpdatedAt()
+	case capability.FieldName:
+		return m.Name()
+	case capability.FieldClass:
+		return m.Class()
+	case capability.FieldEnforceableBy:
+		return m.EnforceableBy()
+	case capability.FieldRequiresPattern:
+		return m.RequiresPattern()
+	case capability.FieldReversible:
+		return m.Reversible()
+	case capability.FieldDescription:
+		return m.Description()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *CapabilityMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case capability.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case capability.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	case capability.FieldName:
+		return m.OldName(ctx)
+	case capability.FieldClass:
+		return m.OldClass(ctx)
+	case capability.FieldEnforceableBy:
+		return m.OldEnforceableBy(ctx)
+	case capability.FieldRequiresPattern:
+		return m.OldRequiresPattern(ctx)
+	case capability.FieldReversible:
+		return m.OldReversible(ctx)
+	case capability.FieldDescription:
+		return m.OldDescription(ctx)
+	}
+	return nil, fmt.Errorf("unknown Capability field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *CapabilityMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case capability.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case capability.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	case capability.FieldName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetName(v)
+		return nil
+	case capability.FieldClass:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetClass(v)
+		return nil
+	case capability.FieldEnforceableBy:
+		v, ok := value.([]string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEnforceableBy(v)
+		return nil
+	case capability.FieldRequiresPattern:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRequiresPattern(v)
+		return nil
+	case capability.FieldReversible:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetReversible(v)
+		return nil
+	case capability.FieldDescription:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDescription(v)
+		return nil
+	}
+	return fmt.Errorf("unknown Capability field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *CapabilityMutation) AddedFields() []string {
+	return nil
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *CapabilityMutation) AddedField(name string) (ent.Value, bool) {
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *CapabilityMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown Capability numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *CapabilityMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *CapabilityMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *CapabilityMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown Capability nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *CapabilityMutation) ResetField(name string) error {
+	switch name {
+	case capability.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case capability.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	case capability.FieldName:
+		m.ResetName()
+		return nil
+	case capability.FieldClass:
+		m.ResetClass()
+		return nil
+	case capability.FieldEnforceableBy:
+		m.ResetEnforceableBy()
+		return nil
+	case capability.FieldRequiresPattern:
+		m.ResetRequiresPattern()
+		return nil
+	case capability.FieldReversible:
+		m.ResetReversible()
+		return nil
+	case capability.FieldDescription:
+		m.ResetDescription()
+		return nil
+	}
+	return fmt.Errorf("unknown Capability field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *CapabilityMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *CapabilityMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *CapabilityMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *CapabilityMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *CapabilityMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *CapabilityMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *CapabilityMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown Capability unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *CapabilityMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown Capability edge %s", name)
 }
 
 // CheckpointMutation represents an operation that mutates the Checkpoint nodes in the graph.
