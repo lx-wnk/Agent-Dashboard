@@ -49,6 +49,9 @@ type MemoryRepo interface {
 	CreateSpace(ctx context.Context, in CreateSpaceInput) (*ent.Resource, error)
 	GetSpace(ctx context.Context, scope Scope, slug string) (*ent.Resource, error)
 	ListSpaces(ctx context.Context, scope Scope) ([]*ent.Resource, error)
+	// DeleteSpace refuses while any entry still references the space —
+	// see the implementation comment for why.
+	DeleteSpace(ctx context.Context, id string) error
 	CreateEntry(ctx context.Context, in CreateEntryInput) (*ent.MemoryEntry, error)
 	GetEntry(ctx context.Context, id string) (*ent.MemoryEntry, error)
 	// SupersedeEntry marks oldID as replaced by newID. It writes a pointer on
@@ -103,6 +106,45 @@ func (r *entMemoryRepo) ListSpaces(ctx context.Context, scope Scope) ([]*ent.Res
 		return nil, fmt.Errorf("memory.ListSpaces: %w", err)
 	}
 	return rows, nil
+}
+
+// DeleteSpace deletes a memory space's resource row, refusing while any entry
+// still references it. space_id is a loose reference with no ent edge or FK,
+// so deleting the row out from under existing entries would not fail — it
+// would leave them pointing at an id that no longer resolves: not deleted,
+// just silently unreachable, in a store whose whole point is durable history.
+// Refusing is reversible (delete or move the entries first, then retry);
+// cascading would decide that for the caller, which "delete this space"
+// should not imply on its own.
+//
+// The reference count and the delete run inside one write transaction so a
+// concurrent CreateEntry cannot slip a new row in between the check and the
+// delete and produce the exact orphan this guards against.
+func (r *entMemoryRepo) DeleteSpace(ctx context.Context, id string) error {
+	err := WithTx(ctx, r.client, func(tx *ent.Tx) error {
+		row, err := tx.Resource.Get(ctx, id)
+		if err != nil {
+			return err
+		}
+		if row.Kind != ResourceKindMemorySpace {
+			return fmt.Errorf("%s: not a memory space", id)
+		}
+		if row.Origin == ResourceOriginBuiltin {
+			return ErrResourceBuiltIn
+		}
+		count, err := tx.MemoryEntry.Query().Where(memoryentry.SpaceIDEQ(id)).Count(ctx)
+		if err != nil {
+			return err
+		}
+		if count > 0 {
+			return ErrResourceReferenced
+		}
+		return tx.Resource.DeleteOneID(id).Exec(ctx)
+	})
+	if err != nil {
+		return fmt.Errorf("memory.DeleteSpace %s: %w", id, err)
+	}
+	return nil
 }
 
 // mustBeSpace fails closed on a space_id that is not a live memory_space

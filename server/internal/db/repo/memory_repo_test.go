@@ -2,6 +2,7 @@ package repo_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -139,6 +140,42 @@ func TestGetSpaceAndListSpaces(t *testing.T) {
 	}
 	if len(list) != 1 || list[0].ID != space.ID {
 		t.Errorf("ListSpaces = %v, want exactly the one created space", list)
+	}
+}
+
+func TestDeleteSpaceRefusesWhenEntriesReferenceIt(t *testing.T) {
+	r, ctx := newMemoryRepo(t)
+	space := mustSpace(t, r, ctx, "project-a")
+	entry := mustEntry(t, r, ctx, space.ID, "still referenced")
+	// Even an expired entry must still block the delete: it references the
+	// space just as much as a live one, and deleting past that would leave
+	// exactly the dangling reference this guard exists to prevent.
+	if err := r.ExpireEntry(ctx, entry.ID, time.Now()); err != nil {
+		t.Fatalf("expire: %v", err)
+	}
+
+	err := r.DeleteSpace(ctx, space.ID)
+	if !errors.Is(err, repo.ErrResourceReferenced) {
+		t.Fatalf("DeleteSpace error = %v, want ErrResourceReferenced", err)
+	}
+
+	if _, err := r.GetSpace(ctx, repo.GlobalScope(), "project-a"); err != nil {
+		t.Errorf("space must still exist after a refused delete: %v", err)
+	}
+	if _, err := r.GetEntry(ctx, entry.ID); err != nil {
+		t.Errorf("the referencing entry must still exist: %v", err)
+	}
+}
+
+func TestDeleteSpaceAllowsUnreferenced(t *testing.T) {
+	r, ctx := newMemoryRepo(t)
+	space := mustSpace(t, r, ctx, "project-a")
+
+	if err := r.DeleteSpace(ctx, space.ID); err != nil {
+		t.Fatalf("delete space: %v", err)
+	}
+	if _, err := r.GetSpace(ctx, repo.GlobalScope(), "project-a"); !repo.IsNotFound(err) {
+		t.Errorf("GetSpace after delete = %v, want not-found", err)
 	}
 }
 
