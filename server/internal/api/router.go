@@ -481,7 +481,8 @@ func NewRouter(deps RouterDeps) http.Handler {
 		r.Get("/api/config/context-files", configHandler.ContextFiles)
 		// Deprecated: kept answering identically for one minor version so a
 		// client built against the old path keeps working. Logs once per
-		// process (see Handler.Memory).
+		// process (see Handler.Memory, which also names what to rename here
+		// when this route goes).
 		r.Get("/api/config/memory", configHandler.Memory)
 		// Single-file read/write for editable (user/project) config files. Writes
 		// are authorized only against the scope's enumerated editable set.

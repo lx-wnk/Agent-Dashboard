@@ -134,6 +134,10 @@ var logLegacyMemoryPathOnce sync.Once
 // Memory handles the deprecated GET /api/config/memory. It answers exactly
 // like ContextFiles and logs the deprecation once per process so a client
 // still on the old path keeps working during the deprecation window.
+//
+// Deprecated: use ContextFiles. When this method goes, rename the response
+// struct's "memory" JSON key to "contextFiles" — it only kept the old name so
+// both paths return byte-identical payloads while this one still exists.
 func (h *Handler) Memory(w http.ResponseWriter, r *http.Request) {
 	logLegacyMemoryPathOnce.Do(func() {
 		slog.Info("config: /api/config/memory is deprecated, use /api/config/context-files instead")
