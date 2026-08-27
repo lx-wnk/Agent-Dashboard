@@ -121,12 +121,12 @@ type RouterDeps struct {
 	// the Enricher (via the agentbroadcast hook enricher) so events POSTed to
 	// /api/hooks/event surface on the matching agent. May be nil (recording off).
 	HookStore *hookstore.Store
-	// PermissionBridge holds PreToolUse hook calls open for a dashboard decision.
+	// HookEnforcer holds PreToolUse hook calls open for a dashboard decision.
 	// Built in the DI container because the agent enricher reads the same
 	// instance and is constructed before this router. May be nil, in which case
 	// this router builds an unobserved one so the endpoints still answer — no
 	// agent is annotated, because nothing else holds a reference to it.
-	PermissionBridge  *hooks.PermissionBridge
+	HookEnforcer      *hooks.HookEnforcer
 	OAuthProvider     authpkg.OAuthProvider
 	UserRepo          repo.UserRepo
 	ApiKeyRepo        repo.ApiKeyRepo
@@ -220,15 +220,15 @@ func NewRouter(deps RouterDeps) http.Handler {
 		debounceMs = 100
 	}
 	rescan := newDebouncedRescan(serverCtx, deps.AgentBroadcaster, debounceMs, getAgents)
-	permissionBridge := deps.PermissionBridge
-	if permissionBridge == nil {
-		permissionBridge = hooks.NewPermissionBridge(nil)
+	hookEnforcer := deps.HookEnforcer
+	if hookEnforcer == nil {
+		hookEnforcer = hooks.NewHookEnforcer(nil)
 	}
-	// The rescan is this router's; installing it on the bridge is therefore this
-	// router's call. A held or resolved permission then reaches connected clients
-	// without waiting for the next scan tick.
-	permissionBridge.SetOnChange(rescan)
-	hooksHandler := hooks.New(deps.Config.HooksSecret, deps.HookStore, rescan, permissionBridge)
+	// The rescan is this router's; installing it on the enforcer is therefore
+	// this router's call. A held or resolved permission then reaches connected
+	// clients without waiting for the next scan tick.
+	hookEnforcer.SetOnChange(rescan)
+	hooksHandler := hooks.New(deps.Config.HooksSecret, deps.HookStore, rescan, hookEnforcer)
 	hooksHandler.SetSessionCWD(newSessionCWDLookup(getAgents))
 	r.Post("/api/hooks/event", hooksHandler.Event)
 	r.Post("/api/hooks/pre-tool", hooksHandler.PreTool)

@@ -16,7 +16,7 @@ import (
 // hookstore so the record path is exercised; onEvent is a no-op since tests
 // verify HTTP behaviour and recorded state, not the rescan side effect.
 func newTestHandler(secret string) *Handler {
-	return New(secret, hookstore.New(50, 0), func() {}, NewPermissionBridge(nil))
+	return New(secret, hookstore.New(50, 0), func() {}, NewHookEnforcer(nil))
 }
 
 // -------------------------------------------------------------------
@@ -333,7 +333,7 @@ func TestPending_WithSecret_ReturnsEmptyEditsWhenNoPending(t *testing.T) {
 // A nil bridge used to mean "build your own", which fails silently: the
 // endpoints answer and hold calls, but the agent enricher reads the DI
 // instance, so the UI shows nothing while sessions stall with no control.
-func TestNewRequiresAPermissionBridge(t *testing.T) {
+func TestNewRequiresAHookEnforcer(t *testing.T) {
 	defer func() {
 		if recover() == nil {
 			t.Fatal("no panic; a disconnected bridge would have been served as a working one")
@@ -345,7 +345,7 @@ func TestNewRequiresAPermissionBridge(t *testing.T) {
 // The constructor is handed a bridge, not asked to reconfigure one. Installing
 // the change callback belongs to the router, which owns the rescan it wraps.
 func TestNewLeavesTheBridgeCallbackAlone(t *testing.T) {
-	bridge := NewPermissionBridge(nil)
+	bridge := NewHookEnforcer(nil)
 	fired := make(chan struct{}, 1)
 	bridge.SetOnChange(func() { fired <- struct{}{} })
 

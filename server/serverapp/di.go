@@ -608,14 +608,14 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	// config dir their process carries.
 	spawnerEnricher := agentbroadcast.NewSpawnerEnricher(spawnerRepo, taskRepoForResolver)
 
-	// Permission bridge: holds PreToolUse hook calls open so an approval prompt
+	// Hook enforcer: holds PreToolUse hook calls open so an approval prompt
 	// can be answered here instead of in the session's terminal. Built at this
 	// point rather than in the router because the enricher below reads the same
 	// instance, and the enricher has to exist before the router is constructed.
-	permissionBridge := hooks.NewPermissionBridge(nil)
+	hookEnforcer := hooks.NewHookEnforcer(nil)
 	// Every config dir, not just the server's own: a session can run under a
 	// custom CLAUDE_CONFIG_DIR and its deny rules live there.
-	permissionBridge.SetDenyReader(claudesettings.NewReader(parser.AllClaudeConfigDirs()...))
+	hookEnforcer.SetDenyReader(claudesettings.NewReader(parser.AllClaudeConfigDirs()...))
 
 	// Combine the read-only crossings into one enricher applied at every GetAgents
 	// call site. A nil pipelineEnricher (no DB) composes away.
@@ -623,7 +623,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		pipelineEnricher,
 		spawnerEnricher,
 		agentbroadcast.NewHookEventEnricher(hookStore),
-		agentbroadcast.NewPermissionBridgeEnricher(permissionBridge),
+		agentbroadcast.NewPermissionBridgeEnricher(hookEnforcer),
 	)
 
 	// Built here (not earlier) so it captures agentEnricher — admin agent search
@@ -693,7 +693,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		Merger:                 agentMerger,
 		Enricher:               agentEnricher,
 		HookStore:              hookStore,
-		PermissionBridge:       permissionBridge,
+		HookEnforcer:           hookEnforcer,
 		OAuthProvider:          oauthProvider,
 		UserRepo:               userRepo,
 		ApiKeyRepo:             apiKeyRepo,
