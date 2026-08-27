@@ -22,6 +22,8 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/evalmetricsnapshot"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/grant"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/grantusage"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/memoryentry"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/memoryinjection"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionpreset"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionrequest"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/pipelineconfig"
@@ -66,6 +68,8 @@ const (
 	TypeEvalMetricSnapshot = "EvalMetricSnapshot"
 	TypeGrant              = "Grant"
 	TypeGrantUsage         = "GrantUsage"
+	TypeMemoryEntry        = "MemoryEntry"
+	TypeMemoryInjection    = "MemoryInjection"
 	TypePermissionPreset   = "PermissionPreset"
 	TypePermissionRequest  = "PermissionRequest"
 	TypePipelineConfig     = "PipelineConfig"
@@ -8740,6 +8744,1875 @@ func (m *GrantUsageMutation) ClearEdge(name string) error {
 // It returns an error if the edge is not defined in the schema.
 func (m *GrantUsageMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown GrantUsage edge %s", name)
+}
+
+// MemoryEntryMutation represents an operation that mutates the MemoryEntry nodes in the graph.
+type MemoryEntryMutation struct {
+	config
+	op            Op
+	typ           string
+	id            *string
+	created_at    *time.Time
+	updated_at    *time.Time
+	space_id      *string
+	summary       *string
+	content       *string
+	kind          *string
+	source_kind   *string
+	source_ref    *string
+	confidence    *float64
+	addconfidence *float64
+	valid_from    *time.Time
+	valid_until   *time.Time
+	superseded_by *string
+	user_id       *string
+	clearedFields map[string]struct{}
+	done          bool
+	oldValue      func(context.Context) (*MemoryEntry, error)
+	predicates    []predicate.MemoryEntry
+}
+
+var _ ent.Mutation = (*MemoryEntryMutation)(nil)
+
+// memoryentryOption allows management of the mutation configuration using functional options.
+type memoryentryOption func(*MemoryEntryMutation)
+
+// newMemoryEntryMutation creates new mutation for the MemoryEntry entity.
+func newMemoryEntryMutation(c config, op Op, opts ...memoryentryOption) *MemoryEntryMutation {
+	m := &MemoryEntryMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeMemoryEntry,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withMemoryEntryID sets the ID field of the mutation.
+func withMemoryEntryID(id string) memoryentryOption {
+	return func(m *MemoryEntryMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *MemoryEntry
+		)
+		m.oldValue = func(ctx context.Context) (*MemoryEntry, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().MemoryEntry.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withMemoryEntry sets the old MemoryEntry of the mutation.
+func withMemoryEntry(node *MemoryEntry) memoryentryOption {
+	return func(m *MemoryEntryMutation) {
+		m.oldValue = func(context.Context) (*MemoryEntry, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m MemoryEntryMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m MemoryEntryMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of MemoryEntry entities.
+func (m *MemoryEntryMutation) SetID(id string) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *MemoryEntryMutation) ID() (id string, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *MemoryEntryMutation) IDs(ctx context.Context) ([]string, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []string{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().MemoryEntry.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *MemoryEntryMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *MemoryEntryMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the MemoryEntry entity.
+// If the MemoryEntry object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MemoryEntryMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *MemoryEntryMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *MemoryEntryMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *MemoryEntryMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the MemoryEntry entity.
+// If the MemoryEntry object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MemoryEntryMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *MemoryEntryMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// SetSpaceID sets the "space_id" field.
+func (m *MemoryEntryMutation) SetSpaceID(s string) {
+	m.space_id = &s
+}
+
+// SpaceID returns the value of the "space_id" field in the mutation.
+func (m *MemoryEntryMutation) SpaceID() (r string, exists bool) {
+	v := m.space_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSpaceID returns the old "space_id" field's value of the MemoryEntry entity.
+// If the MemoryEntry object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MemoryEntryMutation) OldSpaceID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSpaceID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSpaceID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSpaceID: %w", err)
+	}
+	return oldValue.SpaceID, nil
+}
+
+// ResetSpaceID resets all changes to the "space_id" field.
+func (m *MemoryEntryMutation) ResetSpaceID() {
+	m.space_id = nil
+}
+
+// SetSummary sets the "summary" field.
+func (m *MemoryEntryMutation) SetSummary(s string) {
+	m.summary = &s
+}
+
+// Summary returns the value of the "summary" field in the mutation.
+func (m *MemoryEntryMutation) Summary() (r string, exists bool) {
+	v := m.summary
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSummary returns the old "summary" field's value of the MemoryEntry entity.
+// If the MemoryEntry object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MemoryEntryMutation) OldSummary(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSummary is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSummary requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSummary: %w", err)
+	}
+	return oldValue.Summary, nil
+}
+
+// ResetSummary resets all changes to the "summary" field.
+func (m *MemoryEntryMutation) ResetSummary() {
+	m.summary = nil
+}
+
+// SetContent sets the "content" field.
+func (m *MemoryEntryMutation) SetContent(s string) {
+	m.content = &s
+}
+
+// Content returns the value of the "content" field in the mutation.
+func (m *MemoryEntryMutation) Content() (r string, exists bool) {
+	v := m.content
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldContent returns the old "content" field's value of the MemoryEntry entity.
+// If the MemoryEntry object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MemoryEntryMutation) OldContent(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldContent is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldContent requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldContent: %w", err)
+	}
+	return oldValue.Content, nil
+}
+
+// ResetContent resets all changes to the "content" field.
+func (m *MemoryEntryMutation) ResetContent() {
+	m.content = nil
+}
+
+// SetKind sets the "kind" field.
+func (m *MemoryEntryMutation) SetKind(s string) {
+	m.kind = &s
+}
+
+// Kind returns the value of the "kind" field in the mutation.
+func (m *MemoryEntryMutation) Kind() (r string, exists bool) {
+	v := m.kind
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldKind returns the old "kind" field's value of the MemoryEntry entity.
+// If the MemoryEntry object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MemoryEntryMutation) OldKind(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldKind is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldKind requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldKind: %w", err)
+	}
+	return oldValue.Kind, nil
+}
+
+// ResetKind resets all changes to the "kind" field.
+func (m *MemoryEntryMutation) ResetKind() {
+	m.kind = nil
+}
+
+// SetSourceKind sets the "source_kind" field.
+func (m *MemoryEntryMutation) SetSourceKind(s string) {
+	m.source_kind = &s
+}
+
+// SourceKind returns the value of the "source_kind" field in the mutation.
+func (m *MemoryEntryMutation) SourceKind() (r string, exists bool) {
+	v := m.source_kind
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSourceKind returns the old "source_kind" field's value of the MemoryEntry entity.
+// If the MemoryEntry object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MemoryEntryMutation) OldSourceKind(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSourceKind is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSourceKind requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSourceKind: %w", err)
+	}
+	return oldValue.SourceKind, nil
+}
+
+// ResetSourceKind resets all changes to the "source_kind" field.
+func (m *MemoryEntryMutation) ResetSourceKind() {
+	m.source_kind = nil
+}
+
+// SetSourceRef sets the "source_ref" field.
+func (m *MemoryEntryMutation) SetSourceRef(s string) {
+	m.source_ref = &s
+}
+
+// SourceRef returns the value of the "source_ref" field in the mutation.
+func (m *MemoryEntryMutation) SourceRef() (r string, exists bool) {
+	v := m.source_ref
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSourceRef returns the old "source_ref" field's value of the MemoryEntry entity.
+// If the MemoryEntry object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MemoryEntryMutation) OldSourceRef(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSourceRef is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSourceRef requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSourceRef: %w", err)
+	}
+	return oldValue.SourceRef, nil
+}
+
+// ClearSourceRef clears the value of the "source_ref" field.
+func (m *MemoryEntryMutation) ClearSourceRef() {
+	m.source_ref = nil
+	m.clearedFields[memoryentry.FieldSourceRef] = struct{}{}
+}
+
+// SourceRefCleared returns if the "source_ref" field was cleared in this mutation.
+func (m *MemoryEntryMutation) SourceRefCleared() bool {
+	_, ok := m.clearedFields[memoryentry.FieldSourceRef]
+	return ok
+}
+
+// ResetSourceRef resets all changes to the "source_ref" field.
+func (m *MemoryEntryMutation) ResetSourceRef() {
+	m.source_ref = nil
+	delete(m.clearedFields, memoryentry.FieldSourceRef)
+}
+
+// SetConfidence sets the "confidence" field.
+func (m *MemoryEntryMutation) SetConfidence(f float64) {
+	m.confidence = &f
+	m.addconfidence = nil
+}
+
+// Confidence returns the value of the "confidence" field in the mutation.
+func (m *MemoryEntryMutation) Confidence() (r float64, exists bool) {
+	v := m.confidence
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldConfidence returns the old "confidence" field's value of the MemoryEntry entity.
+// If the MemoryEntry object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MemoryEntryMutation) OldConfidence(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldConfidence is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldConfidence requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldConfidence: %w", err)
+	}
+	return oldValue.Confidence, nil
+}
+
+// AddConfidence adds f to the "confidence" field.
+func (m *MemoryEntryMutation) AddConfidence(f float64) {
+	if m.addconfidence != nil {
+		*m.addconfidence += f
+	} else {
+		m.addconfidence = &f
+	}
+}
+
+// AddedConfidence returns the value that was added to the "confidence" field in this mutation.
+func (m *MemoryEntryMutation) AddedConfidence() (r float64, exists bool) {
+	v := m.addconfidence
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetConfidence resets all changes to the "confidence" field.
+func (m *MemoryEntryMutation) ResetConfidence() {
+	m.confidence = nil
+	m.addconfidence = nil
+}
+
+// SetValidFrom sets the "valid_from" field.
+func (m *MemoryEntryMutation) SetValidFrom(t time.Time) {
+	m.valid_from = &t
+}
+
+// ValidFrom returns the value of the "valid_from" field in the mutation.
+func (m *MemoryEntryMutation) ValidFrom() (r time.Time, exists bool) {
+	v := m.valid_from
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldValidFrom returns the old "valid_from" field's value of the MemoryEntry entity.
+// If the MemoryEntry object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MemoryEntryMutation) OldValidFrom(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldValidFrom is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldValidFrom requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldValidFrom: %w", err)
+	}
+	return oldValue.ValidFrom, nil
+}
+
+// ResetValidFrom resets all changes to the "valid_from" field.
+func (m *MemoryEntryMutation) ResetValidFrom() {
+	m.valid_from = nil
+}
+
+// SetValidUntil sets the "valid_until" field.
+func (m *MemoryEntryMutation) SetValidUntil(t time.Time) {
+	m.valid_until = &t
+}
+
+// ValidUntil returns the value of the "valid_until" field in the mutation.
+func (m *MemoryEntryMutation) ValidUntil() (r time.Time, exists bool) {
+	v := m.valid_until
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldValidUntil returns the old "valid_until" field's value of the MemoryEntry entity.
+// If the MemoryEntry object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MemoryEntryMutation) OldValidUntil(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldValidUntil is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldValidUntil requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldValidUntil: %w", err)
+	}
+	return oldValue.ValidUntil, nil
+}
+
+// ClearValidUntil clears the value of the "valid_until" field.
+func (m *MemoryEntryMutation) ClearValidUntil() {
+	m.valid_until = nil
+	m.clearedFields[memoryentry.FieldValidUntil] = struct{}{}
+}
+
+// ValidUntilCleared returns if the "valid_until" field was cleared in this mutation.
+func (m *MemoryEntryMutation) ValidUntilCleared() bool {
+	_, ok := m.clearedFields[memoryentry.FieldValidUntil]
+	return ok
+}
+
+// ResetValidUntil resets all changes to the "valid_until" field.
+func (m *MemoryEntryMutation) ResetValidUntil() {
+	m.valid_until = nil
+	delete(m.clearedFields, memoryentry.FieldValidUntil)
+}
+
+// SetSupersededBy sets the "superseded_by" field.
+func (m *MemoryEntryMutation) SetSupersededBy(s string) {
+	m.superseded_by = &s
+}
+
+// SupersededBy returns the value of the "superseded_by" field in the mutation.
+func (m *MemoryEntryMutation) SupersededBy() (r string, exists bool) {
+	v := m.superseded_by
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSupersededBy returns the old "superseded_by" field's value of the MemoryEntry entity.
+// If the MemoryEntry object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MemoryEntryMutation) OldSupersededBy(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSupersededBy is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSupersededBy requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSupersededBy: %w", err)
+	}
+	return oldValue.SupersededBy, nil
+}
+
+// ClearSupersededBy clears the value of the "superseded_by" field.
+func (m *MemoryEntryMutation) ClearSupersededBy() {
+	m.superseded_by = nil
+	m.clearedFields[memoryentry.FieldSupersededBy] = struct{}{}
+}
+
+// SupersededByCleared returns if the "superseded_by" field was cleared in this mutation.
+func (m *MemoryEntryMutation) SupersededByCleared() bool {
+	_, ok := m.clearedFields[memoryentry.FieldSupersededBy]
+	return ok
+}
+
+// ResetSupersededBy resets all changes to the "superseded_by" field.
+func (m *MemoryEntryMutation) ResetSupersededBy() {
+	m.superseded_by = nil
+	delete(m.clearedFields, memoryentry.FieldSupersededBy)
+}
+
+// SetUserID sets the "user_id" field.
+func (m *MemoryEntryMutation) SetUserID(s string) {
+	m.user_id = &s
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *MemoryEntryMutation) UserID() (r string, exists bool) {
+	v := m.user_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserID returns the old "user_id" field's value of the MemoryEntry entity.
+// If the MemoryEntry object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MemoryEntryMutation) OldUserID(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
+	}
+	return oldValue.UserID, nil
+}
+
+// ClearUserID clears the value of the "user_id" field.
+func (m *MemoryEntryMutation) ClearUserID() {
+	m.user_id = nil
+	m.clearedFields[memoryentry.FieldUserID] = struct{}{}
+}
+
+// UserIDCleared returns if the "user_id" field was cleared in this mutation.
+func (m *MemoryEntryMutation) UserIDCleared() bool {
+	_, ok := m.clearedFields[memoryentry.FieldUserID]
+	return ok
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *MemoryEntryMutation) ResetUserID() {
+	m.user_id = nil
+	delete(m.clearedFields, memoryentry.FieldUserID)
+}
+
+// Where appends a list predicates to the MemoryEntryMutation builder.
+func (m *MemoryEntryMutation) Where(ps ...predicate.MemoryEntry) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the MemoryEntryMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *MemoryEntryMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.MemoryEntry, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *MemoryEntryMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *MemoryEntryMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (MemoryEntry).
+func (m *MemoryEntryMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *MemoryEntryMutation) Fields() []string {
+	fields := make([]string, 0, 13)
+	if m.created_at != nil {
+		fields = append(fields, memoryentry.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, memoryentry.FieldUpdatedAt)
+	}
+	if m.space_id != nil {
+		fields = append(fields, memoryentry.FieldSpaceID)
+	}
+	if m.summary != nil {
+		fields = append(fields, memoryentry.FieldSummary)
+	}
+	if m.content != nil {
+		fields = append(fields, memoryentry.FieldContent)
+	}
+	if m.kind != nil {
+		fields = append(fields, memoryentry.FieldKind)
+	}
+	if m.source_kind != nil {
+		fields = append(fields, memoryentry.FieldSourceKind)
+	}
+	if m.source_ref != nil {
+		fields = append(fields, memoryentry.FieldSourceRef)
+	}
+	if m.confidence != nil {
+		fields = append(fields, memoryentry.FieldConfidence)
+	}
+	if m.valid_from != nil {
+		fields = append(fields, memoryentry.FieldValidFrom)
+	}
+	if m.valid_until != nil {
+		fields = append(fields, memoryentry.FieldValidUntil)
+	}
+	if m.superseded_by != nil {
+		fields = append(fields, memoryentry.FieldSupersededBy)
+	}
+	if m.user_id != nil {
+		fields = append(fields, memoryentry.FieldUserID)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *MemoryEntryMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case memoryentry.FieldCreatedAt:
+		return m.CreatedAt()
+	case memoryentry.FieldUpdatedAt:
+		return m.UpdatedAt()
+	case memoryentry.FieldSpaceID:
+		return m.SpaceID()
+	case memoryentry.FieldSummary:
+		return m.Summary()
+	case memoryentry.FieldContent:
+		return m.Content()
+	case memoryentry.FieldKind:
+		return m.Kind()
+	case memoryentry.FieldSourceKind:
+		return m.SourceKind()
+	case memoryentry.FieldSourceRef:
+		return m.SourceRef()
+	case memoryentry.FieldConfidence:
+		return m.Confidence()
+	case memoryentry.FieldValidFrom:
+		return m.ValidFrom()
+	case memoryentry.FieldValidUntil:
+		return m.ValidUntil()
+	case memoryentry.FieldSupersededBy:
+		return m.SupersededBy()
+	case memoryentry.FieldUserID:
+		return m.UserID()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *MemoryEntryMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case memoryentry.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case memoryentry.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	case memoryentry.FieldSpaceID:
+		return m.OldSpaceID(ctx)
+	case memoryentry.FieldSummary:
+		return m.OldSummary(ctx)
+	case memoryentry.FieldContent:
+		return m.OldContent(ctx)
+	case memoryentry.FieldKind:
+		return m.OldKind(ctx)
+	case memoryentry.FieldSourceKind:
+		return m.OldSourceKind(ctx)
+	case memoryentry.FieldSourceRef:
+		return m.OldSourceRef(ctx)
+	case memoryentry.FieldConfidence:
+		return m.OldConfidence(ctx)
+	case memoryentry.FieldValidFrom:
+		return m.OldValidFrom(ctx)
+	case memoryentry.FieldValidUntil:
+		return m.OldValidUntil(ctx)
+	case memoryentry.FieldSupersededBy:
+		return m.OldSupersededBy(ctx)
+	case memoryentry.FieldUserID:
+		return m.OldUserID(ctx)
+	}
+	return nil, fmt.Errorf("unknown MemoryEntry field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *MemoryEntryMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case memoryentry.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case memoryentry.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	case memoryentry.FieldSpaceID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSpaceID(v)
+		return nil
+	case memoryentry.FieldSummary:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSummary(v)
+		return nil
+	case memoryentry.FieldContent:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetContent(v)
+		return nil
+	case memoryentry.FieldKind:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetKind(v)
+		return nil
+	case memoryentry.FieldSourceKind:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSourceKind(v)
+		return nil
+	case memoryentry.FieldSourceRef:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSourceRef(v)
+		return nil
+	case memoryentry.FieldConfidence:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetConfidence(v)
+		return nil
+	case memoryentry.FieldValidFrom:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetValidFrom(v)
+		return nil
+	case memoryentry.FieldValidUntil:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetValidUntil(v)
+		return nil
+	case memoryentry.FieldSupersededBy:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSupersededBy(v)
+		return nil
+	case memoryentry.FieldUserID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
+		return nil
+	}
+	return fmt.Errorf("unknown MemoryEntry field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *MemoryEntryMutation) AddedFields() []string {
+	var fields []string
+	if m.addconfidence != nil {
+		fields = append(fields, memoryentry.FieldConfidence)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *MemoryEntryMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case memoryentry.FieldConfidence:
+		return m.AddedConfidence()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *MemoryEntryMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case memoryentry.FieldConfidence:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddConfidence(v)
+		return nil
+	}
+	return fmt.Errorf("unknown MemoryEntry numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *MemoryEntryMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(memoryentry.FieldSourceRef) {
+		fields = append(fields, memoryentry.FieldSourceRef)
+	}
+	if m.FieldCleared(memoryentry.FieldValidUntil) {
+		fields = append(fields, memoryentry.FieldValidUntil)
+	}
+	if m.FieldCleared(memoryentry.FieldSupersededBy) {
+		fields = append(fields, memoryentry.FieldSupersededBy)
+	}
+	if m.FieldCleared(memoryentry.FieldUserID) {
+		fields = append(fields, memoryentry.FieldUserID)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *MemoryEntryMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *MemoryEntryMutation) ClearField(name string) error {
+	switch name {
+	case memoryentry.FieldSourceRef:
+		m.ClearSourceRef()
+		return nil
+	case memoryentry.FieldValidUntil:
+		m.ClearValidUntil()
+		return nil
+	case memoryentry.FieldSupersededBy:
+		m.ClearSupersededBy()
+		return nil
+	case memoryentry.FieldUserID:
+		m.ClearUserID()
+		return nil
+	}
+	return fmt.Errorf("unknown MemoryEntry nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *MemoryEntryMutation) ResetField(name string) error {
+	switch name {
+	case memoryentry.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case memoryentry.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	case memoryentry.FieldSpaceID:
+		m.ResetSpaceID()
+		return nil
+	case memoryentry.FieldSummary:
+		m.ResetSummary()
+		return nil
+	case memoryentry.FieldContent:
+		m.ResetContent()
+		return nil
+	case memoryentry.FieldKind:
+		m.ResetKind()
+		return nil
+	case memoryentry.FieldSourceKind:
+		m.ResetSourceKind()
+		return nil
+	case memoryentry.FieldSourceRef:
+		m.ResetSourceRef()
+		return nil
+	case memoryentry.FieldConfidence:
+		m.ResetConfidence()
+		return nil
+	case memoryentry.FieldValidFrom:
+		m.ResetValidFrom()
+		return nil
+	case memoryentry.FieldValidUntil:
+		m.ResetValidUntil()
+		return nil
+	case memoryentry.FieldSupersededBy:
+		m.ResetSupersededBy()
+		return nil
+	case memoryentry.FieldUserID:
+		m.ResetUserID()
+		return nil
+	}
+	return fmt.Errorf("unknown MemoryEntry field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *MemoryEntryMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *MemoryEntryMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *MemoryEntryMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *MemoryEntryMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *MemoryEntryMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *MemoryEntryMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *MemoryEntryMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown MemoryEntry unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *MemoryEntryMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown MemoryEntry edge %s", name)
+}
+
+// MemoryInjectionMutation represents an operation that mutates the MemoryInjection nodes in the graph.
+type MemoryInjectionMutation struct {
+	config
+	op                 Op
+	typ                string
+	id                 *string
+	created_at         *time.Time
+	updated_at         *time.Time
+	stage_run_id       *string
+	entry_ids          *[]string
+	appendentry_ids    []string
+	char_budget        *int
+	addchar_budget     *int
+	chars_used         *int
+	addchars_used      *int
+	candidate_count    *int
+	addcandidate_count *int
+	clearedFields      map[string]struct{}
+	done               bool
+	oldValue           func(context.Context) (*MemoryInjection, error)
+	predicates         []predicate.MemoryInjection
+}
+
+var _ ent.Mutation = (*MemoryInjectionMutation)(nil)
+
+// memoryinjectionOption allows management of the mutation configuration using functional options.
+type memoryinjectionOption func(*MemoryInjectionMutation)
+
+// newMemoryInjectionMutation creates new mutation for the MemoryInjection entity.
+func newMemoryInjectionMutation(c config, op Op, opts ...memoryinjectionOption) *MemoryInjectionMutation {
+	m := &MemoryInjectionMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeMemoryInjection,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withMemoryInjectionID sets the ID field of the mutation.
+func withMemoryInjectionID(id string) memoryinjectionOption {
+	return func(m *MemoryInjectionMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *MemoryInjection
+		)
+		m.oldValue = func(ctx context.Context) (*MemoryInjection, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().MemoryInjection.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withMemoryInjection sets the old MemoryInjection of the mutation.
+func withMemoryInjection(node *MemoryInjection) memoryinjectionOption {
+	return func(m *MemoryInjectionMutation) {
+		m.oldValue = func(context.Context) (*MemoryInjection, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m MemoryInjectionMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m MemoryInjectionMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of MemoryInjection entities.
+func (m *MemoryInjectionMutation) SetID(id string) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *MemoryInjectionMutation) ID() (id string, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *MemoryInjectionMutation) IDs(ctx context.Context) ([]string, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []string{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().MemoryInjection.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *MemoryInjectionMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *MemoryInjectionMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the MemoryInjection entity.
+// If the MemoryInjection object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MemoryInjectionMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *MemoryInjectionMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *MemoryInjectionMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *MemoryInjectionMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the MemoryInjection entity.
+// If the MemoryInjection object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MemoryInjectionMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *MemoryInjectionMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// SetStageRunID sets the "stage_run_id" field.
+func (m *MemoryInjectionMutation) SetStageRunID(s string) {
+	m.stage_run_id = &s
+}
+
+// StageRunID returns the value of the "stage_run_id" field in the mutation.
+func (m *MemoryInjectionMutation) StageRunID() (r string, exists bool) {
+	v := m.stage_run_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStageRunID returns the old "stage_run_id" field's value of the MemoryInjection entity.
+// If the MemoryInjection object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MemoryInjectionMutation) OldStageRunID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStageRunID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStageRunID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStageRunID: %w", err)
+	}
+	return oldValue.StageRunID, nil
+}
+
+// ResetStageRunID resets all changes to the "stage_run_id" field.
+func (m *MemoryInjectionMutation) ResetStageRunID() {
+	m.stage_run_id = nil
+}
+
+// SetEntryIds sets the "entry_ids" field.
+func (m *MemoryInjectionMutation) SetEntryIds(s []string) {
+	m.entry_ids = &s
+	m.appendentry_ids = nil
+}
+
+// EntryIds returns the value of the "entry_ids" field in the mutation.
+func (m *MemoryInjectionMutation) EntryIds() (r []string, exists bool) {
+	v := m.entry_ids
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEntryIds returns the old "entry_ids" field's value of the MemoryInjection entity.
+// If the MemoryInjection object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MemoryInjectionMutation) OldEntryIds(ctx context.Context) (v []string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEntryIds is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEntryIds requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEntryIds: %w", err)
+	}
+	return oldValue.EntryIds, nil
+}
+
+// AppendEntryIds adds s to the "entry_ids" field.
+func (m *MemoryInjectionMutation) AppendEntryIds(s []string) {
+	m.appendentry_ids = append(m.appendentry_ids, s...)
+}
+
+// AppendedEntryIds returns the list of values that were appended to the "entry_ids" field in this mutation.
+func (m *MemoryInjectionMutation) AppendedEntryIds() ([]string, bool) {
+	if len(m.appendentry_ids) == 0 {
+		return nil, false
+	}
+	return m.appendentry_ids, true
+}
+
+// ResetEntryIds resets all changes to the "entry_ids" field.
+func (m *MemoryInjectionMutation) ResetEntryIds() {
+	m.entry_ids = nil
+	m.appendentry_ids = nil
+}
+
+// SetCharBudget sets the "char_budget" field.
+func (m *MemoryInjectionMutation) SetCharBudget(i int) {
+	m.char_budget = &i
+	m.addchar_budget = nil
+}
+
+// CharBudget returns the value of the "char_budget" field in the mutation.
+func (m *MemoryInjectionMutation) CharBudget() (r int, exists bool) {
+	v := m.char_budget
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCharBudget returns the old "char_budget" field's value of the MemoryInjection entity.
+// If the MemoryInjection object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MemoryInjectionMutation) OldCharBudget(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCharBudget is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCharBudget requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCharBudget: %w", err)
+	}
+	return oldValue.CharBudget, nil
+}
+
+// AddCharBudget adds i to the "char_budget" field.
+func (m *MemoryInjectionMutation) AddCharBudget(i int) {
+	if m.addchar_budget != nil {
+		*m.addchar_budget += i
+	} else {
+		m.addchar_budget = &i
+	}
+}
+
+// AddedCharBudget returns the value that was added to the "char_budget" field in this mutation.
+func (m *MemoryInjectionMutation) AddedCharBudget() (r int, exists bool) {
+	v := m.addchar_budget
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetCharBudget resets all changes to the "char_budget" field.
+func (m *MemoryInjectionMutation) ResetCharBudget() {
+	m.char_budget = nil
+	m.addchar_budget = nil
+}
+
+// SetCharsUsed sets the "chars_used" field.
+func (m *MemoryInjectionMutation) SetCharsUsed(i int) {
+	m.chars_used = &i
+	m.addchars_used = nil
+}
+
+// CharsUsed returns the value of the "chars_used" field in the mutation.
+func (m *MemoryInjectionMutation) CharsUsed() (r int, exists bool) {
+	v := m.chars_used
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCharsUsed returns the old "chars_used" field's value of the MemoryInjection entity.
+// If the MemoryInjection object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MemoryInjectionMutation) OldCharsUsed(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCharsUsed is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCharsUsed requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCharsUsed: %w", err)
+	}
+	return oldValue.CharsUsed, nil
+}
+
+// AddCharsUsed adds i to the "chars_used" field.
+func (m *MemoryInjectionMutation) AddCharsUsed(i int) {
+	if m.addchars_used != nil {
+		*m.addchars_used += i
+	} else {
+		m.addchars_used = &i
+	}
+}
+
+// AddedCharsUsed returns the value that was added to the "chars_used" field in this mutation.
+func (m *MemoryInjectionMutation) AddedCharsUsed() (r int, exists bool) {
+	v := m.addchars_used
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetCharsUsed resets all changes to the "chars_used" field.
+func (m *MemoryInjectionMutation) ResetCharsUsed() {
+	m.chars_used = nil
+	m.addchars_used = nil
+}
+
+// SetCandidateCount sets the "candidate_count" field.
+func (m *MemoryInjectionMutation) SetCandidateCount(i int) {
+	m.candidate_count = &i
+	m.addcandidate_count = nil
+}
+
+// CandidateCount returns the value of the "candidate_count" field in the mutation.
+func (m *MemoryInjectionMutation) CandidateCount() (r int, exists bool) {
+	v := m.candidate_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCandidateCount returns the old "candidate_count" field's value of the MemoryInjection entity.
+// If the MemoryInjection object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MemoryInjectionMutation) OldCandidateCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCandidateCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCandidateCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCandidateCount: %w", err)
+	}
+	return oldValue.CandidateCount, nil
+}
+
+// AddCandidateCount adds i to the "candidate_count" field.
+func (m *MemoryInjectionMutation) AddCandidateCount(i int) {
+	if m.addcandidate_count != nil {
+		*m.addcandidate_count += i
+	} else {
+		m.addcandidate_count = &i
+	}
+}
+
+// AddedCandidateCount returns the value that was added to the "candidate_count" field in this mutation.
+func (m *MemoryInjectionMutation) AddedCandidateCount() (r int, exists bool) {
+	v := m.addcandidate_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetCandidateCount resets all changes to the "candidate_count" field.
+func (m *MemoryInjectionMutation) ResetCandidateCount() {
+	m.candidate_count = nil
+	m.addcandidate_count = nil
+}
+
+// Where appends a list predicates to the MemoryInjectionMutation builder.
+func (m *MemoryInjectionMutation) Where(ps ...predicate.MemoryInjection) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the MemoryInjectionMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *MemoryInjectionMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.MemoryInjection, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *MemoryInjectionMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *MemoryInjectionMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (MemoryInjection).
+func (m *MemoryInjectionMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *MemoryInjectionMutation) Fields() []string {
+	fields := make([]string, 0, 7)
+	if m.created_at != nil {
+		fields = append(fields, memoryinjection.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, memoryinjection.FieldUpdatedAt)
+	}
+	if m.stage_run_id != nil {
+		fields = append(fields, memoryinjection.FieldStageRunID)
+	}
+	if m.entry_ids != nil {
+		fields = append(fields, memoryinjection.FieldEntryIds)
+	}
+	if m.char_budget != nil {
+		fields = append(fields, memoryinjection.FieldCharBudget)
+	}
+	if m.chars_used != nil {
+		fields = append(fields, memoryinjection.FieldCharsUsed)
+	}
+	if m.candidate_count != nil {
+		fields = append(fields, memoryinjection.FieldCandidateCount)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *MemoryInjectionMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case memoryinjection.FieldCreatedAt:
+		return m.CreatedAt()
+	case memoryinjection.FieldUpdatedAt:
+		return m.UpdatedAt()
+	case memoryinjection.FieldStageRunID:
+		return m.StageRunID()
+	case memoryinjection.FieldEntryIds:
+		return m.EntryIds()
+	case memoryinjection.FieldCharBudget:
+		return m.CharBudget()
+	case memoryinjection.FieldCharsUsed:
+		return m.CharsUsed()
+	case memoryinjection.FieldCandidateCount:
+		return m.CandidateCount()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *MemoryInjectionMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case memoryinjection.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case memoryinjection.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	case memoryinjection.FieldStageRunID:
+		return m.OldStageRunID(ctx)
+	case memoryinjection.FieldEntryIds:
+		return m.OldEntryIds(ctx)
+	case memoryinjection.FieldCharBudget:
+		return m.OldCharBudget(ctx)
+	case memoryinjection.FieldCharsUsed:
+		return m.OldCharsUsed(ctx)
+	case memoryinjection.FieldCandidateCount:
+		return m.OldCandidateCount(ctx)
+	}
+	return nil, fmt.Errorf("unknown MemoryInjection field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *MemoryInjectionMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case memoryinjection.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case memoryinjection.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	case memoryinjection.FieldStageRunID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStageRunID(v)
+		return nil
+	case memoryinjection.FieldEntryIds:
+		v, ok := value.([]string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEntryIds(v)
+		return nil
+	case memoryinjection.FieldCharBudget:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCharBudget(v)
+		return nil
+	case memoryinjection.FieldCharsUsed:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCharsUsed(v)
+		return nil
+	case memoryinjection.FieldCandidateCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCandidateCount(v)
+		return nil
+	}
+	return fmt.Errorf("unknown MemoryInjection field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *MemoryInjectionMutation) AddedFields() []string {
+	var fields []string
+	if m.addchar_budget != nil {
+		fields = append(fields, memoryinjection.FieldCharBudget)
+	}
+	if m.addchars_used != nil {
+		fields = append(fields, memoryinjection.FieldCharsUsed)
+	}
+	if m.addcandidate_count != nil {
+		fields = append(fields, memoryinjection.FieldCandidateCount)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *MemoryInjectionMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case memoryinjection.FieldCharBudget:
+		return m.AddedCharBudget()
+	case memoryinjection.FieldCharsUsed:
+		return m.AddedCharsUsed()
+	case memoryinjection.FieldCandidateCount:
+		return m.AddedCandidateCount()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *MemoryInjectionMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case memoryinjection.FieldCharBudget:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddCharBudget(v)
+		return nil
+	case memoryinjection.FieldCharsUsed:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddCharsUsed(v)
+		return nil
+	case memoryinjection.FieldCandidateCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddCandidateCount(v)
+		return nil
+	}
+	return fmt.Errorf("unknown MemoryInjection numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *MemoryInjectionMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *MemoryInjectionMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *MemoryInjectionMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown MemoryInjection nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *MemoryInjectionMutation) ResetField(name string) error {
+	switch name {
+	case memoryinjection.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case memoryinjection.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	case memoryinjection.FieldStageRunID:
+		m.ResetStageRunID()
+		return nil
+	case memoryinjection.FieldEntryIds:
+		m.ResetEntryIds()
+		return nil
+	case memoryinjection.FieldCharBudget:
+		m.ResetCharBudget()
+		return nil
+	case memoryinjection.FieldCharsUsed:
+		m.ResetCharsUsed()
+		return nil
+	case memoryinjection.FieldCandidateCount:
+		m.ResetCandidateCount()
+		return nil
+	}
+	return fmt.Errorf("unknown MemoryInjection field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *MemoryInjectionMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *MemoryInjectionMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *MemoryInjectionMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *MemoryInjectionMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *MemoryInjectionMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *MemoryInjectionMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *MemoryInjectionMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown MemoryInjection unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *MemoryInjectionMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown MemoryInjection edge %s", name)
 }
 
 // PermissionPresetMutation represents an operation that mutates the PermissionPreset nodes in the graph.

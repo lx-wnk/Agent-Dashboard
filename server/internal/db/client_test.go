@@ -468,3 +468,65 @@ func TestBackfillGrantsSkipsUngrantedTaskPermissions(t *testing.T) {
 	require.NoError(t, bundle2.DB.QueryRow(`SELECT COUNT(*) FROM grants`).Scan(&count))
 	require.Equal(t, 0, count, "an ungranted task_permission must not become a grant")
 }
+
+// TestOpenTwiceWithMemoryTables proves the memory_entries and
+// memory_injections tables and memory_entries' three indexes survive a second
+// Open on an existing database. An ent index change triggers SQLite's 12-step
+// table rebuild, which fails on populated tables with "NOT NULL constraint
+// failed" — the pre-migration exists to make ent's diff find the indexes
+// already present so it never rebuilds.
+func TestOpenTwiceWithMemoryTables(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "twice-memory.db")
+
+	first, err := db.Open(path)
+	if err != nil {
+		t.Fatalf("first Open: %v", err)
+	}
+	ctx := context.Background()
+	if _, err := first.Client.MemoryEntry.Create().
+		SetID("entry-1").
+		SetSpaceID("space-1").
+		SetSummary("example summary").
+		SetContent("example content").
+		SetKind("fact").
+		SetSourceKind("agent").
+		SetConfidence(0.9).
+		Save(ctx); err != nil {
+		t.Fatalf("insert memory_entry: %v", err)
+	}
+	if _, err := first.Client.MemoryInjection.Create().
+		SetID("injection-1").
+		SetStageRunID("stage-run-1").
+		SetCharBudget(1000).
+		SetCharsUsed(200).
+		SetCandidateCount(3).
+		Save(ctx); err != nil {
+		t.Fatalf("insert memory_injection: %v", err)
+	}
+	if err := first.Client.Close(); err != nil {
+		t.Fatalf("close first: %v", err)
+	}
+
+	second, err := db.Open(path)
+	if err != nil {
+		t.Fatalf("second Open on a populated database: %v", err)
+	}
+	t.Cleanup(func() { _ = second.Client.Close() })
+
+	entries, err := second.Client.MemoryEntry.Query().Count(ctx)
+	if err != nil {
+		t.Fatalf("count memory_entries after reopen: %v", err)
+	}
+	if entries != 1 {
+		t.Errorf("memory_entry count after reopen = %d, want 1", entries)
+	}
+
+	injections, err := second.Client.MemoryInjection.Query().Count(ctx)
+	if err != nil {
+		t.Fatalf("count memory_injections after reopen: %v", err)
+	}
+	if injections != 1 {
+		t.Errorf("memory_injection count after reopen = %d, want 1", injections)
+	}
+}

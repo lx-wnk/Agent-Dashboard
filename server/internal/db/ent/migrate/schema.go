@@ -324,6 +324,63 @@ var (
 			},
 		},
 	}
+	// MemoryEntriesColumns holds the columns for the "memory_entries" table.
+	MemoryEntriesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "space_id", Type: field.TypeString},
+		{Name: "summary", Type: field.TypeString},
+		{Name: "content", Type: field.TypeString, Size: 2147483647},
+		{Name: "kind", Type: field.TypeString},
+		{Name: "source_kind", Type: field.TypeString},
+		{Name: "source_ref", Type: field.TypeString, Nullable: true},
+		{Name: "confidence", Type: field.TypeFloat64},
+		{Name: "valid_from", Type: field.TypeTime},
+		{Name: "valid_until", Type: field.TypeTime, Nullable: true},
+		{Name: "superseded_by", Type: field.TypeString, Nullable: true},
+		{Name: "user_id", Type: field.TypeString, Nullable: true},
+	}
+	// MemoryEntriesTable holds the schema information for the "memory_entries" table.
+	MemoryEntriesTable = &schema.Table{
+		Name:       "memory_entries",
+		Columns:    MemoryEntriesColumns,
+		PrimaryKey: []*schema.Column{MemoryEntriesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "memoryentry_space_id_valid_until",
+				Unique:  false,
+				Columns: []*schema.Column{MemoryEntriesColumns[3], MemoryEntriesColumns[11]},
+			},
+			{
+				Name:    "memoryentry_space_id_kind",
+				Unique:  false,
+				Columns: []*schema.Column{MemoryEntriesColumns[3], MemoryEntriesColumns[6]},
+			},
+			{
+				Name:    "memoryentry_superseded_by",
+				Unique:  false,
+				Columns: []*schema.Column{MemoryEntriesColumns[12]},
+			},
+		},
+	}
+	// MemoryInjectionsColumns holds the columns for the "memory_injections" table.
+	MemoryInjectionsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "stage_run_id", Type: field.TypeString},
+		{Name: "entry_ids", Type: field.TypeJSON},
+		{Name: "char_budget", Type: field.TypeInt},
+		{Name: "chars_used", Type: field.TypeInt},
+		{Name: "candidate_count", Type: field.TypeInt},
+	}
+	// MemoryInjectionsTable holds the schema information for the "memory_injections" table.
+	MemoryInjectionsTable = &schema.Table{
+		Name:       "memory_injections",
+		Columns:    MemoryInjectionsColumns,
+		PrimaryKey: []*schema.Column{MemoryInjectionsColumns[0]},
+	}
 	// PermissionPresetsColumns holds the columns for the "permission_presets" table.
 	PermissionPresetsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -981,6 +1038,8 @@ var (
 		EvalMetricSnapshotsTable,
 		GrantsTable,
 		GrantUsagesTable,
+		MemoryEntriesTable,
+		MemoryInjectionsTable,
 		PermissionPresetsTable,
 		PermissionRequestsTable,
 		PipelineConfigsTable,

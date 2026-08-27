@@ -106,6 +106,10 @@ func Open(path string) (*DBBundle, error) {
 		_ = client.Close()
 		return nil, fmt.Errorf("db: ensure grant_usage index: %w", err)
 	}
+	if err := migrateEnsureMemoryEntryIndexes(sqlDB); err != nil {
+		_ = client.Close()
+		return nil, fmt.Errorf("db: ensure memory_entry indexes: %w", err)
+	}
 	if err := client.Schema.Create(context.Background()); err != nil {
 		_ = client.Close()
 		return nil, fmt.Errorf("db: auto-migrate: %w", err)
@@ -690,6 +694,43 @@ func migrateEnsureGrantUsageIndex(db *sql.DB) error {
 			`ON grant_usages (grant_id, used_at)`,
 	); err != nil {
 		return fmt.Errorf("pre-create grant_usage index: %w", err)
+	}
+	return nil
+}
+
+// migrateEnsureMemoryEntryIndexes pre-creates the memory_entries table's three
+// named indexes under ent's exact generated names before ent auto-migrate
+// runs. The memory_entries table is new in this change, so today's fresh
+// databases hit the no-op path below and ent creates the table with all three
+// indexes already declared. The guard exists for the databases that will
+// exist once this ships: a later change to any of these indexes would
+// otherwise make ent's diff add it via SQLite's 12-step table rebuild, which
+// crashes on populated databases with "NOT NULL constraint failed" (PR #207)
+// — the same hazard migrateEnsureGrantIndexes guards against, applied here to
+// a new table with only non-unique indexes.
+// Idempotent via IF NOT EXISTS.
+func migrateEnsureMemoryEntryIndexes(db *sql.DB) error {
+	var exists int
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'memory_entries'`,
+	).Scan(&exists); err != nil {
+		return fmt.Errorf("probe memory_entries table: %w", err)
+	}
+	if exists == 0 {
+		return nil
+	}
+	stmts := []string{
+		`CREATE INDEX IF NOT EXISTS memoryentry_space_id_valid_until ` +
+			`ON memory_entries (space_id, valid_until)`,
+		`CREATE INDEX IF NOT EXISTS memoryentry_space_id_kind ` +
+			`ON memory_entries (space_id, kind)`,
+		`CREATE INDEX IF NOT EXISTS memoryentry_superseded_by ` +
+			`ON memory_entries (superseded_by)`,
+	}
+	for _, stmt := range stmts {
+		if _, err := db.Exec(stmt); err != nil {
+			return fmt.Errorf("pre-create memory_entry index: %w\nstatement: %s", err, stmt)
+		}
 	}
 	return nil
 }
