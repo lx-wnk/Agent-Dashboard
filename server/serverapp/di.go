@@ -232,6 +232,13 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		if err := seedPluginsFromEnabledList(ctx, settingsSvc, pluginRepo); err != nil {
 			return nil, fmt.Errorf("seed plugins from enabled list: %w", err)
 		}
+
+		resourceRepo := repo.NewResourceRepo(entClient)
+		if linked, err := repo.ReconcilePluginResources(ctx, resourceRepo, entClient); err != nil {
+			slog.Warn("registry: plugin reconcile failed", "err", err)
+		} else if linked > 0 {
+			slog.Info("registry: linked plugins to registry identities", "count", linked)
+		}
 	}
 
 	// Load plugins from configured plugin_dir. ctx is the server-lifetime context
