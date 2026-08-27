@@ -15,7 +15,7 @@ import (
 //
 // Idempotent: a plugin that already carries a resource_id is skipped, so this
 // runs on every boot and returns 0 once the tree is settled.
-func ReconcilePluginResources(ctx context.Context, resources ResourceRepo, plugins PluginRepo, client *ent.Client) (int, error) {
+func ReconcilePluginResources(ctx context.Context, resources ResourceRepo, client *ent.Client) (int, error) {
 	rows, err := client.Plugin.Query().Where(plugin.ResourceIDEQ("")).All(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("reconcile plugins: query unlinked: %w", err)

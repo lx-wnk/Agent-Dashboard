@@ -27,7 +27,7 @@ func TestReconcilePluginResourcesIsIdempotent(t *testing.T) {
 		t.Fatalf("seed plugin: %v", err)
 	}
 
-	n, err := repo.ReconcilePluginResources(ctx, resourceRepo, pluginRepo, bundle.Client)
+	n, err := repo.ReconcilePluginResources(ctx, resourceRepo, bundle.Client)
 	if err != nil {
 		t.Fatalf("first reconcile: %v", err)
 	}
@@ -35,7 +35,7 @@ func TestReconcilePluginResourcesIsIdempotent(t *testing.T) {
 		t.Errorf("first reconcile linked %d plugins, want 1", n)
 	}
 
-	again, err := repo.ReconcilePluginResources(ctx, resourceRepo, pluginRepo, bundle.Client)
+	again, err := repo.ReconcilePluginResources(ctx, resourceRepo, bundle.Client)
 	if err != nil {
 		t.Fatalf("second reconcile: %v", err)
 	}
