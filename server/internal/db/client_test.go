@@ -1,6 +1,7 @@
 package db_test
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"path/filepath"
@@ -301,4 +302,44 @@ func hasIndexAtPath(t *testing.T, path, table, indexName string) bool {
 	require.NoError(t, err)
 	defer func() { _ = raw.Close() }()
 	return hasIndex(t, raw, table, indexName)
+}
+
+// TestOpenTwiceWithResourceTable proves the resource table and its unique index
+// survive a second Open on an existing database. An ent index change triggers
+// SQLite's 12-step table rebuild, which fails on populated tables with
+// "NOT NULL constraint failed" — the pre-migration exists to make ent's diff
+// find the index already present so it never rebuilds.
+func TestOpenTwiceWithResourceTable(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "twice.db")
+
+	first, err := db.Open(path)
+	if err != nil {
+		t.Fatalf("first Open: %v", err)
+	}
+	ctx := context.Background()
+	if _, err := first.Client.Resource.Create().
+		SetID("res-1").
+		SetKind("application").
+		SetSlug("example").
+		Save(ctx); err != nil {
+		t.Fatalf("insert resource: %v", err)
+	}
+	if err := first.Client.Close(); err != nil {
+		t.Fatalf("close first: %v", err)
+	}
+
+	second, err := db.Open(path)
+	if err != nil {
+		t.Fatalf("second Open on a populated database: %v", err)
+	}
+	t.Cleanup(func() { _ = second.Client.Close() })
+
+	n, err := second.Client.Resource.Query().Count(ctx)
+	if err != nil {
+		t.Fatalf("count after reopen: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("resource count after reopen = %d, want 1", n)
+	}
 }

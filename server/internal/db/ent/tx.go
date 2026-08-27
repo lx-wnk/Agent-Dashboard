@@ -50,6 +50,8 @@ type Tx struct {
 	RefinementTurn *RefinementTurnClient
 	// RemoteRegistration is the client for interacting with the RemoteRegistration builders.
 	RemoteRegistration *RemoteRegistrationClient
+	// Resource is the client for interacting with the Resource builders.
+	Resource *ResourceClient
 	// Scratchpad is the client for interacting with the Scratchpad builders.
 	Scratchpad *ScratchpadClient
 	// Spawner is the client for interacting with the Spawner builders.
@@ -218,6 +220,7 @@ func (tx *Tx) init() {
 	tx.ProviderSetting = NewProviderSettingClient(tx.config)
 	tx.RefinementTurn = NewRefinementTurnClient(tx.config)
 	tx.RemoteRegistration = NewRemoteRegistrationClient(tx.config)
+	tx.Resource = NewResourceClient(tx.config)
 	tx.Scratchpad = NewScratchpadClient(tx.config)
 	tx.Spawner = NewSpawnerClient(tx.config)
 	tx.StageRun = NewStageRunClient(tx.config)

@@ -507,6 +507,40 @@ var (
 			},
 		},
 	}
+	// ResourcesColumns holds the columns for the "resources" table.
+	ResourcesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "kind", Type: field.TypeString},
+		{Name: "slug", Type: field.TypeString},
+		{Name: "name", Type: field.TypeString, Default: ""},
+		{Name: "scope_kind", Type: field.TypeString, Default: "global"},
+		{Name: "scope_ref", Type: field.TypeString, Default: ""},
+		{Name: "node_id", Type: field.TypeString, Default: "local"},
+		{Name: "state", Type: field.TypeString, Default: "discovered"},
+		{Name: "version", Type: field.TypeString, Default: ""},
+		{Name: "origin", Type: field.TypeString, Default: "local"},
+		{Name: "origin_ref", Type: field.TypeString, Default: ""},
+	}
+	// ResourcesTable holds the schema information for the "resources" table.
+	ResourcesTable = &schema.Table{
+		Name:       "resources",
+		Columns:    ResourcesColumns,
+		PrimaryKey: []*schema.Column{ResourcesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "resource_kind_scope_kind_scope_ref_slug",
+				Unique:  true,
+				Columns: []*schema.Column{ResourcesColumns[3], ResourcesColumns[6], ResourcesColumns[7], ResourcesColumns[4]},
+			},
+			{
+				Name:    "resource_kind_state",
+				Unique:  false,
+				Columns: []*schema.Column{ResourcesColumns[3], ResourcesColumns[9]},
+			},
+		},
+	}
 	// ScratchpadsColumns holds the columns for the "scratchpads" table.
 	ScratchpadsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -877,6 +911,7 @@ var (
 		ProviderSettingsTable,
 		RefinementTurnsTable,
 		RemoteRegistrationsTable,
+		ResourcesTable,
 		ScratchpadsTable,
 		SpawnersTable,
 		StageRunsTable,

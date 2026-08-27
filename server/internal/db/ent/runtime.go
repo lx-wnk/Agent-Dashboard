@@ -23,6 +23,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/providersetting"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/refinementturn"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/remoteregistration"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/resource"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/schema"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/scratchpad"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/spawner"
@@ -257,6 +258,53 @@ func init() {
 	remoteregistrationDescCreatedAt := remoteregistrationFields[5].Descriptor()
 	// remoteregistration.DefaultCreatedAt holds the default value on creation for the created_at field.
 	remoteregistration.DefaultCreatedAt = remoteregistrationDescCreatedAt.Default.(func() time.Time)
+	resourceMixin := schema.Resource{}.Mixin()
+	resourceMixinFields0 := resourceMixin[0].Fields()
+	_ = resourceMixinFields0
+	resourceFields := schema.Resource{}.Fields()
+	_ = resourceFields
+	// resourceDescCreatedAt is the schema descriptor for created_at field.
+	resourceDescCreatedAt := resourceMixinFields0[1].Descriptor()
+	// resource.DefaultCreatedAt holds the default value on creation for the created_at field.
+	resource.DefaultCreatedAt = resourceDescCreatedAt.Default.(func() time.Time)
+	// resourceDescUpdatedAt is the schema descriptor for updated_at field.
+	resourceDescUpdatedAt := resourceMixinFields0[2].Descriptor()
+	// resource.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	resource.DefaultUpdatedAt = resourceDescUpdatedAt.Default.(func() time.Time)
+	// resource.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	resource.UpdateDefaultUpdatedAt = resourceDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// resourceDescName is the schema descriptor for name field.
+	resourceDescName := resourceFields[2].Descriptor()
+	// resource.DefaultName holds the default value on creation for the name field.
+	resource.DefaultName = resourceDescName.Default.(string)
+	// resourceDescScopeKind is the schema descriptor for scope_kind field.
+	resourceDescScopeKind := resourceFields[3].Descriptor()
+	// resource.DefaultScopeKind holds the default value on creation for the scope_kind field.
+	resource.DefaultScopeKind = resourceDescScopeKind.Default.(string)
+	// resourceDescScopeRef is the schema descriptor for scope_ref field.
+	resourceDescScopeRef := resourceFields[4].Descriptor()
+	// resource.DefaultScopeRef holds the default value on creation for the scope_ref field.
+	resource.DefaultScopeRef = resourceDescScopeRef.Default.(string)
+	// resourceDescNodeID is the schema descriptor for node_id field.
+	resourceDescNodeID := resourceFields[5].Descriptor()
+	// resource.DefaultNodeID holds the default value on creation for the node_id field.
+	resource.DefaultNodeID = resourceDescNodeID.Default.(string)
+	// resourceDescState is the schema descriptor for state field.
+	resourceDescState := resourceFields[6].Descriptor()
+	// resource.DefaultState holds the default value on creation for the state field.
+	resource.DefaultState = resourceDescState.Default.(string)
+	// resourceDescVersion is the schema descriptor for version field.
+	resourceDescVersion := resourceFields[7].Descriptor()
+	// resource.DefaultVersion holds the default value on creation for the version field.
+	resource.DefaultVersion = resourceDescVersion.Default.(string)
+	// resourceDescOrigin is the schema descriptor for origin field.
+	resourceDescOrigin := resourceFields[8].Descriptor()
+	// resource.DefaultOrigin holds the default value on creation for the origin field.
+	resource.DefaultOrigin = resourceDescOrigin.Default.(string)
+	// resourceDescOriginRef is the schema descriptor for origin_ref field.
+	resourceDescOriginRef := resourceFields[9].Descriptor()
+	// resource.DefaultOriginRef holds the default value on creation for the origin_ref field.
+	resource.DefaultOriginRef = resourceDescOriginRef.Default.(string)
 	scratchpadFields := schema.Scratchpad{}.Fields()
 	_ = scratchpadFields
 	// scratchpadDescUpdatedAt is the schema descriptor for updated_at field.

@@ -34,6 +34,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/providersetting"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/refinementturn"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/remoteregistration"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/resource"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/scratchpad"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/spawner"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/stagerun"
@@ -88,6 +89,8 @@ type Client struct {
 	RefinementTurn *RefinementTurnClient
 	// RemoteRegistration is the client for interacting with the RemoteRegistration builders.
 	RemoteRegistration *RemoteRegistrationClient
+	// Resource is the client for interacting with the Resource builders.
+	Resource *ResourceClient
 	// Scratchpad is the client for interacting with the Scratchpad builders.
 	Scratchpad *ScratchpadClient
 	// Spawner is the client for interacting with the Spawner builders.
@@ -136,6 +139,7 @@ func (c *Client) init() {
 	c.ProviderSetting = NewProviderSettingClient(c.config)
 	c.RefinementTurn = NewRefinementTurnClient(c.config)
 	c.RemoteRegistration = NewRemoteRegistrationClient(c.config)
+	c.Resource = NewResourceClient(c.config)
 	c.Scratchpad = NewScratchpadClient(c.config)
 	c.Spawner = NewSpawnerClient(c.config)
 	c.StageRun = NewStageRunClient(c.config)
@@ -256,6 +260,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		ProviderSetting:    NewProviderSettingClient(cfg),
 		RefinementTurn:     NewRefinementTurnClient(cfg),
 		RemoteRegistration: NewRemoteRegistrationClient(cfg),
+		Resource:           NewResourceClient(cfg),
 		Scratchpad:         NewScratchpadClient(cfg),
 		Spawner:            NewSpawnerClient(cfg),
 		StageRun:           NewStageRunClient(cfg),
@@ -303,6 +308,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		ProviderSetting:    NewProviderSettingClient(cfg),
 		RefinementTurn:     NewRefinementTurnClient(cfg),
 		RemoteRegistration: NewRemoteRegistrationClient(cfg),
+		Resource:           NewResourceClient(cfg),
 		Scratchpad:         NewScratchpadClient(cfg),
 		Spawner:            NewSpawnerClient(cfg),
 		StageRun:           NewStageRunClient(cfg),
@@ -345,8 +351,9 @@ func (c *Client) Use(hooks ...Hook) {
 		c.CoordLock, c.DriftAlert, c.EvalMetricSnapshot, c.PermissionPreset,
 		c.PermissionRequest, c.PipelineConfig, c.Plugin, c.PluginSetting, c.Project,
 		c.ProjectFolder, c.PromptTemplate, c.ProviderSetting, c.RefinementTurn,
-		c.RemoteRegistration, c.Scratchpad, c.Spawner, c.StageRun, c.SystemPrompt,
-		c.Task, c.TaskDependency, c.TaskPermission, c.TaskSchedule, c.User,
+		c.RemoteRegistration, c.Resource, c.Scratchpad, c.Spawner, c.StageRun,
+		c.SystemPrompt, c.Task, c.TaskDependency, c.TaskPermission, c.TaskSchedule,
+		c.User,
 	} {
 		n.Use(hooks...)
 	}
@@ -360,8 +367,9 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 		c.CoordLock, c.DriftAlert, c.EvalMetricSnapshot, c.PermissionPreset,
 		c.PermissionRequest, c.PipelineConfig, c.Plugin, c.PluginSetting, c.Project,
 		c.ProjectFolder, c.PromptTemplate, c.ProviderSetting, c.RefinementTurn,
-		c.RemoteRegistration, c.Scratchpad, c.Spawner, c.StageRun, c.SystemPrompt,
-		c.Task, c.TaskDependency, c.TaskPermission, c.TaskSchedule, c.User,
+		c.RemoteRegistration, c.Resource, c.Scratchpad, c.Spawner, c.StageRun,
+		c.SystemPrompt, c.Task, c.TaskDependency, c.TaskPermission, c.TaskSchedule,
+		c.User,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -408,6 +416,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.RefinementTurn.mutate(ctx, m)
 	case *RemoteRegistrationMutation:
 		return c.RemoteRegistration.mutate(ctx, m)
+	case *ResourceMutation:
+		return c.Resource.mutate(ctx, m)
 	case *ScratchpadMutation:
 		return c.Scratchpad.mutate(ctx, m)
 	case *SpawnerMutation:
@@ -3006,6 +3016,139 @@ func (c *RemoteRegistrationClient) mutate(ctx context.Context, m *RemoteRegistra
 	}
 }
 
+// ResourceClient is a client for the Resource schema.
+type ResourceClient struct {
+	config
+}
+
+// NewResourceClient returns a client for the Resource from the given config.
+func NewResourceClient(c config) *ResourceClient {
+	return &ResourceClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `resource.Hooks(f(g(h())))`.
+func (c *ResourceClient) Use(hooks ...Hook) {
+	c.hooks.Resource = append(c.hooks.Resource, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `resource.Intercept(f(g(h())))`.
+func (c *ResourceClient) Intercept(interceptors ...Interceptor) {
+	c.inters.Resource = append(c.inters.Resource, interceptors...)
+}
+
+// Create returns a builder for creating a Resource entity.
+func (c *ResourceClient) Create() *ResourceCreate {
+	mutation := newResourceMutation(c.config, OpCreate)
+	return &ResourceCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of Resource entities.
+func (c *ResourceClient) CreateBulk(builders ...*ResourceCreate) *ResourceCreateBulk {
+	return &ResourceCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ResourceClient) MapCreateBulk(slice any, setFunc func(*ResourceCreate, int)) *ResourceCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ResourceCreateBulk{err: fmt.Errorf("calling to ResourceClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ResourceCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &ResourceCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for Resource.
+func (c *ResourceClient) Update() *ResourceUpdate {
+	mutation := newResourceMutation(c.config, OpUpdate)
+	return &ResourceUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *ResourceClient) UpdateOne(_m *Resource) *ResourceUpdateOne {
+	mutation := newResourceMutation(c.config, OpUpdateOne, withResource(_m))
+	return &ResourceUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *ResourceClient) UpdateOneID(id string) *ResourceUpdateOne {
+	mutation := newResourceMutation(c.config, OpUpdateOne, withResourceID(id))
+	return &ResourceUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for Resource.
+func (c *ResourceClient) Delete() *ResourceDelete {
+	mutation := newResourceMutation(c.config, OpDelete)
+	return &ResourceDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *ResourceClient) DeleteOne(_m *Resource) *ResourceDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *ResourceClient) DeleteOneID(id string) *ResourceDeleteOne {
+	builder := c.Delete().Where(resource.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &ResourceDeleteOne{builder}
+}
+
+// Query returns a query builder for Resource.
+func (c *ResourceClient) Query() *ResourceQuery {
+	return &ResourceQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeResource},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a Resource entity by its id.
+func (c *ResourceClient) Get(ctx context.Context, id string) (*Resource, error) {
+	return c.Query().Where(resource.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *ResourceClient) GetX(ctx context.Context, id string) *Resource {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *ResourceClient) Hooks() []Hook {
+	return c.hooks.Resource
+}
+
+// Interceptors returns the client interceptors.
+func (c *ResourceClient) Interceptors() []Interceptor {
+	return c.inters.Resource
+}
+
+func (c *ResourceClient) mutate(ctx context.Context, m *ResourceMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&ResourceCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&ResourceUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&ResourceUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&ResourceDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown Resource mutation op: %q", m.Op())
+	}
+}
+
 // ScratchpadClient is a client for the Scratchpad schema.
 type ScratchpadClient struct {
 	config
@@ -4353,16 +4496,16 @@ type (
 		AgentCostTrend, ApiKey, AppSetting, AuditEvent, Checkpoint, CoordLock,
 		DriftAlert, EvalMetricSnapshot, PermissionPreset, PermissionRequest,
 		PipelineConfig, Plugin, PluginSetting, Project, ProjectFolder, PromptTemplate,
-		ProviderSetting, RefinementTurn, RemoteRegistration, Scratchpad, Spawner,
-		StageRun, SystemPrompt, Task, TaskDependency, TaskPermission, TaskSchedule,
-		User []ent.Hook
+		ProviderSetting, RefinementTurn, RemoteRegistration, Resource, Scratchpad,
+		Spawner, StageRun, SystemPrompt, Task, TaskDependency, TaskPermission,
+		TaskSchedule, User []ent.Hook
 	}
 	inters struct {
 		AgentCostTrend, ApiKey, AppSetting, AuditEvent, Checkpoint, CoordLock,
 		DriftAlert, EvalMetricSnapshot, PermissionPreset, PermissionRequest,
 		PipelineConfig, Plugin, PluginSetting, Project, ProjectFolder, PromptTemplate,
-		ProviderSetting, RefinementTurn, RemoteRegistration, Scratchpad, Spawner,
-		StageRun, SystemPrompt, Task, TaskDependency, TaskPermission, TaskSchedule,
-		User []ent.Interceptor
+		ProviderSetting, RefinementTurn, RemoteRegistration, Resource, Scratchpad,
+		Spawner, StageRun, SystemPrompt, Task, TaskDependency, TaskPermission,
+		TaskSchedule, User []ent.Interceptor
 	}
 )
