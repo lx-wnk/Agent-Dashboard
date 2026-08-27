@@ -113,9 +113,9 @@ func buildViaDecide(perms []*ent.TaskPermission, taskID string, allowGitPush boo
 	contexts := []capability.Context{{Kind: "task", Ref: taskID}}
 	var out []string
 	for _, s := range survivors {
-		cap := capability.CapabilityView{Name: s.tool, Class: "tool", EnforceableBy: []string{"spawn"}}
+		capView := capability.CapabilityView{Name: s.tool, Class: "tool", EnforceableBy: []string{"spawn"}}
 		req := capability.Request{Capability: s.tool, Value: s.value, Contexts: contexts}
-		if capability.Decide(req, grantsByTool[s.tool], cap).Effect == capability.EffectAllow {
+		if capability.Decide(req, grantsByTool[s.tool], capView).Effect == capability.EffectAllow {
 			out = append(out, formatAllowEntry(s.tool, s.value))
 		}
 	}
@@ -187,6 +187,21 @@ func TestAllowListParity(t *testing.T) {
 		assertParity(t, []*ent.TaskPermission{{ID: "p1", Tool: "Bash", Granted: true}}, false)
 	})
 
+	t.Run("rule 4: empty-string Bash pattern is dropped (currently backstopped by rule 6)", func(t *testing.T) {
+		// Pattern is a non-nil empty string, distinct from Pattern: nil above — this
+		// pins the "*p.Pattern == \"\"" half of rule 4 on its own. Today it is not
+		// actually rule 4 doing the work in a hypothetical narrowed-rule-4 world:
+		// an empty pattern also fails permissions.IsSafeBashPattern (rule 6, "empty
+		// pattern"), so removing rule 4's empty-string check alone would NOT turn
+		// this fixture red. That backstop is an accident of rule ordering, not a
+		// guarantee — record it here so a future reader does not mistake this
+		// fixture for proof that rule 4's empty-string half is independently
+		// covered.
+		assertParity(t, []*ent.TaskPermission{
+			{ID: "bash-empty-pattern", Tool: "Bash", Pattern: ptr(""), Granted: true},
+		}, false)
+	})
+
 	t.Run("rule 5: git-push Bash pattern is dropped when push is disallowed", func(t *testing.T) {
 		assertParity(t, []*ent.TaskPermission{
 			{ID: "p1", Tool: "Bash", Pattern: &gitPushPattern, Granted: true},
@@ -201,6 +216,18 @@ func TestAllowListParity(t *testing.T) {
 
 	t.Run("rule 7: bare WebFetch with no pattern is dropped", func(t *testing.T) {
 		assertParity(t, []*ent.TaskPermission{{ID: "p1", Tool: "WebFetch", Granted: true}}, false)
+	})
+
+	t.Run("rule 7: whitespace-only WebFetch pattern is dropped", func(t *testing.T) {
+		// Pattern is non-nil but blank, distinct from Pattern: nil above — this
+		// pins the "strings.TrimSpace(*p.Pattern) == \"\"" half of rule 7 on its
+		// own. WebFetch has no downstream safety net the way Bash has
+		// IsSafeBashPattern, so if this half of the guard is ever dropped, the
+		// result is an unrestricted WebFetch() allow entry with nothing else to
+		// catch it.
+		assertParity(t, []*ent.TaskPermission{
+			{ID: "webfetch-whitespace-pattern", Tool: "WebFetch", Pattern: ptr("   "), Granted: true},
+		}, false)
 	})
 
 	t.Run("manual_override bypasses the git-push and Bash-safety gates", func(t *testing.T) {
