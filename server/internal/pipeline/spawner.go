@@ -14,6 +14,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/capability"
 	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/envsec"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pathutil"
 	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
@@ -116,22 +117,16 @@ func SetCapabilityCatalogue(views map[string]capability.CapabilityView) {
 }
 
 // capabilityViewFor resolves the CapabilityView for tool, preferring the
-// booted catalogue and falling back to the same class/enforcement defaults
-// repo.SeedCapabilities assigns when the catalogue has no row yet — e.g. in
-// tests, or before the first boot has seeded it.
+// booted catalogue and falling back to repo.DefaultCapabilityView — the same
+// function repo.SeedCapabilities calls to fill a missing row — when the
+// catalogue has no entry yet (e.g. in tests, or before the first boot has
+// seeded it). The fallback delegates rather than holding its own copy of the
+// class/enforcement literals, so the two paths cannot silently drift apart.
 func capabilityViewFor(tool string) capability.CapabilityView {
 	if v, ok := capabilityCatalogue[tool]; ok {
 		return v
 	}
-	class := "tool"
-	if tool == "WebFetch" {
-		class = "reach"
-	}
-	return capability.CapabilityView{
-		Name:          tool,
-		Class:         class,
-		EnforceableBy: []string{capability.EnforcerSpawn, capability.EnforcerHook},
-	}
+	return repo.DefaultCapabilityView(tool)
 }
 
 // permissionGrantContextRef is the synthetic context reference paired with

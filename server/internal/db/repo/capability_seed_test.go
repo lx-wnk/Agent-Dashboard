@@ -2,10 +2,12 @@ package repo_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/capability"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
 )
@@ -129,5 +131,61 @@ func TestSeedCapabilitiesDoesNotOverwriteHumanEdit(t *testing.T) {
 	}
 	if bash.Class != repo.CapClassResource {
 		t.Errorf("Bash class = %q, want %q (human edit must survive a re-seed)", bash.Class, repo.CapClassResource)
+	}
+}
+
+// failingUpsertCapabilityRepo wraps a real CapabilityRepo and fails Upsert
+// for one specific name, to exercise SeedCapabilities' warn-and-continue
+// path — mirroring TestReconcilePluginResourcesSkipsOversizedIDButLinksTheRest
+// for the analogous plugin-reconcile precedent.
+type failingUpsertCapabilityRepo struct {
+	repo.CapabilityRepo
+	failName string
+}
+
+func (f *failingUpsertCapabilityRepo) Upsert(ctx context.Context, in repo.UpsertCapabilityInput) (*ent.Capability, error) {
+	if in.Name == f.failName {
+		return nil, fmt.Errorf("simulated failure for %s", f.failName)
+	}
+	return f.CapabilityRepo.Upsert(ctx, in)
+}
+
+// TestSeedCapabilitiesSkipsUnseedableNameButSeedsTheRest proves one
+// unseedable name does not stop every name ordered after it — the
+// warn-and-continue behaviour the brief asked to mirror from
+// ReconcilePluginResources. A loop that aborted on the first failure would
+// leave every later capability missing from the catalogue on every boot.
+func TestSeedCapabilitiesSkipsUnseedableNameButSeedsTheRest(t *testing.T) {
+	bundle, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("db.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+	ctx := context.Background()
+
+	real := repo.NewCapabilityRepo(bundle.Client)
+	names := permissions.GrantableToolNames()
+	if len(names) < 2 {
+		t.Fatal("test needs at least two grantable tool names")
+	}
+	failName := names[0] // GrantableToolNames is sorted, so later names exist to prove they still seed.
+	fake := &failingUpsertCapabilityRepo{CapabilityRepo: real, failName: failName}
+
+	seeded, err := repo.SeedCapabilities(ctx, fake)
+	if err != nil {
+		t.Fatalf("SeedCapabilities must not fail because one name is unseedable: %v", err)
+	}
+	if want := len(names) - 1; seeded != want {
+		t.Errorf("seeded = %d, want %d (every name except the failing one)", seeded, want)
+	}
+
+	if _, err := real.Get(ctx, failName); err == nil {
+		t.Errorf("failing name %q must not have been seeded", failName)
+	}
+
+	for _, later := range names[1:] {
+		if _, err := real.Get(ctx, later); err != nil {
+			t.Errorf("name %q ordered after the failing one was not seeded: %v", later, err)
+		}
 	}
 }
