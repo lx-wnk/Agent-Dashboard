@@ -7015,6 +7015,7 @@ type GrantMutation struct {
 	granted_by              *string
 	granted_at              *time.Time
 	revoked_at              *time.Time
+	revoked_by              *string
 	reason                  *string
 	node_id                 *string
 	clearedFields           map[string]struct{}
@@ -7661,6 +7662,42 @@ func (m *GrantMutation) ResetRevokedAt() {
 	delete(m.clearedFields, grant.FieldRevokedAt)
 }
 
+// SetRevokedBy sets the "revoked_by" field.
+func (m *GrantMutation) SetRevokedBy(s string) {
+	m.revoked_by = &s
+}
+
+// RevokedBy returns the value of the "revoked_by" field in the mutation.
+func (m *GrantMutation) RevokedBy() (r string, exists bool) {
+	v := m.revoked_by
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRevokedBy returns the old "revoked_by" field's value of the Grant entity.
+// If the Grant object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GrantMutation) OldRevokedBy(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRevokedBy is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRevokedBy requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRevokedBy: %w", err)
+	}
+	return oldValue.RevokedBy, nil
+}
+
+// ResetRevokedBy resets all changes to the "revoked_by" field.
+func (m *GrantMutation) ResetRevokedBy() {
+	m.revoked_by = nil
+}
+
 // SetReason sets the "reason" field.
 func (m *GrantMutation) SetReason(s string) {
 	m.reason = &s
@@ -7767,7 +7804,7 @@ func (m *GrantMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *GrantMutation) Fields() []string {
-	fields := make([]string, 0, 15)
+	fields := make([]string, 0, 16)
 	if m.created_at != nil {
 		fields = append(fields, grant.FieldCreatedAt)
 	}
@@ -7806,6 +7843,9 @@ func (m *GrantMutation) Fields() []string {
 	}
 	if m.revoked_at != nil {
 		fields = append(fields, grant.FieldRevokedAt)
+	}
+	if m.revoked_by != nil {
+		fields = append(fields, grant.FieldRevokedBy)
 	}
 	if m.reason != nil {
 		fields = append(fields, grant.FieldReason)
@@ -7847,6 +7887,8 @@ func (m *GrantMutation) Field(name string) (ent.Value, bool) {
 		return m.GrantedAt()
 	case grant.FieldRevokedAt:
 		return m.RevokedAt()
+	case grant.FieldRevokedBy:
+		return m.RevokedBy()
 	case grant.FieldReason:
 		return m.Reason()
 	case grant.FieldNodeID:
@@ -7886,6 +7928,8 @@ func (m *GrantMutation) OldField(ctx context.Context, name string) (ent.Value, e
 		return m.OldGrantedAt(ctx)
 	case grant.FieldRevokedAt:
 		return m.OldRevokedAt(ctx)
+	case grant.FieldRevokedBy:
+		return m.OldRevokedBy(ctx)
 	case grant.FieldReason:
 		return m.OldReason(ctx)
 	case grant.FieldNodeID:
@@ -7989,6 +8033,13 @@ func (m *GrantMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetRevokedAt(v)
+		return nil
+	case grant.FieldRevokedBy:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRevokedBy(v)
 		return nil
 	case grant.FieldReason:
 		v, ok := value.(string)
@@ -8133,6 +8184,9 @@ func (m *GrantMutation) ResetField(name string) error {
 		return nil
 	case grant.FieldRevokedAt:
 		m.ResetRevokedAt()
+		return nil
+	case grant.FieldRevokedBy:
+		m.ResetRevokedBy()
 		return nil
 	case grant.FieldReason:
 		m.ResetReason()

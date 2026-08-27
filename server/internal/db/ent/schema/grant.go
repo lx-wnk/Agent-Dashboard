@@ -47,6 +47,13 @@ func (Grant) Fields() []ent.Field {
 		field.String("granted_by"),
 		field.Time("granted_at").Default(time.Now).Immutable(),
 		field.Time("revoked_at").Optional().Nillable(),
+		// revoked_by mirrors granted_by: a revocation is equally a security
+		// decision and needs an actor, or "who revoked this" becomes
+		// unanswerable the same way "who allowed this" was. Unlike
+		// granted_by it is not required-non-empty — an un-revoked row
+		// legitimately has none — so "" means "not revoked", not "revoked
+		// by nobody". The non-empty constraint lives in Revoke.
+		field.String("revoked_by").Default(""),
 		field.String("reason").Default(""),
 		// node_id is "local" until the node registry lands.
 		field.String("node_id").Default("local"),

@@ -173,6 +173,20 @@ func (_c *GrantCreate) SetNillableRevokedAt(v *time.Time) *GrantCreate {
 	return _c
 }
 
+// SetRevokedBy sets the "revoked_by" field.
+func (_c *GrantCreate) SetRevokedBy(v string) *GrantCreate {
+	_c.mutation.SetRevokedBy(v)
+	return _c
+}
+
+// SetNillableRevokedBy sets the "revoked_by" field if the given value is not nil.
+func (_c *GrantCreate) SetNillableRevokedBy(v *string) *GrantCreate {
+	if v != nil {
+		_c.SetRevokedBy(*v)
+	}
+	return _c
+}
+
 // SetReason sets the "reason" field.
 func (_c *GrantCreate) SetReason(v string) *GrantCreate {
 	_c.mutation.SetReason(v)
@@ -270,6 +284,10 @@ func (_c *GrantCreate) defaults() {
 		v := grant.DefaultGrantedAt()
 		_c.mutation.SetGrantedAt(v)
 	}
+	if _, ok := _c.mutation.RevokedBy(); !ok {
+		v := grant.DefaultRevokedBy
+		_c.mutation.SetRevokedBy(v)
+	}
 	if _, ok := _c.mutation.Reason(); !ok {
 		v := grant.DefaultReason
 		_c.mutation.SetReason(v)
@@ -314,6 +332,9 @@ func (_c *GrantCreate) check() error {
 	}
 	if _, ok := _c.mutation.GrantedAt(); !ok {
 		return &ValidationError{Name: "granted_at", err: errors.New(`ent: missing required field "Grant.granted_at"`)}
+	}
+	if _, ok := _c.mutation.RevokedBy(); !ok {
+		return &ValidationError{Name: "revoked_by", err: errors.New(`ent: missing required field "Grant.revoked_by"`)}
 	}
 	if _, ok := _c.mutation.Reason(); !ok {
 		return &ValidationError{Name: "reason", err: errors.New(`ent: missing required field "Grant.reason"`)}
@@ -408,6 +429,10 @@ func (_c *GrantCreate) createSpec() (*Grant, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.RevokedAt(); ok {
 		_spec.SetField(grant.FieldRevokedAt, field.TypeTime, value)
 		_node.RevokedAt = &value
+	}
+	if value, ok := _c.mutation.RevokedBy(); ok {
+		_spec.SetField(grant.FieldRevokedBy, field.TypeString, value)
+		_node.RevokedBy = value
 	}
 	if value, ok := _c.mutation.Reason(); ok {
 		_spec.SetField(grant.FieldReason, field.TypeString, value)
@@ -622,6 +647,18 @@ func (u *GrantUpsert) UpdateRevokedAt() *GrantUpsert {
 // ClearRevokedAt clears the value of the "revoked_at" field.
 func (u *GrantUpsert) ClearRevokedAt() *GrantUpsert {
 	u.SetNull(grant.FieldRevokedAt)
+	return u
+}
+
+// SetRevokedBy sets the "revoked_by" field.
+func (u *GrantUpsert) SetRevokedBy(v string) *GrantUpsert {
+	u.Set(grant.FieldRevokedBy, v)
+	return u
+}
+
+// UpdateRevokedBy sets the "revoked_by" field to the value that was provided on create.
+func (u *GrantUpsert) UpdateRevokedBy() *GrantUpsert {
+	u.SetExcluded(grant.FieldRevokedBy)
 	return u
 }
 
@@ -882,6 +919,20 @@ func (u *GrantUpsertOne) UpdateRevokedAt() *GrantUpsertOne {
 func (u *GrantUpsertOne) ClearRevokedAt() *GrantUpsertOne {
 	return u.Update(func(s *GrantUpsert) {
 		s.ClearRevokedAt()
+	})
+}
+
+// SetRevokedBy sets the "revoked_by" field.
+func (u *GrantUpsertOne) SetRevokedBy(v string) *GrantUpsertOne {
+	return u.Update(func(s *GrantUpsert) {
+		s.SetRevokedBy(v)
+	})
+}
+
+// UpdateRevokedBy sets the "revoked_by" field to the value that was provided on create.
+func (u *GrantUpsertOne) UpdateRevokedBy() *GrantUpsertOne {
+	return u.Update(func(s *GrantUpsert) {
+		s.UpdateRevokedBy()
 	})
 }
 
@@ -1313,6 +1364,20 @@ func (u *GrantUpsertBulk) UpdateRevokedAt() *GrantUpsertBulk {
 func (u *GrantUpsertBulk) ClearRevokedAt() *GrantUpsertBulk {
 	return u.Update(func(s *GrantUpsert) {
 		s.ClearRevokedAt()
+	})
+}
+
+// SetRevokedBy sets the "revoked_by" field.
+func (u *GrantUpsertBulk) SetRevokedBy(v string) *GrantUpsertBulk {
+	return u.Update(func(s *GrantUpsert) {
+		s.SetRevokedBy(v)
+	})
+}
+
+// UpdateRevokedBy sets the "revoked_by" field to the value that was provided on create.
+func (u *GrantUpsertBulk) UpdateRevokedBy() *GrantUpsertBulk {
+	return u.Update(func(s *GrantUpsert) {
+		s.UpdateRevokedBy()
 	})
 }
 

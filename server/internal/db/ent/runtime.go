@@ -198,12 +198,16 @@ func init() {
 	grantDescGrantedAt := grantFields[9].Descriptor()
 	// grant.DefaultGrantedAt holds the default value on creation for the granted_at field.
 	grant.DefaultGrantedAt = grantDescGrantedAt.Default.(func() time.Time)
+	// grantDescRevokedBy is the schema descriptor for revoked_by field.
+	grantDescRevokedBy := grantFields[11].Descriptor()
+	// grant.DefaultRevokedBy holds the default value on creation for the revoked_by field.
+	grant.DefaultRevokedBy = grantDescRevokedBy.Default.(string)
 	// grantDescReason is the schema descriptor for reason field.
-	grantDescReason := grantFields[11].Descriptor()
+	grantDescReason := grantFields[12].Descriptor()
 	// grant.DefaultReason holds the default value on creation for the reason field.
 	grant.DefaultReason = grantDescReason.Default.(string)
 	// grantDescNodeID is the schema descriptor for node_id field.
-	grantDescNodeID := grantFields[12].Descriptor()
+	grantDescNodeID := grantFields[13].Descriptor()
 	// grant.DefaultNodeID holds the default value on creation for the node_id field.
 	grant.DefaultNodeID = grantDescNodeID.Default.(string)
 	permissionrequestFields := schema.PermissionRequest{}.Fields()

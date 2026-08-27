@@ -281,6 +281,7 @@ var (
 		{Name: "granted_by", Type: field.TypeString},
 		{Name: "granted_at", Type: field.TypeTime},
 		{Name: "revoked_at", Type: field.TypeTime, Nullable: true},
+		{Name: "revoked_by", Type: field.TypeString, Default: ""},
 		{Name: "reason", Type: field.TypeString, Default: ""},
 		{Name: "node_id", Type: field.TypeString, Default: "local"},
 	}

@@ -200,6 +200,20 @@ func (_u *GrantUpdate) ClearRevokedAt() *GrantUpdate {
 	return _u
 }
 
+// SetRevokedBy sets the "revoked_by" field.
+func (_u *GrantUpdate) SetRevokedBy(v string) *GrantUpdate {
+	_u.mutation.SetRevokedBy(v)
+	return _u
+}
+
+// SetNillableRevokedBy sets the "revoked_by" field if the given value is not nil.
+func (_u *GrantUpdate) SetNillableRevokedBy(v *string) *GrantUpdate {
+	if v != nil {
+		_u.SetRevokedBy(*v)
+	}
+	return _u
+}
+
 // SetReason sets the "reason" field.
 func (_u *GrantUpdate) SetReason(v string) *GrantUpdate {
 	_u.mutation.SetReason(v)
@@ -322,6 +336,9 @@ func (_u *GrantUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.RevokedAtCleared() {
 		_spec.ClearField(grant.FieldRevokedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.RevokedBy(); ok {
+		_spec.SetField(grant.FieldRevokedBy, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Reason(); ok {
 		_spec.SetField(grant.FieldReason, field.TypeString, value)
@@ -521,6 +538,20 @@ func (_u *GrantUpdateOne) ClearRevokedAt() *GrantUpdateOne {
 	return _u
 }
 
+// SetRevokedBy sets the "revoked_by" field.
+func (_u *GrantUpdateOne) SetRevokedBy(v string) *GrantUpdateOne {
+	_u.mutation.SetRevokedBy(v)
+	return _u
+}
+
+// SetNillableRevokedBy sets the "revoked_by" field if the given value is not nil.
+func (_u *GrantUpdateOne) SetNillableRevokedBy(v *string) *GrantUpdateOne {
+	if v != nil {
+		_u.SetRevokedBy(*v)
+	}
+	return _u
+}
+
 // SetReason sets the "reason" field.
 func (_u *GrantUpdateOne) SetReason(v string) *GrantUpdateOne {
 	_u.mutation.SetReason(v)
@@ -673,6 +704,9 @@ func (_u *GrantUpdateOne) sqlSave(ctx context.Context) (_node *Grant, err error)
 	}
 	if _u.mutation.RevokedAtCleared() {
 		_spec.ClearField(grant.FieldRevokedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.RevokedBy(); ok {
+		_spec.SetField(grant.FieldRevokedBy, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Reason(); ok {
 		_spec.SetField(grant.FieldReason, field.TypeString, value)

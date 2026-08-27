@@ -64,10 +64,10 @@ type CreateGrantInput struct {
 type GrantRepo interface {
 	Create(ctx context.Context, in CreateGrantInput) (*ent.Grant, error)
 	ListForCapability(ctx context.Context, capabilityName string) ([]*ent.Grant, error)
-	// Revoke tombstones a grant: revoked_at is set, the row stays — history is
-	// never lost to a DELETE. revokedBy identifies who revoked it; the schema
-	// has no revoked_by column (spec §4.2 lists none for grant), so this is
-	// not persisted here.
+	// Revoke tombstones a grant: revoked_at and revoked_by are set, the row
+	// stays — history is never lost to a DELETE. revokedBy is required for
+	// the same reason granted_by is: a revocation is a security decision,
+	// and "who revoked this" must stay answerable.
 	Revoke(ctx context.Context, id, revokedBy string) error
 }
 
@@ -118,8 +118,14 @@ func (r *entGrantRepo) ListForCapability(ctx context.Context, capabilityName str
 	return rows, nil
 }
 
-func (r *entGrantRepo) Revoke(ctx context.Context, id, _ string) error {
-	if err := r.client.Grant.UpdateOneID(id).SetRevokedAt(time.Now()).Exec(ctx); err != nil {
+func (r *entGrantRepo) Revoke(ctx context.Context, id, revokedBy string) error {
+	if revokedBy == "" {
+		return fmt.Errorf("grant.Revoke: revoked_by is required")
+	}
+	if err := r.client.Grant.UpdateOneID(id).
+		SetRevokedAt(time.Now()).
+		SetRevokedBy(revokedBy).
+		Exec(ctx); err != nil {
 		return fmt.Errorf("grant.Revoke: %w", err)
 	}
 	return nil

@@ -44,7 +44,7 @@ func TestGrantRevokeIsATombstone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if err := r.Revoke(ctx, g.ID, "user:alex"); err != nil {
+	if err := r.Revoke(ctx, g.ID, "user:sam"); err != nil {
 		t.Fatalf("revoke: %v", err)
 	}
 	all, err := r.ListForCapability(ctx, "Bash")
@@ -56,6 +56,26 @@ func TestGrantRevokeIsATombstone(t *testing.T) {
 	}
 	if all[0].RevokedAt == nil {
 		t.Error("revoked_at must be set — revocation is a tombstone, not a delete")
+	}
+	if all[0].RevokedBy != "user:sam" {
+		t.Errorf("revoked_by = %q, want %q — a revocation is a security decision and needs an actor", all[0].RevokedBy, "user:sam")
+	}
+}
+
+func TestGrantRevokeRequiresRevokedBy(t *testing.T) {
+	r, ctx := newGrantRepo(t)
+	g, err := r.Create(ctx, repo.CreateGrantInput{
+		CapabilityName: "Bash",
+		Context:        repo.GrantContextFor(repo.GrantContextGlobal, ""),
+		Mode:           repo.GrantModeAllow,
+		Pattern:        "git status*",
+		GrantedBy:      "user:alex",
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := r.Revoke(ctx, g.ID, ""); err == nil {
+		t.Fatal("a revoke without revoked_by must be refused — identity on a decision is not optional")
 	}
 }
 

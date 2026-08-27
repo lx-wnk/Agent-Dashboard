@@ -43,6 +43,8 @@ type Grant struct {
 	GrantedAt time.Time `json:"granted_at,omitempty"`
 	// RevokedAt holds the value of the "revoked_at" field.
 	RevokedAt *time.Time `json:"revoked_at,omitempty"`
+	// RevokedBy holds the value of the "revoked_by" field.
+	RevokedBy string `json:"revoked_by,omitempty"`
 	// Reason holds the value of the "reason" field.
 	Reason string `json:"reason,omitempty"`
 	// NodeID holds the value of the "node_id" field.
@@ -57,7 +59,7 @@ func (*Grant) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case grant.FieldLimitCount, grant.FieldLimitWindowSeconds:
 			values[i] = new(sql.NullInt64)
-		case grant.FieldID, grant.FieldCapabilityName, grant.FieldContextKind, grant.FieldContextRef, grant.FieldPattern, grant.FieldMode, grant.FieldGrantedBy, grant.FieldReason, grant.FieldNodeID:
+		case grant.FieldID, grant.FieldCapabilityName, grant.FieldContextKind, grant.FieldContextRef, grant.FieldPattern, grant.FieldMode, grant.FieldGrantedBy, grant.FieldRevokedBy, grant.FieldReason, grant.FieldNodeID:
 			values[i] = new(sql.NullString)
 		case grant.FieldCreatedAt, grant.FieldUpdatedAt, grant.FieldExpiresAt, grant.FieldGrantedAt, grant.FieldRevokedAt:
 			values[i] = new(sql.NullTime)
@@ -162,6 +164,12 @@ func (_m *Grant) assignValues(columns []string, values []any) error {
 				_m.RevokedAt = new(time.Time)
 				*_m.RevokedAt = value.Time
 			}
+		case grant.FieldRevokedBy:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field revoked_by", values[i])
+			} else if value.Valid {
+				_m.RevokedBy = value.String
+			}
 		case grant.FieldReason:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field reason", values[i])
@@ -252,6 +260,9 @@ func (_m *Grant) String() string {
 		builder.WriteString("revoked_at=")
 		builder.WriteString(v.Format(time.ANSIC))
 	}
+	builder.WriteString(", ")
+	builder.WriteString("revoked_by=")
+	builder.WriteString(_m.RevokedBy)
 	builder.WriteString(", ")
 	builder.WriteString("reason=")
 	builder.WriteString(_m.Reason)

@@ -39,6 +39,8 @@ const (
 	FieldGrantedAt = "granted_at"
 	// FieldRevokedAt holds the string denoting the revoked_at field in the database.
 	FieldRevokedAt = "revoked_at"
+	// FieldRevokedBy holds the string denoting the revoked_by field in the database.
+	FieldRevokedBy = "revoked_by"
 	// FieldReason holds the string denoting the reason field in the database.
 	FieldReason = "reason"
 	// FieldNodeID holds the string denoting the node_id field in the database.
@@ -63,6 +65,7 @@ var Columns = []string{
 	FieldGrantedBy,
 	FieldGrantedAt,
 	FieldRevokedAt,
+	FieldRevokedBy,
 	FieldReason,
 	FieldNodeID,
 }
@@ -94,6 +97,8 @@ var (
 	DefaultLimitWindowSeconds int
 	// DefaultGrantedAt holds the default value on creation for the "granted_at" field.
 	DefaultGrantedAt func() time.Time
+	// DefaultRevokedBy holds the default value on creation for the "revoked_by" field.
+	DefaultRevokedBy string
 	// DefaultReason holds the default value on creation for the "reason" field.
 	DefaultReason string
 	// DefaultNodeID holds the default value on creation for the "node_id" field.
@@ -171,6 +176,11 @@ func ByGrantedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByRevokedAt orders the results by the revoked_at field.
 func ByRevokedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldRevokedAt, opts...).ToFunc()
+}
+
+// ByRevokedBy orders the results by the revoked_by field.
+func ByRevokedBy(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRevokedBy, opts...).ToFunc()
 }
 
 // ByReason orders the results by the reason field.
