@@ -208,6 +208,7 @@ func resolvePermissionDecisions(perms []*ent.TaskPermission, allowGitPush bool) 
 
 		grantsByTool[p.Tool] = append(grantsByTool[p.Tool], capability.GrantView{
 			ID:          p.ID,
+			Capability:  p.Tool,
 			ContextKind: "task",
 			ContextRef:  permissionGrantContextRef,
 			Pattern:     value,

@@ -67,6 +67,7 @@ func toGrant(p *ent.TaskPermission, taskID string, allowGitPush bool) (grant cap
 
 	return capability.GrantView{
 		ID:          p.ID,
+		Capability:  p.Tool,
 		ContextKind: "task",
 		ContextRef:  taskID,
 		Pattern:     value,
