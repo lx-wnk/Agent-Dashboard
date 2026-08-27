@@ -135,7 +135,7 @@ func TestDiscover_InstalledPluginOrphanedNotDeleted(t *testing.T) {
 func TestDiscover_SkipsMalformedID(t *testing.T) {
 	dir := t.TempDir()
 	writeManifest(t, dir, "valid-plugin", "1.0.0")
-	// Malformed ID: uppercase letters fail pluginIDRe.
+	// Malformed ID: uppercase letters fail the canonical slug validation rule.
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "Bad-Plugin"), 0o755))
 	badBody := `{"id":"Bad-Plugin","version":"1.0.0","capabilities":["route_extension"],"addr":"127.0.0.1:1"}`
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "Bad-Plugin", "plugin.json"), []byte(badBody), 0o644))
