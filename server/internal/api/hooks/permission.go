@@ -167,10 +167,20 @@ func NewHookEnforcer(onChange func()) *HookEnforcer {
 // path cannot guarantee, and callers must not present it to the user as
 // protected for hand-started sessions.
 //
-// Everything else about this type still fails closed: an unarmed session is
-// never held (mayHoldLocked), a call forbidden by the user's own deny rules
-// is offered without an Allow (deniedBy), and resolve refuses to turn a
-// deny-rule match into an allow. Only the timeout path yields no decision.
+// The rest of PermissionRequest also answers with no decision, but for two
+// different reasons that must not be read as "fails closed" the way the
+// timeout above does:
+//   - An unarmed session (mayHoldLocked) or a malformed/incomplete payload is
+//     never held at all. Nothing was evaluated, so there is nothing to fail
+//     open or closed -- it is left entirely to Claude Code's own native
+//     prompt, exactly as if the hook were not installed.
+//   - A call the user's own deny rules forbid (deniedBy) IS actively vetoed:
+//     it is held and offered without an Allow, and resolve refuses to turn it
+//     into one even if asked (errDeniedByRule). That is the one guarantee
+//     this type makes.
+//
+// Only a call that was genuinely held and got no answer in time lapses open
+// on the timeout above.
 func (b *HookEnforcer) Point() string { return capability.EnforcerHook }
 
 // SetOnChange installs the callback fired whenever the pending set changes.
