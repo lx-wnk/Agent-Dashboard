@@ -1,6 +1,9 @@
 package capability
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // Effect is the outcome of a permission decision.
 type Effect string
@@ -57,6 +60,12 @@ type Decision struct {
 }
 
 // contextRank orders context kinds by specificity; lower is more specific.
+// This map is the single source of truth for which context kinds are valid.
+// A kind added here without also being accepted by the grant schema's
+// validation (or vice versa) makes grants silently inert: Decide drops any
+// grant whose ContextKind isn't a key below, on purpose, rather than
+// treating an unrecognised kind as least-specific and letting a typo widen
+// a grant to global scope.
 var contextRank = map[string]int{
 	"agent_session": 0,
 	"task":          1,
@@ -94,6 +103,7 @@ func Decide(req Request, grants []GrantView, cap CapabilityView) Decision {
 	now := time.Now()
 	bestRank := -1
 	var candidates []*GrantView
+	droppedUnknownKind := false
 
 	for i := range grants {
 		g := &grants[i]
@@ -111,6 +121,7 @@ func Decide(req Request, grants []GrantView, cap CapabilityView) Decision {
 		}
 		rank, known := contextRank[g.ContextKind]
 		if !known {
+			droppedUnknownKind = true
 			continue
 		}
 		switch {
@@ -123,9 +134,14 @@ func Decide(req Request, grants []GrantView, cap CapabilityView) Decision {
 	}
 
 	if len(candidates) == 0 {
+		effect := defaultEffect(cap.Class)
+		reason := fmt.Sprintf("no matching grant at any context level; class %q defaults to %s", cap.Class, effect)
+		if droppedUnknownKind {
+			reason += "; a grant was dropped for an unrecognised context kind"
+		}
 		return Decision{
-			Effect:      defaultEffect(cap.Class),
-			Reason:      "no matching grant at any context level; falling back to the capability's default",
+			Effect:      effect,
+			Reason:      reason,
 			Enforceable: cap.EnforceableBy,
 		}
 	}
@@ -140,7 +156,7 @@ func Decide(req Request, grants []GrantView, cap CapabilityView) Decision {
 	return Decision{
 		Effect:      effectForMode(winner.Mode),
 		GrantID:     winner.ID,
-		Reason:      "resolved from the most specific matching grant",
+		Reason:      fmt.Sprintf("%s grant at context %s decided this", winner.Mode, winner.ContextKind),
 		Enforceable: cap.EnforceableBy,
 	}
 }

@@ -1,6 +1,7 @@
 package capability_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -161,6 +162,42 @@ func TestDecideScopeFilterDistinguishesSameKindDifferentRef(t *testing.T) {
 	got := capability.Decide(req, grants, cap)
 	if got.Effect != capability.EffectDeny {
 		t.Errorf("Effect = %v, want deny — the t1-scoped grant must be considered even though t2 is also in the chain", got.Effect)
+	}
+}
+
+func TestDecideReasonNamesModeAndContextKind(t *testing.T) {
+	cap := capability.CapabilityView{Name: "Bash", Class: "tool"}
+	req := capability.Request{
+		Capability: "Bash",
+		Value:      "git status",
+		Contexts:   []capability.Context{{Kind: "task", Ref: "t1"}},
+	}
+	got := capability.Decide(req, []capability.GrantView{
+		{ID: "g1", ContextKind: "task", ContextRef: "t1", Mode: "deny"},
+	}, cap)
+	if !strings.Contains(got.Reason, "deny") {
+		t.Errorf("Reason = %q, want it to name the winning mode (deny)", got.Reason)
+	}
+	if !strings.Contains(got.Reason, "task") {
+		t.Errorf("Reason = %q, want it to name the context kind (task)", got.Reason)
+	}
+}
+
+func TestDecideUnknownContextKindIsDroppedNotSilent(t *testing.T) {
+	cap := capability.CapabilityView{Name: "Bash", Class: "tool"}
+	req := capability.Request{
+		Capability: "Bash",
+		Value:      "git status",
+		Contexts:   []capability.Context{{Kind: "bogus", Ref: "x"}},
+	}
+	got := capability.Decide(req, []capability.GrantView{
+		{ID: "g1", ContextKind: "bogus", ContextRef: "x", Mode: "allow"},
+	}, cap)
+	if got.Effect != capability.EffectAsk {
+		t.Errorf("Effect = %v, want the class default (ask) — an unrecognised context kind must not apply", got.Effect)
+	}
+	if !strings.Contains(got.Reason, "unrecognised") {
+		t.Errorf("Reason = %q, want it to mention the grant dropped for an unrecognised context kind", got.Reason)
 	}
 }
 
