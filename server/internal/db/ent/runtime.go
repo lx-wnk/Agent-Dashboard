@@ -14,6 +14,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/coordlock"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/driftalert"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/evalmetricsnapshot"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/grant"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionrequest"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/pipelineconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/plugin"
@@ -162,6 +163,49 @@ func init() {
 	evalmetricsnapshotDescRecordedAt := evalmetricsnapshotFields[9].Descriptor()
 	// evalmetricsnapshot.DefaultRecordedAt holds the default value on creation for the recorded_at field.
 	evalmetricsnapshot.DefaultRecordedAt = evalmetricsnapshotDescRecordedAt.Default.(func() time.Time)
+	grantMixin := schema.Grant{}.Mixin()
+	grantMixinFields0 := grantMixin[0].Fields()
+	_ = grantMixinFields0
+	grantFields := schema.Grant{}.Fields()
+	_ = grantFields
+	// grantDescCreatedAt is the schema descriptor for created_at field.
+	grantDescCreatedAt := grantMixinFields0[1].Descriptor()
+	// grant.DefaultCreatedAt holds the default value on creation for the created_at field.
+	grant.DefaultCreatedAt = grantDescCreatedAt.Default.(func() time.Time)
+	// grantDescUpdatedAt is the schema descriptor for updated_at field.
+	grantDescUpdatedAt := grantMixinFields0[2].Descriptor()
+	// grant.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	grant.DefaultUpdatedAt = grantDescUpdatedAt.Default.(func() time.Time)
+	// grant.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	grant.UpdateDefaultUpdatedAt = grantDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// grantDescContextRef is the schema descriptor for context_ref field.
+	grantDescContextRef := grantFields[2].Descriptor()
+	// grant.DefaultContextRef holds the default value on creation for the context_ref field.
+	grant.DefaultContextRef = grantDescContextRef.Default.(string)
+	// grantDescPattern is the schema descriptor for pattern field.
+	grantDescPattern := grantFields[3].Descriptor()
+	// grant.DefaultPattern holds the default value on creation for the pattern field.
+	grant.DefaultPattern = grantDescPattern.Default.(string)
+	// grantDescLimitCount is the schema descriptor for limit_count field.
+	grantDescLimitCount := grantFields[5].Descriptor()
+	// grant.DefaultLimitCount holds the default value on creation for the limit_count field.
+	grant.DefaultLimitCount = grantDescLimitCount.Default.(int)
+	// grantDescLimitWindowSeconds is the schema descriptor for limit_window_seconds field.
+	grantDescLimitWindowSeconds := grantFields[6].Descriptor()
+	// grant.DefaultLimitWindowSeconds holds the default value on creation for the limit_window_seconds field.
+	grant.DefaultLimitWindowSeconds = grantDescLimitWindowSeconds.Default.(int)
+	// grantDescGrantedAt is the schema descriptor for granted_at field.
+	grantDescGrantedAt := grantFields[9].Descriptor()
+	// grant.DefaultGrantedAt holds the default value on creation for the granted_at field.
+	grant.DefaultGrantedAt = grantDescGrantedAt.Default.(func() time.Time)
+	// grantDescReason is the schema descriptor for reason field.
+	grantDescReason := grantFields[11].Descriptor()
+	// grant.DefaultReason holds the default value on creation for the reason field.
+	grant.DefaultReason = grantDescReason.Default.(string)
+	// grantDescNodeID is the schema descriptor for node_id field.
+	grantDescNodeID := grantFields[12].Descriptor()
+	// grant.DefaultNodeID holds the default value on creation for the node_id field.
+	grant.DefaultNodeID = grantDescNodeID.Default.(string)
 	permissionrequestFields := schema.PermissionRequest{}.Fields()
 	_ = permissionrequestFields
 	// permissionrequestDescRequestedAt is the schema descriptor for requested_at field.

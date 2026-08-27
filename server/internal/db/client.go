@@ -98,6 +98,10 @@ func Open(path string) (*DBBundle, error) {
 		_ = client.Close()
 		return nil, fmt.Errorf("db: ensure resource unique index: %w", err)
 	}
+	if err := migrateEnsureGrantIndexes(sqlDB); err != nil {
+		_ = client.Close()
+		return nil, fmt.Errorf("db: ensure grant indexes: %w", err)
+	}
 	if err := client.Schema.Create(context.Background()); err != nil {
 		_ = client.Close()
 		return nil, fmt.Errorf("db: auto-migrate: %w", err)
@@ -507,6 +511,40 @@ func migrateEnsureResourceUniqueIndex(db *sql.DB) error {
 			`ON resources (kind, scope_kind, scope_ref, slug)`,
 	); err != nil {
 		return fmt.Errorf("pre-create resource unique index: %w", err)
+	}
+	return nil
+}
+
+// migrateEnsureGrantIndexes pre-creates the grant table's two named indexes
+// under ent's exact generated names before ent auto-migrate runs. The grants
+// table is new in this change, so today's fresh databases hit the no-op path
+// below and ent creates the table with both indexes already declared. The
+// guard exists for the databases that will exist once this ships: a later
+// change to either index would otherwise make ent's diff add it via SQLite's
+// 12-step table rebuild, which crashes on populated databases with
+// "NOT NULL constraint failed" (PR #207) — the same hazard
+// migrateEnsureResourceUniqueIndex guards against, applied here to both of
+// this table's Indexes() entries rather than just the compound one.
+// Idempotent via IF NOT EXISTS.
+func migrateEnsureGrantIndexes(db *sql.DB) error {
+	var exists int
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'grants'`,
+	).Scan(&exists); err != nil {
+		return fmt.Errorf("probe grants table: %w", err)
+	}
+	if exists == 0 {
+		return nil
+	}
+	stmts := []string{
+		`CREATE INDEX IF NOT EXISTS grant_capability_name_context_kind_context_ref ` +
+			`ON grants (capability_name, context_kind, context_ref)`,
+		`CREATE INDEX IF NOT EXISTS grant_revoked_at ON grants (revoked_at)`,
+	}
+	for _, stmt := range stmts {
+		if _, err := db.Exec(stmt); err != nil {
+			return fmt.Errorf("pre-create grant index: %w\nstatement: %s", err, stmt)
+		}
 	}
 	return nil
 }

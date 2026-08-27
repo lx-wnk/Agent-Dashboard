@@ -30,6 +30,8 @@ type Tx struct {
 	DriftAlert *DriftAlertClient
 	// EvalMetricSnapshot is the client for interacting with the EvalMetricSnapshot builders.
 	EvalMetricSnapshot *EvalMetricSnapshotClient
+	// Grant is the client for interacting with the Grant builders.
+	Grant *GrantClient
 	// PermissionPreset is the client for interacting with the PermissionPreset builders.
 	PermissionPreset *PermissionPresetClient
 	// PermissionRequest is the client for interacting with the PermissionRequest builders.
@@ -212,6 +214,7 @@ func (tx *Tx) init() {
 	tx.CoordLock = NewCoordLockClient(tx.config)
 	tx.DriftAlert = NewDriftAlertClient(tx.config)
 	tx.EvalMetricSnapshot = NewEvalMetricSnapshotClient(tx.config)
+	tx.Grant = NewGrantClient(tx.config)
 	tx.PermissionPreset = NewPermissionPresetClient(tx.config)
 	tx.PermissionRequest = NewPermissionRequestClient(tx.config)
 	tx.PipelineConfig = NewPipelineConfigClient(tx.config)
