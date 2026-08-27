@@ -272,7 +272,14 @@ func runRawMigrations(db *sql.DB) error {
 			VALUES (new.rowid, new.id, new.summary, new.content);
 		END`,
 
-		// Sync trigger: DELETE on memory_entries.
+		// Sync trigger: DELETE on memory_entries. No repository method deletes
+		// a memory_entry row today (MemoryRepo only supersedes/expires them,
+		// and DeleteSpace was removed as dead code), so this trigger is
+		// unreached in practice. It stays: it is correct at the database
+		// layer, and a future deletion path will need it to keep memory_fts
+		// from accumulating rows for entries that no longer exist. Proven
+		// directly against the ent client in client_test.go, bypassing the
+		// (currently nonexistent) repository layer.
 		`CREATE TRIGGER IF NOT EXISTS memory_entries_ad AFTER DELETE ON memory_entries BEGIN
 			DELETE FROM memory_fts WHERE rowid = old.rowid;
 		END`,
