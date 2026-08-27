@@ -28,9 +28,6 @@ type entPluginRepo struct{ client *ent.Client }
 
 func NewPluginRepo(client *ent.Client) PluginRepo { return &entPluginRepo{client: client} }
 
-// IsNotFound exposes ent.IsNotFound for callers/tests.
-func IsNotFound(err error) bool { return ent.IsNotFound(err) }
-
 func (r *entPluginRepo) Get(ctx context.Context, id string) (*ent.Plugin, error) {
 	p, err := r.client.Plugin.Get(ctx, id)
 	if err != nil {

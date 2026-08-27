@@ -153,15 +153,6 @@ func (r *entSpawnerRepo) SetDefault(ctx context.Context, id string) (*ent.Spawne
 	return s, prevID, nil
 }
 
-// rollback wraps a transaction rollback, preserving the original error and
-// preferring the ent NotFound sentinel so callers can still type-switch on it.
-func rollback(tx *ent.Tx, cause error) error {
-	if rbErr := tx.Rollback(); rbErr != nil {
-		return fmt.Errorf("%w (rollback failed: %v)", cause, rbErr)
-	}
-	return cause
-}
-
 func (r *entSpawnerRepo) List(ctx context.Context) ([]*ent.Spawner, error) {
 	spawners, err := r.client.Spawner.Query().
 		Order(spawner.ByCreatedAt()).
