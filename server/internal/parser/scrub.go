@@ -38,3 +38,11 @@ func scrubSecrets(s string) string {
 	}
 	return s
 }
+
+// ScrubSecrets is the exported entry point onto scrubSecrets for callers
+// outside this package (e.g. memory, sanitizing content before it is stored).
+// secretPatterns itself stays unexported: a caller that could reach the slice
+// could mutate the source of truth every other caller relies on.
+func ScrubSecrets(s string) string {
+	return scrubSecrets(s)
+}
