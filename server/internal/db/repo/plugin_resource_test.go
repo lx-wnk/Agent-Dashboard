@@ -2,6 +2,7 @@ package repo_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -58,6 +59,48 @@ func TestReconcilePluginResourcesIsIdempotent(t *testing.T) {
 	}
 	if len(rows) != 1 {
 		t.Errorf("expected exactly 1 application resource, got %d", len(rows))
+	}
+}
+
+func TestReconcilePluginResourcesSkipsOversizedIDButLinksTheRest(t *testing.T) {
+	bundle, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("db.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+	ctx := context.Background()
+
+	pluginRepo := repo.NewPluginRepo(bundle.Client)
+	resourceRepo := repo.NewResourceRepo(bundle.Client)
+
+	// The registry slug is capped at 64 chars, but the plugins table predates
+	// that cap — a real database can hold a longer manifest id.
+	oversizedID := strings.Repeat("a", 65)
+	if _, err := pluginRepo.Upsert(ctx, repo.UpsertPluginInput{
+		ID:      oversizedID,
+		Name:    "Oversized Plugin",
+		Version: "1.0.0",
+	}); err != nil {
+		t.Fatalf("seed oversized plugin: %v", err)
+	}
+	if _, err := pluginRepo.Upsert(ctx, repo.UpsertPluginInput{
+		ID:      "valid-plugin",
+		Name:    "Valid Plugin",
+		Version: "1.0.0",
+	}); err != nil {
+		t.Fatalf("seed valid plugin: %v", err)
+	}
+
+	linked, err := repo.ReconcilePluginResources(ctx, resourceRepo, bundle.Client)
+	if err != nil {
+		t.Fatalf("reconcile must not fail because one plugin id is invalid: %v", err)
+	}
+	if linked != 1 {
+		t.Errorf("linked = %d, want 1 (only the valid plugin)", linked)
+	}
+
+	if _, err := resourceRepo.Get(ctx, repo.ResourceKindApplication, repo.GlobalScope(), "valid-plugin"); err != nil {
+		t.Errorf("valid plugin must still receive a registry identity: %v", err)
 	}
 }
 
