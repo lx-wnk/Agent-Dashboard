@@ -12,6 +12,11 @@ func ExportedWriteSettingsFile(autonomy, cwd string, perms []*ent.TaskPermission
 	return writeSettingsFile(autonomy, cwd, perms, enableChannel, allowGitPush)
 }
 
+// CapabilityViewForTest exposes capabilityViewFor so the allow-list parity
+// test resolves capability views the same way production does, instead of
+// hardcoding a CapabilityView that can drift from the real catalogue.
+var CapabilityViewForTest = capabilityViewFor
+
 // SortPickCandidatesForTest exposes sortPickCandidates for testing.
 var SortPickCandidatesForTest = sortPickCandidates
 

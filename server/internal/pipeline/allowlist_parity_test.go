@@ -114,7 +114,7 @@ func buildViaDecide(perms []*ent.TaskPermission, taskID string, allowGitPush boo
 	contexts := []capability.Context{{Kind: "task", Ref: taskID}}
 	var out []string
 	for _, s := range survivors {
-		capView := capability.CapabilityView{Name: s.tool, Class: "tool", EnforceableBy: []string{"spawn"}}
+		capView := pipeline.CapabilityViewForTest(s.tool)
 		req := capability.Request{Capability: s.tool, Value: s.value, Contexts: contexts}
 		if capability.Decide(req, grantsByTool[s.tool], capView).Effect == capability.EffectAllow {
 			out = append(out, formatAllowEntry(s.tool, s.value))
@@ -123,11 +123,15 @@ func buildViaDecide(perms []*ent.TaskPermission, taskID string, allowGitPush boo
 	return out
 }
 
-// assertParity runs both paths — the legacy filter chain and the
-// grant-translation-plus-Decide path — over the same fixtures under
-// autonomy "manual" (the only autonomy where BuildAllowList reads perms at
-// all, see exception A below) and requires an identical, identically
-// ordered result.
+// assertParity runs both paths — BuildAllowList's own grant-translation
+// (resolvePermissionDecisions) and this file's independent
+// grant-translation-plus-Decide path (buildViaDecide) — over the same
+// fixtures under autonomy "manual" (the only autonomy where BuildAllowList
+// reads perms at all, see exception A below) and requires an identical,
+// identically ordered result. There is no separate legacy filter chain
+// being compared here any more: buildViaDecide duplicates
+// resolvePermissionDecisions's own validation, so a passing run pins that
+// duplication rather than proving Decide replaced an older code path.
 func assertParity(t *testing.T, perms []*ent.TaskPermission, allowGitPush bool) {
 	t.Helper()
 	const taskID = "t1"
@@ -136,12 +140,14 @@ func assertParity(t *testing.T, perms []*ent.TaskPermission, allowGitPush bool) 
 	require.Equal(t, want, got, "capability.Decide must reproduce BuildAllowList's output element for element and order for order")
 }
 
-// TestAllowListParity pins parity between BuildAllowList's restrictive
-// filter chain (server/internal/pipeline/spawner.go:98) and the same
-// fixtures resolved through capability.Decide, before Task 6 rewrites that
-// function's body. It covers all seven drop rules the function implements,
-// plus the two carve-outs the controller ruling names as deliberate and out
-// of scope for the Decider.
+// TestAllowListParity is a change-detector, not a proof against a legacy
+// implementation: it pins the seven drop rules BuildAllowList's
+// grant-translation layer implements (spawner.go's
+// resolvePermissionDecisions) against this file's independent
+// re-implementation of the same rules (toGrant, buildViaDecide), so a
+// future edit that silently changes one of those rules turns this test red.
+// It also covers the two carve-outs below that are deliberately out of
+// scope for capability.Decide.
 func TestAllowListParity(t *testing.T) {
 	past := time.Now().Add(-time.Hour)
 	safePattern := "pnpm test"
@@ -237,9 +243,9 @@ func TestAllowListParity(t *testing.T) {
 		}, false)
 	})
 
-	// Exception A (controller ruling): the allow-all short-circuit is out of
-	// scope for the Decider. BuildAllowList never reads perms on this path,
-	// so there is nothing to translate into grants — synthesising wildcard
+	// Exception A: the allow-all short-circuit is deliberately out of scope
+	// for the Decider. BuildAllowList never reads perms on this path, so
+	// there is nothing to translate into grants — synthesising wildcard
 	// grants to make it comparable would fabricate policy nobody authored.
 	// Asserted here as its own claim: the perms argument has zero effect on
 	// the result for spec_gated/full autonomy.
@@ -252,9 +258,9 @@ func TestAllowListParity(t *testing.T) {
 		}
 	})
 
-	// Exception B (controller ruling): channel entries bypass the gate by
-	// design — enableChannel prepends them unconditionally, consulting no
-	// grant. Asserted separately; only the tail is compared against the
+	// Exception B: channel entries bypass the gate by design —
+	// enableChannel prepends them unconditionally, consulting no grant.
+	// Asserted separately; only the tail is compared against the
 	// grant-resolved list.
 	t.Run("exception B: channel tools bypass the gate and are asserted separately", func(t *testing.T) {
 		perms := []*ent.TaskPermission{{ID: "p1", Tool: "Bash", Pattern: &safePattern, Granted: true}}
