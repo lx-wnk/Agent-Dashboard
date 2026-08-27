@@ -18,7 +18,7 @@ func newGrantUsageRepo(t *testing.T) (repo.GrantUsageRepo, *db.DBBundle, context
 		t.Fatalf("db.Open: %v", err)
 	}
 	t.Cleanup(func() { _ = bundle.Client.Close() })
-	return repo.NewGrantUsageRepo(bundle.Client), bundle, context.Background()
+	return repo.NewGrantUsageRepo(bundle.Client, bundle.WriteClient), bundle, context.Background()
 }
 
 func TestGrantUsageRecordIfWithinLimitRequiresGrantID(t *testing.T) {
@@ -206,7 +206,7 @@ func TestGrantUsageCountSinceExcludesRowsOlderThanTheWindow(t *testing.T) {
 		t.Fatalf("seed other grant usage: %v", err)
 	}
 
-	r := repo.NewGrantUsageRepo(bundle.Client)
+	r := repo.NewGrantUsageRepo(bundle.Client, bundle.WriteClient)
 	count, err := r.CountSince(ctx, grantID, now.Add(-time.Hour))
 	if err != nil {
 		t.Fatalf("CountSince: %v", err)
@@ -231,7 +231,7 @@ func TestGrantUsageCountSinceBoundaryIsInclusive(t *testing.T) {
 		t.Fatalf("seed grant usage: %v", err)
 	}
 
-	r := repo.NewGrantUsageRepo(bundle.Client)
+	r := repo.NewGrantUsageRepo(bundle.Client, bundle.WriteClient)
 	count, err := r.CountSince(ctx, grantID, since)
 	if err != nil {
 		t.Fatalf("CountSince: %v", err)

@@ -46,6 +46,38 @@ func WithTx(ctx context.Context, client *ent.Client, fn func(tx *ent.Tx) error) 
 	return nil
 }
 
+// WithWriteTx runs fn inside a transaction opened with BEGIN IMMEDIATE rather
+// than the BEGIN (deferred) that WithTx uses. Use it for read-then-write
+// sequences — count usage then insert, count references then delete — where
+// a deferred transaction that reads and later writes can race a concurrent
+// writer's commit into SQLITE_BUSY_SNAPSHOT: a snapshot invalidation, not
+// lock contention, so busy_timeout does not retry it and the operation just
+// fails. Beginning the write lock up front avoids the race entirely —
+// busy_timeout's wait-and-retry applies to ordinary lock contention, which is
+// what BEGIN IMMEDIATE turns this into.
+//
+// client must be a client opened onto a connection pool started with the
+// driver's `_txlock=immediate` DSN parameter (db.DBBundle.WriteClient) — not
+// the plain client WithTx takes. This is a distinct entry point rather than
+// an option on WithTx because modernc.org/sqlite (the driver in use) only
+// exposes BEGIN IMMEDIATE as a per-connection DSN setting: sql.TxOptions'
+// Isolation field is ignored by the driver's transaction begin (verified by
+// reading modernc.org/sqlite@v1.57.0's tx.go — only opts.ReadOnly is
+// consulted), so there is no per-call ent or database/sql option that
+// selects it. Given that, scoping immediate mode to specific call sites
+// instead of every WithTx caller requires a second pool, which is what
+// WriteClient is.
+//
+// This cannot be exercised on the ":memory:" test fixture: that fixture
+// pins the whole pool to one connection (db.Open) specifically so every
+// query shares one database, which also means there is never a second,
+// concurrent connection to race against — WriteClient equals Client there.
+// Do not add a ":memory:"-backed test that claims to cover the race; it
+// cannot fail even if BEGIN IMMEDIATE were silently dropped.
+func WithWriteTx(ctx context.Context, client *ent.Client, fn func(tx *ent.Tx) error) error {
+	return WithTx(ctx, client, fn)
+}
+
 // Deletion refusals shared by managed resources. Only the spawner repository
 // had refusals of this shape; they are shared so every kind can refuse for a
 // named reason rather than inventing its own error string.

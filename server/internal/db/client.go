@@ -23,11 +23,32 @@ import (
 type DBBundle struct {
 	Client *ent.Client
 	DB     *sql.DB
+	// WriteClient is a second connection pool onto the same database, opened
+	// with the driver's `_txlock=immediate` DSN parameter so its transactions
+	// take the write lock at BEGIN instead of deferring it to the first write
+	// statement. Use it via repo.WithWriteTx for read-then-write sequences
+	// that must not race a concurrent committer into SQLITE_BUSY_SNAPSHOT —
+	// see the doc comment on WithWriteTx for why a second pool, rather than a
+	// per-call option, is what the driver actually offers.
+	//
+	// Equal to Client when path is ":memory:": that fixture pins the whole
+	// pool to a single connection (see below) specifically so every query
+	// shares one in-memory database, and a second, independently-opened
+	// ":memory:" pool would just be a second, empty database sitting next to
+	// it — not a race-safe stand-in for a real second connection.
+	WriteClient *ent.Client
 }
 
-// Close closes the database connection. Both Client and DB become invalid after this call.
+// Close closes the database connection(s). Client, DB, and WriteClient all
+// become invalid after this call.
 // Note: Client.Close() also closes DB because the ent driver wraps the same *sql.DB.
 func (b *DBBundle) Close() error {
+	if b.WriteClient != nil && b.WriteClient != b.Client {
+		if err := b.WriteClient.Close(); err != nil {
+			_ = b.Client.Close()
+			return fmt.Errorf("db: close write pool: %w", err)
+		}
+	}
 	return b.Client.Close()
 }
 
@@ -150,7 +171,21 @@ func Open(path string) (*DBBundle, error) {
 		_ = client.Close()
 		return nil, fmt.Errorf("db: raw migrations: %w", err)
 	}
-	return &DBBundle{Client: client, DB: sqlDB}, nil
+	writeClient := client
+	if path != ":memory:" {
+		// A second pool onto the same file, opened after migrations so it
+		// sees the finished schema. _txlock=immediate is this driver's only
+		// way to select BEGIN IMMEDIATE — it is a per-connection setting, not
+		// a per-transaction option, hence the separate pool. See WriteClient's
+		// doc comment and repo.WithWriteTx.
+		writeSQLDB, err := sql.Open("sqlite", dsn+"&_txlock=immediate")
+		if err != nil {
+			_ = client.Close()
+			return nil, fmt.Errorf("db: open write pool for %q: %w", path, err)
+		}
+		writeClient = ent.NewClient(ent.Driver(entsql.OpenDB(dialect.SQLite, writeSQLDB)))
+	}
+	return &DBBundle{Client: client, DB: sqlDB, WriteClient: writeClient}, nil
 }
 
 // runRawMigrations creates tables and FTS5 virtual tables that are not managed
