@@ -34,14 +34,21 @@ type Request struct {
 // GrantView is a narrow read-only projection of an ent.Grant row. It exists
 // so this package never imports server/internal/db/ent or the repo package,
 // keeping Decide pure and database-free.
+//
+// LimitCount and LimitWindowSeconds carry the grant's rate limit for the
+// enforcer to read. Decide never reads either field — it stays pure and
+// evaluates no limit, per the standing rule that rate limits are enforced
+// outside the decider (see WithinLimit in enforcer_server.go).
 type GrantView struct {
-	ID          string
-	ContextKind string
-	ContextRef  string
-	Pattern     string
-	Mode        string
-	ExpiresAt   *time.Time
-	RevokedAt   *time.Time
+	ID                 string
+	ContextKind        string
+	ContextRef         string
+	Pattern            string
+	Mode               string
+	LimitCount         int
+	LimitWindowSeconds int
+	ExpiresAt          *time.Time
+	RevokedAt          *time.Time
 }
 
 // CapabilityView is a narrow read-only projection of an ent.Capability row.

@@ -10,13 +10,15 @@ import (
 )
 
 type recordingAsker struct {
-	called bool
-	answer bool
-	err    error
+	called       bool
+	answer       bool
+	err          error
+	lastDecision capability.Decision
 }
 
-func (a *recordingAsker) Ask(_ context.Context, _ capability.Decision) (bool, error) {
+func (a *recordingAsker) Ask(_ context.Context, d capability.Decision) (bool, error) {
 	a.called = true
+	a.lastDecision = d
 	return a.answer, a.err
 }
 

@@ -15,6 +15,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/driftalert"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/evalmetricsnapshot"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/grant"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/grantusage"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionrequest"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/pipelineconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/plugin"
@@ -210,6 +211,25 @@ func init() {
 	grantDescNodeID := grantFields[13].Descriptor()
 	// grant.DefaultNodeID holds the default value on creation for the node_id field.
 	grant.DefaultNodeID = grantDescNodeID.Default.(string)
+	grantusageMixin := schema.GrantUsage{}.Mixin()
+	grantusageMixinFields0 := grantusageMixin[0].Fields()
+	_ = grantusageMixinFields0
+	grantusageFields := schema.GrantUsage{}.Fields()
+	_ = grantusageFields
+	// grantusageDescCreatedAt is the schema descriptor for created_at field.
+	grantusageDescCreatedAt := grantusageMixinFields0[1].Descriptor()
+	// grantusage.DefaultCreatedAt holds the default value on creation for the created_at field.
+	grantusage.DefaultCreatedAt = grantusageDescCreatedAt.Default.(func() time.Time)
+	// grantusageDescUpdatedAt is the schema descriptor for updated_at field.
+	grantusageDescUpdatedAt := grantusageMixinFields0[2].Descriptor()
+	// grantusage.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	grantusage.DefaultUpdatedAt = grantusageDescUpdatedAt.Default.(func() time.Time)
+	// grantusage.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	grantusage.UpdateDefaultUpdatedAt = grantusageDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// grantusageDescUsedAt is the schema descriptor for used_at field.
+	grantusageDescUsedAt := grantusageFields[1].Descriptor()
+	// grantusage.DefaultUsedAt holds the default value on creation for the used_at field.
+	grantusage.DefaultUsedAt = grantusageDescUsedAt.Default.(func() time.Time)
 	permissionrequestFields := schema.PermissionRequest{}.Fields()
 	_ = permissionrequestFields
 	// permissionrequestDescRequestedAt is the schema descriptor for requested_at field.

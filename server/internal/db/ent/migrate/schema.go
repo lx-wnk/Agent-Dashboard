@@ -303,6 +303,27 @@ var (
 			},
 		},
 	}
+	// GrantUsagesColumns holds the columns for the "grant_usages" table.
+	GrantUsagesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "grant_id", Type: field.TypeString},
+		{Name: "used_at", Type: field.TypeTime},
+	}
+	// GrantUsagesTable holds the schema information for the "grant_usages" table.
+	GrantUsagesTable = &schema.Table{
+		Name:       "grant_usages",
+		Columns:    GrantUsagesColumns,
+		PrimaryKey: []*schema.Column{GrantUsagesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "grantusage_grant_id_used_at",
+				Unique:  false,
+				Columns: []*schema.Column{GrantUsagesColumns[3], GrantUsagesColumns[4]},
+			},
+		},
+	}
 	// PermissionPresetsColumns holds the columns for the "permission_presets" table.
 	PermissionPresetsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -959,6 +980,7 @@ var (
 		DriftAlertsTable,
 		EvalMetricSnapshotsTable,
 		GrantsTable,
+		GrantUsagesTable,
 		PermissionPresetsTable,
 		PermissionRequestsTable,
 		PipelineConfigsTable,

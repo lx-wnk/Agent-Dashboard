@@ -25,6 +25,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/driftalert"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/evalmetricsnapshot"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/grant"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/grantusage"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionpreset"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionrequest"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/pipelineconfig"
@@ -73,6 +74,8 @@ type Client struct {
 	EvalMetricSnapshot *EvalMetricSnapshotClient
 	// Grant is the client for interacting with the Grant builders.
 	Grant *GrantClient
+	// GrantUsage is the client for interacting with the GrantUsage builders.
+	GrantUsage *GrantUsageClient
 	// PermissionPreset is the client for interacting with the PermissionPreset builders.
 	PermissionPreset *PermissionPresetClient
 	// PermissionRequest is the client for interacting with the PermissionRequest builders.
@@ -136,6 +139,7 @@ func (c *Client) init() {
 	c.DriftAlert = NewDriftAlertClient(c.config)
 	c.EvalMetricSnapshot = NewEvalMetricSnapshotClient(c.config)
 	c.Grant = NewGrantClient(c.config)
+	c.GrantUsage = NewGrantUsageClient(c.config)
 	c.PermissionPreset = NewPermissionPresetClient(c.config)
 	c.PermissionRequest = NewPermissionRequestClient(c.config)
 	c.PipelineConfig = NewPipelineConfigClient(c.config)
@@ -259,6 +263,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		DriftAlert:         NewDriftAlertClient(cfg),
 		EvalMetricSnapshot: NewEvalMetricSnapshotClient(cfg),
 		Grant:              NewGrantClient(cfg),
+		GrantUsage:         NewGrantUsageClient(cfg),
 		PermissionPreset:   NewPermissionPresetClient(cfg),
 		PermissionRequest:  NewPermissionRequestClient(cfg),
 		PipelineConfig:     NewPipelineConfigClient(cfg),
@@ -309,6 +314,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		DriftAlert:         NewDriftAlertClient(cfg),
 		EvalMetricSnapshot: NewEvalMetricSnapshotClient(cfg),
 		Grant:              NewGrantClient(cfg),
+		GrantUsage:         NewGrantUsageClient(cfg),
 		PermissionPreset:   NewPermissionPresetClient(cfg),
 		PermissionRequest:  NewPermissionRequestClient(cfg),
 		PipelineConfig:     NewPipelineConfigClient(cfg),
@@ -361,8 +367,8 @@ func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
 		c.AgentCostTrend, c.ApiKey, c.AppSetting, c.AuditEvent, c.Capability,
 		c.Checkpoint, c.CoordLock, c.DriftAlert, c.EvalMetricSnapshot, c.Grant,
-		c.PermissionPreset, c.PermissionRequest, c.PipelineConfig, c.Plugin,
-		c.PluginSetting, c.Project, c.ProjectFolder, c.PromptTemplate,
+		c.GrantUsage, c.PermissionPreset, c.PermissionRequest, c.PipelineConfig,
+		c.Plugin, c.PluginSetting, c.Project, c.ProjectFolder, c.PromptTemplate,
 		c.ProviderSetting, c.RefinementTurn, c.RemoteRegistration, c.Resource,
 		c.Scratchpad, c.Spawner, c.StageRun, c.SystemPrompt, c.Task, c.TaskDependency,
 		c.TaskPermission, c.TaskSchedule, c.User,
@@ -377,8 +383,8 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
 		c.AgentCostTrend, c.ApiKey, c.AppSetting, c.AuditEvent, c.Capability,
 		c.Checkpoint, c.CoordLock, c.DriftAlert, c.EvalMetricSnapshot, c.Grant,
-		c.PermissionPreset, c.PermissionRequest, c.PipelineConfig, c.Plugin,
-		c.PluginSetting, c.Project, c.ProjectFolder, c.PromptTemplate,
+		c.GrantUsage, c.PermissionPreset, c.PermissionRequest, c.PipelineConfig,
+		c.Plugin, c.PluginSetting, c.Project, c.ProjectFolder, c.PromptTemplate,
 		c.ProviderSetting, c.RefinementTurn, c.RemoteRegistration, c.Resource,
 		c.Scratchpad, c.Spawner, c.StageRun, c.SystemPrompt, c.Task, c.TaskDependency,
 		c.TaskPermission, c.TaskSchedule, c.User,
@@ -410,6 +416,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.EvalMetricSnapshot.mutate(ctx, m)
 	case *GrantMutation:
 		return c.Grant.mutate(ctx, m)
+	case *GrantUsageMutation:
+		return c.GrantUsage.mutate(ctx, m)
 	case *PermissionPresetMutation:
 		return c.PermissionPreset.mutate(ctx, m)
 	case *PermissionRequestMutation:
@@ -1784,6 +1792,139 @@ func (c *GrantClient) mutate(ctx context.Context, m *GrantMutation) (Value, erro
 		return (&GrantDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown Grant mutation op: %q", m.Op())
+	}
+}
+
+// GrantUsageClient is a client for the GrantUsage schema.
+type GrantUsageClient struct {
+	config
+}
+
+// NewGrantUsageClient returns a client for the GrantUsage from the given config.
+func NewGrantUsageClient(c config) *GrantUsageClient {
+	return &GrantUsageClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `grantusage.Hooks(f(g(h())))`.
+func (c *GrantUsageClient) Use(hooks ...Hook) {
+	c.hooks.GrantUsage = append(c.hooks.GrantUsage, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `grantusage.Intercept(f(g(h())))`.
+func (c *GrantUsageClient) Intercept(interceptors ...Interceptor) {
+	c.inters.GrantUsage = append(c.inters.GrantUsage, interceptors...)
+}
+
+// Create returns a builder for creating a GrantUsage entity.
+func (c *GrantUsageClient) Create() *GrantUsageCreate {
+	mutation := newGrantUsageMutation(c.config, OpCreate)
+	return &GrantUsageCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of GrantUsage entities.
+func (c *GrantUsageClient) CreateBulk(builders ...*GrantUsageCreate) *GrantUsageCreateBulk {
+	return &GrantUsageCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *GrantUsageClient) MapCreateBulk(slice any, setFunc func(*GrantUsageCreate, int)) *GrantUsageCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &GrantUsageCreateBulk{err: fmt.Errorf("calling to GrantUsageClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*GrantUsageCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &GrantUsageCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for GrantUsage.
+func (c *GrantUsageClient) Update() *GrantUsageUpdate {
+	mutation := newGrantUsageMutation(c.config, OpUpdate)
+	return &GrantUsageUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *GrantUsageClient) UpdateOne(_m *GrantUsage) *GrantUsageUpdateOne {
+	mutation := newGrantUsageMutation(c.config, OpUpdateOne, withGrantUsage(_m))
+	return &GrantUsageUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *GrantUsageClient) UpdateOneID(id string) *GrantUsageUpdateOne {
+	mutation := newGrantUsageMutation(c.config, OpUpdateOne, withGrantUsageID(id))
+	return &GrantUsageUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for GrantUsage.
+func (c *GrantUsageClient) Delete() *GrantUsageDelete {
+	mutation := newGrantUsageMutation(c.config, OpDelete)
+	return &GrantUsageDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *GrantUsageClient) DeleteOne(_m *GrantUsage) *GrantUsageDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *GrantUsageClient) DeleteOneID(id string) *GrantUsageDeleteOne {
+	builder := c.Delete().Where(grantusage.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &GrantUsageDeleteOne{builder}
+}
+
+// Query returns a query builder for GrantUsage.
+func (c *GrantUsageClient) Query() *GrantUsageQuery {
+	return &GrantUsageQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeGrantUsage},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a GrantUsage entity by its id.
+func (c *GrantUsageClient) Get(ctx context.Context, id string) (*GrantUsage, error) {
+	return c.Query().Where(grantusage.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *GrantUsageClient) GetX(ctx context.Context, id string) *GrantUsage {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *GrantUsageClient) Hooks() []Hook {
+	return c.hooks.GrantUsage
+}
+
+// Interceptors returns the client interceptors.
+func (c *GrantUsageClient) Interceptors() []Interceptor {
+	return c.inters.GrantUsage
+}
+
+func (c *GrantUsageClient) mutate(ctx context.Context, m *GrantUsageMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&GrantUsageCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&GrantUsageUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&GrantUsageUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&GrantUsageDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown GrantUsage mutation op: %q", m.Op())
 	}
 }
 
@@ -4776,7 +4917,7 @@ func (c *UserClient) mutate(ctx context.Context, m *UserMutation) (Value, error)
 type (
 	hooks struct {
 		AgentCostTrend, ApiKey, AppSetting, AuditEvent, Capability, Checkpoint,
-		CoordLock, DriftAlert, EvalMetricSnapshot, Grant, PermissionPreset,
+		CoordLock, DriftAlert, EvalMetricSnapshot, Grant, GrantUsage, PermissionPreset,
 		PermissionRequest, PipelineConfig, Plugin, PluginSetting, Project,
 		ProjectFolder, PromptTemplate, ProviderSetting, RefinementTurn,
 		RemoteRegistration, Resource, Scratchpad, Spawner, StageRun, SystemPrompt,
@@ -4784,7 +4925,7 @@ type (
 	}
 	inters struct {
 		AgentCostTrend, ApiKey, AppSetting, AuditEvent, Capability, Checkpoint,
-		CoordLock, DriftAlert, EvalMetricSnapshot, Grant, PermissionPreset,
+		CoordLock, DriftAlert, EvalMetricSnapshot, Grant, GrantUsage, PermissionPreset,
 		PermissionRequest, PipelineConfig, Plugin, PluginSetting, Project,
 		ProjectFolder, PromptTemplate, ProviderSetting, RefinementTurn,
 		RemoteRegistration, Resource, Scratchpad, Spawner, StageRun, SystemPrompt,

@@ -63,3 +63,38 @@ func (e ServerEnforcer) Enforce(ctx context.Context, d Decision) error {
 		return fmt.Errorf("%w: unknown effect %q", ErrDenied, d.Effect)
 	}
 }
+
+// WithinLimit reports whether a grant carrying LimitCount/LimitWindowSeconds
+// still has room for one more use, given how many uses already fall inside
+// the window. A limit of zero means unlimited. usedInWindow equal to the
+// limit is exhausted — a limit of three permits three calls, not four.
+//
+// Pure: no clock, no database. The caller (an enforcer) supplies the count,
+// keeping capability.Decide itself free of any limit evaluation.
+func WithinLimit(g GrantView, usedInWindow int) bool {
+	if g.LimitCount <= 0 {
+		return true
+	}
+	return usedInWindow < g.LimitCount
+}
+
+// EnforceLimited behaves like Enforce, but first checks the rate limit of
+// the grant that produced d. An allow decision whose grant is exhausted is
+// downgraded to ask — never to a silent deny, which would be
+// indistinguishable from having no grant at all, and never left as a silent
+// allow, which would let the limit go unenforced. The reason names the
+// limit so the user can tell which cap they hit (spec §6).
+//
+// Only EffectAllow is limit-checked: a deny or ask decision already carries
+// its own reason and is unaffected by usage.
+func (e ServerEnforcer) EnforceLimited(ctx context.Context, d Decision, g GrantView, usedInWindow int) error {
+	if d.Effect == EffectAllow && !WithinLimit(g, usedInWindow) {
+		d = Decision{
+			Effect:      EffectAsk,
+			GrantID:     d.GrantID,
+			Reason:      fmt.Sprintf("rate limit exceeded: grant %s allows %d use(s) per %ds, %d used", g.ID, g.LimitCount, g.LimitWindowSeconds, usedInWindow),
+			Enforceable: d.Enforceable,
+		}
+	}
+	return e.Enforce(ctx, d)
+}

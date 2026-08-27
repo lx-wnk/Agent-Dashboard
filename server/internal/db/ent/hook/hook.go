@@ -129,6 +129,18 @@ func (f GrantFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.GrantMutation", m)
 }
 
+// The GrantUsageFunc type is an adapter to allow the use of ordinary
+// function as GrantUsage mutator.
+type GrantUsageFunc func(context.Context, *ent.GrantUsageMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f GrantUsageFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.GrantUsageMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.GrantUsageMutation", m)
+}
+
 // The PermissionPresetFunc type is an adapter to allow the use of ordinary
 // function as PermissionPreset mutator.
 type PermissionPresetFunc func(context.Context, *ent.PermissionPresetMutation) (ent.Value, error)

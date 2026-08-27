@@ -22,6 +22,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/driftalert"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/evalmetricsnapshot"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/grant"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/grantusage"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionpreset"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionrequest"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/pipelineconfig"
@@ -113,6 +114,7 @@ func checkColumn(t, c string) error {
 			driftalert.Table:         driftalert.ValidColumn,
 			evalmetricsnapshot.Table: evalmetricsnapshot.ValidColumn,
 			grant.Table:              grant.ValidColumn,
+			grantusage.Table:         grantusage.ValidColumn,
 			permissionpreset.Table:   permissionpreset.ValidColumn,
 			permissionrequest.Table:  permissionrequest.ValidColumn,
 			pipelineconfig.Table:     pipelineconfig.ValidColumn,

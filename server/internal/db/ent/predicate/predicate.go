@@ -36,6 +36,9 @@ type EvalMetricSnapshot func(*sql.Selector)
 // Grant is the predicate function for grant builders.
 type Grant func(*sql.Selector)
 
+// GrantUsage is the predicate function for grantusage builders.
+type GrantUsage func(*sql.Selector)
+
 // PermissionPreset is the predicate function for permissionpreset builders.
 type PermissionPreset func(*sql.Selector)
 
