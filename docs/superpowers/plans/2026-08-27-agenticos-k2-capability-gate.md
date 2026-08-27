@@ -39,6 +39,23 @@ These apply to **every** task. They are not repeated per task.
 
 The `outcome` vocabulary normalization that the spec lists as G6 **shipped separately** in the ACP fix. `repo.OutcomeGranted`, `repo.OutcomeDenied` and `repo.OutcomeExpired` already exist in `server/internal/db/repo/permission_repo.go`, every writer and validator uses them, and a boot migration rewrites the legacy `"approved"` value. Verify with `grep -n "OutcomeGranted" server/internal/db/repo/permission_repo.go` before starting; if it is absent, stop and report — the dependency assumption is wrong.
 
+## Execution-order amendments
+
+Two changes to this document were ruled during execution. The task text below is
+otherwise unchanged; the full reasoning for each is in the SDD ledger.
+
+- **Task 10 runs immediately after Task 6, before Task 7.** Its scope grew: it
+  now also seeds the capability catalogue on boot. `CapabilityRepo.Upsert` has
+  no callers, so the `capabilities` table is empty at runtime, and an empty
+  catalogue makes every lookup return a zero-value `CapabilityView` whose class
+  resolves to `deny`. Task 7 is the first task that performs a real lookup, so
+  the seed has to exist before it.
+- **The enforcement-point constants move in Task 6.** `EnforcerServer`,
+  `EnforcerSpawn` and `EnforcerHook` are declared in package `repo`, but Tasks
+  6, 7 and 9 all reference them as though they were in package `capability` —
+  which may not import `repo`. Task 6 moves all three; the later tasks assume
+  the move landed and must verify it rather than importing `repo`.
+
 ## What exists today, verified
 
 Every signature below was read from the tree at plan time. Verify each again before the task that consumes it.
