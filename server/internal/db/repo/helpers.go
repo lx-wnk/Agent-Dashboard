@@ -15,7 +15,7 @@ func IsNotFound(err error) bool { return ent.IsNotFound(err) }
 // rollback itself also fails.
 func rollback(tx *ent.Tx, cause error) error {
 	if rerr := tx.Rollback(); rerr != nil {
-		return fmt.Errorf("%w: rollback: %v", cause, rerr)
+		return fmt.Errorf("%w (rollback failed: %v)", cause, rerr)
 	}
 	return cause
 }
