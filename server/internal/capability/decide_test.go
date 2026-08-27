@@ -109,6 +109,61 @@ func TestDecideExpiredAndRevokedAreIgnored(t *testing.T) {
 	}
 }
 
+func TestDecideDefaultEffectPerClass(t *testing.T) {
+	req := capability.Request{
+		Capability: "whatever",
+		Value:      "whatever",
+		Contexts:   []capability.Context{{Kind: "global"}},
+	}
+
+	tests := []struct {
+		class string
+		want  capability.Effect
+	}{
+		{"tool", capability.EffectAsk},
+		{"reach", capability.EffectAsk},
+		{"resource", capability.EffectAsk},
+		{"spend", capability.EffectDeny},
+		{"nonsense", capability.EffectDeny},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.class, func(t *testing.T) {
+			cap := capability.CapabilityView{Name: "whatever", Class: tt.class}
+			got := capability.Decide(req, nil, cap)
+			if got.Effect != tt.want {
+				t.Errorf("class %q: Effect = %v, want %v", tt.class, got.Effect, tt.want)
+			}
+		})
+	}
+}
+
+func TestDecideScopeFilterDistinguishesSameKindDifferentRef(t *testing.T) {
+	// Two contexts share the "task" kind with different refs (e.g. a
+	// sub-task nested under a parent task). A grant scoped to the
+	// first-listed ref must still be considered — a scope filter keyed on
+	// kind alone would silently keep only the last ref and drop this grant,
+	// falling through to the capability default (ask) instead of deny.
+	cap := capability.CapabilityView{Name: "Bash", Class: "tool"}
+	req := capability.Request{
+		Capability: "Bash",
+		Value:      "git status",
+		Contexts: []capability.Context{
+			{Kind: "task", Ref: "t1"},
+			{Kind: "task", Ref: "t2"},
+		},
+	}
+
+	grants := []capability.GrantView{
+		{ID: "g1", ContextKind: "task", ContextRef: "t1", Mode: "deny"},
+	}
+
+	got := capability.Decide(req, grants, cap)
+	if got.Effect != capability.EffectDeny {
+		t.Errorf("Effect = %v, want deny — the t1-scoped grant must be considered even though t2 is also in the chain", got.Effect)
+	}
+}
+
 func TestDecisionCarriesEnforceability(t *testing.T) {
 	cap := capability.CapabilityView{Name: "mail.send", Class: "reach", EnforceableBy: []string{"server"}}
 	req := capability.Request{Capability: "mail.send", Contexts: []capability.Context{{Kind: "global"}}}

@@ -86,9 +86,9 @@ var modeRank = map[string]int{
 // Rate limits are not evaluated here — Decide is pure and holds no counter;
 // limit enforcement belongs to the enforcers that track call counts.
 func Decide(req Request, grants []GrantView, cap CapabilityView) Decision {
-	inScope := make(map[string]string, len(req.Contexts))
+	inScope := make(map[Context]bool, len(req.Contexts))
 	for _, c := range req.Contexts {
-		inScope[c.Kind] = c.Ref
+		inScope[c] = true
 	}
 
 	now := time.Now()
@@ -106,8 +106,7 @@ func Decide(req Request, grants []GrantView, cap CapabilityView) Decision {
 		if !Match(g.Pattern, req.Value) {
 			continue
 		}
-		ref, inRequestChain := inScope[g.ContextKind]
-		if !inRequestChain || ref != g.ContextRef {
+		if !inScope[Context{Kind: g.ContextKind, Ref: g.ContextRef}] {
 			continue
 		}
 		rank, known := contextRank[g.ContextKind]
@@ -147,7 +146,10 @@ func Decide(req Request, grants []GrantView, cap CapabilityView) Decision {
 }
 
 // effectForMode maps a grant's stored mode to an Effect. An unrecognised
-// mode fails safe to ask rather than silently allowing.
+// mode fails safe to ask rather than silently allowing: a grant exists and a
+// human authored it, so surfacing it for confirmation is the right failure
+// mode. This is deliberately asymmetric with defaultEffect below, where no
+// grant exists at all and the safe failure is the opposite direction.
 func effectForMode(mode string) Effect {
 	switch mode {
 	case "allow":
@@ -160,11 +162,21 @@ func effectForMode(mode string) Effect {
 }
 
 // defaultEffect is the capability's fallback when no grant at any level
-// applies: ask for tool and reach (and any other class), deny for spend —
-// spend is the one class where the safe default is refusal, not a prompt.
+// applies, per spec §4.3 rule 5. "spend" denies unconditionally here — the
+// spec's "deny above budget" condition needs a running counter, which the
+// Decider does not hold; the budget check itself is the enforcer's job,
+// same as rate limits.
+//
+// An unrecognised class also denies, not asks: falling through to ask would
+// turn a typo'd or future class silently into a prompt a human clicks
+// through. Deny breaks loudly where the class was introduced instead.
 func defaultEffect(class string) Effect {
-	if class == "spend" {
+	switch class {
+	case "tool", "reach", "resource":
+		return EffectAsk
+	case "spend":
+		return EffectDeny
+	default:
 		return EffectDeny
 	}
-	return EffectAsk
 }
