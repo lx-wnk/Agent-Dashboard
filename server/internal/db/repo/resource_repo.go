@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/google/uuid"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
@@ -58,6 +59,12 @@ type UpsertResourceInput struct {
 type ResourceRepo interface {
 	Upsert(ctx context.Context, in UpsertResourceInput) (*ent.Resource, error)
 	Get(ctx context.Context, kind string, scope Scope, slug string) (*ent.Resource, error)
+	// Resolve returns the row for scope, falling back to the global row when the
+	// scope has none. This is the effective-value lookup.
+	Resolve(ctx context.Context, kind string, scope Scope, slug string) (*ent.Resource, error)
+	// ListMerged returns global rows merged with scope rows, scope winning on a
+	// slug collision.
+	ListMerged(ctx context.Context, kind string, scope Scope) ([]*ent.Resource, error)
 	ListForKind(ctx context.Context, kind string) ([]*ent.Resource, error)
 	ListForScope(ctx context.Context, kind string, scope Scope) ([]*ent.Resource, error)
 	SetState(ctx context.Context, id, state string) (*ent.Resource, error)
@@ -176,4 +183,53 @@ func (r *entResourceRepo) Delete(ctx context.Context, id string) error {
 		return fmt.Errorf("resource.Delete: %w", err)
 	}
 	return nil
+}
+
+func (r *entResourceRepo) Resolve(ctx context.Context, kind string, scope Scope, slug string) (*ent.Resource, error) {
+	s := scope.Normalize()
+	if !s.IsGlobal() {
+		row, err := r.Get(ctx, kind, s, slug)
+		if err == nil {
+			return row, nil
+		}
+		if !ent.IsNotFound(err) {
+			return nil, err
+		}
+	}
+	row, err := r.Get(ctx, kind, GlobalScope(), slug)
+	if err != nil {
+		return nil, fmt.Errorf("resource.Resolve: %w", err)
+	}
+	return row, nil
+}
+
+func (r *entResourceRepo) ListMerged(ctx context.Context, kind string, scope Scope) ([]*ent.Resource, error) {
+	globals, err := r.ListForScope(ctx, kind, GlobalScope())
+	if err != nil {
+		return nil, fmt.Errorf("resource.ListMerged: %w", err)
+	}
+	s := scope.Normalize()
+	if s.IsGlobal() {
+		return globals, nil
+	}
+	scoped, err := r.ListForScope(ctx, kind, s)
+	if err != nil {
+		return nil, fmt.Errorf("resource.ListMerged: %w", err)
+	}
+
+	bySlug := make(map[string]*ent.Resource, len(globals)+len(scoped))
+	for _, row := range globals {
+		bySlug[row.Slug] = row
+	}
+	// Scoped rows overwrite globals of the same slug — the merge rule.
+	for _, row := range scoped {
+		bySlug[row.Slug] = row
+	}
+
+	out := make([]*ent.Resource, 0, len(bySlug))
+	for _, row := range bySlug {
+		out = append(out, row)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Slug < out[j].Slug })
+	return out, nil
 }

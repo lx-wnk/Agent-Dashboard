@@ -135,3 +135,91 @@ func TestResourceRejectsInvalidSlug(t *testing.T) {
 		t.Fatal("an invalid slug must be rejected before it reaches the database")
 	}
 }
+
+func TestResourceResolveFallsBackToGlobal(t *testing.T) {
+	r, ctx := newResourceRepo(t)
+	if _, err := r.Upsert(ctx, repo.UpsertResourceInput{
+		Kind:  repo.ResourceKindSkill,
+		Slug:  "review",
+		Name:  "Global Review",
+		Scope: repo.GlobalScope(),
+	}); err != nil {
+		t.Fatalf("seed global: %v", err)
+	}
+
+	got, err := r.Resolve(ctx, repo.ResourceKindSkill, repo.ProjectScope("/tmp/project-a"), "review")
+	if err != nil {
+		t.Fatalf("Resolve with no project row must fall back: %v", err)
+	}
+	if got.Name != "Global Review" {
+		t.Errorf("name = %q, want the global row", got.Name)
+	}
+}
+
+func TestResourceResolvePrefersTheScopedRow(t *testing.T) {
+	r, ctx := newResourceRepo(t)
+	if _, err := r.Upsert(ctx, repo.UpsertResourceInput{
+		Kind: repo.ResourceKindSkill, Slug: "review",
+		Name: "Global Review", Scope: repo.GlobalScope(),
+	}); err != nil {
+		t.Fatalf("seed global: %v", err)
+	}
+	if _, err := r.Upsert(ctx, repo.UpsertResourceInput{
+		Kind: repo.ResourceKindSkill, Slug: "review",
+		Name: "Project Review", Scope: repo.ProjectScope("/tmp/project-a"),
+	}); err != nil {
+		t.Fatalf("seed project: %v", err)
+	}
+
+	got, err := r.Resolve(ctx, repo.ResourceKindSkill, repo.ProjectScope("/tmp/project-a"), "review")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if got.Name != "Project Review" {
+		t.Errorf("name = %q, want the project row to win", got.Name)
+	}
+}
+
+func TestResourceGetDoesNotFallBack(t *testing.T) {
+	r, ctx := newResourceRepo(t)
+	if _, err := r.Upsert(ctx, repo.UpsertResourceInput{
+		Kind: repo.ResourceKindSkill, Slug: "review", Scope: repo.GlobalScope(),
+	}); err != nil {
+		t.Fatalf("seed global: %v", err)
+	}
+
+	if _, err := r.Get(ctx, repo.ResourceKindSkill, repo.ProjectScope("/tmp/project-a"), "review"); err == nil {
+		t.Error("Get must not fall back to the global row — that is Resolve's job")
+	}
+}
+
+func TestResourceListMergedScopedWins(t *testing.T) {
+	r, ctx := newResourceRepo(t)
+	for _, in := range []repo.UpsertResourceInput{
+		{Kind: repo.ResourceKindSkill, Slug: "review", Name: "Global Review", Scope: repo.GlobalScope()},
+		{Kind: repo.ResourceKindSkill, Slug: "deploy", Name: "Global Deploy", Scope: repo.GlobalScope()},
+		{Kind: repo.ResourceKindSkill, Slug: "review", Name: "Project Review", Scope: repo.ProjectScope("/tmp/project-a")},
+	} {
+		if _, err := r.Upsert(ctx, in); err != nil {
+			t.Fatalf("seed %s: %v", in.Slug, err)
+		}
+	}
+
+	merged, err := r.ListMerged(ctx, repo.ResourceKindSkill, repo.ProjectScope("/tmp/project-a"))
+	if err != nil {
+		t.Fatalf("ListMerged: %v", err)
+	}
+	if len(merged) != 2 {
+		t.Fatalf("merged length = %d, want 2 (review and deploy)", len(merged))
+	}
+	byName := map[string]string{}
+	for _, row := range merged {
+		byName[row.Slug] = row.Name
+	}
+	if byName["review"] != "Project Review" {
+		t.Errorf("review = %q, want the project row to win", byName["review"])
+	}
+	if byName["deploy"] != "Global Deploy" {
+		t.Errorf("deploy = %q, want the global row to survive", byName["deploy"])
+	}
+}
