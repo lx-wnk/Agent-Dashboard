@@ -130,6 +130,14 @@ func Open(path string) (*DBBundle, error) {
 		_ = client.Close()
 		return nil, fmt.Errorf("db: copy audit_logs → audit_events: %w", err)
 	}
+	// Backfill task_permissions and permission_presets rows into grants, so the
+	// capability gate's grant table starts from the legacy permission tables it
+	// is replacing rather than empty. Idempotent — must run after ent
+	// auto-migrate (task_permissions, permission_presets, and grants all exist).
+	if err := migrateBackfillGrants(sqlDB); err != nil {
+		_ = client.Close()
+		return nil, fmt.Errorf("db: backfill grants: %w", err)
+	}
 	if err := runRawMigrations(sqlDB); err != nil {
 		_ = client.Close()
 		return nil, fmt.Errorf("db: raw migrations: %w", err)
@@ -344,6 +352,110 @@ func migrateCopyAuditLogsToAuditEvents(db *sql.DB) error {
 	`); err != nil {
 		return fmt.Errorf("copy audit_logs: %w", err)
 	}
+	return nil
+}
+
+// migrateBackfillGrants converts existing task_permissions and
+// permission_presets rows into grants, so the capability gate's grant table
+// starts from the legacy permission tables it is replacing instead of empty.
+//
+// task_permissions rows are backfilled only when granted = 1: an ungranted
+// row records a pending or denied request, not a decision the gate should
+// honour as an allow — ListEffectiveTaskPermissions already treats
+// granted = 0 the same way. permission_presets carries no such flag; a
+// preset row is the allow decision by definition, so every preset row is
+// backfilled unconditionally.
+//
+// context_kind/context_ref: task_permissions map to ("task", task_id),
+// permission_presets map to ("project", project_cwd). mode is always
+// "allow". granted_by is "migration:legacy" rather than an empty string —
+// granted_by is required, and an empty string would be indistinguishable
+// from a bug; the marker says "unknown because it predates identity" out
+// loud.
+//
+// Idempotent via a NOT EXISTS guard on the grant's identifying columns
+// (capability_name, context_kind, context_ref, pattern), mirroring
+// migrateCopyAuditLogsToAuditEvents above. Must run after ent auto-migrate,
+// once task_permissions, permission_presets, and grants all exist.
+func migrateBackfillGrants(db *sql.DB) error {
+	var pendingPerms int
+	if err := db.QueryRow(`
+		SELECT COUNT(*) FROM task_permissions tp
+		WHERE tp.granted = 1
+		  AND NOT EXISTS (
+			SELECT 1 FROM grants g
+			WHERE g.capability_name = tp.tool
+			  AND g.context_kind = 'task'
+			  AND g.context_ref = tp.task_id
+			  AND g.pattern = COALESCE(tp.pattern, '')
+		  )
+	`).Scan(&pendingPerms); err != nil {
+		return fmt.Errorf("count pending task_permission backfill: %w", err)
+	}
+	if pendingPerms > 0 {
+		if _, err := db.Exec(`
+			INSERT INTO grants (
+				id, created_at, updated_at, capability_name, context_kind, context_ref,
+				pattern, mode, limit_count, limit_window_seconds, expires_at,
+				granted_by, granted_at, revoked_at, revoked_by, reason, node_id
+			)
+			SELECT
+				lower(hex(randomblob(16))), datetime('now'), datetime('now'), tp.tool, 'task', tp.task_id,
+				COALESCE(tp.pattern, ''), 'allow', 0, 0, tp.expires_at,
+				'migration:legacy', datetime('now'), NULL, '', '', 'local'
+			FROM task_permissions tp
+			WHERE tp.granted = 1
+			  AND NOT EXISTS (
+				SELECT 1 FROM grants g
+				WHERE g.capability_name = tp.tool
+				  AND g.context_kind = 'task'
+				  AND g.context_ref = tp.task_id
+				  AND g.pattern = COALESCE(tp.pattern, '')
+			  )
+		`); err != nil {
+			return fmt.Errorf("backfill grants from task_permissions: %w", err)
+		}
+		slog.Warn("migration: backfilled grants from task_permissions", "count", pendingPerms)
+	}
+
+	var pendingPresets int
+	if err := db.QueryRow(`
+		SELECT COUNT(*) FROM permission_presets pp
+		WHERE NOT EXISTS (
+			SELECT 1 FROM grants g
+			WHERE g.capability_name = pp.tool
+			  AND g.context_kind = 'project'
+			  AND g.context_ref = pp.project_cwd
+			  AND g.pattern = COALESCE(pp.pattern, '')
+		)
+	`).Scan(&pendingPresets); err != nil {
+		return fmt.Errorf("count pending permission_preset backfill: %w", err)
+	}
+	if pendingPresets > 0 {
+		if _, err := db.Exec(`
+			INSERT INTO grants (
+				id, created_at, updated_at, capability_name, context_kind, context_ref,
+				pattern, mode, limit_count, limit_window_seconds, expires_at,
+				granted_by, granted_at, revoked_at, revoked_by, reason, node_id
+			)
+			SELECT
+				lower(hex(randomblob(16))), datetime('now'), datetime('now'), pp.tool, 'project', pp.project_cwd,
+				COALESCE(pp.pattern, ''), 'allow', 0, 0, NULL,
+				'migration:legacy', datetime('now'), NULL, '', '', 'local'
+			FROM permission_presets pp
+			WHERE NOT EXISTS (
+				SELECT 1 FROM grants g
+				WHERE g.capability_name = pp.tool
+				  AND g.context_kind = 'project'
+				  AND g.context_ref = pp.project_cwd
+				  AND g.pattern = COALESCE(pp.pattern, '')
+			)
+		`); err != nil {
+			return fmt.Errorf("backfill grants from permission_presets: %w", err)
+		}
+		slog.Warn("migration: backfilled grants from permission_presets", "count", pendingPresets)
+	}
+
 	return nil
 }
 
