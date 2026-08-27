@@ -198,3 +198,41 @@ func TestApproveAllPending_UnknownTask(t *testing.T) {
 		t.Fatalf("expected 404, got %d", w.Code)
 	}
 }
+
+// TestApproveAllPending_WritesGrantedOutcome pins the value, not just the count.
+//
+// ApproveAllPending used to write the outcome "approved" while every other
+// resolver wrote "granted". The ACP permission gate authorizes on
+// repo.OutcomeGranted alone and reads anything else as a refusal, so approving
+// through this path denied the call for an ACP-backed agent. The pre-existing
+// happy-path test only asserted that nothing stayed pending, which "approved"
+// satisfied — hence this assertion on the stored value.
+func TestApproveAllPending_WritesGrantedOutcome(t *testing.T) {
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	client, r := newApproveAllHandler(t, &requeueCapture{})
+	taskID, runID := seedAwaitingWithPermissions(t, client, 1)
+
+	ctx := context.Background()
+	permRepo := repo.NewPermissionRepo(client)
+	pending, err := permRepo.ListPendingForStageRun(ctx, runID)
+	if err != nil || len(pending) != 1 {
+		t.Fatalf("expected 1 pending request, got %d (err=%v)", len(pending), err)
+	}
+	reqID := pending[0].ID
+
+	if w := postApproveAll(t, r, taskID); w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	resolved, err := permRepo.GetPermissionRequest(ctx, reqID)
+	if err != nil {
+		t.Fatalf("get resolved request: %v", err)
+	}
+	if resolved.Outcome == nil {
+		t.Fatalf("outcome is nil — request was not resolved")
+	}
+	if *resolved.Outcome != repo.OutcomeGranted {
+		t.Errorf("outcome = %q, want %q (the only value the ACP gate authorizes on)",
+			*resolved.Outcome, repo.OutcomeGranted)
+	}
+}

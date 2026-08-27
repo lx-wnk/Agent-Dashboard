@@ -906,7 +906,7 @@ func (h *Handler) resolvePermissionRequest(w http.ResponseWriter, r *http.Reques
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		return apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
 	}
-	if body.Outcome != "granted" && body.Outcome != "denied" {
+	if body.Outcome != repo.OutcomeGranted && body.Outcome != repo.OutcomeDenied {
 		return apierr.NewAppError(http.StatusBadRequest, "outcome must be granted or denied")
 	}
 	// Object-level authz: the request must belong to the task in the URL,
@@ -929,7 +929,7 @@ func (h *Handler) resolvePermissionRequest(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		return fmt.Errorf("tasks.resolvePermissionRequest.get: %w", err)
 	}
-	if body.Outcome == "granted" {
+	if body.Outcome == repo.OutcomeGranted {
 		entries := []repo.GrantEntry{{Tool: pr.Tool, Pattern: pr.Pattern}}
 		if _, errs := h.grantValidatedEntries(r.Context(), id, entries); len(errs) > 0 {
 			slog.Warn("resolvePermissionRequest: grant failed", "taskID", id, "errs", errs)

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/llmadapter"
 )
 
@@ -336,13 +337,13 @@ func acpPermissionGate(ctx *StageContext) func(context.Context, acp.PermissionRe
 			if err != nil {
 				return acp.StatusPending, err
 			}
-			// outcome stays unset until a human resolves the request; "granted"
-			// is the only outcome that authorizes the call, and an expired one
-			// is a refusal like any other.
+			// outcome stays unset until a human resolves the request;
+			// repo.OutcomeGranted is the only value that authorizes the call, and
+			// an expired one is a refusal like any other.
 			if row == nil || row.Outcome == nil || *row.Outcome == "" {
 				return acp.StatusPending, nil
 			}
-			if *row.Outcome == "granted" {
+			if *row.Outcome == repo.OutcomeGranted {
 				return acp.StatusGranted, nil
 			}
 			return acp.StatusDenied, nil
