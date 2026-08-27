@@ -49,9 +49,6 @@ type MemoryRepo interface {
 	CreateSpace(ctx context.Context, in CreateSpaceInput) (*ent.Resource, error)
 	GetSpace(ctx context.Context, scope Scope, slug string) (*ent.Resource, error)
 	ListSpaces(ctx context.Context, scope Scope) ([]*ent.Resource, error)
-	// DeleteSpace refuses while any entry still references the space —
-	// see the implementation comment for why.
-	DeleteSpace(ctx context.Context, id string) error
 	CreateEntry(ctx context.Context, in CreateEntryInput) (*ent.MemoryEntry, error)
 	GetEntry(ctx context.Context, id string) (*ent.MemoryEntry, error)
 	// SupersedeEntry marks oldID as replaced by newID. It writes a pointer on
@@ -79,6 +76,19 @@ func NewMemoryRepo(client *ent.Client) MemoryRepo {
 	return &entMemoryRepo{client: client, resources: NewResourceRepo(client)}
 }
 
+// CreateSpace creates or refreshes a memory space's resource row.
+//
+// There is no delete path for a space: memory_entry.space_id is a loose
+// reference with no ent edge or foreign key, so deleting the resource row out
+// from under existing entries would not fail — it would leave them pointing
+// at an id that no longer resolves, silently orphaned rather than deleted, in
+// a store whose whole point is durable history. Any future deletion path
+// must count referencing entries and refuse while any exist, exactly as
+// CreateEntry's mustBeSpace refuses a write that references a space that does
+// not exist. That count must include expired and superseded entries, not
+// just currently-valid ones: expiry and superseding govern visibility
+// (ListValid), not existence — the row is still there, still referencing the
+// space, until something actually deletes it.
 func (r *entMemoryRepo) CreateSpace(ctx context.Context, in CreateSpaceInput) (*ent.Resource, error) {
 	row, err := r.resources.Upsert(ctx, UpsertResourceInput{
 		Kind:  ResourceKindMemorySpace,
@@ -106,45 +116,6 @@ func (r *entMemoryRepo) ListSpaces(ctx context.Context, scope Scope) ([]*ent.Res
 		return nil, fmt.Errorf("memory.ListSpaces: %w", err)
 	}
 	return rows, nil
-}
-
-// DeleteSpace deletes a memory space's resource row, refusing while any entry
-// still references it. space_id is a loose reference with no ent edge or FK,
-// so deleting the row out from under existing entries would not fail — it
-// would leave them pointing at an id that no longer resolves: not deleted,
-// just silently unreachable, in a store whose whole point is durable history.
-// Refusing is reversible (delete or move the entries first, then retry);
-// cascading would decide that for the caller, which "delete this space"
-// should not imply on its own.
-//
-// The reference count and the delete run inside one write transaction so a
-// concurrent CreateEntry cannot slip a new row in between the check and the
-// delete and produce the exact orphan this guards against.
-func (r *entMemoryRepo) DeleteSpace(ctx context.Context, id string) error {
-	err := WithTx(ctx, r.client, func(tx *ent.Tx) error {
-		row, err := tx.Resource.Get(ctx, id)
-		if err != nil {
-			return err
-		}
-		if row.Kind != ResourceKindMemorySpace {
-			return fmt.Errorf("%s: not a memory space", id)
-		}
-		if row.Origin == ResourceOriginBuiltin {
-			return ErrResourceBuiltIn
-		}
-		count, err := tx.MemoryEntry.Query().Where(memoryentry.SpaceIDEQ(id)).Count(ctx)
-		if err != nil {
-			return err
-		}
-		if count > 0 {
-			return ErrResourceReferenced
-		}
-		return tx.Resource.DeleteOneID(id).Exec(ctx)
-	})
-	if err != nil {
-		return fmt.Errorf("memory.DeleteSpace %s: %w", id, err)
-	}
-	return nil
 }
 
 // mustBeSpace fails closed on a space_id that is not a live memory_space
@@ -253,13 +224,43 @@ func (r *entMemoryRepo) ListValid(ctx context.Context, spaceID string, now time.
 	return rows, nil
 }
 
+// mustBeStageRun fails closed on a stage_run_id that does not reference a
+// real stage_run row. Same reasoning as mustBeSpace: stage_run_id is a loose
+// string reference (no ent edge, no FK), so nothing at the database level
+// stops RecordInjection from writing an audit-trail row tied to a stage run
+// that never existed.
+func (r *entMemoryRepo) mustBeStageRun(ctx context.Context, stageRunID string) error {
+	if _, err := r.client.StageRun.Get(ctx, stageRunID); err != nil {
+		return fmt.Errorf("stage run %s: %w", stageRunID, err)
+	}
+	return nil
+}
+
+// mustBeEntries fails closed if any of entryIDs does not reference a real
+// memory_entry row — entry_ids is stored as a loose JSON array with no ent
+// edge or FK, same gap mustBeStageRun closes for stage_run_id.
+func (r *entMemoryRepo) mustBeEntries(ctx context.Context, entryIDs []string) error {
+	for _, id := range entryIDs {
+		if _, err := r.client.MemoryEntry.Get(ctx, id); err != nil {
+			return fmt.Errorf("entry %s: %w", id, err)
+		}
+	}
+	return nil
+}
+
 func (r *entMemoryRepo) RecordInjection(ctx context.Context, in RecordInjectionInput) (*ent.MemoryInjection, error) {
 	if in.StageRunID == "" {
 		return nil, fmt.Errorf("memory.RecordInjection: stage_run_id is required")
 	}
+	if err := r.mustBeStageRun(ctx, in.StageRunID); err != nil {
+		return nil, fmt.Errorf("memory.RecordInjection: %w", err)
+	}
 	entryIDs := in.EntryIDs
 	if entryIDs == nil {
 		entryIDs = []string{}
+	}
+	if err := r.mustBeEntries(ctx, entryIDs); err != nil {
+		return nil, fmt.Errorf("memory.RecordInjection: %w", err)
 	}
 	row, err := r.client.MemoryInjection.Create().
 		SetID(uuid.New().String()).

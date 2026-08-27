@@ -2,7 +2,6 @@ package repo_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -19,6 +18,30 @@ func newMemoryRepo(t *testing.T) (repo.MemoryRepo, context.Context) {
 	}
 	t.Cleanup(func() { _ = bundle.Client.Close() })
 	return repo.NewMemoryRepo(bundle.Client), context.Background()
+}
+
+// newMemoryRepoWithStageRun is newMemoryRepo plus a real stage_run row, for
+// tests that exercise RecordInjection: stage_run_id must reference a real
+// row (mustBeStageRun), so a made-up id like "stage-run-1" is no longer
+// accepted.
+func newMemoryRepoWithStageRun(t *testing.T) (repo.MemoryRepo, context.Context, string) {
+	t.Helper()
+	bundle, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("db.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+	ctx := context.Background()
+	taskID := createTask(t, repo.NewTaskRepo(bundle.Client), "memory-injection-task")
+	run, err := repo.NewStageRunRepo(bundle.Client).Create(ctx, repo.CreateStageRunInput{
+		TaskID:    taskID,
+		Stage:     "concept",
+		Iteration: 1,
+	})
+	if err != nil {
+		t.Fatalf("create stage run: %v", err)
+	}
+	return repo.NewMemoryRepo(bundle.Client), ctx, run.ID
 }
 
 func mustSpace(t *testing.T, r repo.MemoryRepo, ctx context.Context, slug string) *ent.Resource {
@@ -143,42 +166,6 @@ func TestGetSpaceAndListSpaces(t *testing.T) {
 	}
 }
 
-func TestDeleteSpaceRefusesWhenEntriesReferenceIt(t *testing.T) {
-	r, ctx := newMemoryRepo(t)
-	space := mustSpace(t, r, ctx, "project-a")
-	entry := mustEntry(t, r, ctx, space.ID, "still referenced")
-	// Even an expired entry must still block the delete: it references the
-	// space just as much as a live one, and deleting past that would leave
-	// exactly the dangling reference this guard exists to prevent.
-	if err := r.ExpireEntry(ctx, entry.ID, time.Now()); err != nil {
-		t.Fatalf("expire: %v", err)
-	}
-
-	err := r.DeleteSpace(ctx, space.ID)
-	if !errors.Is(err, repo.ErrResourceReferenced) {
-		t.Fatalf("DeleteSpace error = %v, want ErrResourceReferenced", err)
-	}
-
-	if _, err := r.GetSpace(ctx, repo.GlobalScope(), "project-a"); err != nil {
-		t.Errorf("space must still exist after a refused delete: %v", err)
-	}
-	if _, err := r.GetEntry(ctx, entry.ID); err != nil {
-		t.Errorf("the referencing entry must still exist: %v", err)
-	}
-}
-
-func TestDeleteSpaceAllowsUnreferenced(t *testing.T) {
-	r, ctx := newMemoryRepo(t)
-	space := mustSpace(t, r, ctx, "project-a")
-
-	if err := r.DeleteSpace(ctx, space.ID); err != nil {
-		t.Fatalf("delete space: %v", err)
-	}
-	if _, err := r.GetSpace(ctx, repo.GlobalScope(), "project-a"); !repo.IsNotFound(err) {
-		t.Errorf("GetSpace after delete = %v, want not-found", err)
-	}
-}
-
 func TestCreateEntryRejectsUnknownSpace(t *testing.T) {
 	r, ctx := newMemoryRepo(t)
 	_, err := r.CreateEntry(ctx, repo.CreateEntryInput{
@@ -213,12 +200,12 @@ func TestSupersedeRejectsUnknownReplacement(t *testing.T) {
 }
 
 func TestRecordInjectionPersistsEntryIDs(t *testing.T) {
-	r, ctx := newMemoryRepo(t)
+	r, ctx, stageRunID := newMemoryRepoWithStageRun(t)
 	space := mustSpace(t, r, ctx, "project-a")
 	entry := mustEntry(t, r, ctx, space.ID, "used in a spawn")
 
 	got, err := r.RecordInjection(ctx, repo.RecordInjectionInput{
-		StageRunID:     "stage-run-1",
+		StageRunID:     stageRunID,
 		EntryIDs:       []string{entry.ID},
 		CharBudget:     4000,
 		CharsUsed:      120,
@@ -232,5 +219,31 @@ func TestRecordInjectionPersistsEntryIDs(t *testing.T) {
 	}
 	if got.CharBudget != 4000 || got.CharsUsed != 120 || got.CandidateCount != 3 {
 		t.Errorf("counters not persisted as given: %+v", got)
+	}
+}
+
+func TestRecordInjectionRejectsUnknownStageRun(t *testing.T) {
+	r, ctx, _ := newMemoryRepoWithStageRun(t)
+	space := mustSpace(t, r, ctx, "project-a")
+	entry := mustEntry(t, r, ctx, space.ID, "used in a spawn")
+
+	_, err := r.RecordInjection(ctx, repo.RecordInjectionInput{
+		StageRunID: "does-not-exist",
+		EntryIDs:   []string{entry.ID},
+	})
+	if err == nil {
+		t.Error("a stage_run_id that does not reference a real stage run must be refused, not written")
+	}
+}
+
+func TestRecordInjectionRejectsUnknownEntryID(t *testing.T) {
+	r, ctx, stageRunID := newMemoryRepoWithStageRun(t)
+
+	_, err := r.RecordInjection(ctx, repo.RecordInjectionInput{
+		StageRunID: stageRunID,
+		EntryIDs:   []string{"does-not-exist"},
+	})
+	if err == nil {
+		t.Error("an entry id that does not reference a real memory entry must be refused, not written")
 	}
 }
