@@ -360,7 +360,7 @@ func registerResolvePermissionRequest(registry mcp.ToolRegistry, d ControlDeps) 
 			"type": "object",
 			"properties": map[string]any{
 				"request_id": map[string]any{"type": "string", "description": "Permission request ID"},
-				"outcome":    map[string]any{"type": "string", "enum": []string{"granted", "denied"}},
+				"outcome":    map[string]any{"type": "string", "enum": []string{repo.OutcomeGranted, repo.OutcomeDenied}},
 			},
 			"required": []string{"request_id", "outcome"},
 		},
@@ -373,7 +373,7 @@ func registerResolvePermissionRequest(registry mcp.ToolRegistry, d ControlDeps) 
 			if err != nil {
 				return nil, err
 			}
-			if outcome != "granted" && outcome != "denied" {
+			if outcome != repo.OutcomeGranted && outcome != repo.OutcomeDenied {
 				return nil, mcp.Fail("outcome must be 'granted' or 'denied'")
 			}
 
@@ -390,7 +390,7 @@ func registerResolvePermissionRequest(registry mcp.ToolRegistry, d ControlDeps) 
 			var resumed bool
 			run, runErr := d.SRRepo.GetByID(ctx, req.StageRunID)
 			if runErr == nil && run != nil {
-				if outcome == "granted" {
+				if outcome == repo.OutcomeGranted {
 					in := repo.CreateTaskPermissionInput{
 						TaskID:         run.TaskID,
 						Tool:           req.Tool,
@@ -421,7 +421,7 @@ func registerResolvePermissionRequest(registry mcp.ToolRegistry, d ControlDeps) 
 					safeBroadcast(d.Broadcast, run.TaskID)
 					resumed = true
 				}
-			} else if outcome == "granted" {
+			} else if outcome == repo.OutcomeGranted {
 				// Stage run not found — log via result warning, agent not signalled.
 				return mcp.OK(map[string]any{
 					"resolved": req,

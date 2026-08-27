@@ -11,6 +11,16 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/taskpermission"
 )
 
+// Outcome is the set of terminal states a permission_request may resolve to.
+// The column is a plain string, so these constants are the only guard against a
+// dialect drifting apart: the ACP gate authorizes on OutcomeGranted alone and
+// reads every other value as a refusal.
+const (
+	OutcomeGranted = "granted"
+	OutcomeDenied  = "denied"
+	OutcomeExpired = "expired"
+)
+
 type PermissionRepo interface {
 	CreateTaskPermission(ctx context.Context, input CreateTaskPermissionInput) (*ent.TaskPermission, error)
 	BulkGrantPermissions(ctx context.Context, taskID string, entries []GrantEntry) ([]*ent.TaskPermission, error)
@@ -266,7 +276,7 @@ func (r *entPermissionRepo) CountForStageRunsBulk(ctx context.Context, stageRunI
 func (r *entPermissionRepo) ExpirePendingForStageRun(ctx context.Context, stageRunID string) (int, error) {
 	n, err := r.client.PermissionRequest.Update().
 		Where(permissionrequest.StageRunID(stageRunID), permissionrequest.OutcomeIsNil()).
-		SetOutcome("expired").
+		SetOutcome(OutcomeExpired).
 		SetResolvedAt(time.Now()).
 		Save(ctx)
 	if err != nil {

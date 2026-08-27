@@ -115,7 +115,7 @@ func (h *Handler) createPermissionRequest(w http.ResponseWriter, r *http.Request
 		task, taskErr := h.taskRepo.GetByID(r.Context(), sr.TaskID)
 		if taskErr == nil && taskcontrol.IsAllowAll(task.Autonomy) {
 			// Auto-approve: task operates in allow-all mode — no human gating needed.
-			if resolveErr := h.permRepo.ResolvePermissionRequest(r.Context(), req.ID, "granted"); resolveErr != nil {
+			if resolveErr := h.permRepo.ResolvePermissionRequest(r.Context(), req.ID, repo.OutcomeGranted); resolveErr != nil {
 				slog.Warn("createPermissionRequest: auto-approve failed", "reqID", req.ID, "err", resolveErr)
 			} else {
 				_ = h.auditRepo.RecordTaskAudit(r.Context(), sr.TaskID, nil, "permission_auto_approved", "task:"+sr.TaskID, map[string]any{
@@ -364,7 +364,7 @@ func (h *Handler) bulkCreatePermissionRequests(w http.ResponseWriter, r *http.Re
 		}
 		if taskIsAllowAll {
 			// Auto-approve: task operates in allow-all mode.
-			if resolveErr := h.permRepo.ResolvePermissionRequest(r.Context(), req.ID, "granted"); resolveErr != nil {
+			if resolveErr := h.permRepo.ResolvePermissionRequest(r.Context(), req.ID, repo.OutcomeGranted); resolveErr != nil {
 				slog.Warn("bulkCreatePermissionRequests: auto-approve failed", "reqID", req.ID, "err", resolveErr)
 			} else {
 				_ = h.auditRepo.RecordTaskAudit(r.Context(), sr.TaskID, nil, "permission_auto_approved", "task:"+sr.TaskID, map[string]any{
@@ -412,7 +412,7 @@ func (h *Handler) bulkResolvePermissionRequests(w http.ResponseWriter, r *http.R
 	if body.TaskID == "" {
 		return apierr.NewAppError(http.StatusBadRequest, "taskId is required")
 	}
-	if body.Outcome != "granted" && body.Outcome != "denied" {
+	if body.Outcome != repo.OutcomeGranted && body.Outcome != repo.OutcomeDenied {
 		return apierr.NewAppError(http.StatusBadRequest, "outcome must be granted or denied")
 	}
 
@@ -464,7 +464,7 @@ func (h *Handler) bulkResolvePermissionRequests(w http.ResponseWriter, r *http.R
 
 	// When granted, create task_permissions from the resolved requests so the
 	// respawned agent's allow-list includes the newly approved tools, then resume.
-	if outcome == "granted" && len(idsToResolve) > 0 {
+	if outcome == repo.OutcomeGranted && len(idsToResolve) > 0 {
 		resolveSet := make(map[string]bool, len(idsToResolve))
 		for _, id := range idsToResolve {
 			resolveSet[id] = true
@@ -518,7 +518,7 @@ func (h *Handler) bulkResolvePermissionRequests(w http.ResponseWriter, r *http.R
 }
 
 // approveAllPending resolves every pending permission_request for a task as
-// "approved", then re-queues the task when its latest stage run is awaiting_user.
+// granted, then re-queues the task when its latest stage run is awaiting_user.
 func (h *Handler) approveAllPending(w http.ResponseWriter, r *http.Request) error {
 	taskID := chi.URLParam(r, "id")
 

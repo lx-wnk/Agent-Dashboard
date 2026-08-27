@@ -35,7 +35,7 @@ type ApproveAllPendingResult struct {
 }
 
 // ApproveAllPending resolves every pending permission_request for a task as
-// "approved", persists each as a manual-override grant so a re-queued agent's
+// granted, persists each as a manual-override grant so a re-queued agent's
 // repeated request is auto-satisfied, then re-queues the task when its latest
 // stage run is awaiting_user. Re-queue is skipped when nothing was pending.
 func ApproveAllPending(ctx context.Context, d ApproveAllPendingDeps, taskID string) (ApproveAllPendingResult, error) {
@@ -61,7 +61,7 @@ func ApproveAllPending(ctx context.Context, d ApproveAllPendingDeps, taskID stri
 	}
 
 	for _, req := range pending {
-		if err := d.PermRepo.ResolvePermissionRequest(ctx, req.ID, "approved"); err != nil {
+		if err := d.PermRepo.ResolvePermissionRequest(ctx, req.ID, repo.OutcomeGranted); err != nil {
 			return res, fmt.Errorf("approve_all_pending: resolve %s: %w", req.ID, err)
 		}
 	}

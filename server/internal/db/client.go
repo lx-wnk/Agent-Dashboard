@@ -110,6 +110,12 @@ func Open(path string) (*DBBundle, error) {
 		_ = client.Close()
 		return nil, fmt.Errorf("db: drop bare-WebFetch grants: %w", err)
 	}
+	// Normalize the legacy "approved" permission_request outcome to "granted".
+	// Must run after ent auto-migrate and before the server accepts traffic.
+	if err := migrateNormalizeApprovedOutcome(sqlDB); err != nil {
+		_ = client.Close()
+		return nil, fmt.Errorf("db: normalize approved outcome: %w", err)
+	}
 	// Copy legacy audit_logs rows into audit_events (forensics consolidation).
 	// Idempotent — no-op once rows are migrated. Must run after ent auto-migrate.
 	if err := migrateCopyAuditLogsToAuditEvents(sqlDB); err != nil {
@@ -249,6 +255,30 @@ func migrateDropBareWebFetchGrants(db *sql.DB) error {
 			`DELETE FROM task_permissions WHERE tool = 'WebFetch' AND pattern IS NULL`,
 		); err != nil {
 			return fmt.Errorf("delete bare-WebFetch grants: %w", err)
+		}
+	}
+	return nil
+}
+
+// migrateNormalizeApprovedOutcome rewrites the legacy permission_request outcome
+// "approved" to "granted". ApproveAllPending wrote "approved" while every other
+// resolver wrote "granted", and the ACP gate authorizes on "granted" alone — so a
+// request approved through that path was read back as a refusal. Historical rows
+// carry the same ambiguity, hence the repair.
+// Idempotent: harmless on a fresh database or after a prior run.
+func migrateNormalizeApprovedOutcome(db *sql.DB) error {
+	var count int
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM permission_requests WHERE outcome = 'approved'`,
+	).Scan(&count); err != nil {
+		return fmt.Errorf("count approved outcomes: %w", err)
+	}
+	if count > 0 {
+		slog.Warn("migration: normalizing legacy \"approved\" permission_request outcomes to \"granted\"", "count", count)
+		if _, err := db.Exec(
+			`UPDATE permission_requests SET outcome = 'granted' WHERE outcome = 'approved'`,
+		); err != nil {
+			return fmt.Errorf("normalize approved outcomes: %w", err)
 		}
 	}
 	return nil
