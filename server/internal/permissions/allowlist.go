@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -252,6 +253,18 @@ var WriteToolNames = []string{"Edit", "Write", "MultiEdit"}
 // Use this instead of accessing allowedToolNames directly so the set
 // cannot be mutated by other packages.
 func IsAllowedTool(name string) bool { return allowedToolNames[name] }
+
+// GrantableToolNames returns the tool names a grant may name, sorted so the
+// order is stable across boots. It reads the same map IsAllowedTool consults,
+// so the catalogue cannot drift from the allow-list.
+func GrantableToolNames() []string {
+	names := make([]string, 0, len(allowedToolNames))
+	for name := range allowedToolNames {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
 
 // writeToolNames is the unexported set of tools that mutate file contents.
 // External packages must use IsWriteTool to prevent mutation of the map.

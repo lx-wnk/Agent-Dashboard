@@ -92,6 +92,48 @@ func BuildDenyList(autonomy string, allowGitPush bool) []string {
 	return nil
 }
 
+// capabilityCatalogue holds the CapabilityView seeded for each tool name,
+// keyed by name. Set once at boot (di.go) after the catalogue is seeded and
+// read back from the database. nil until boot runs — every unit test in this
+// package, and any code path that never calls SetCapabilityCatalogue — in
+// which case capabilityViewFor falls back to the same defaults the seeder
+// assigns (see repo.SeedCapabilities), so behaviour is unaffected until a
+// human edits a class through the catalogue.
+//
+// A package-level catalogue rather than a BuildAllowList parameter is a
+// deliberate choice: every caller of BuildAllowList was left untouched when
+// this file was rewritten to resolve through capability.Decide, and giving
+// this function a live repository handle would make a pure function depend
+// on a database connection it does not otherwise need.
+var capabilityCatalogue map[string]capability.CapabilityView
+
+// SetCapabilityCatalogue installs the resolved capability catalogue that
+// resolvePermissionDecisions consults when translating a TaskPermission into
+// a capability.CapabilityView. Call once at boot after the catalogue has
+// been seeded and loaded from the database.
+func SetCapabilityCatalogue(views map[string]capability.CapabilityView) {
+	capabilityCatalogue = views
+}
+
+// capabilityViewFor resolves the CapabilityView for tool, preferring the
+// booted catalogue and falling back to the same class/enforcement defaults
+// repo.SeedCapabilities assigns when the catalogue has no row yet — e.g. in
+// tests, or before the first boot has seeded it.
+func capabilityViewFor(tool string) capability.CapabilityView {
+	if v, ok := capabilityCatalogue[tool]; ok {
+		return v
+	}
+	class := "tool"
+	if tool == "WebFetch" {
+		class = "reach"
+	}
+	return capability.CapabilityView{
+		Name:          tool,
+		Class:         class,
+		EnforceableBy: []string{capability.EnforcerSpawn, capability.EnforcerHook},
+	}
+}
+
 // permissionGrantContextRef is the synthetic context reference paired with
 // every on-the-fly grant built from a TaskPermission row below. BuildAllowList
 // has no task ID to thread through capability.Decide, and none is needed: a
@@ -183,7 +225,7 @@ func resolvePermissionDecisions(perms []*ent.TaskPermission, allowGitPush bool) 
 	decisions := make([]capability.Decision, 0, len(survivors))
 	entries := make([]capability.AllowEntry, 0, len(survivors))
 	for _, s := range survivors {
-		capView := capability.CapabilityView{Name: s.tool, Class: "tool", EnforceableBy: []string{capability.EnforcerSpawn}}
+		capView := capabilityViewFor(s.tool)
 		req := capability.Request{Capability: s.tool, Value: s.value, Contexts: contexts}
 		decisions = append(decisions, capability.Decide(req, grantsByTool[s.tool], capView))
 		entries = append(entries, capability.AllowEntry{Tool: s.tool, Pattern: s.value})

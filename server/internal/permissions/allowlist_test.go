@@ -38,6 +38,51 @@ func TestWriteToolNames_ContainsExpectedEntries(t *testing.T) {
 	}
 }
 
+// TestGrantableToolNames_MatchesIsAllowedTool proves the accessor cannot
+// drift from the allow-list it is meant to expose: every name it returns
+// must satisfy IsAllowedTool, and every name IsAllowedTool accepts must
+// appear in the returned slice.
+func TestGrantableToolNames_MatchesIsAllowedTool(t *testing.T) {
+	names := permissions.GrantableToolNames()
+	if len(names) == 0 {
+		t.Fatal("GrantableToolNames returned no names")
+	}
+	seen := make(map[string]bool, len(names))
+	for _, name := range names {
+		if !permissions.IsAllowedTool(name) {
+			t.Errorf("GrantableToolNames returned %q, which IsAllowedTool rejects", name)
+		}
+		seen[name] = true
+	}
+	for _, known := range []string{"Read", "Bash", "WebFetch", "mcp__dashboard-channel__dashboard_reply"} {
+		if !seen[known] {
+			t.Errorf("GrantableToolNames is missing known allow-listed tool %q", known)
+		}
+	}
+}
+
+// TestGrantableToolNames_Sorted proves the order is stable across calls, per
+// the accessor's documented contract.
+func TestGrantableToolNames_Sorted(t *testing.T) {
+	names := permissions.GrantableToolNames()
+	for i := 1; i < len(names); i++ {
+		if names[i-1] >= names[i] {
+			t.Errorf("GrantableToolNames not sorted: %q before %q", names[i-1], names[i])
+		}
+	}
+}
+
+// TestGrantableToolNames_ReturnsCopy proves mutating the returned slice
+// cannot corrupt the source of truth — a repeat call must be unaffected.
+func TestGrantableToolNames_ReturnsCopy(t *testing.T) {
+	first := permissions.GrantableToolNames()
+	first[0] = "tampered"
+	second := permissions.GrantableToolNames()
+	if second[0] == "tampered" {
+		t.Error("GrantableToolNames leaked a mutable reference to the source of truth")
+	}
+}
+
 // TestWriteToolNames_NonWriteToolsAreAbsent verifies that commonly used
 // non-write tools are not erroneously listed in WriteToolNames.
 func TestWriteToolNames_NonWriteToolsAreAbsent(t *testing.T) {
