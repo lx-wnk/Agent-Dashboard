@@ -80,6 +80,11 @@ func NewResourceRepo(client *ent.Client) ResourceRepo {
 	return &entResourceRepo{client: client}
 }
 
+// Upsert creates the identity row or refreshes its mutable metadata on
+// conflict. It deliberately does not touch state or origin on conflict: those
+// are owned by SetState and the original discovery respectively, so a
+// re-discovery upsert (which defaults an empty State to "discovered") cannot
+// silently reset a resource that has since been enabled or disabled.
 func (r *entResourceRepo) Upsert(ctx context.Context, in UpsertResourceInput) (*ent.Resource, error) {
 	scope := in.Scope.Normalize()
 	if err := scope.Validate(); err != nil {
@@ -119,7 +124,8 @@ func (r *entResourceRepo) Upsert(ctx context.Context, in UpsertResourceInput) (*
 			resource.FieldScopeRef,
 			resource.FieldSlug,
 		).
-		UpdateNewValues().
+		// On re-discovery, refresh metadata but DO NOT reset state/origin.
+		UpdateName().UpdateVersion().UpdateOriginRef().UpdateUpdatedAt().
 		Exec(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("resource.Upsert: %w", err)

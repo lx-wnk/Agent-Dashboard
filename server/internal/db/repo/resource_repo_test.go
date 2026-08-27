@@ -106,6 +106,41 @@ func TestResourceGetAndSetState(t *testing.T) {
 	}
 }
 
+func TestResourceUpsertDoesNotResetState(t *testing.T) {
+	r, ctx := newResourceRepo(t)
+	created, err := r.Upsert(ctx, repo.UpsertResourceInput{
+		Kind:  repo.ResourceKindApplication,
+		Slug:  "obsidian",
+		Name:  "Obsidian",
+		Scope: repo.GlobalScope(),
+	})
+	if err != nil {
+		t.Fatalf("first upsert: %v", err)
+	}
+	if _, err := r.SetState(ctx, created.ID, repo.ResourceStateEnabled); err != nil {
+		t.Fatalf("set state: %v", err)
+	}
+
+	// Re-discovery upsert with no State set (defaults to "discovered") must not
+	// clobber the state that SetState established.
+	if _, err := r.Upsert(ctx, repo.UpsertResourceInput{
+		Kind:  repo.ResourceKindApplication,
+		Slug:  "obsidian",
+		Name:  "Obsidian",
+		Scope: repo.GlobalScope(),
+	}); err != nil {
+		t.Fatalf("second upsert: %v", err)
+	}
+
+	got, err := r.Get(ctx, repo.ResourceKindApplication, repo.GlobalScope(), "obsidian")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.State != repo.ResourceStateEnabled {
+		t.Errorf("state = %q, want %q (upsert must not reset lifecycle state)", got.State, repo.ResourceStateEnabled)
+	}
+}
+
 func TestResourceGetNormalizesScope(t *testing.T) {
 	r, ctx := newResourceRepo(t)
 	if _, err := r.Upsert(ctx, repo.UpsertResourceInput{
