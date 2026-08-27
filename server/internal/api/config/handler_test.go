@@ -70,9 +70,9 @@ func memoryHasProjectFile(t *testing.T, h *Handler, cwd string) bool {
 	rec := httptest.NewRecorder()
 	h.Memory(rec, httptest.NewRequest(http.MethodGet, "/api/config/memory?cwd="+cwd, nil))
 	require.Equal(t, http.StatusOK, rec.Code)
-	var resp memoryResponse
+	var resp contextFilesResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	for _, m := range resp.Memory {
+	for _, m := range resp.ContextFiles {
 		if m.Scope == "project" {
 			return true
 		}
@@ -153,14 +153,58 @@ func TestMemoryEndpoint_UserScopeFromConfigDir(t *testing.T) {
 	h.Memory(rec, httptest.NewRequest(http.MethodGet, "/api/config/memory", nil))
 
 	require.Equal(t, http.StatusOK, rec.Code)
-	var resp memoryResponse
+	var resp contextFilesResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 
 	var foundUser bool
-	for _, m := range resp.Memory {
+	for _, m := range resp.ContextFiles {
 		if m.Scope == "user" && m.Path == filepath.Join(cfg, "CLAUDE.md") {
 			foundUser = true
 		}
 	}
 	require.True(t, foundUser, "user memory resolved from the spawner config dir")
+}
+
+func TestContextFilesEndpointAnswers(t *testing.T) {
+	cfg := t.TempDir()
+	writeFile(t, filepath.Join(cfg, "CLAUDE.md"), "# user memory")
+
+	h := handlerWithConfigDir(t, cfg)
+	rec := httptest.NewRecorder()
+	h.ContextFiles(rec, httptest.NewRequest(http.MethodGet, "/api/config/context-files", nil))
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var resp contextFilesResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+
+	var foundUser bool
+	for _, f := range resp.ContextFiles {
+		if f.Scope == "user" && f.Path == filepath.Join(cfg, "CLAUDE.md") {
+			foundUser = true
+		}
+	}
+	require.True(t, foundUser, "user context file resolved from the spawner config dir")
+}
+
+func TestLegacyMemoryPathStillAnswers(t *testing.T) {
+	cfg := t.TempDir()
+	writeFile(t, filepath.Join(cfg, "CLAUDE.md"), "# user memory")
+
+	h := handlerWithConfigDir(t, cfg)
+
+	legacyRec := httptest.NewRecorder()
+	h.Memory(legacyRec, httptest.NewRequest(http.MethodGet, "/api/config/memory", nil))
+	require.Equal(t, http.StatusOK, legacyRec.Code)
+	var legacy contextFilesResponse
+	require.NoError(t, json.Unmarshal(legacyRec.Body.Bytes(), &legacy))
+	require.NotEmpty(t, legacy.ContextFiles, "legacy path must keep answering during the deprecation window")
+
+	newRec := httptest.NewRecorder()
+	h.ContextFiles(newRec, httptest.NewRequest(http.MethodGet, "/api/config/context-files", nil))
+	require.Equal(t, http.StatusOK, newRec.Code)
+
+	// The legacy path is a straight alias: byte-identical payload, not just a
+	// matching status code, proves it did not quietly diverge from the new one.
+	require.JSONEq(t, newRec.Body.String(), legacyRec.Body.String(),
+		"legacy /api/config/memory must return the same payload shape as /api/config/context-files")
 }

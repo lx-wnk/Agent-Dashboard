@@ -1,22 +1,24 @@
 // Package config provides HTTP handlers for enumerating and editing the Claude
 // configuration available within a resolved scope: installed skills, slash
-// commands, and memory (CLAUDE.md / AGENTS.md) files. Reads and writes are
+// commands, and context files (CLAUDE.md / AGENTS.md). Reads and writes are
 // confined to the scope's enumerated, editable members (see file.go).
 //
 // Enumeration is scoped per spawner or per live session via cmdscope, so the
 // "Config" explorer reflects the capability set a given spawner/session
 // actually sees (e.g. claude-work's ~/.claude-work) rather than a fixed global
 // view. The only client-supplied path accepted is ?cwd, which is sanitized and
-// used solely to read <cwd>/.claude/{commands,skills} and project memory files.
+// used solely to read <cwd>/.claude/{commands,skills} and project context files.
 package config
 
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
+	"sync"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/cmdscope"
 )
@@ -43,8 +45,8 @@ func NewHandler(spawners cmdscope.SpawnerGetter, agents cmdscope.AgentsFn, cwdPo
 	return &Handler{spawners: spawners, agents: agents, cwdPolicy: cwdPolicy}
 }
 
-// MemoryEntry describes a single memory file (CLAUDE.md / AGENTS.md).
-type MemoryEntry struct {
+// ContextFileEntry describes a single context file (CLAUDE.md / AGENTS.md).
+type ContextFileEntry struct {
 	Path     string `json:"path"`
 	Scope    string `json:"scope"` // "user" | "project"
 	Size     int64  `json:"size"`
@@ -66,10 +68,13 @@ type commandsResponse struct {
 	ScopeLabel         string                   `json:"scopeLabel"`
 }
 
-type memoryResponse struct {
-	Memory      []MemoryEntry `json:"memory"`
-	ScopeSource string        `json:"scopeSource"`
-	ScopeLabel  string        `json:"scopeLabel"`
+// contextFilesResponse keeps the wire tag "memory" so the payload stays
+// identical to what /api/config/memory always returned — old and new paths
+// must answer identically during the deprecation window.
+type contextFilesResponse struct {
+	ContextFiles []ContextFileEntry `json:"memory"`
+	ScopeSource  string             `json:"scopeSource"`
+	ScopeLabel   string             `json:"scopeLabel"`
 }
 
 func (h *Handler) resolve(r *http.Request) cmdscope.Scope {
@@ -114,14 +119,26 @@ func (h *Handler) Commands(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Memory handles GET /api/config/memory.
-func (h *Handler) Memory(w http.ResponseWriter, r *http.Request) {
+// ContextFiles handles GET /api/config/context-files.
+func (h *Handler) ContextFiles(w http.ResponseWriter, r *http.Request) {
 	scope := h.resolve(r)
-	writeJSON(w, memoryResponse{
-		Memory:      enumerateMemoryFiles(scope),
-		ScopeSource: scope.Source,
-		ScopeLabel:  scope.Label,
+	writeJSON(w, contextFilesResponse{
+		ContextFiles: enumerateMemoryFiles(scope),
+		ScopeSource:  scope.Source,
+		ScopeLabel:   scope.Label,
 	})
+}
+
+var logLegacyMemoryPathOnce sync.Once
+
+// Memory handles the deprecated GET /api/config/memory. It answers exactly
+// like ContextFiles and logs the deprecation once per process so a client
+// still on the old path keeps working during the deprecation window.
+func (h *Handler) Memory(w http.ResponseWriter, r *http.Request) {
+	logLegacyMemoryPathOnce.Do(func() {
+		slog.Info("config: /api/config/memory is deprecated, use /api/config/context-files instead")
+	})
+	h.ContextFiles(w, r)
 }
 
 func writeJSON(w http.ResponseWriter, v any) {
@@ -135,8 +152,8 @@ func writeJSON(w http.ResponseWriter, v any) {
 //
 // When the scope carries no project cwd, the server's own working directory is
 // used for the project scope (preserving the pre-scoping behavior).
-func enumerateMemoryFiles(scope cmdscope.Scope) []MemoryEntry {
-	out := []MemoryEntry{}
+func enumerateMemoryFiles(scope cmdscope.Scope) []ContextFileEntry {
+	out := []ContextFileEntry{}
 
 	type candidate struct {
 		scope string
@@ -170,7 +187,7 @@ func enumerateMemoryFiles(scope cmdscope.Scope) []MemoryEntry {
 		if err != nil || info.IsDir() {
 			continue
 		}
-		out = append(out, MemoryEntry{
+		out = append(out, ContextFileEntry{
 			Path:     c.path,
 			Scope:    c.scope,
 			Size:     info.Size(),

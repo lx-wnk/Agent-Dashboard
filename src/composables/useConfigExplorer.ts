@@ -111,7 +111,7 @@ async function loadAll(spawnerId?: string): Promise<void> {
     const [s, c, m] = await Promise.all([
       fetchJSON<SkillsResponse>(withSpawner('/api/config/skills', spawnerId)),
       fetchJSON<CommandsResponse>(withSpawner('/api/config/commands', spawnerId)),
-      fetchJSON<MemoryResponse>(withSpawner('/api/config/memory', spawnerId)),
+      fetchJSON<MemoryResponse>(withSpawner('/api/config/context-files', spawnerId)),
     ])
     if (token !== loadToken)
       return // a newer load superseded this one

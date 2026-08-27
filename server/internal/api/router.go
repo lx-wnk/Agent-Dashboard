@@ -470,13 +470,18 @@ func NewRouter(deps RouterDeps) http.Handler {
 			r.Post("/api/agents/{pid}/allow-tool", ErrorMiddleware(allowToolHandler.AllowTool))
 		}
 
-		// Config explorer — enumerate and edit skills, slash commands, and memory
-		// files, scoped per spawner / live session via ?spawnerId / ?sessionId.
+		// Config explorer — enumerate and edit skills, slash commands, and
+		// context files (CLAUDE.md / AGENTS.md), scoped per spawner / live
+		// session via ?spawnerId / ?sessionId.
 		// The only client path accepted is ?cwd; it is sanitized and confined to
 		// the spawn policy's project roots so the editable set stays bounded.
 		configHandler := apiconfig.NewHandler(deps.SpawnerRepo, getAgents, spawnPolicy)
 		r.Get("/api/config/skills", configHandler.Skills)
 		r.Get("/api/config/commands", configHandler.Commands)
+		r.Get("/api/config/context-files", configHandler.ContextFiles)
+		// Deprecated: kept answering identically for one minor version so a
+		// client built against the old path keeps working. Logs once per
+		// process (see Handler.Memory).
 		r.Get("/api/config/memory", configHandler.Memory)
 		// Single-file read/write for editable (user/project) config files. Writes
 		// are authorized only against the scope's enumerated editable set.
