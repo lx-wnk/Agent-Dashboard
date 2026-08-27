@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/capability"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 )
@@ -23,7 +24,7 @@ func TestCapabilityUpsertIsIdempotent(t *testing.T) {
 	in := repo.UpsertCapabilityInput{
 		Name:          "mail.send",
 		Class:         repo.CapClassReach,
-		EnforceableBy: []string{repo.EnforcerServer},
+		EnforceableBy: []string{capability.EnforcerServer},
 		Reversible:    false,
 		Description:   "Send mail on the user's behalf",
 	}
@@ -49,7 +50,7 @@ func TestCapabilityIrreversibleIsPersisted(t *testing.T) {
 	got, err := r.Upsert(ctx, repo.UpsertCapabilityInput{
 		Name:          "obsidian.delete",
 		Class:         repo.CapClassReach,
-		EnforceableBy: []string{repo.EnforcerServer},
+		EnforceableBy: []string{capability.EnforcerServer},
 		Reversible:    false,
 	})
 	if err != nil {

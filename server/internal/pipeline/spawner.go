@@ -10,8 +10,8 @@ import (
 	"regexp"
 	"strings"
 	"syscall"
-	"time"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/capability"
 	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/envsec"
@@ -92,9 +92,19 @@ func BuildDenyList(autonomy string, allowGitPush bool) []string {
 	return nil
 }
 
+// permissionGrantContextRef is the synthetic context reference paired with
+// every on-the-fly grant built from a TaskPermission row below. BuildAllowList
+// has no task ID to thread through capability.Decide, and none is needed: a
+// grant built for the duration of one call only has to agree with its own
+// request on which context it applies to, not with any real entity.
+const permissionGrantContextRef = "task-permission"
+
 // BuildAllowList assembles the --allowedTools slice for a spawn.
 // When autonomy is an allow-all level (spec_gated or full), the restrictive
 // per-permission loop is skipped and the permissive list is returned instead.
+// Otherwise each granted TaskPermission is translated into a capability grant
+// and resolved through capability.Decide, then capability.SpawnEnforcer
+// renders whatever decided allow.
 func BuildAllowList(autonomy string, perms []*ent.TaskPermission, enableChannel, allowGitPush bool) []string {
 	var allow []string
 	if enableChannel {
@@ -103,51 +113,82 @@ func BuildAllowList(autonomy string, perms []*ent.TaskPermission, enableChannel,
 	if taskcontrol.IsAllowAll(autonomy) {
 		return append(allow, taskcontrol.PermissiveAllowList(allowGitPush)...)
 	}
-	now := time.Now()
+	decisions, entries := resolvePermissionDecisions(perms, allowGitPush)
+	return append(allow, capability.SpawnEnforcer{}.AllowList(decisions, entries)...)
+}
+
+// resolvePermissionDecisions translates granted TaskPermission rows into
+// capability.Decide requests and resolves each one. It applies the validation
+// capability.Decide has no notion of — tool allow-list membership,
+// blanket-Bash and bare-WebFetch rejection, git-push containment, Bash
+// command safety — exactly as the pre-gate filter chain did, then lets
+// Decide resolve context specificity, mode ranking, and grant expiry for
+// whatever survives. The returned slices are parallel and preserve the order
+// perms was walked in, as capability.SpawnEnforcer.AllowList requires.
+func resolvePermissionDecisions(perms []*ent.TaskPermission, allowGitPush bool) ([]capability.Decision, []capability.AllowEntry) {
+	contexts := []capability.Context{{Kind: "task", Ref: permissionGrantContextRef}}
+
+	type survivor struct{ tool, value string }
+	grantsByTool := make(map[string][]capability.GrantView)
+	var survivors []survivor
+
 	for _, p := range perms {
 		if !p.Granted {
-			continue
-		}
-		if p.ExpiresAt != nil && p.ExpiresAt.Before(now) {
-			continue
+			continue // rule 1: not granted
 		}
 		if !permissions.IsAllowedTool(p.Tool) {
-			continue
+			continue // rule 3: tool not on the allow-list
 		}
-		if p.Tool == "Bash" {
+
+		var value string
+		switch p.Tool {
+		case "Bash":
 			if p.Pattern == nil || *p.Pattern == "" {
-				continue // blanket Bash allow is forbidden
+				continue // rule 4: blanket Bash allow is forbidden
 			}
 			normalized := strings.Join(strings.Fields(*p.Pattern), " ")
-			if p.ManualOverride {
-				// Human explicitly approved this exact pattern — skip allow-list and git-push gate.
-				allow = append(allow, fmt.Sprintf("Bash(%s)", normalized))
-				continue
+			if !p.ManualOverride {
+				// Human explicitly approved this exact pattern — skip the git-push and safety gates.
+				if !allowGitPush && gitPushRE.MatchString(normalized) {
+					continue // rule 5: git push forbidden
+				}
+				if ok, _ := permissions.IsSafeBashPattern(normalized); !ok {
+					continue // rule 6: unsafe shell pattern
+				}
 			}
-			if !allowGitPush && gitPushRE.MatchString(normalized) {
-				continue
-			}
-			if ok, _ := permissions.IsSafeBashPattern(normalized); !ok {
-				continue // unsafe shell pattern — skip silently at spawn time
-			}
-			allow = append(allow, fmt.Sprintf("Bash(%s)", normalized))
-			continue
-		}
-		if p.Tool == "WebFetch" {
+			value = normalized
+		case "WebFetch":
 			// Bare WebFetch grants (no pattern) are rejected — require a domain pattern.
 			if p.Pattern == nil || strings.TrimSpace(*p.Pattern) == "" {
-				continue
+				continue // rule 7: bare WebFetch forbidden
 			}
-			allow = append(allow, fmt.Sprintf("WebFetch(%s)", strings.TrimSpace(*p.Pattern)))
-			continue
+			value = strings.TrimSpace(*p.Pattern)
+		default:
+			if p.Pattern != nil {
+				value = *p.Pattern
+			}
 		}
-		if p.Pattern != nil && *p.Pattern != "" {
-			allow = append(allow, fmt.Sprintf("%s(%s)", p.Tool, *p.Pattern))
-		} else {
-			allow = append(allow, p.Tool)
-		}
+
+		grantsByTool[p.Tool] = append(grantsByTool[p.Tool], capability.GrantView{
+			ID:          p.ID,
+			ContextKind: "task",
+			ContextRef:  permissionGrantContextRef,
+			Pattern:     value,
+			Mode:        "allow",
+			ExpiresAt:   p.ExpiresAt,
+		})
+		survivors = append(survivors, survivor{tool: p.Tool, value: value})
 	}
-	return allow
+
+	decisions := make([]capability.Decision, 0, len(survivors))
+	entries := make([]capability.AllowEntry, 0, len(survivors))
+	for _, s := range survivors {
+		capView := capability.CapabilityView{Name: s.tool, Class: "tool", EnforceableBy: []string{capability.EnforcerSpawn}}
+		req := capability.Request{Capability: s.tool, Value: s.value, Contexts: contexts}
+		decisions = append(decisions, capability.Decide(req, grantsByTool[s.tool], capView))
+		entries = append(entries, capability.AllowEntry{Tool: s.tool, Pattern: s.value})
+	}
+	return decisions, entries
 }
 
 func BuildSpawnArgs(opts SpawnAgentOptions) []string {

@@ -18,13 +18,6 @@ const (
 	CapClassSpend    = "spend"
 )
 
-// Enforcement points a capability's EnforceableBy set can name.
-const (
-	EnforcerServer = "server"
-	EnforcerSpawn  = "spawn"
-	EnforcerHook   = "hook"
-)
-
 // UpsertCapabilityInput is the named input for Upsert. Named rather than
 // positional because the call has more than four parameters, which is where
 // this codebase's convention switches.
