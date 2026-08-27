@@ -245,10 +245,6 @@ func ValidateGrantEntry(tool, pattern string) error {
 	return ValidateGrantEntryWithOverride(tool, pattern, false)
 }
 
-// WriteToolNames is the canonical list of write-type tools that trigger the edit gate.
-// isWriteTool in the hooks handler derives from this slice — updating this list is sufficient.
-var WriteToolNames = []string{"Edit", "Write", "MultiEdit"}
-
 // IsAllowedTool reports whether name is in the pipeline tool allow-list.
 // Use this instead of accessing allowedToolNames directly so the set
 // cannot be mutated by other packages.
@@ -278,6 +274,19 @@ var writeToolNames = map[string]bool{
 // Use this instead of accessing writeToolNames directly so the set cannot
 // be mutated by other packages.
 func IsWriteTool(name string) bool { return writeToolNames[name] }
+
+// WriteToolNames returns the edit-gate write tool set as a sorted copy, in the
+// same shape as GrantableToolNames: it reads the same map IsWriteTool
+// consults, so the list cannot drift from the gate, and callers cannot
+// mutate the source of truth through the returned slice.
+func WriteToolNames() []string {
+	names := make([]string, 0, len(writeToolNames))
+	for name := range writeToolNames {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
 
 // allowedToolNames is the unexported source of truth for grantable tools.
 // All callers must go through IsAllowedTool.

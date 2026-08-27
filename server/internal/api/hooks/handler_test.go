@@ -295,11 +295,11 @@ func TestPending_WithSecret_ReturnsValidJSON(t *testing.T) {
 	}
 }
 
-// TestWriteToolNames_MatchesHookGate asserts that every name in permissions.WriteToolNames
+// TestWriteToolNames_MatchesHookGate asserts that every name in permissions.WriteToolNames()
 // is treated as a write tool by isWriteTool, and that isWriteTool returns false for
 // a known non-write tool. This guards against the two lists drifting apart.
 func TestWriteToolNames_MatchesHookGate(t *testing.T) {
-	for _, name := range permissions.WriteToolNames {
+	for _, name := range permissions.WriteToolNames() {
 		if !permissions.IsWriteTool(name) {
 			t.Errorf("IsWriteTool(%q) = false, want true — permissions.WriteToolNames and the gate are out of sync", name)
 		}
