@@ -23,18 +23,12 @@ func TestSeedCapabilitiesIsIdempotent(t *testing.T) {
 	capRepo := repo.NewCapabilityRepo(bundle.Client)
 	want := len(permissions.GrantableToolNames())
 
-	seeded, err := repo.SeedCapabilities(ctx, capRepo)
-	if err != nil {
-		t.Fatalf("first seed: %v", err)
-	}
+	seeded := repo.SeedCapabilities(ctx, capRepo)
 	if seeded != want {
 		t.Errorf("first seed created %d rows, want %d (one per grantable tool)", seeded, want)
 	}
 
-	again, err := repo.SeedCapabilities(ctx, capRepo)
-	if err != nil {
-		t.Fatalf("second seed: %v", err)
-	}
+	again := repo.SeedCapabilities(ctx, capRepo)
 	if again != 0 {
 		t.Errorf("second seed created %d rows, want 0 — it must be idempotent", again)
 	}
@@ -57,9 +51,7 @@ func TestSeedCapabilitiesClassesAndEnforcement(t *testing.T) {
 	ctx := context.Background()
 
 	capRepo := repo.NewCapabilityRepo(bundle.Client)
-	if _, err := repo.SeedCapabilities(ctx, capRepo); err != nil {
-		t.Fatalf("seed: %v", err)
-	}
+	repo.SeedCapabilities(ctx, capRepo)
 
 	webFetch, err := capRepo.Get(ctx, "WebFetch")
 	if err != nil {
@@ -108,9 +100,7 @@ func TestSeedCapabilitiesDoesNotOverwriteHumanEdit(t *testing.T) {
 	ctx := context.Background()
 
 	capRepo := repo.NewCapabilityRepo(bundle.Client)
-	if _, err := repo.SeedCapabilities(ctx, capRepo); err != nil {
-		t.Fatalf("seed: %v", err)
-	}
+	repo.SeedCapabilities(ctx, capRepo)
 
 	// A human edits Bash's class through the catalogue after seeding.
 	if _, err := capRepo.Upsert(ctx, repo.UpsertCapabilityInput{
@@ -121,9 +111,7 @@ func TestSeedCapabilitiesDoesNotOverwriteHumanEdit(t *testing.T) {
 		t.Fatalf("human edit: %v", err)
 	}
 
-	if _, err := repo.SeedCapabilities(ctx, capRepo); err != nil {
-		t.Fatalf("re-seed: %v", err)
-	}
+	repo.SeedCapabilities(ctx, capRepo)
 
 	bash, err := capRepo.Get(ctx, "Bash")
 	if err != nil {
@@ -171,10 +159,7 @@ func TestSeedCapabilitiesSkipsUnseedableNameButSeedsTheRest(t *testing.T) {
 	failName := names[0] // GrantableToolNames is sorted, so later names exist to prove they still seed.
 	fake := &failingUpsertCapabilityRepo{CapabilityRepo: real, failName: failName}
 
-	seeded, err := repo.SeedCapabilities(ctx, fake)
-	if err != nil {
-		t.Fatalf("SeedCapabilities must not fail because one name is unseedable: %v", err)
-	}
+	seeded := repo.SeedCapabilities(ctx, fake)
 	if want := len(names) - 1; seeded != want {
 		t.Errorf("seeded = %d, want %d (every name except the failing one)", seeded, want)
 	}

@@ -162,10 +162,11 @@ func NewHookEnforcer(onChange func()) *HookEnforcer {
 // proceeds unblocked. That is the declared posture, not an oversight — the
 // hold's budget (permissionHoldTimeout) is sized so this side gives up before
 // Claude Code's own hook timeout, so a dashboard outage degrades a
-// hand-started session to its normal prompt instead of hanging it forever. A
-// capability whose EnforceableBy omits capability.EnforcerHook is one this
-// path cannot guarantee, and callers must not present it to the user as
-// protected for hand-started sessions.
+// hand-started session to its normal prompt instead of hanging it forever.
+// HookEnforcer does not read a capability's EnforceableBy at all — it holds
+// every PreToolUse call that reaches it, regardless of what the capability
+// declares. Whether a given tool call reaches this hook in the first place
+// is decided by Claude Code's own hook wiring, not by this type.
 //
 // The rest of PermissionRequest also answers with no decision, but for two
 // different reasons that must not be read as "fails closed" the way the

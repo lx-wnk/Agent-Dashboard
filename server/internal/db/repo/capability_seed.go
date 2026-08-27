@@ -47,7 +47,11 @@ func DefaultCapabilityView(name string) capability.CapabilityView {
 // catalogue is not overwritten on the next boot. Only missing rows are
 // created. A name whose insert fails is logged and skipped rather than
 // aborting the loop — one bad name must not stop every name ordered after it.
-func SeedCapabilities(ctx context.Context, capabilities CapabilityRepo) (int, error) {
+//
+// Returns only a count, never an error: every failure path above is
+// warn-and-continue, so there is no outcome an error return could carry that
+// the returned count and the logged warnings do not already.
+func SeedCapabilities(ctx context.Context, capabilities CapabilityRepo) int {
 	seeded, skipped := 0, 0
 	for _, name := range permissions.GrantableToolNames() {
 		// "not found" is detected via ent.IsNotFound unwrapping through Get's
@@ -78,5 +82,5 @@ func SeedCapabilities(ctx context.Context, capabilities CapabilityRepo) (int, er
 	if skipped > 0 {
 		slog.Warn("seed capabilities: some names were not seeded", "seeded", seeded, "skipped", skipped)
 	}
-	return seeded, nil
+	return seeded
 }

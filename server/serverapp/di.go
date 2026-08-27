@@ -248,9 +248,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		// a zero-value CapabilityView, which the gate's fail-closed default
 		// sends to deny.
 		capabilityRepo := repo.NewCapabilityRepo(entClient)
-		if seeded, err := repo.SeedCapabilities(ctx, capabilityRepo); err != nil {
-			slog.Warn("capability: seed failed", "err", err)
-		} else if seeded > 0 {
+		if seeded := repo.SeedCapabilities(ctx, capabilityRepo); seeded > 0 {
 			slog.Info("capability: seeded catalogue", "count", seeded)
 		}
 		if rows, err := capabilityRepo.List(ctx); err != nil {

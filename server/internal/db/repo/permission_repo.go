@@ -49,9 +49,10 @@ type GrantEntry struct {
 	Pattern        *string
 	ExpiresAt      *time.Time
 	ManualOverride bool
-	// DecidedBy identifies who approved this grant (e.g. "user", "mcp"). Left
-	// empty for system-derived grants (preset replay, template materialization,
-	// parent inheritance) where no one actually decided anything.
+	// DecidedBy identifies the authenticated caller who approved this grant
+	// (its identity, not a role placeholder). Left empty for system-derived
+	// grants (preset replay, template materialization, parent inheritance)
+	// where no one actually decided anything.
 	DecidedBy string
 }
 
