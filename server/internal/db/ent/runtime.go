@@ -191,6 +191,8 @@ func init() {
 	grantDescLimitCount := grantFields[5].Descriptor()
 	// grant.DefaultLimitCount holds the default value on creation for the limit_count field.
 	grant.DefaultLimitCount = grantDescLimitCount.Default.(int)
+	// grant.LimitCountValidator is a validator for the "limit_count" field. It is called by the builders before save.
+	grant.LimitCountValidator = grantDescLimitCount.Validators[0].(func(int) error)
 	// grantDescLimitWindowSeconds is the schema descriptor for limit_window_seconds field.
 	grantDescLimitWindowSeconds := grantFields[6].Descriptor()
 	// grant.DefaultLimitWindowSeconds holds the default value on creation for the limit_window_seconds field.

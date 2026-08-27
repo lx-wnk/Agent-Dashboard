@@ -93,6 +93,8 @@ var (
 	DefaultPattern string
 	// DefaultLimitCount holds the default value on creation for the "limit_count" field.
 	DefaultLimitCount int
+	// LimitCountValidator is a validator for the "limit_count" field. It is called by the builders before save.
+	LimitCountValidator func(int) error
 	// DefaultLimitWindowSeconds holds the default value on creation for the "limit_window_seconds" field.
 	DefaultLimitWindowSeconds int
 	// DefaultGrantedAt holds the default value on creation for the "granted_at" field.

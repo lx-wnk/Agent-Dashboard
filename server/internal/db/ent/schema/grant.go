@@ -36,8 +36,11 @@ func (Grant) Fields() []ent.Field {
 		field.String("pattern").Default(""),
 		// mode: "allow" | "deny" | "ask".
 		field.String("mode"),
-		// limit_count: 0 means unlimited.
-		field.Int("limit_count").Default(0),
+		// limit_count: 0 means unlimited. Min(0) rejects a negative value at
+		// write time — capability.WithinLimit also fails a negative value
+		// closed (exhausted, never unlimited) as a second, independent
+		// guard for any row that predates this constraint.
+		field.Int("limit_count").Default(0).Min(0),
 		field.Int("limit_window_seconds").Default(0),
 		field.Time("expires_at").Optional().Nillable(),
 		// granted_by is required, not nillable. Its predecessor,

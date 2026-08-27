@@ -2,6 +2,7 @@ package repo_test
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -20,22 +21,25 @@ func newGrantUsageRepo(t *testing.T) (repo.GrantUsageRepo, *db.DBBundle, context
 	return repo.NewGrantUsageRepo(bundle.Client), bundle, context.Background()
 }
 
-func TestGrantUsageRecordRequiresGrantID(t *testing.T) {
+func TestGrantUsageRecordIfWithinLimitRequiresGrantID(t *testing.T) {
 	r, _, ctx := newGrantUsageRepo(t)
-	if err := r.Record(ctx, ""); err == nil {
-		t.Fatal("Record with an empty grant_id must be refused")
+	if _, err := r.RecordIfWithinLimit(ctx, "", 3, time.Hour); err == nil {
+		t.Fatal("RecordIfWithinLimit with an empty grant_id must be refused")
 	}
 }
 
-func TestGrantUsageRecordThenCountSince(t *testing.T) {
+func TestGrantUsageRecordIfWithinLimitPermitsUnderTheLimitAndRecords(t *testing.T) {
 	r, _, ctx := newGrantUsageRepo(t)
 	grantID := "g1"
 
-	if err := r.Record(ctx, grantID); err != nil {
-		t.Fatalf("Record: %v", err)
-	}
-	if err := r.Record(ctx, grantID); err != nil {
-		t.Fatalf("Record: %v", err)
+	for i := 0; i < 2; i++ {
+		ok, err := r.RecordIfWithinLimit(ctx, grantID, 3, time.Hour)
+		if err != nil {
+			t.Fatalf("RecordIfWithinLimit: %v", err)
+		}
+		if !ok {
+			t.Fatalf("call %d: want permitted (under a limit of 3)", i+1)
+		}
 	}
 
 	count, err := r.CountSince(ctx, grantID, time.Now().Add(-time.Hour))
@@ -43,7 +47,129 @@ func TestGrantUsageRecordThenCountSince(t *testing.T) {
 		t.Fatalf("CountSince: %v", err)
 	}
 	if count != 2 {
-		t.Errorf("CountSince = %d, want 2", count)
+		t.Errorf("CountSince = %d, want 2 recorded uses", count)
+	}
+}
+
+// TestGrantUsageRecordIfWithinLimitRefusesAtTheLimitWithoutRecording proves
+// the boundary: a limit of 3 permits three calls, not four, and a refused
+// call is not itself recorded.
+func TestGrantUsageRecordIfWithinLimitRefusesAtTheLimitWithoutRecording(t *testing.T) {
+	r, _, ctx := newGrantUsageRepo(t)
+	grantID := "g1"
+
+	for i := 0; i < 3; i++ {
+		ok, err := r.RecordIfWithinLimit(ctx, grantID, 3, time.Hour)
+		if err != nil || !ok {
+			t.Fatalf("call %d: want permitted, got ok=%v err=%v", i+1, ok, err)
+		}
+	}
+
+	ok, err := r.RecordIfWithinLimit(ctx, grantID, 3, time.Hour)
+	if err != nil {
+		t.Fatalf("RecordIfWithinLimit: %v", err)
+	}
+	if ok {
+		t.Fatal("the 4th call must be refused — a limit of 3 permits three calls, not four")
+	}
+
+	count, err := r.CountSince(ctx, grantID, time.Now().Add(-time.Hour))
+	if err != nil {
+		t.Fatalf("CountSince: %v", err)
+	}
+	if count != 3 {
+		t.Errorf("CountSince = %d, want 3 — the refused 4th call must not be recorded", count)
+	}
+}
+
+func TestGrantUsageRecordIfWithinLimitZeroIsUnlimited(t *testing.T) {
+	r, _, ctx := newGrantUsageRepo(t)
+	grantID := "g1"
+
+	for i := 0; i < 50; i++ {
+		ok, err := r.RecordIfWithinLimit(ctx, grantID, 0, time.Hour)
+		if err != nil {
+			t.Fatalf("RecordIfWithinLimit: %v", err)
+		}
+		if !ok {
+			t.Fatalf("call %d: an unlimited grant (limit 0) must never be refused", i+1)
+		}
+	}
+}
+
+// TestGrantUsageRecordIfWithinLimitNegativeIsExhausted proves the read-side
+// fail-closed guard: a negative limit is invalid and resolves to exhausted,
+// never to unlimited, regardless of how little usage exists.
+func TestGrantUsageRecordIfWithinLimitNegativeIsExhausted(t *testing.T) {
+	r, _, ctx := newGrantUsageRepo(t)
+	grantID := "g1"
+
+	ok, err := r.RecordIfWithinLimit(ctx, grantID, -1, time.Hour)
+	if err != nil {
+		t.Fatalf("RecordIfWithinLimit: %v", err)
+	}
+	if ok {
+		t.Fatal("a negative limit must resolve to exhausted, not unlimited")
+	}
+
+	count, err := r.CountSince(ctx, grantID, time.Now().Add(-time.Hour))
+	if err != nil {
+		t.Fatalf("CountSince: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("CountSince = %d, want 0 — a refused call must not be recorded", count)
+	}
+}
+
+// TestGrantUsageRecordIfWithinLimitIsAtomicUnderConcurrency is the
+// regression for the TOCTOU a separate count-then-insert would leave open:
+// N goroutines race RecordIfWithinLimit against the same grant and a limit
+// of 3. Two independent, non-transactional calls could both observe "under
+// the limit" and both proceed, overrunning the cap; the single write
+// transaction in RecordIfWithinLimit must make the check-and-insert pair
+// atomic instead, so exactly 3 of the N concurrent attempts succeed.
+func TestGrantUsageRecordIfWithinLimitIsAtomicUnderConcurrency(t *testing.T) {
+	r, _, ctx := newGrantUsageRepo(t)
+	grantID := "g1"
+	const limit = 3
+	const attempts = 15
+
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	permitted := 0
+	var errs []error
+
+	for i := 0; i < attempts; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ok, err := r.RecordIfWithinLimit(ctx, grantID, limit, time.Hour)
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				errs = append(errs, err)
+				return
+			}
+			if ok {
+				permitted++
+			}
+		}()
+	}
+	wg.Wait()
+
+	if len(errs) != 0 {
+		t.Fatalf("got %d unexpected errors from concurrent RecordIfWithinLimit calls: %v", len(errs), errs[0])
+	}
+	if permitted != limit {
+		t.Fatalf("permitted = %d, want exactly %d — concurrent calls must not overrun the limit", permitted, limit)
+	}
+
+	count, err := r.CountSince(ctx, grantID, time.Now().Add(-time.Hour))
+	if err != nil {
+		t.Fatalf("CountSince: %v", err)
+	}
+	if count != limit {
+		t.Errorf("CountSince = %d, want %d rows actually recorded", count, limit)
 	}
 }
 

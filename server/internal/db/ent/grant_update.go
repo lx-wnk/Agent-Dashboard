@@ -283,7 +283,20 @@ func (_u *GrantUpdate) defaults() {
 	}
 }
 
+// check runs all checks and user-defined validators on the builder.
+func (_u *GrantUpdate) check() error {
+	if v, ok := _u.mutation.LimitCount(); ok {
+		if err := grant.LimitCountValidator(v); err != nil {
+			return &ValidationError{Name: "limit_count", err: fmt.Errorf(`ent: validator failed for field "Grant.limit_count": %w`, err)}
+		}
+	}
+	return nil
+}
+
 func (_u *GrantUpdate) sqlSave(ctx context.Context) (_node int, err error) {
+	if err := _u.check(); err != nil {
+		return _node, err
+	}
 	_spec := sqlgraph.NewUpdateSpec(grant.Table, grant.Columns, sqlgraph.NewFieldSpec(grant.FieldID, field.TypeString))
 	if ps := _u.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
@@ -634,7 +647,20 @@ func (_u *GrantUpdateOne) defaults() {
 	}
 }
 
+// check runs all checks and user-defined validators on the builder.
+func (_u *GrantUpdateOne) check() error {
+	if v, ok := _u.mutation.LimitCount(); ok {
+		if err := grant.LimitCountValidator(v); err != nil {
+			return &ValidationError{Name: "limit_count", err: fmt.Errorf(`ent: validator failed for field "Grant.limit_count": %w`, err)}
+		}
+	}
+	return nil
+}
+
 func (_u *GrantUpdateOne) sqlSave(ctx context.Context) (_node *Grant, err error) {
+	if err := _u.check(); err != nil {
+		return _node, err
+	}
 	_spec := sqlgraph.NewUpdateSpec(grant.Table, grant.Columns, sqlgraph.NewFieldSpec(grant.FieldID, field.TypeString))
 	id, ok := _u.mutation.ID()
 	if !ok {

@@ -20,6 +20,7 @@ func TestWithinLimit(t *testing.T) {
 		{"under the limit", 3, 2, true},
 		{"at the limit is exhausted", 3, 3, false},
 		{"over the limit", 3, 4, false},
+		{"negative limit is exhausted, not unlimited", -1, 0, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -40,7 +41,7 @@ func TestServerEnforcerLimitExhaustedAsks(t *testing.T) {
 	g := capability.GrantView{ID: "g1", LimitCount: 3, LimitWindowSeconds: 3600}
 	d := capability.Decision{Effect: capability.EffectAllow, GrantID: "g1"}
 
-	err := e.EnforceLimited(context.Background(), d, g, 3)
+	err := e.Enforce(context.Background(), d, g, 3)
 	if err != nil {
 		t.Fatalf("an asker that grants must let the call through: %v", err)
 	}
@@ -57,9 +58,9 @@ func TestServerEnforcerLimitExhaustedReasonNamesTheLimit(t *testing.T) {
 	g := capability.GrantView{ID: "g1", LimitCount: 3, LimitWindowSeconds: 3600}
 	d := capability.Decision{Effect: capability.EffectAllow, GrantID: "g1"}
 
-	err := e.EnforceLimited(context.Background(), d, g, 3)
+	err := e.Enforce(context.Background(), d, g, 3)
 	if !errors.Is(err, capability.ErrDenied) {
-		t.Fatalf("EnforceLimited = %v, want it to wrap ErrDenied when the asker refuses", err)
+		t.Fatalf("Enforce = %v, want it to wrap ErrDenied when the asker refuses", err)
 	}
 	seen := asker.lastDecision.Reason
 	if !strings.Contains(seen, "3") {
@@ -76,7 +77,7 @@ func TestServerEnforcerLimitWithinBoundsAllowsWithoutAsking(t *testing.T) {
 	g := capability.GrantView{ID: "g1", LimitCount: 3, LimitWindowSeconds: 3600}
 	d := capability.Decision{Effect: capability.EffectAllow, GrantID: "g1"}
 
-	if err := e.EnforceLimited(context.Background(), d, g, 2); err != nil {
+	if err := e.Enforce(context.Background(), d, g, 2); err != nil {
 		t.Fatalf("allow under the limit must pass: %v", err)
 	}
 	if asker.called {
@@ -92,7 +93,7 @@ func TestServerEnforcerLimitUnlimitedNeverAsks(t *testing.T) {
 	g := capability.GrantView{ID: "g1", LimitCount: 0, LimitWindowSeconds: 3600}
 	d := capability.Decision{Effect: capability.EffectAllow, GrantID: "g1"}
 
-	if err := e.EnforceLimited(context.Background(), d, g, 999999); err != nil {
+	if err := e.Enforce(context.Background(), d, g, 999999); err != nil {
 		t.Fatalf("an unlimited grant must pass regardless of usage: %v", err)
 	}
 	if asker.called {
@@ -109,9 +110,9 @@ func TestServerEnforcerLimitIgnoredForNonAllow(t *testing.T) {
 	g := capability.GrantView{ID: "g1", LimitCount: 3, LimitWindowSeconds: 3600}
 	d := capability.Decision{Effect: capability.EffectDeny, GrantID: "g1", Reason: "denied elsewhere"}
 
-	err := e.EnforceLimited(context.Background(), d, g, 999)
+	err := e.Enforce(context.Background(), d, g, 999)
 	if !errors.Is(err, capability.ErrDenied) {
-		t.Fatalf("EnforceLimited = %v, want it to wrap ErrDenied for a deny decision", err)
+		t.Fatalf("Enforce = %v, want it to wrap ErrDenied for a deny decision", err)
 	}
 	if asker.called {
 		t.Error("a deny decision must not consult the asker via the limit check")

@@ -324,6 +324,11 @@ func (_c *GrantCreate) check() error {
 	if _, ok := _c.mutation.LimitCount(); !ok {
 		return &ValidationError{Name: "limit_count", err: errors.New(`ent: missing required field "Grant.limit_count"`)}
 	}
+	if v, ok := _c.mutation.LimitCount(); ok {
+		if err := grant.LimitCountValidator(v); err != nil {
+			return &ValidationError{Name: "limit_count", err: fmt.Errorf(`ent: validator failed for field "Grant.limit_count": %w`, err)}
+		}
+	}
 	if _, ok := _c.mutation.LimitWindowSeconds(); !ok {
 		return &ValidationError{Name: "limit_window_seconds", err: errors.New(`ent: missing required field "Grant.limit_window_seconds"`)}
 	}

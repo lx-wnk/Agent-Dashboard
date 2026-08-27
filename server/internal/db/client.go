@@ -102,6 +102,10 @@ func Open(path string) (*DBBundle, error) {
 		_ = client.Close()
 		return nil, fmt.Errorf("db: ensure grant indexes: %w", err)
 	}
+	if err := migrateEnsureGrantUsageIndex(sqlDB); err != nil {
+		_ = client.Close()
+		return nil, fmt.Errorf("db: ensure grant_usage index: %w", err)
+	}
 	if err := client.Schema.Create(context.Background()); err != nil {
 		_ = client.Close()
 		return nil, fmt.Errorf("db: auto-migrate: %w", err)
@@ -657,6 +661,35 @@ func migrateEnsureGrantIndexes(db *sql.DB) error {
 		if _, err := db.Exec(stmt); err != nil {
 			return fmt.Errorf("pre-create grant index: %w\nstatement: %s", err, stmt)
 		}
+	}
+	return nil
+}
+
+// migrateEnsureGrantUsageIndex pre-creates the grant_usages table's compound
+// index under ent's exact generated name before ent auto-migrate runs. The
+// grant_usages table is new in this change, so today's fresh databases hit
+// the no-op path below and ent creates the table with the index already
+// declared. The guard exists for the databases that will exist once this
+// ships, exactly like migrateEnsureGrantIndexes above: a brand-new table is
+// not exempt from the hazard, because it is a later index change on a
+// populated database that triggers SQLite's 12-step table rebuild, which
+// crashes on existing databases with "NOT NULL constraint failed" (PR #207).
+// Idempotent via IF NOT EXISTS.
+func migrateEnsureGrantUsageIndex(db *sql.DB) error {
+	var exists int
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'grant_usages'`,
+	).Scan(&exists); err != nil {
+		return fmt.Errorf("probe grant_usages table: %w", err)
+	}
+	if exists == 0 {
+		return nil
+	}
+	if _, err := db.Exec(
+		`CREATE INDEX IF NOT EXISTS grantusage_grant_id_used_at ` +
+			`ON grant_usages (grant_id, used_at)`,
+	); err != nil {
+		return fmt.Errorf("pre-create grant_usage index: %w", err)
 	}
 	return nil
 }
