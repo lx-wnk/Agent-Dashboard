@@ -14,7 +14,7 @@ The following third-party packages are used as transitive dependencies.
 | entgo.io/ent | Apache-2.0 | https://github.com/ent/ent/blob/v0.14.6/LICENSE |
 | github.com/SherClockHolmes/webpush-go | MIT | https://github.com/SherClockHolmes/webpush-go/blob/v1.4.0/LICENSE |
 | github.com/agext/levenshtein | Apache-2.0 | https://github.com/agext/levenshtein/blob/v1.2.3/LICENSE |
-| github.com/anthropics/anthropic-sdk-go | MIT | https://github.com/anthropics/anthropic-sdk-go/blob/v1.61.0/LICENSE |
+| github.com/anthropics/anthropic-sdk-go | MIT | https://github.com/anthropics/anthropic-sdk-go/blob/v1.66.0/LICENSE |
 | github.com/apparentlymart/go-textseg/v15/textseg | MIT | https://github.com/apparentlymart/go-textseg/blob/v15.0.0/LICENSE |
 | github.com/bahlo/generic-list-go | BSD-3-Clause | https://github.com/bahlo/generic-list-go/blob/v0.2.0/LICENSE |
 | github.com/bmatcuk/doublestar | MIT | https://github.com/bmatcuk/doublestar/blob/v1.3.4/LICENSE |
@@ -24,7 +24,7 @@ The following third-party packages are used as transitive dependencies.
 | github.com/creack/pty | MIT | https://github.com/creack/pty/blob/v1.1.24/LICENSE |
 | github.com/dustin/go-humanize | MIT | https://github.com/dustin/go-humanize/blob/v1.0.1/LICENSE |
 | github.com/fsnotify/fsnotify | BSD-3-Clause | https://github.com/fsnotify/fsnotify/blob/v1.10.1/LICENSE |
-| github.com/go-chi/chi/v5 | MIT | https://github.com/go-chi/chi/blob/v5.3.1/LICENSE |
+| github.com/go-chi/chi/v5 | MIT | https://github.com/go-chi/chi/blob/v5.3.2/LICENSE |
 | github.com/go-openapi/inflect | MIT | https://github.com/go-openapi/inflect/blob/v0.19.0/LICENCE |
 | github.com/go-viper/mapstructure/v2 | MIT | https://github.com/go-viper/mapstructure/blob/v2.4.0/LICENSE |
 | github.com/golang-jwt/jwt/v5 | MIT | https://github.com/golang-jwt/jwt/blob/v5.3.1/LICENSE |
@@ -63,7 +63,7 @@ The following third-party packages are used as transitive dependencies.
 | github.com/tidwall/match | MIT | https://github.com/tidwall/match/blob/v1.1.1/LICENSE |
 | github.com/tidwall/pretty | MIT | https://github.com/tidwall/pretty/blob/v1.2.1/LICENSE |
 | github.com/tidwall/sjson | MIT | https://github.com/tidwall/sjson/blob/v1.2.5/LICENSE |
-| github.com/wailsapp/wails/v2 | MIT | https://github.com/wailsapp/wails/blob/v2.14.0/v2/LICENSE |
+| github.com/wailsapp/wails/v2 | MIT | https://github.com/wailsapp/wails/blob/v2.15.0/v2/LICENSE |
 | github.com/yosida95/uritemplate/v3 | BSD-3-Clause | https://github.com/yosida95/uritemplate/blob/v3.0.2/LICENSE |
 | github.com/zclconf/go-cty-yaml | Apache-2.0 | https://github.com/zclconf/go-cty-yaml/blob/v1.1.0/LICENSE |
 | github.com/zclconf/go-cty/cty | MIT | https://github.com/zclconf/go-cty/blob/v1.14.4/LICENSE |
@@ -81,7 +81,7 @@ The following third-party packages are used as transitive dependencies.
 | modernc.org/libc | BSD-3-Clause | https://gitlab.com/cznic/libc/-/blob/v1.74.4/LICENSE |
 | modernc.org/mathutil | BSD-3-Clause | https://gitlab.com/cznic/mathutil/-/blob/v1.7.1/LICENSE |
 | modernc.org/memory | BSD-3-Clause | https://gitlab.com/cznic/memory/-/blob/v1.11.0/LICENSE |
-| modernc.org/sqlite | BSD-3-Clause | https://gitlab.com/cznic/sqlite/-/blob/v1.56.0/LICENSE |
+| modernc.org/sqlite | BSD-3-Clause | https://gitlab.com/cznic/sqlite/-/blob/v1.57.0/LICENSE |
 
 ## Frontend Dependencies
 
