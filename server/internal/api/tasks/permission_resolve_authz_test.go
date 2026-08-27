@@ -150,6 +150,38 @@ func TestBulkResolve_Granted_CreatesTaskPermission(t *testing.T) {
 	}
 }
 
+// TestBulkResolve_Granted_RecordsDecidedBy verifies the bulk-resolve REST path
+// stamps decided_by/decided_at on the created task_permission — one of the
+// three resolve paths that used to leave both columns unset.
+func TestBulkResolve_Granted_RecordsDecidedBy(t *testing.T) {
+	client, r := newRetryHandler(t, &captureOrchestrator{})
+	taskID, _, reqID := seedPendingPermissionWithPattern(t, client, "bulk-decided-by", "Bash", "grep -r*")
+
+	body := `{"taskId":"` + taskID + `","outcome":"granted","permissionIds":["` + reqID + `"]}`
+	req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/permission-requests/bulk-resolve", strings.NewReader(body)))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	perms, err := repo.NewPermissionRepo(client).ListEffectiveTaskPermissions(context.Background(), taskID)
+	if err != nil {
+		t.Fatalf("list permissions: %v", err)
+	}
+	if len(perms) == 0 {
+		t.Fatal("expected a task_permission after granted bulk resolve, got none")
+	}
+	if perms[0].DecidedBy == nil || *perms[0].DecidedBy == "" {
+		t.Error("expected decided_by to be recorded, got nil/empty")
+	}
+	if perms[0].DecidedAt == nil {
+		t.Error("expected decided_at to be recorded, got nil")
+	}
+}
+
 // TestBulkResolve_Denied_DoesNotCreateTaskPermission verifies that resolving a
 // request as "denied" does NOT create a task_permission.
 func TestBulkResolve_Denied_DoesNotCreateTaskPermission(t *testing.T) {
@@ -204,6 +236,37 @@ func TestSingleResolve_Granted_CreatesTaskPermission(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("task_permission for Read not found after single granted resolve; got %+v", perms)
+	}
+}
+
+// TestSingleResolve_Granted_RecordsDecidedBy verifies the single-resolve REST
+// path stamps decided_by/decided_at on the created task_permission.
+func TestSingleResolve_Granted_RecordsDecidedBy(t *testing.T) {
+	client, r := newRetryHandler(t, &captureOrchestrator{})
+	taskID, _, reqID := seedPendingPermissionWithPattern(t, client, "single-decided-by", "Read", "")
+
+	url := "/api/tasks/" + taskID + "/permission-requests/" + reqID + "/resolve"
+	req := withAuth(t, httptest.NewRequest(http.MethodPost, url, strings.NewReader(`{"outcome":"granted"}`)))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	perms, err := repo.NewPermissionRepo(client).ListEffectiveTaskPermissions(context.Background(), taskID)
+	if err != nil {
+		t.Fatalf("list permissions: %v", err)
+	}
+	if len(perms) == 0 {
+		t.Fatal("expected a task_permission after granted single resolve, got none")
+	}
+	if perms[0].DecidedBy == nil || *perms[0].DecidedBy == "" {
+		t.Error("expected decided_by to be recorded, got nil/empty")
+	}
+	if perms[0].DecidedAt == nil {
+		t.Error("expected decided_at to be recorded, got nil")
 	}
 }
 

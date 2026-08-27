@@ -397,6 +397,7 @@ func registerResolvePermissionRequest(registry mcp.ToolRegistry, d ControlDeps) 
 						Granted:        true,
 						PreApproved:    false,
 						ManualOverride: false, // agent/MCP path never gets override
+						DecidedBy:      "mcp",
 					}
 					if req.Pattern != nil {
 						in.Pattern = req.Pattern

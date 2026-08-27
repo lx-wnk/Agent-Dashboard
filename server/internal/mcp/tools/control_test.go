@@ -116,6 +116,70 @@ func TestApproveAllPendingTool_ReturnsCountAndRequeued(t *testing.T) {
 	require.Equal(t, "Bash", grants[0].Tool)
 }
 
+// TestResolvePermissionRequestTool_RecordsDecidedBy verifies the MCP
+// resolve_permission_request tool stamps decided_by/decided_at on the
+// task_permission it creates for a granted outcome.
+func TestResolvePermissionRequestTool_RecordsDecidedBy(t *testing.T) {
+	bundle, err := db.Open(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+
+	client := bundle.Client
+	ctx := context.Background()
+
+	taskRepo := repo.NewTaskRepo(client)
+	srRepo := repo.NewStageRunRepo(client)
+	permRepo := repo.NewPermissionRepo(client)
+
+	task, err := taskRepo.Create(ctx, repo.CreateTaskInput{
+		Slug:          "mcp-resolve-decided-by",
+		Title:         "MCP Resolve Decided By",
+		Cwd:           t.TempDir(),
+		MaxIterations: 3,
+		Priority:      "normal",
+		CurrentStage:  "implementation",
+	})
+	require.NoError(t, err)
+
+	run, err := srRepo.Create(ctx, repo.CreateStageRunInput{
+		TaskID:    task.ID,
+		Stage:     "implementation",
+		Iteration: 0,
+	})
+	require.NoError(t, err)
+
+	pattern := "echo hello"
+	pendingReq, err := permRepo.CreatePermissionRequest(ctx, repo.CreatePermissionRequestInput{
+		StageRunID: run.ID,
+		Tool:       "Bash",
+		Pattern:    &pattern,
+	})
+	require.NoError(t, err)
+
+	registry := mcp.ToolRegistry{}
+	RegisterControlTools(registry, ControlDeps{
+		TaskRepo: taskRepo,
+		SRRepo:   srRepo,
+		PermRepo: permRepo,
+	})
+
+	tool, ok := registry["resolve_permission_request"]
+	require.True(t, ok)
+
+	_, err = tool.Handler(ctx, map[string]any{
+		"request_id": pendingReq.ID,
+		"outcome":    repo.OutcomeGranted,
+	})
+	require.NoError(t, err)
+
+	grants, err := permRepo.ListTaskPermissions(ctx, task.ID)
+	require.NoError(t, err)
+	require.Len(t, grants, 1)
+	require.NotNil(t, grants[0].DecidedBy)
+	require.NotEmpty(t, *grants[0].DecidedBy)
+	require.NotNil(t, grants[0].DecidedAt)
+}
+
 // stubOrchestrator satisfies ControlOrchestrator for MCP tool tests.
 type stubOrchestrator struct {
 	requeueFn func(taskID string)

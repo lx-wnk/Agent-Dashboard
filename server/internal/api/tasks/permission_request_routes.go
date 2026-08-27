@@ -474,7 +474,7 @@ func (h *Handler) bulkResolvePermissionRequests(w http.ResponseWriter, r *http.R
 			if !resolveSet[req.ID] {
 				continue
 			}
-			entries = append(entries, repo.GrantEntry{Tool: req.Tool, Pattern: req.Pattern})
+			entries = append(entries, repo.GrantEntry{Tool: req.Tool, Pattern: req.Pattern, DecidedBy: "user"})
 		}
 		if _, errs := h.grantValidatedEntries(r.Context(), body.TaskID, entries); len(errs) > 0 {
 			resolveErrors = append(resolveErrors, errs...)

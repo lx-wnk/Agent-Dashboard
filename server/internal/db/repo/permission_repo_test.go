@@ -30,6 +30,34 @@ func TestPermissionRepo_CreateAndListTaskPermission(t *testing.T) {
 	require.Equal(t, perm.ID, perms[0].ID)
 }
 
+// TestPermissionRepo_CreateTaskPermission_RecordsDecidedByAndAt verifies that
+// setting DecidedBy on the input stamps decided_at, and that leaving it empty
+// leaves both fields nil rather than writing a placeholder — decided_by and
+// decided_at only ever appear together.
+func TestPermissionRepo_CreateTaskPermission_RecordsDecidedByAndAt(t *testing.T) {
+	client := openDB(t)
+	ctx := context.Background()
+	tr := repo.NewTaskRepo(client)
+	pr := repo.NewPermissionRepo(client)
+
+	taskID := createTask(t, tr, "perm-task-decided")
+
+	decided, err := pr.CreateTaskPermission(ctx, repo.CreateTaskPermissionInput{
+		TaskID: taskID, Tool: "Bash", Granted: true, DecidedBy: "user",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, decided.DecidedBy)
+	require.Equal(t, "user", *decided.DecidedBy)
+	require.NotNil(t, decided.DecidedAt)
+
+	undecided, err := pr.CreateTaskPermission(ctx, repo.CreateTaskPermissionInput{
+		TaskID: taskID, Tool: "Read", Granted: true,
+	})
+	require.NoError(t, err)
+	require.Nil(t, undecided.DecidedBy)
+	require.Nil(t, undecided.DecidedAt)
+}
+
 func TestPermissionRepo_DeleteTaskPermission(t *testing.T) {
 	client := openDB(t)
 	ctx := context.Background()

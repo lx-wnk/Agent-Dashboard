@@ -68,7 +68,10 @@ func ApproveAllPending(ctx context.Context, d ApproveAllPendingDeps, taskID stri
 
 	entries := make([]repo.GrantEntry, 0, len(pending))
 	for _, req := range pending {
-		entries = append(entries, repo.GrantEntry{Tool: req.Tool, Pattern: req.Pattern})
+		// Recorded as "user" unconditionally, matching the audit event below —
+		// approve-all is reached via the REST endpoint and the MCP tool alike,
+		// but both represent the same human bulk-approval decision.
+		entries = append(entries, repo.GrantEntry{Tool: req.Tool, Pattern: req.Pattern, DecidedBy: "user"})
 	}
 	if len(entries) > 0 {
 		if _, errs := grantOverrideEntries(ctx, d.PermRepo, taskID, entries); len(errs) > 0 {

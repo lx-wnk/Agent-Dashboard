@@ -199,6 +199,34 @@ func TestApproveAllPending_UnknownTask(t *testing.T) {
 	}
 }
 
+// TestApproveAllPending_RecordsDecidedBy verifies the fourth, distinct grant
+// path (ApproveAllPending, shared by the REST endpoint and the MCP tool)
+// stamps decided_by/decided_at on the resulting task_permission.
+func TestApproveAllPending_RecordsDecidedBy(t *testing.T) {
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	client, r := newApproveAllHandler(t, &requeueCapture{})
+	taskID, _ := seedAwaitingWithPermissions(t, client, 1)
+
+	w := postApproveAll(t, r, taskID)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	grants, err := repo.NewPermissionRepo(client).ListTaskPermissions(context.Background(), taskID)
+	if err != nil {
+		t.Fatalf("list task permissions: %v", err)
+	}
+	if len(grants) == 0 {
+		t.Fatal("expected a task_permission after approve-all, got none")
+	}
+	if grants[0].DecidedBy == nil || *grants[0].DecidedBy == "" {
+		t.Error("expected decided_by to be recorded, got nil/empty")
+	}
+	if grants[0].DecidedAt == nil {
+		t.Error("expected decided_at to be recorded, got nil")
+	}
+}
+
 // TestApproveAllPending_WritesGrantedOutcome pins the value, not just the count.
 //
 // ApproveAllPending used to write the outcome "approved" while every other

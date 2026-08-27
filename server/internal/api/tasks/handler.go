@@ -930,7 +930,7 @@ func (h *Handler) resolvePermissionRequest(w http.ResponseWriter, r *http.Reques
 		return fmt.Errorf("tasks.resolvePermissionRequest.get: %w", err)
 	}
 	if body.Outcome == repo.OutcomeGranted {
-		entries := []repo.GrantEntry{{Tool: pr.Tool, Pattern: pr.Pattern}}
+		entries := []repo.GrantEntry{{Tool: pr.Tool, Pattern: pr.Pattern, DecidedBy: "user"}}
 		if _, errs := h.grantValidatedEntries(r.Context(), id, entries); len(errs) > 0 {
 			slog.Warn("resolvePermissionRequest: grant failed", "taskID", id, "errs", errs)
 		}
