@@ -74,6 +74,32 @@ func TestServerEnforcerWithoutAskerFailsClosed(t *testing.T) {
 	}
 }
 
+func TestServerEnforcerAskWrapsAskerError(t *testing.T) {
+	sentinel := errors.New("asker transport failed")
+	e := capability.ServerEnforcer{Asker: &recordingAsker{err: sentinel}}
+	err := e.Enforce(context.Background(), capability.Decision{Effect: capability.EffectAsk})
+	if err == nil {
+		t.Fatal("Enforce = nil, want a non-nil error when the asker itself fails")
+	}
+	if !errors.Is(err, sentinel) {
+		t.Fatalf("Enforce = %v, want it to wrap the asker's error", err)
+	}
+}
+
+// TestServerEnforcerIgnoresEnforceable pins that this enforcement point does
+// not filter on Decision.Enforceable, unlike SpawnEnforcer. It is the
+// complete backstop and must judge every decision handed to it.
+func TestServerEnforcerIgnoresEnforceable(t *testing.T) {
+	e := capability.ServerEnforcer{Asker: &recordingAsker{}}
+	err := e.Enforce(context.Background(), capability.Decision{
+		Effect:      capability.EffectDeny,
+		Enforceable: []string{capability.EnforcerHook},
+	})
+	if !errors.Is(err, capability.ErrDenied) {
+		t.Fatalf("Enforce = %v, want ErrDenied even though EnforcerServer is absent from Enforceable", err)
+	}
+}
+
 func TestServerEnforcerUnknownEffectDenies(t *testing.T) {
 	e := capability.ServerEnforcer{Asker: &recordingAsker{}}
 	err := e.Enforce(context.Background(), capability.Decision{Effect: capability.Effect("bogus")})

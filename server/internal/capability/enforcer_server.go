@@ -30,6 +30,14 @@ type ServerEnforcer struct {
 func (ServerEnforcer) Point() string { return EnforcerServer }
 
 // Enforce returns nil when the action may proceed.
+//
+// Unlike SpawnEnforcer, it does not check d.Enforceable for EnforcerServer:
+// SpawnEnforcer renders a shared batch of decisions into one allow-list, so
+// it must filter out capabilities that aren't its concern. This is the
+// complete backstop judging one decision at its point of use, and the other
+// two points are each incomplete in their own way — the hook fails open on
+// timeout, the spawn point is static and cannot ask — so this one enforces
+// every decision handed to it regardless of where else it is enforceable.
 func (e ServerEnforcer) Enforce(ctx context.Context, d Decision) error {
 	switch d.Effect {
 	case EffectAllow:
