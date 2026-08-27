@@ -11,6 +11,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/llmadapter"
+	"github.com/lx-wnk/agent-dashboard/server/internal/memory"
 )
 
 // SpawnFunc launches the agent process for native (claude) stages.
@@ -209,13 +210,80 @@ const resumeContinueInstruction = "Continue your previous attempt on this task. 
 
 // buildStageUserPrompt assembles the user-facing prompt for a stage execution.
 // On resume, the full task spec (bundle.UserPrompt) is swapped for a short
-// "continue" instruction; feedback and additional-prompt suffix are preserved.
+// "continue" instruction; feedback and additional-prompt suffix are
+// preserved.
+//
+// The memory block goes here, in the user prompt, not the system prompt.
+// Custom system-prompt content is prepended at the top of Execute
+// (custom + "\n\n---\n\n" + bundle.SystemPrompt), and BuildSpawnArgs
+// silently truncates the system prompt head-first at systemPromptMaxChars —
+// a memory block added there would compete with, and could push out, the
+// tail of the bundle's own system prompt. The user prompt has no such cut,
+// and placing the block after the stage instructions and before the user's
+// additional prompt keeps instruction primacy and gives human input the
+// last word.
 func buildStageUserPrompt(ctx *StageContext, bundle PromptBundle, feedback string) string {
 	userPrompt := bundle.UserPrompt
 	if ctx.ResumeSessionID != "" {
 		userPrompt = resumeContinueInstruction
 	}
-	return feedback + userPrompt + buildAdditionalPromptSuffix(ctx.UserAdditionalPrompt)
+	memoryBlock := injectMemoryBlock(ctx)
+	return feedback + userPrompt + buildMemoryBlockSuffix(memoryBlock) + buildAdditionalPromptSuffix(ctx.UserAdditionalPrompt)
+}
+
+// injectMemoryBlock retrieves a budgeted slice of memory for the stage's
+// task and packs it into ctx.MemoryBudget characters. Memory being
+// unavailable must never block a spawn: a nil InjectMemory or a budget that
+// cannot fit even one entry (<= 0) disables the push outright, and a
+// retrieval error degrades to no block rather than failing the stage.
+func injectMemoryBlock(ctx *StageContext) string {
+	if ctx.InjectMemory == nil || ctx.MemoryBudget <= 0 {
+		return ""
+	}
+
+	scope := repo.GlobalScope()
+	if ctx.Task.Cwd != "" {
+		scope = repo.ProjectScope(ctx.Task.Cwd)
+	}
+	queryText := ctx.Task.Title
+	if ctx.Task.Description != nil {
+		queryText += " " + *ctx.Task.Description
+	}
+
+	entries, err := ctx.InjectMemory(ctx.Ctx, memory.Query{Text: queryText, Scope: scope})
+	if err != nil {
+		ctx.RecordAudit(ctx.StageRun.Stage+"_memory_retrieve_failed", map[string]any{"error": err.Error()})
+		return ""
+	}
+
+	sel := memory.Select(entries, ctx.MemoryBudget)
+	if ctx.RecordMemoryInjection != nil {
+		entryIDs := make([]string, len(sel.Entries))
+		for i, e := range sel.Entries {
+			entryIDs[i] = e.ID
+		}
+		if _, err := ctx.RecordMemoryInjection(ctx.Ctx, repo.RecordInjectionInput{
+			StageRunID:     ctx.StageRun.ID,
+			EntryIDs:       entryIDs,
+			CharBudget:     ctx.MemoryBudget,
+			CharsUsed:      sel.Used,
+			CandidateCount: len(entries),
+		}); err != nil {
+			ctx.RecordAudit(ctx.StageRun.Stage+"_memory_record_failed", map[string]any{"error": err.Error()})
+		}
+	}
+	return sel.Block
+}
+
+// buildMemoryBlockSuffix wraps a non-empty memory block in the same
+// "\n\n---\n" separator buildAdditionalPromptSuffix uses, so the assembled
+// prompt reads as a sequence of clearly bounded sections. An empty block
+// contributes nothing — no separator, no empty heading.
+func buildMemoryBlockSuffix(block string) string {
+	if block == "" {
+		return ""
+	}
+	return "\n\n---\n" + block
 }
 
 func buildAdditionalPromptSuffix(prompt string) string {

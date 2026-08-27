@@ -6,6 +6,7 @@ import (
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	"github.com/lx-wnk/agent-dashboard/server/internal/memory"
 )
 
 // StageTransition is a sealed interface. Only types in this package satisfy it.
@@ -139,6 +140,23 @@ type StageContext struct {
 	// by its ID. Kept acp-agnostic: it returns the ent row, not an acp-package
 	// type, so this file does not need to import the acp adapter.
 	PermissionStatus func(ctx context.Context, id string) (*ent.PermissionRequest, error)
+
+	// InjectMemory retrieves ranked memory entries for the stage's spawn user
+	// prompt — typically a bound (*memory.Retriever).Retrieve method value.
+	// Nil disables the memory push outright: memory being unavailable must
+	// never block a spawn, so "no injector wired" means "no injection" rather
+	// than a best-effort partial one.
+	InjectMemory memory.InjectorFunc
+
+	// MemoryBudget bounds the injected memory block in characters. <= 0
+	// disables injection — a non-positive value must never be read as
+	// "unbounded", so this fails closed rather than risking an uncapped block.
+	MemoryBudget int
+
+	// RecordMemoryInjection persists what memory was offered and what fit for
+	// this stage run. Nil skips recording: it is best-effort bookkeeping and
+	// must not fail a spawn.
+	RecordMemoryInjection func(ctx context.Context, in repo.RecordInjectionInput) (*ent.MemoryInjection, error)
 }
 
 // StageHandler is implemented by each pipeline stage.

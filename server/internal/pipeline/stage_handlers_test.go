@@ -2,10 +2,17 @@ package pipeline_test
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	"github.com/lx-wnk/agent-dashboard/server/internal/llmadapter"
+	"github.com/lx-wnk/agent-dashboard/server/internal/memory"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 	"github.com/stretchr/testify/require"
 )
@@ -232,4 +239,157 @@ func TestPlanReviewBuilder_NoFeedbackIsDefensive(t *testing.T) {
 	}
 	bundle := pipeline.PlanReviewBuilderForTest(ctx)
 	require.NotEmpty(t, bundle.UserPrompt, "prompt must be non-empty even without feedback")
+}
+
+// TestAgentStageHandler_MemoryBlockInNativeUserPromptNotSystemPrompt is the
+// seam test the brief asks for: the memory block must land in the final user
+// prompt sent to the native `claude` spawn, and never in the system prompt —
+// BuildSpawnArgs silently truncates the system prompt head-first at 10000
+// characters, and since custom system-prompt content is prepended, a block
+// there would risk deleting the stage instructions.
+func TestAgentStageHandler_MemoryBlockInNativeUserPromptNotSystemPrompt(t *testing.T) {
+	const memorySummary = "past lesson: always check the retry budget before requeueing"
+
+	var captured pipeline.SpawnAgentOptions
+	spawnFn := func(opts pipeline.SpawnAgentOptions) (pipeline.SpawnResult, error) {
+		captured = opts
+		return pipeline.SpawnResult{PID: 123}, nil
+	}
+	handler := pipeline.NewAgentStageHandlerForTest("implementation", spawnFn)
+
+	var recordedCandidates int
+	ctx := &pipeline.StageContext{
+		Ctx:               context.Background(),
+		Task:              &ent.Task{Title: "Fix the retry loop", Cwd: "/tmp/proj-a"},
+		StageRun:          &ent.StageRun{Stage: "implementation", ID: "sr-native-1"},
+		RecordAudit:       func(string, map[string]any) {},
+		RequestPermission: func(string, string, string) *ent.PermissionRequest { return nil },
+		InjectMemory: func(_ context.Context, _ memory.Query) ([]memory.Entry, error) {
+			return []memory.Entry{{ID: "mem-1", Summary: memorySummary}}, nil
+		},
+		MemoryBudget: 2000,
+		RecordMemoryInjection: func(_ context.Context, in repo.RecordInjectionInput) (*ent.MemoryInjection, error) {
+			recordedCandidates = in.CandidateCount
+			require.Equal(t, "sr-native-1", in.StageRunID)
+			require.Equal(t, []string{"mem-1"}, in.EntryIDs)
+			require.Equal(t, 2000, in.CharBudget)
+			require.Greater(t, in.CharsUsed, 0)
+			return &ent.MemoryInjection{}, nil
+		},
+	}
+
+	_, err := handler.Execute(ctx)
+	require.NoError(t, err)
+	require.Contains(t, captured.Prompt, memorySummary, "memory block must land in the user prompt")
+	require.NotContains(t, captured.SystemPrompt, memorySummary, "memory block must never land in the system prompt — that is the truncation trap")
+	require.Equal(t, 1, recordedCandidates, "the injection record must know what was offered, not just what fit")
+}
+
+// TestAgentStageHandler_MemoryBlockInAdapterUserPromptNotSystemPrompt proves
+// the same seam holds for the LLM-adapter dispatch path, which consumes the
+// identical fullUserPrompt value as the native path.
+func TestAgentStageHandler_MemoryBlockInAdapterUserPromptNotSystemPrompt(t *testing.T) {
+	const memorySummary = "past lesson: rotate the API key before it expires"
+
+	dir := t.TempDir()
+	captureFile := filepath.Join(dir, "capture.json")
+	scriptPath := filepath.Join(dir, "fake-adapter.sh")
+	script := "#!/bin/sh\ncat > " + captureFile + "\necho '{}'\n"
+	require.NoError(t, os.WriteFile(scriptPath, []byte(script), 0o755))
+
+	handler := pipeline.NewAgentStageHandlerForTest("implementation", func(pipeline.SpawnAgentOptions) (pipeline.SpawnResult, error) {
+		t.Fatal("native spawnFn must not be called on the adapter path")
+		return pipeline.SpawnResult{}, nil
+	})
+
+	ctx := &pipeline.StageContext{
+		Ctx:               context.Background(),
+		Task:              &ent.Task{Title: "Rotate credentials", Cwd: "/tmp/proj-b"},
+		StageRun:          &ent.StageRun{Stage: "implementation", ID: "sr-adapter-1"},
+		RecordAudit:       func(string, map[string]any) {},
+		RequestPermission: func(string, string, string) *ent.PermissionRequest { return nil },
+		ResolveSpawner: func(context.Context, string, string) (*ent.Spawner, error) {
+			return &ent.Spawner{AdapterType: "custom", Command: scriptPath}, nil
+		},
+		InjectMemory: func(_ context.Context, _ memory.Query) ([]memory.Entry, error) {
+			return []memory.Entry{{ID: "mem-2", Summary: memorySummary}}, nil
+		},
+		MemoryBudget: 2000,
+	}
+
+	_, err := handler.Execute(ctx)
+	require.NoError(t, err)
+
+	raw, err := os.ReadFile(captureFile)
+	require.NoError(t, err, "the adapter must have been invoked with args on stdin")
+	var sent llmadapter.LLMSpawnArgs
+	require.NoError(t, json.Unmarshal(raw, &sent))
+
+	require.Contains(t, sent.UserPrompt, memorySummary, "memory block must land in the adapter's user prompt")
+	require.NotContains(t, sent.SystemPrompt, memorySummary, "memory block must never land in the adapter's system prompt")
+}
+
+// TestAgentStageHandler_MemoryRetrievalErrorDoesNotBlockSpawn is this task's
+// other fail-closed decision: a spawn must not be blocked by memory being
+// unavailable. A retrieval error degrades to no block, not a failed stage.
+func TestAgentStageHandler_MemoryRetrievalErrorDoesNotBlockSpawn(t *testing.T) {
+	var captured pipeline.SpawnAgentOptions
+	spawnFn := func(opts pipeline.SpawnAgentOptions) (pipeline.SpawnResult, error) {
+		captured = opts
+		return pipeline.SpawnResult{PID: 123}, nil
+	}
+	handler := pipeline.NewAgentStageHandlerForTest("implementation", spawnFn)
+
+	recordCalled := false
+	ctx := &pipeline.StageContext{
+		Ctx:               context.Background(),
+		Task:              &ent.Task{Title: "Some task", Cwd: "/tmp/proj-c"},
+		StageRun:          &ent.StageRun{Stage: "implementation", ID: "sr-err-1"},
+		RecordAudit:       func(string, map[string]any) {},
+		RequestPermission: func(string, string, string) *ent.PermissionRequest { return nil },
+		InjectMemory: func(_ context.Context, _ memory.Query) ([]memory.Entry, error) {
+			return nil, errors.New("fts index unavailable")
+		},
+		MemoryBudget: 2000,
+		RecordMemoryInjection: func(context.Context, repo.RecordInjectionInput) (*ent.MemoryInjection, error) {
+			recordCalled = true
+			return &ent.MemoryInjection{}, nil
+		},
+	}
+
+	_, err := handler.Execute(ctx)
+	require.NoError(t, err, "a memory retrieval failure must not fail the spawn")
+	require.Equal(t, "test", captured.Prompt, "prompt must fall back to the bundle's own content with no memory block")
+	require.False(t, recordCalled, "nothing was retrieved, so there is nothing to record")
+}
+
+// TestAgentStageHandler_ZeroMemoryBudgetDisablesInjection is the other
+// boundary named in the brief: a budget that cannot fit even one entry must
+// disable the push outright rather than being read as "unbounded".
+func TestAgentStageHandler_ZeroMemoryBudgetDisablesInjection(t *testing.T) {
+	var captured pipeline.SpawnAgentOptions
+	spawnFn := func(opts pipeline.SpawnAgentOptions) (pipeline.SpawnResult, error) {
+		captured = opts
+		return pipeline.SpawnResult{PID: 123}, nil
+	}
+	handler := pipeline.NewAgentStageHandlerForTest("implementation", spawnFn)
+
+	retrieveCalled := false
+	ctx := &pipeline.StageContext{
+		Ctx:               context.Background(),
+		Task:              &ent.Task{Title: "Some task", Cwd: "/tmp/proj-d"},
+		StageRun:          &ent.StageRun{Stage: "implementation", ID: "sr-zero-1"},
+		RecordAudit:       func(string, map[string]any) {},
+		RequestPermission: func(string, string, string) *ent.PermissionRequest { return nil },
+		InjectMemory: func(_ context.Context, _ memory.Query) ([]memory.Entry, error) {
+			retrieveCalled = true
+			return []memory.Entry{{ID: "mem-3", Summary: "should never be reached"}}, nil
+		},
+		MemoryBudget: 0,
+	}
+
+	_, err := handler.Execute(ctx)
+	require.NoError(t, err)
+	require.Equal(t, "test", captured.Prompt)
+	require.False(t, retrieveCalled, "a non-positive budget disables injection before retrieval is even attempted")
 }
