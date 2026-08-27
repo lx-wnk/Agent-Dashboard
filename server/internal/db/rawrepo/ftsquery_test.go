@@ -50,6 +50,27 @@ func TestSanitizeFTSQuery(t *testing.T) {
 			input: "***",
 			want:  `"***"*`,
 		},
+		// The single-token cases above prove escaping and prefix-wrapping in
+		// isolation; they don't prove each token is wrapped and escaped
+		// independently rather than, say, the whole input being escaped once
+		// and then split. These multi-token cases exercise that: every token
+		// gets its own independently-doubled quotes and its own wrapper,
+		// regardless of what its neighbors contain.
+		{
+			name:  "multiple tokens, one with an embedded quote",
+			input: `he"llo world`,
+			want:  `"he""llo"* "world"*`,
+		},
+		{
+			name:  "multiple tokens, one punctuation-only",
+			input: "hello ***",
+			want:  `"hello"* "***"*`,
+		},
+		{
+			name:  "mix of a quoted token and a punctuation-only token",
+			input: `he"llo *** wor"ld`,
+			want:  `"he""llo"* "***"* "wor""ld"*`,
+		},
 	}
 
 	for _, tc := range cases {
