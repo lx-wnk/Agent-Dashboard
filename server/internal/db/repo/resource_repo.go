@@ -179,6 +179,13 @@ func (r *entResourceRepo) SetState(ctx context.Context, id, state string) (*ent.
 }
 
 func (r *entResourceRepo) Delete(ctx context.Context, id string) error {
+	row, err := r.client.Resource.Get(ctx, id)
+	if err != nil {
+		return fmt.Errorf("resource.Delete: %w", err)
+	}
+	if row.Origin == ResourceOriginBuiltin {
+		return fmt.Errorf("resource.Delete %s: %w", row.Slug, ErrResourceBuiltIn)
+	}
 	if err := r.client.Resource.DeleteOneID(id).Exec(ctx); err != nil {
 		return fmt.Errorf("resource.Delete: %w", err)
 	}

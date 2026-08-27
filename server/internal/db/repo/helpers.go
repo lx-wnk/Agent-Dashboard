@@ -2,6 +2,7 @@ package repo
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
@@ -43,3 +44,14 @@ func WithTx(ctx context.Context, client *ent.Client, fn func(tx *ent.Tx) error) 
 	}
 	return nil
 }
+
+// Deletion refusals shared by managed resources. Only the spawner repository
+// had refusals of this shape; they are shared so every kind can refuse for a
+// named reason rather than inventing its own error string.
+var (
+	// ErrResourceBuiltIn means the resource ships with the dashboard and is not
+	// the user's to delete.
+	ErrResourceBuiltIn = errors.New("resource is built in and cannot be deleted")
+	// ErrResourceReferenced means something else still points at this resource.
+	ErrResourceReferenced = errors.New("resource is still referenced")
+)

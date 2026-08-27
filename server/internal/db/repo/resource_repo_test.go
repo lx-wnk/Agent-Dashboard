@@ -2,6 +2,7 @@ package repo_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db"
@@ -221,5 +222,46 @@ func TestResourceListMergedScopedWins(t *testing.T) {
 	}
 	if byName["deploy"] != "Global Deploy" {
 		t.Errorf("deploy = %q, want the global row to survive", byName["deploy"])
+	}
+}
+
+func TestResourceDeleteRefusesBuiltin(t *testing.T) {
+	r, ctx := newResourceRepo(t)
+	created, err := r.Upsert(ctx, repo.UpsertResourceInput{
+		Kind:   repo.ResourceKindApplication,
+		Slug:   "builtin-app",
+		Scope:  repo.GlobalScope(),
+		Origin: repo.ResourceOriginBuiltin,
+	})
+	if err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+
+	err = r.Delete(ctx, created.ID)
+	if !errors.Is(err, repo.ErrResourceBuiltIn) {
+		t.Fatalf("Delete of a builtin resource = %v, want ErrResourceBuiltIn", err)
+	}
+
+	if _, err := r.Get(ctx, repo.ResourceKindApplication, repo.GlobalScope(), "builtin-app"); err != nil {
+		t.Errorf("refused delete must leave the row in place, got %v", err)
+	}
+}
+
+func TestResourceDeleteAllowsLocal(t *testing.T) {
+	r, ctx := newResourceRepo(t)
+	created, err := r.Upsert(ctx, repo.UpsertResourceInput{
+		Kind:   repo.ResourceKindApplication,
+		Slug:   "local-app",
+		Scope:  repo.GlobalScope(),
+		Origin: repo.ResourceOriginLocal,
+	})
+	if err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+	if err := r.Delete(ctx, created.ID); err != nil {
+		t.Fatalf("Delete of a local resource: %v", err)
+	}
+	if _, err := r.Get(ctx, repo.ResourceKindApplication, repo.GlobalScope(), "local-app"); err == nil {
+		t.Error("row still present after a successful delete")
 	}
 }
