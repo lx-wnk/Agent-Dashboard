@@ -22,9 +22,10 @@ func rollback(tx *ent.Tx, cause error) error {
 }
 
 // WithTx runs fn inside a transaction, committing on success and rolling back on
-// error or panic. It replaces the two rollback idioms this package grew: a
-// deferred blind rollback in some repos and an explicit per-branch rollback in
-// others.
+// error or panic. This is the shape new transactional code in this package
+// should use; adopting it in the repositories that already hand-roll their own
+// transaction (a deferred blind rollback in some, an explicit per-branch
+// rollback in others) has not happened yet.
 func WithTx(ctx context.Context, client *ent.Client, fn func(tx *ent.Tx) error) error {
 	tx, err := client.Tx(ctx)
 	if err != nil {
