@@ -35,12 +35,17 @@ type Request struct {
 // so this package never imports server/internal/db/ent or the repo package,
 // keeping Decide pure and database-free.
 //
+// Capability must equal the Request's Capability for this grant to resolve
+// it — a grant for one capability must never resolve a request for another
+// just because its Pattern happens to match the requested Value.
+//
 // LimitCount and LimitWindowSeconds carry the grant's rate limit for the
 // enforcer to read. Decide never reads either field — it stays pure and
 // evaluates no limit, per the standing rule that rate limits are enforced
 // outside the decider (see WithinLimit in enforcer_server.go).
 type GrantView struct {
 	ID                 string
+	Capability         string
 	ContextKind        string
 	ContextRef         string
 	Pattern            string
@@ -83,7 +88,10 @@ var contextRank = map[string]int{
 }
 
 // modeRank orders grant modes within one context level: deny beats allow
-// beats ask; lower wins.
+// beats ask; lower wins. This map is the single source of truth for which
+// modes are valid. Decide drops any grant whose Mode isn't a key below, on
+// purpose, rather than treating an unrecognised mode as rank 0 (deny) and
+// letting a typo'd mode silently outrank — or hide behind — an explicit deny.
 var modeRank = map[string]int{
 	"deny":  0,
 	"allow": 1,
@@ -93,11 +101,12 @@ var modeRank = map[string]int{
 // Decide resolves a permission request to one decision.
 //
 // Specificity is resolved before mode: grants are dropped first for being
-// revoked, expired, out of scope, or not matching the requested value. The
-// remainder is ranked by context specificity, and the most specific level
-// with any surviving grant decides outright — deny beats allow beats ask
-// only within that level. A broader deny never overrules a narrower allow;
-// it never gets a vote once a more specific level has any matching grant.
+// revoked, expired, scoped to a different capability, out of scope, or not
+// matching the requested value. The remainder is ranked by context
+// specificity, and the most specific level with any surviving grant decides
+// outright — deny beats allow beats ask only within that level. A broader
+// deny never overrules a narrower allow; it never gets a vote once a more
+// specific level has any matching grant.
 //
 // Rate limits are not evaluated here — Decide is pure and holds no counter;
 // limit enforcement belongs to the enforcers that track call counts.
@@ -123,12 +132,21 @@ func Decide(req Request, grants []GrantView, cap CapabilityView) Decision {
 		if !Match(g.Pattern, req.Value) {
 			continue
 		}
+		if g.Capability != req.Capability {
+			continue
+		}
 		if !inScope[Context{Kind: g.ContextKind, Ref: g.ContextRef}] {
 			continue
 		}
 		rank, known := contextRank[g.ContextKind]
 		if !known {
 			droppedUnknownKind = true
+			continue
+		}
+		if _, known := modeRank[g.Mode]; !known {
+			// A grant with a mode nobody can parse must not participate in
+			// ranking at all, exactly as a grant with an unrecognised
+			// context kind (above) does not.
 			continue
 		}
 		switch {
