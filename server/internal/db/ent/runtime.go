@@ -164,12 +164,16 @@ func init() {
 	pluginDescManifestHash := pluginFields[6].Descriptor()
 	// plugin.DefaultManifestHash holds the default value on creation for the manifest_hash field.
 	plugin.DefaultManifestHash = pluginDescManifestHash.Default.(string)
+	// pluginDescResourceID is the schema descriptor for resource_id field.
+	pluginDescResourceID := pluginFields[7].Descriptor()
+	// plugin.DefaultResourceID holds the default value on creation for the resource_id field.
+	plugin.DefaultResourceID = pluginDescResourceID.Default.(string)
 	// pluginDescCreatedAt is the schema descriptor for created_at field.
-	pluginDescCreatedAt := pluginFields[7].Descriptor()
+	pluginDescCreatedAt := pluginFields[8].Descriptor()
 	// plugin.DefaultCreatedAt holds the default value on creation for the created_at field.
 	plugin.DefaultCreatedAt = pluginDescCreatedAt.Default.(func() time.Time)
 	// pluginDescUpdatedAt is the schema descriptor for updated_at field.
-	pluginDescUpdatedAt := pluginFields[8].Descriptor()
+	pluginDescUpdatedAt := pluginFields[9].Descriptor()
 	// plugin.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	plugin.DefaultUpdatedAt = pluginDescUpdatedAt.Default.(func() time.Time)
 	// plugin.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

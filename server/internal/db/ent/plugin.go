@@ -29,6 +29,8 @@ type Plugin struct {
 	Path string `json:"path,omitempty"`
 	// ManifestHash holds the value of the "manifest_hash" field.
 	ManifestHash string `json:"manifest_hash,omitempty"`
+	// ResourceID holds the value of the "resource_id" field.
+	ResourceID string `json:"resource_id,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
@@ -43,7 +45,7 @@ func (*Plugin) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case plugin.FieldActive:
 			values[i] = new(sql.NullBool)
-		case plugin.FieldID, plugin.FieldName, plugin.FieldVersion, plugin.FieldPath, plugin.FieldManifestHash:
+		case plugin.FieldID, plugin.FieldName, plugin.FieldVersion, plugin.FieldPath, plugin.FieldManifestHash, plugin.FieldResourceID:
 			values[i] = new(sql.NullString)
 		case plugin.FieldInstalledAt, plugin.FieldCreatedAt, plugin.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -104,6 +106,12 @@ func (_m *Plugin) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field manifest_hash", values[i])
 			} else if value.Valid {
 				_m.ManifestHash = value.String
+			}
+		case plugin.FieldResourceID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field resource_id", values[i])
+			} else if value.Valid {
+				_m.ResourceID = value.String
 			}
 		case plugin.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -172,6 +180,9 @@ func (_m *Plugin) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("manifest_hash=")
 	builder.WriteString(_m.ManifestHash)
+	builder.WriteString(", ")
+	builder.WriteString("resource_id=")
+	builder.WriteString(_m.ResourceID)
 	builder.WriteString(", ")
 	builder.WriteString("created_at=")
 	builder.WriteString(_m.CreatedAt.Format(time.ANSIC))

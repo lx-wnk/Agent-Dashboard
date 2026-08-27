@@ -8040,6 +8040,7 @@ type PluginMutation struct {
 	active        *bool
 	_path         *string
 	manifest_hash *string
+	resource_id   *string
 	created_at    *time.Time
 	updated_at    *time.Time
 	clearedFields map[string]struct{}
@@ -8381,6 +8382,42 @@ func (m *PluginMutation) ResetManifestHash() {
 	m.manifest_hash = nil
 }
 
+// SetResourceID sets the "resource_id" field.
+func (m *PluginMutation) SetResourceID(s string) {
+	m.resource_id = &s
+}
+
+// ResourceID returns the value of the "resource_id" field in the mutation.
+func (m *PluginMutation) ResourceID() (r string, exists bool) {
+	v := m.resource_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldResourceID returns the old "resource_id" field's value of the Plugin entity.
+// If the Plugin object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PluginMutation) OldResourceID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldResourceID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldResourceID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldResourceID: %w", err)
+	}
+	return oldValue.ResourceID, nil
+}
+
+// ResetResourceID resets all changes to the "resource_id" field.
+func (m *PluginMutation) ResetResourceID() {
+	m.resource_id = nil
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (m *PluginMutation) SetCreatedAt(t time.Time) {
 	m.created_at = &t
@@ -8487,7 +8524,7 @@ func (m *PluginMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *PluginMutation) Fields() []string {
-	fields := make([]string, 0, 8)
+	fields := make([]string, 0, 9)
 	if m.name != nil {
 		fields = append(fields, plugin.FieldName)
 	}
@@ -8505,6 +8542,9 @@ func (m *PluginMutation) Fields() []string {
 	}
 	if m.manifest_hash != nil {
 		fields = append(fields, plugin.FieldManifestHash)
+	}
+	if m.resource_id != nil {
+		fields = append(fields, plugin.FieldResourceID)
 	}
 	if m.created_at != nil {
 		fields = append(fields, plugin.FieldCreatedAt)
@@ -8532,6 +8572,8 @@ func (m *PluginMutation) Field(name string) (ent.Value, bool) {
 		return m.Path()
 	case plugin.FieldManifestHash:
 		return m.ManifestHash()
+	case plugin.FieldResourceID:
+		return m.ResourceID()
 	case plugin.FieldCreatedAt:
 		return m.CreatedAt()
 	case plugin.FieldUpdatedAt:
@@ -8557,6 +8599,8 @@ func (m *PluginMutation) OldField(ctx context.Context, name string) (ent.Value, 
 		return m.OldPath(ctx)
 	case plugin.FieldManifestHash:
 		return m.OldManifestHash(ctx)
+	case plugin.FieldResourceID:
+		return m.OldResourceID(ctx)
 	case plugin.FieldCreatedAt:
 		return m.OldCreatedAt(ctx)
 	case plugin.FieldUpdatedAt:
@@ -8611,6 +8655,13 @@ func (m *PluginMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetManifestHash(v)
+		return nil
+	case plugin.FieldResourceID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetResourceID(v)
 		return nil
 	case plugin.FieldCreatedAt:
 		v, ok := value.(time.Time)
@@ -8701,6 +8752,9 @@ func (m *PluginMutation) ResetField(name string) error {
 		return nil
 	case plugin.FieldManifestHash:
 		m.ResetManifestHash()
+		return nil
+	case plugin.FieldResourceID:
+		m.ResetResourceID()
 		return nil
 	case plugin.FieldCreatedAt:
 		m.ResetCreatedAt()

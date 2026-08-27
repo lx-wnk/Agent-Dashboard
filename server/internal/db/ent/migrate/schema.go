@@ -334,6 +334,7 @@ var (
 		{Name: "active", Type: field.TypeBool, Default: false},
 		{Name: "path", Type: field.TypeString, Default: ""},
 		{Name: "manifest_hash", Type: field.TypeString, Default: ""},
+		{Name: "resource_id", Type: field.TypeString, Default: ""},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 	}
