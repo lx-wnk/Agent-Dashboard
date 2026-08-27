@@ -20,6 +20,9 @@ func (Capability) Mixin() []ent.Mixin {
 func (Capability) Fields() []ent.Field {
 	return []ent.Field{
 		// name: "mail.send", "Bash", "memory.write" — the capability's identity.
+		// Unique() is a column-level constraint, not a named Indexes() entry
+		// like resource's — no pre-seeded index in client.go is needed or
+		// meaningful here; do not add one "for consistency" with resource.
 		field.String("name").Unique(),
 		// class: "tool" | "reach" | "resource" | "spend".
 		field.String("class"),

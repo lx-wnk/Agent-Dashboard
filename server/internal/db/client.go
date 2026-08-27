@@ -98,10 +98,6 @@ func Open(path string) (*DBBundle, error) {
 		_ = client.Close()
 		return nil, fmt.Errorf("db: ensure resource unique index: %w", err)
 	}
-	if err := migrateEnsureCapabilityUniqueIndex(sqlDB); err != nil {
-		_ = client.Close()
-		return nil, fmt.Errorf("db: ensure capability unique index: %w", err)
-	}
 	if err := client.Schema.Create(context.Background()); err != nil {
 		_ = client.Close()
 		return nil, fmt.Errorf("db: auto-migrate: %w", err)
@@ -511,32 +507,6 @@ func migrateEnsureResourceUniqueIndex(db *sql.DB) error {
 			`ON resources (kind, scope_kind, scope_ref, slug)`,
 	); err != nil {
 		return fmt.Errorf("pre-create resource unique index: %w", err)
-	}
-	return nil
-}
-
-// migrateEnsureCapabilityUniqueIndex pre-creates the capability unique index
-// under the exact name ent generates (capabilities_name_key) before ent
-// auto-migrate runs. Without this, a later change to the index would make
-// ent's diff add it via SQLite's 12-step table rebuild, which crashes on
-// existing databases with "NOT NULL constraint failed: capabilities.id"
-// (PR #207).
-// Idempotent via IF NOT EXISTS; on a fresh database the table does not yet
-// exist, so the statement is a no-op and ent creates its own index.
-func migrateEnsureCapabilityUniqueIndex(db *sql.DB) error {
-	var exists int
-	if err := db.QueryRow(
-		`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'capabilities'`,
-	).Scan(&exists); err != nil {
-		return fmt.Errorf("probe capabilities table: %w", err)
-	}
-	if exists == 0 {
-		return nil
-	}
-	if _, err := db.Exec(
-		`CREATE UNIQUE INDEX IF NOT EXISTS capabilities_name_key ON capabilities (name)`,
-	); err != nil {
-		return fmt.Errorf("pre-create capability unique index: %w", err)
 	}
 	return nil
 }
