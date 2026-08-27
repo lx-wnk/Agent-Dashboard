@@ -530,3 +530,59 @@ func TestOpenTwiceWithMemoryTables(t *testing.T) {
 		t.Errorf("memory_injection count after reopen = %d, want 1", injections)
 	}
 }
+
+// TestMemoryFTSRoundTrip proves memory_fts stays in sync with memory_entries
+// across insert, update, and delete. The delete leg is the one that matters:
+// a contentless-form trigger against a content-owning table fails at runtime,
+// not at boot, so only an actual delete exercises it.
+func TestMemoryFTSRoundTrip(t *testing.T) {
+	bundle, err := db.Open(":memory:")
+	require.NoError(t, err)
+	defer func() { _ = bundle.Client.Close() }()
+	ctx := t.Context()
+
+	entry, err := bundle.Client.MemoryEntry.Create().
+		SetID("entry-fts-1").
+		SetSpaceID("space-1").
+		SetSummary("Observability Dashboard Feature").
+		SetContent("initial content").
+		SetKind("fact").
+		SetSourceKind("agent").
+		SetConfidence(0.9).
+		Save(ctx)
+	require.NoError(t, err)
+
+	// FTS5 content= tables cannot return UNINDEXED columns directly via SELECT because the
+	// engine re-fetches columns from the content table (memory_entries) by name, and
+	// memory_entries has no "entry_id" column. Use a rowid-based subquery, mirroring
+	// TestOpen_FTS5TriggerRoundTrip.
+	matchID := func(term string) (string, error) {
+		var id string
+		err := bundle.DB.QueryRow(
+			`SELECT id FROM memory_entries WHERE rowid IN (SELECT rowid FROM memory_fts WHERE memory_fts MATCH ?)`,
+			term,
+		).Scan(&id)
+		return id, err
+	}
+
+	id, err := matchID("Observability")
+	require.NoError(t, err)
+	require.Equal(t, entry.ID, id)
+
+	_, err = bundle.Client.MemoryEntry.UpdateOneID(entry.ID).
+		SetSummary("Renamed Feature Summary").
+		Save(ctx)
+	require.NoError(t, err)
+
+	_, err = matchID("Observability")
+	require.ErrorIs(t, err, sql.ErrNoRows, "old summary term must no longer match after update")
+
+	id, err = matchID("Renamed")
+	require.NoError(t, err)
+	require.Equal(t, entry.ID, id)
+
+	require.NoError(t, bundle.Client.MemoryEntry.DeleteOneID(entry.ID).Exec(ctx))
+
+	_, err = matchID("Renamed")
+	require.ErrorIs(t, err, sql.ErrNoRows, "deleted entry must no longer match")
+}

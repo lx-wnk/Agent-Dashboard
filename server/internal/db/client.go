@@ -164,6 +164,9 @@ func runRawMigrations(db *sql.DB) error {
 		`DROP TRIGGER IF EXISTS tasks_ai`,
 		`DROP TRIGGER IF EXISTS tasks_au`,
 		`DROP TRIGGER IF EXISTS tasks_ad`,
+		`DROP TRIGGER IF EXISTS memory_entries_ai`,
+		`DROP TRIGGER IF EXISTS memory_entries_au`,
+		`DROP TRIGGER IF EXISTS memory_entries_ad`,
 	} {
 		if _, err := db.Exec(stmt); err != nil {
 			return fmt.Errorf("raw migration (drop trigger): %w\nstatement: %s", err, stmt)
@@ -209,6 +212,34 @@ func runRawMigrations(db *sql.DB) error {
 		// Sync trigger: DELETE on tasks.
 		`CREATE TRIGGER IF NOT EXISTS tasks_ad AFTER DELETE ON tasks BEGIN
 			DELETE FROM task_fts WHERE rowid = old.rowid;
+		END`,
+
+		// FTS5 virtual table for full-text search over memory entries.
+		`CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
+			entry_id UNINDEXED,
+			summary,
+			content
+		)`,
+
+		// Sync trigger: INSERT on memory_entries.
+		`CREATE TRIGGER IF NOT EXISTS memory_entries_ai AFTER INSERT ON memory_entries BEGIN
+			INSERT INTO memory_fts(rowid, entry_id, summary, content)
+			VALUES (new.rowid, new.id, new.summary, new.content);
+		END`,
+
+		// Sync trigger: UPDATE on memory_entries (delete old index entry, insert new one).
+		// memory_fts is a regular (content-owning) FTS5 table like task_fts, so plain
+		// DELETE by rowid is required; the "INSERT INTO ft(ft, rowid) VALUES('delete', ...)"
+		// form is only valid for contentless FTS5 tables (content='').
+		`CREATE TRIGGER IF NOT EXISTS memory_entries_au AFTER UPDATE ON memory_entries BEGIN
+			DELETE FROM memory_fts WHERE rowid = old.rowid;
+			INSERT INTO memory_fts(rowid, entry_id, summary, content)
+			VALUES (new.rowid, new.id, new.summary, new.content);
+		END`,
+
+		// Sync trigger: DELETE on memory_entries.
+		`CREATE TRIGGER IF NOT EXISTS memory_entries_ad AFTER DELETE ON memory_entries BEGIN
+			DELETE FROM memory_fts WHERE rowid = old.rowid;
 		END`,
 
 		// workflow_patterns: top ngrams discovered from JSONL session files.
