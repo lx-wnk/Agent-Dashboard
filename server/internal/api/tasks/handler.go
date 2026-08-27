@@ -864,6 +864,19 @@ func (h *Handler) listPermissions(w http.ResponseWriter, r *http.Request) error 
 	return jsonReply(w, http.StatusOK, perms)
 }
 
+// decidedByFromRequest resolves the authenticated caller's identity for the
+// decided_by column. A missing JWT payload can only happen in bypass mode
+// (DASHBOARD_AUTH=none) — RequireAuth rejects unauthenticated requests before
+// any handler runs when auth is enabled — so this is a real identity
+// (auth.BypassUserID), not a placeholder.
+func decidedByFromRequest(r *http.Request) string {
+	payload, ok := auth.PayloadFromContext(r.Context())
+	if !ok {
+		payload = auth.BypassPayload()
+	}
+	return payload.Sub
+}
+
 func (h *Handler) grantPermission(w http.ResponseWriter, r *http.Request) error {
 	id := chi.URLParam(r, "id")
 	var body struct {
@@ -877,10 +890,11 @@ func (h *Handler) grantPermission(w http.ResponseWriter, r *http.Request) error 
 		return apierr.NewAppError(http.StatusBadRequest, "tool is required")
 	}
 	perm, err := h.permRepo.CreateTaskPermission(r.Context(), repo.CreateTaskPermissionInput{
-		TaskID:  id,
-		Tool:    body.Tool,
-		Pattern: body.Pattern,
-		Granted: true,
+		TaskID:    id,
+		Tool:      body.Tool,
+		Pattern:   body.Pattern,
+		Granted:   true,
+		DecidedBy: decidedByFromRequest(r),
 	})
 	if err != nil {
 		return fmt.Errorf("tasks.grantPermission: %w", err)
@@ -930,7 +944,7 @@ func (h *Handler) resolvePermissionRequest(w http.ResponseWriter, r *http.Reques
 		return fmt.Errorf("tasks.resolvePermissionRequest.get: %w", err)
 	}
 	if body.Outcome == repo.OutcomeGranted {
-		entries := []repo.GrantEntry{{Tool: pr.Tool, Pattern: pr.Pattern, DecidedBy: "user"}}
+		entries := []repo.GrantEntry{{Tool: pr.Tool, Pattern: pr.Pattern, DecidedBy: decidedByFromRequest(r)}}
 		if _, errs := h.grantValidatedEntries(r.Context(), id, entries); len(errs) > 0 {
 			slog.Warn("resolvePermissionRequest: grant failed", "taskID", id, "errs", errs)
 		}

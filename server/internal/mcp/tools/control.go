@@ -304,6 +304,17 @@ func registerRetryTask(registry mcp.ToolRegistry, d ControlDeps) {
 	})
 }
 
+// decidedByFromCtx resolves the calling API key's identity for the
+// decided_by column. Empty when no MCP auth is attached to ctx (e.g.
+// unauthenticated stdio bridges) — an unknown decider is left unset rather
+// than written as a placeholder.
+func decidedByFromCtx(ctx context.Context) string {
+	if info := mcp.AuthFromContext(ctx); info != nil {
+		return info.KeyID
+	}
+	return ""
+}
+
 func registerGrantPermission(registry mcp.ToolRegistry, d ControlDeps) {
 	registry.Register(&mcp.ToolDef{
 		Name:        "grant_permission",
@@ -339,6 +350,7 @@ func registerGrantPermission(registry mcp.ToolRegistry, d ControlDeps) {
 				Tool:        tool,
 				Granted:     true,
 				PreApproved: true,
+				DecidedBy:   decidedByFromCtx(ctx),
 			}
 			if p := mcp.OptionalString(args, "pattern"); p != "" {
 				in.Pattern = &p
@@ -397,7 +409,7 @@ func registerResolvePermissionRequest(registry mcp.ToolRegistry, d ControlDeps) 
 						Granted:        true,
 						PreApproved:    false,
 						ManualOverride: false, // agent/MCP path never gets override
-						DecidedBy:      "mcp",
+						DecidedBy:      decidedByFromCtx(ctx),
 					}
 					if req.Pattern != nil {
 						in.Pattern = req.Pattern

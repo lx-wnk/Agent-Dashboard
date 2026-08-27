@@ -174,8 +174,11 @@ func TestBulkResolve_Granted_RecordsDecidedBy(t *testing.T) {
 	if len(perms) == 0 {
 		t.Fatal("expected a task_permission after granted bulk resolve, got none")
 	}
-	if perms[0].DecidedBy == nil || *perms[0].DecidedBy == "" {
-		t.Error("expected decided_by to be recorded, got nil/empty")
+	// "user-1" is the Sub withAuth signs into the request's JWT — pinning the
+	// specific value, not just non-emptiness, is what proves the real caller
+	// identity was threaded through rather than a role literal.
+	if perms[0].DecidedBy == nil || *perms[0].DecidedBy != "user-1" {
+		t.Errorf("expected decided_by=%q, got %v", "user-1", perms[0].DecidedBy)
 	}
 	if perms[0].DecidedAt == nil {
 		t.Error("expected decided_at to be recorded, got nil")
@@ -262,8 +265,8 @@ func TestSingleResolve_Granted_RecordsDecidedBy(t *testing.T) {
 	if len(perms) == 0 {
 		t.Fatal("expected a task_permission after granted single resolve, got none")
 	}
-	if perms[0].DecidedBy == nil || *perms[0].DecidedBy == "" {
-		t.Error("expected decided_by to be recorded, got nil/empty")
+	if perms[0].DecidedBy == nil || *perms[0].DecidedBy != "user-1" {
+		t.Errorf("expected decided_by=%q, got %v", "user-1", perms[0].DecidedBy)
 	}
 	if perms[0].DecidedAt == nil {
 		t.Error("expected decided_at to be recorded, got nil")

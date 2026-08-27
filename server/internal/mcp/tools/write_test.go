@@ -201,6 +201,75 @@ func TestCreateTask_Autonomy_InvalidValue_ReturnsError(t *testing.T) {
 	require.ErrorContains(t, err, "invalid autonomy value")
 }
 
+// TestCreateTask_ExplicitPermissions_RecordsDecidedBy verifies that
+// permissions granted explicitly at task creation record the calling API
+// key's identity, not a role literal.
+func TestCreateTask_ExplicitPermissions_RecordsDecidedBy(t *testing.T) {
+	deps := newWriteDepsForTest(t)
+	registry := mcp.ToolRegistry{}
+	RegisterWriteTools(registry, deps)
+
+	tool, ok := registry["create_task"]
+	require.True(t, ok)
+
+	authedCtx := mcp.ContextWithAuth(context.Background(), &mcp.MCPAuthInfo{KeyID: "key-create-789"})
+	result, err := tool.Handler(authedCtx, map[string]any{
+		"slug":        "explicit-perm-decided-by",
+		"title":       "Explicit Perm Decided By",
+		"cwd":         "/tmp/explicit-perm-decided-by",
+		"permissions": []any{map[string]any{"tool": "Bash", "pattern": "echo hi"}},
+	})
+	require.NoError(t, err)
+	out := toolResultJSON(t, result)
+	taskMap, _ := out["task"].(map[string]any)
+	require.NotNil(t, taskMap)
+	taskID, _ := taskMap["id"].(string)
+	require.NotEmpty(t, taskID)
+
+	grants, err := deps.PermRepo.ListTaskPermissions(context.Background(), taskID)
+	require.NoError(t, err)
+	require.Len(t, grants, 1)
+	require.NotNil(t, grants[0].DecidedBy)
+	require.Equal(t, "key-create-789", *grants[0].DecidedBy)
+	require.NotNil(t, grants[0].DecidedAt)
+}
+
+// TestManageTask_GrantPermissions_RecordsDecidedBy verifies the manage_task
+// grant_permissions action records the calling API key's identity.
+func TestManageTask_GrantPermissions_RecordsDecidedBy(t *testing.T) {
+	deps := newWriteDepsForTest(t)
+	registry := mcp.ToolRegistry{}
+	RegisterWriteTools(registry, deps)
+
+	task, err := deps.TaskRepo.Create(context.Background(), repo.CreateTaskInput{
+		Slug:          "manage-grant-decided-by",
+		Title:         "Manage Grant Decided By",
+		Cwd:           t.TempDir(),
+		MaxIterations: 3,
+		Priority:      "normal",
+		CurrentStage:  "implementation",
+	})
+	require.NoError(t, err)
+
+	tool, ok := registry["manage_task"]
+	require.True(t, ok)
+
+	authedCtx := mcp.ContextWithAuth(context.Background(), &mcp.MCPAuthInfo{KeyID: "key-manage-321"})
+	_, err = tool.Handler(authedCtx, map[string]any{
+		"task_id":     task.ID,
+		"action":      "grant_permissions",
+		"permissions": []any{map[string]any{"tool": "Read"}},
+	})
+	require.NoError(t, err)
+
+	grants, err := deps.PermRepo.ListTaskPermissions(context.Background(), task.ID)
+	require.NoError(t, err)
+	require.Len(t, grants, 1)
+	require.NotNil(t, grants[0].DecidedBy)
+	require.Equal(t, "key-manage-321", *grants[0].DecidedBy)
+	require.NotNil(t, grants[0].DecidedAt)
+}
+
 func TestUpdateTask_Autonomy_Persists(t *testing.T) {
 	deps := newWriteDepsForTest(t)
 	registry := mcp.ToolRegistry{}

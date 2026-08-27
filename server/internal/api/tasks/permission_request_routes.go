@@ -469,12 +469,13 @@ func (h *Handler) bulkResolvePermissionRequests(w http.ResponseWriter, r *http.R
 		for _, id := range idsToResolve {
 			resolveSet[id] = true
 		}
+		decidedBy := decidedByFromRequest(r)
 		var entries []repo.GrantEntry
 		for _, req := range pending {
 			if !resolveSet[req.ID] {
 				continue
 			}
-			entries = append(entries, repo.GrantEntry{Tool: req.Tool, Pattern: req.Pattern, DecidedBy: "user"})
+			entries = append(entries, repo.GrantEntry{Tool: req.Tool, Pattern: req.Pattern, DecidedBy: decidedBy})
 		}
 		if _, errs := h.grantValidatedEntries(r.Context(), body.TaskID, entries); len(errs) > 0 {
 			resolveErrors = append(resolveErrors, errs...)

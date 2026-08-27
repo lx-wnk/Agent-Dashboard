@@ -219,8 +219,9 @@ func TestApproveAllPending_RecordsDecidedBy(t *testing.T) {
 	if len(grants) == 0 {
 		t.Fatal("expected a task_permission after approve-all, got none")
 	}
-	if grants[0].DecidedBy == nil || *grants[0].DecidedBy == "" {
-		t.Error("expected decided_by to be recorded, got nil/empty")
+	// "user-1" is the Sub withAuth signs into postApproveAll's request JWT.
+	if grants[0].DecidedBy == nil || *grants[0].DecidedBy != "user-1" {
+		t.Errorf("expected decided_by=%q, got %v", "user-1", grants[0].DecidedBy)
 	}
 	if grants[0].DecidedAt == nil {
 		t.Error("expected decided_at to be recorded, got nil")

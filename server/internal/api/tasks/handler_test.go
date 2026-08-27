@@ -314,6 +314,48 @@ func TestListPermissionRequests_OutsideSafeList(t *testing.T) {
 	}
 }
 
+// TestGrantPermission_RecordsDecidedBy verifies the direct-grant REST endpoint
+// (POST /api/tasks/{id}/permissions) records the authenticated caller's real
+// identity, not a role literal.
+func TestGrantPermission_RecordsDecidedBy(t *testing.T) {
+	client, r := newTestHandlerWithRepos(t)
+	task, err := repo.NewTaskRepo(client).Create(testCtx(t), repo.CreateTaskInput{
+		Slug:          "grant-decided-by",
+		Title:         "Grant Decided By",
+		Cwd:           t.TempDir(),
+		MaxIterations: 5,
+		Priority:      "normal",
+		CurrentStage:  "implementation",
+	})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+
+	body := `{"tool":"Bash","pattern":"echo hi"}`
+	req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/tasks/"+task.ID+"/permissions", strings.NewReader(body)))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	perms, err := repo.NewPermissionRepo(client).ListTaskPermissions(testCtx(t), task.ID)
+	if err != nil {
+		t.Fatalf("list permissions: %v", err)
+	}
+	if len(perms) != 1 {
+		t.Fatalf("expected 1 permission, got %d", len(perms))
+	}
+	// "user-1" is the Sub withAuth signs into the request's JWT.
+	if perms[0].DecidedBy == nil || *perms[0].DecidedBy != "user-1" {
+		t.Errorf("expected decided_by=%q, got %v", "user-1", perms[0].DecidedBy)
+	}
+	if perms[0].DecidedAt == nil {
+		t.Error("expected decided_at to be recorded, got nil")
+	}
+}
+
 func TestCreateTask_DuplicateSlug(t *testing.T) {
 	_, r := newTestHandler(t)
 
