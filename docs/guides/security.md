@@ -27,15 +27,42 @@ that decides its default when nothing has granted or denied it explicitly:
 class default to deny.
 
 One pure **Decider** (`server/internal/capability`) resolves a capability
-request to allow / deny / ask by ranking the grants that apply to it: the
-most specific matching context wins (agent session, then task, then routine,
-then application, then project, then global), and within one context level a
-deny beats an allow beats an ask. Grants are rows with an optional expiry and
-rate limit, bound to that context. A capability also declares which
-enforcement points it can be applied at, and a resolved decision carries that
-same list forward, so a point that has no standing over a capability (e.g.
-one only enforceable at the server) does not act on it just because the
-Decider returned "allow".
+request to allow / deny / ask by ranking the grants that apply to it. The
+model defines six context levels, from most to least specific — agent
+session, task, routine, application, project, global — and the Decider
+ranks grants across all six, with a deny beating an allow beating an ask
+within whichever level wins. Grants are rows with an optional expiry and
+rate limit, bound to one of those contexts.
+
+**State this plainly: that ranking cannot change an outcome today.** The
+only enforcement path that resolves real requests, `SpawnEnforcer`
+(`server/internal/pipeline/spawner.go`), never reads the `grants` table —
+it builds a `GrantView` on the fly from each granted `TaskPermission` row,
+pinned to one fixed, synthetic task-level context. A migration does
+backfill real rows into `grants` (`task` context from `task_permissions`,
+`project` context from `permission_presets`, both idempotent — see
+[`PRIVACY.md`](../../PRIVACY.md)), but nothing in production reads them
+back: the only reader of the `grants` table, `GrantRepo.ListForCapability`,
+has no caller. With a single context level ever actually in play, the
+six-level hierarchy has no second level to rank against — it is implemented
+and tested in the Decider, but the data path that would give it something
+to rank has not landed. The grants table is being written in preparation
+for a read path that does not exist yet.
+
+A capability also declares which enforcement points it can be applied at,
+and a resolved decision carries that same list forward — but the two wired
+enforcement points treat it differently. `SpawnEnforcer` renders a shared
+batch of decisions into one allow-list, so it must filter out capabilities
+that aren't its concern: a point with no standing over a capability (e.g.
+one only enforceable at the server) does not act on it there just because
+the Decider returned "allow". `ServerEnforcer` deliberately does the
+opposite and ignores `Enforceable` entirely: it is the complete backstop
+judging one decision at its point of use — the other two points are each
+incomplete in their own way (the hook fails open on timeout, the spawn
+point is static and cannot ask) — so it enforces every decision handed to
+it regardless of where else that capability is declared enforceable
+(`server/internal/capability/enforcer_server.go`, pinned by
+`TestServerEnforcerIgnoresEnforceable`).
 
 That one Decider is shared by all three enforcement points below, but they
 are not otherwise identical — each has a different guarantee, and one of

@@ -25,7 +25,7 @@ Most agent monitors require you to wire hooks or wrappers into every project. Th
 - 🔌 **Zero-config monitoring** — discovers agents by scanning processes (`ps`/`lsof`) and reading `CLAUDE_CONFIG_DIR` from them to tell profiles apart; no per-project hooks or wrappers
 - 🔁 **Autonomous task pipeline** — a real state machine that spawns a `claude` CLI process per stage in an isolated git worktree
 - 🎛️ **MCP control plane** — an authenticated MCP endpoint with scoped tokens lets agents (and you) drive the dashboard back
-- 🔐 **Auth & permissions** — GitHub OAuth + JWT, scoped API keys, and a capability gate: one shared decision model (allow/deny/ask, ranked by context) that today resolves every spawned task-pipeline agent's permissions — see [Security model](docs/guides/security.md) for which of its three enforcement points are actually wired in and which fails open
+- 🔐 **Auth & permissions** — GitHub OAuth + JWT, scoped API keys, and a capability gate: one shared decision model (allow/deny/ask, ranked across six context levels — though only the task level is wired to real grants today) that resolves every spawned task-pipeline agent's permissions — see [Security model](docs/guides/security.md) for which of its three enforcement points are actually wired in and which fails open
 - 🙋 **Answer prompts where you are** — opt-in hooks let you approve or deny a session's permission prompt from the dashboard instead of its terminal, for any session including ones you started by hand; when nobody answers, it falls back to the terminal prompt untouched
 - 🏠 **Local-first** — binds to `127.0.0.1`, hashes tokens, makes no outbound calls unless you opt in. No telemetry, no SaaS
 
