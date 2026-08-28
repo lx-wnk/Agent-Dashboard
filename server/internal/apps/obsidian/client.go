@@ -319,10 +319,11 @@ type searchResponseItem struct {
 // Search runs the Local REST API's simple search across the whole vault.
 //
 // Unlike Read/Write/Delete, results are not confined to VaultRoot — the
-// upstream endpoint searches the entire vault by design. Filtering results
-// to VaultRoot is a real boundary question the brief for this client does
-// not ask for and untested here; left for whichever task decides how the
-// index (or capability check) should treat matches outside VaultRoot.
+// upstream endpoint searches the entire vault by design. IndexNotes
+// (index.go) is the caller that has to live with this: it filters results to
+// VaultRoot itself (pathUnderRoot) before treating anything as indexable, so
+// a note outside the configured root is never read or pointed to just
+// because the vault-wide search happened to surface it.
 func (c *Client) Search(ctx context.Context, query string) ([]SearchResult, error) {
 	u := *c.baseURL
 	u.Path = "/search/simple/"
