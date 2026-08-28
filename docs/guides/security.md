@@ -117,6 +117,45 @@ matcher onto the deny side would make deny rules match *less*, and start
 offering Allow on calls the user's own settings already forbid. The two
 matchers stay separate on purpose.
 
+### Obsidian's TLS trust model
+
+The Obsidian Application (`server/internal/apps/obsidian`) talks to Obsidian's
+Local REST API, which serves HTTPS with a self-signed certificate — the
+common workaround is `curl -k`, verification off entirely. `obsidian.Client`
+makes that a decision instead of a silent default, through `Config.TLSMode`:
+
+| Mode | What it does | When `NewClient` refuses it |
+|---|---|---|
+| `verify` | Normal certificate verification against the system trust store. | Never — but only works if you have separately installed and trusted the vault's certificate. |
+| `pinned` (default) | Trust-on-first-use: the first certificate seen is trusted and its SHA-256 fingerprint kept in memory; any later connection presenting a different fingerprint is refused. | Never at construction. The fingerprint is in-memory only and lost on restart — a fresh boot re-trusts whatever certificate answers first. |
+| `insecure-loopback` | Skips certificate verification outright. | Unless the configured host actually resolves to loopback. That is the one case a network attacker cannot be the party presenting the certificate, which is what makes skipping verification tolerable here and nowhere else. |
+
+Independent of `TLSMode`, the client resolves its configured host to a
+single IP exactly once, at construction, and its dialer refuses to connect
+to any other host or port afterwards — a DNS answer that changes after that
+resolution (rebinding) is never consulted again. This runs *alongside*, not
+instead of, the server-wide SSRF guard (`validation.IsBlockedIP`): that
+guard blocks loopback on purpose, and Obsidian's API lives on loopback, so
+the client carries its own narrow, named dial policy rather than widening
+the shared guard to accommodate one application.
+
+**As of this increment, nothing in production constructs this client.** The
+settings surface that would supply `BaseURL`, `APIKey`, `VaultRoot`, and
+`TLSMode` does not exist — no HTTP route, no settings panel, no CLI command.
+`obsidian.Register`, the only part of this Application wired into boot
+(`server/serverapp/di.go`), writes only the application's registry identity
+and its four capability rows; it never builds a `Client`. So the TLS modes
+above describe code that is implemented and tested (`client_test.go`,
+`dial_test.go`) but has no way to run against a real vault today. The API
+key `Config.APIKey` would carry, once a settings surface exists, also has no
+encrypted home yet: the one plugin-agnostic key/value store,
+`AppSettingRepo`, persists a plain unencrypted string with no masking, and
+the existing AES-GCM secret path belongs to the subprocess plugin mechanism
+this Application deliberately does not use (`server/internal/apps/obsidian`'s
+package doc explains why). **State this plainly: an Obsidian API key
+configured today, by any means, would sit in the database in plaintext** —
+see [`PRIVACY.md`](../../PRIVACY.md).
+
 ## Reporting a vulnerability
 
 Please report security issues privately via [GitHub Security Advisories](https://github.com/lx-wnk/Agent-Dashboard/security/advisories/new) rather than opening a public issue.

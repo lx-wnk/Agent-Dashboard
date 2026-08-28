@@ -17,7 +17,7 @@ The tree has three tiers, and they are kept apart on purpose:
 | [Configuration](guides/configuration.md) | Every environment variable, grouped by concern |
 | [MCP Endpoint](guides/mcp.md) | Authenticated MCP server, scopes, the tools, and connecting Claude |
 | [Controlling & Spawning Agents](guides/agent-control.md) | Channel control, the spawn dialog, slash commands, permissions |
-| [Security](guides/security.md) | Threat model, auth, hardening defaults |
+| [Security](guides/security.md) | Threat model, auth, hardening defaults, the capability gate, and the Obsidian vault client's TLS trust model |
 | [Shell Statusline](guides/statusline.md) | `scripts/statusline.py` PS1 integration |
 | [Agent Skills](guides/agent-skills.md) | Installing the project's AI agent skills |
 | [Plugins](plugin-guide.md) | Sidecar plugin architecture |
