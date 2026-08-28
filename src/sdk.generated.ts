@@ -251,7 +251,13 @@ export interface PendingCapabilityDecision {
   id: string
   capability: string
   value: string
+  /**
+   * ValueElided/ContextElided carry the cut count as their own field, mirroring
+   * RecentTool.Elided, so a truncated Value/Context cannot forge its own "…".
+   */
+  valueElided?: number /* int */
   context: string
+  contextElided?: number /* int */
   reason: string
   requestedAt: string
 }

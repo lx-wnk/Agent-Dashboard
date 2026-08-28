@@ -879,12 +879,14 @@ func toPendingCapabilityDecisions(entries []askgate.Entry[serverask.Pending]) []
 	out := make([]sdk.PendingCapabilityDecision, len(entries))
 	for i, e := range entries {
 		out[i] = sdk.PendingCapabilityDecision{
-			ID:          e.ID,
-			Capability:  e.Meta.Capability,
-			Value:       e.Meta.Value,
-			Context:     e.Meta.Context,
-			Reason:      e.Meta.Reason,
-			RequestedAt: e.Meta.RequestedAt.UTC().Format(time.RFC3339),
+			ID:            e.ID,
+			Capability:    e.Meta.Capability,
+			Value:         e.Meta.Value,
+			ValueElided:   e.Meta.ValueElided,
+			Context:       e.Meta.Context,
+			ContextElided: e.Meta.ContextElided,
+			Reason:        e.Meta.Reason,
+			RequestedAt:   e.Meta.RequestedAt.UTC().Format(time.RFC3339),
 		}
 	}
 	return out

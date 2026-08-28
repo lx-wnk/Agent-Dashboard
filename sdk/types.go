@@ -234,12 +234,16 @@ type PendingPermission struct {
 // server enforcement point; unlike PendingPermission it names a capability
 // and scope, not a tool, and belongs to no Claude Code session.
 type PendingCapabilityDecision struct {
-	ID          string `json:"id"`
-	Capability  string `json:"capability"`
-	Value       string `json:"value"`
-	Context     string `json:"context"`
-	Reason      string `json:"reason"`
-	RequestedAt string `json:"requestedAt"`
+	ID         string `json:"id"`
+	Capability string `json:"capability"`
+	Value      string `json:"value"`
+	// ValueElided/ContextElided carry the cut count as their own field, mirroring
+	// RecentTool.Elided, so a truncated Value/Context cannot forge its own "…".
+	ValueElided   int    `json:"valueElided,omitempty"`
+	Context       string `json:"context"`
+	ContextElided int    `json:"contextElided,omitempty"`
+	Reason        string `json:"reason"`
+	RequestedAt   string `json:"requestedAt"`
 }
 
 // RecentTool is one entry of the recent-tool trail. Detail is the tool's own
