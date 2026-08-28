@@ -230,6 +230,18 @@ type PendingPermission struct {
 	RequestedAt string  `json:"requestedAt"`
 }
 
+// PendingCapabilityDecision is a capability decision waiting for a human at a
+// server enforcement point; unlike PendingPermission it names a capability
+// and scope, not a tool, and belongs to no Claude Code session.
+type PendingCapabilityDecision struct {
+	ID          string `json:"id"`
+	Capability  string `json:"capability"`
+	Value       string `json:"value"`
+	Context     string `json:"context"`
+	Reason      string `json:"reason"`
+	RequestedAt string `json:"requestedAt"`
+}
+
 // RecentTool is one entry of the recent-tool trail. Detail is the tool's own
 // human-readable argument -- a Bash command, an Edit/Write path -- and is
 // agent-authored text on its way to a UI: never interpolate it into a shell
