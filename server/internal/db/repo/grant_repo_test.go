@@ -64,6 +64,36 @@ func TestGrantRevokeIsATombstone(t *testing.T) {
 	}
 }
 
+func TestGrantRevokeRefusesSecondCall(t *testing.T) {
+	r, ctx := newGrantRepo(t)
+	g, err := r.Create(ctx, repo.CreateGrantInput{
+		CapabilityName: "Bash",
+		Context:        repo.GrantContextFor(repo.GrantContextGlobal, ""),
+		Mode:           repo.GrantModeAllow,
+		Pattern:        "git status*",
+		GrantedBy:      "user:alex",
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := r.Revoke(ctx, g.ID, "user:sam"); err != nil {
+		t.Fatalf("first revoke: %v", err)
+	}
+	if err := r.Revoke(ctx, g.ID, "user:pat"); err == nil {
+		t.Fatal("a second revoke of an already-revoked grant must be refused — it would overwrite who revoked it")
+	}
+	all, err := r.ListForCapability(ctx, "Bash")
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(all) != 1 {
+		t.Fatalf("got %d rows, want 1", len(all))
+	}
+	if all[0].RevokedBy != "user:sam" {
+		t.Errorf("revoked_by = %q after a refused second revoke, want unchanged %q", all[0].RevokedBy, "user:sam")
+	}
+}
+
 func TestGrantRevokeRequiresRevokedBy(t *testing.T) {
 	r, ctx := newGrantRepo(t)
 	g, err := r.Create(ctx, repo.CreateGrantInput{
@@ -142,6 +172,33 @@ func TestGrantCreateRejectsRefOnGlobalContext(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("a global-context grant with a non-empty ref must be refused — Decide looks up Context{Kind, Ref} exactly and the row would never match")
+	}
+}
+
+func TestGrantCreateRejectsEmptyRefOnNonGlobalContext(t *testing.T) {
+	kinds := []string{
+		repo.GrantContextProject,
+		repo.GrantContextTask,
+		repo.GrantContextRoutine,
+		repo.GrantContextApplication,
+		repo.GrantContextAgentSession,
+	}
+	for _, kind := range kinds {
+		r, ctx := newGrantRepo(t)
+		_, err := r.Create(ctx, repo.CreateGrantInput{
+			CapabilityName: "Bash",
+			Context:        repo.GrantContextFor(kind, ""),
+			Mode:           repo.GrantModeAllow,
+			Pattern:        "git status*",
+			GrantedBy:      "user:alex",
+		})
+		if err == nil {
+			t.Errorf("Create with context kind %q and empty ref must be refused — repo.Scope.Normalize collapses it to global and the grant can never match", kind)
+			continue
+		}
+		if !strings.Contains(err.Error(), kind) {
+			t.Errorf("error %q must name context kind %q", err.Error(), kind)
+		}
 	}
 }
 

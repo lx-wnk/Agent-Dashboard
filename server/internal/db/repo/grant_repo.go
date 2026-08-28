@@ -99,6 +99,9 @@ func (r *entGrantRepo) Create(ctx context.Context, in CreateGrantInput) (*ent.Gr
 	if in.Context.Kind == GrantContextGlobal && in.Context.Ref != "" {
 		return nil, fmt.Errorf("grant.Create: context ref must be empty for the global context, got %q", in.Context.Ref)
 	}
+	if in.Context.Kind != GrantContextGlobal && in.Context.Ref == "" {
+		return nil, fmt.Errorf("grant.Create: context ref is required for context kind %q", in.Context.Kind)
+	}
 	row, err := r.client.Grant.Create().
 		SetID(uuid.New().String()).
 		SetCapabilityName(in.CapabilityName).
@@ -140,15 +143,29 @@ func (r *entGrantRepo) List(ctx context.Context) ([]*ent.Grant, error) {
 	return rows, nil
 }
 
+// Revoke refuses a grant that is already revoked, so a second call can never
+// overwrite who revoked it. The guard is a single conditional UPDATE (WHERE
+// id = ? AND revoked_at IS NULL) rather than a Get-then-UpdateOneID pair: a
+// separate read followed by a write is exactly the shape that races under
+// WAL (see repo.WithWriteTx), while one predicated UPDATE has no read step
+// to go stale — it either matches and commits, or matches nothing.
 func (r *entGrantRepo) Revoke(ctx context.Context, id, revokedBy string) error {
 	if revokedBy == "" {
 		return fmt.Errorf("grant.Revoke: revoked_by is required")
 	}
-	if err := r.client.Grant.UpdateOneID(id).
+	n, err := r.client.Grant.Update().
+		Where(grant.IDEQ(id), grant.RevokedAtIsNil()).
 		SetRevokedAt(time.Now()).
 		SetRevokedBy(revokedBy).
-		Exec(ctx); err != nil {
+		Save(ctx)
+	if err != nil {
 		return fmt.Errorf("grant.Revoke: %w", err)
+	}
+	if n == 0 {
+		if _, err := r.client.Grant.Get(ctx, id); err != nil {
+			return fmt.Errorf("grant.Revoke: %w", err)
+		}
+		return fmt.Errorf("grant.Revoke: grant %s is already revoked", id)
 	}
 	return nil
 }
