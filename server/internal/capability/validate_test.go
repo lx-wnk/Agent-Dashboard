@@ -2,8 +2,16 @@ package capability
 
 import "testing"
 
+// wantContextKinds and wantModes are written out rather than derived from
+// contextRank/modeRank: the accessors under test are themselves derived from
+// those maps, so a test that read them could not fail.
+var (
+	wantContextKinds = []string{"agent_session", "task", "routine", "application", "project", "global"}
+	wantModes        = []string{"deny", "allow", "ask"}
+)
+
 func TestIsValidContextKind(t *testing.T) {
-	for kind := range contextRank {
+	for _, kind := range wantContextKinds {
 		if !IsValidContextKind(kind) {
 			t.Errorf("IsValidContextKind(%q) = false, want true", kind)
 		}
@@ -16,7 +24,7 @@ func TestIsValidContextKind(t *testing.T) {
 }
 
 func TestIsValidMode(t *testing.T) {
-	for mode := range modeRank {
+	for _, mode := range wantModes {
 		if !IsValidMode(mode) {
 			t.Errorf("IsValidMode(%q) = false, want true", mode)
 		}
@@ -29,7 +37,7 @@ func TestIsValidMode(t *testing.T) {
 }
 
 func TestContextKindsOrder(t *testing.T) {
-	want := []string{"agent_session", "task", "routine", "application", "project", "global"}
+	want := wantContextKinds
 	got := ContextKinds()
 	if len(got) != len(want) {
 		t.Fatalf("ContextKinds() = %v, want %v", got, want)
@@ -42,7 +50,7 @@ func TestContextKindsOrder(t *testing.T) {
 }
 
 func TestModesOrder(t *testing.T) {
-	want := []string{"deny", "allow", "ask"}
+	want := wantModes
 	got := Modes()
 	if len(got) != len(want) {
 		t.Fatalf("Modes() = %v, want %v", got, want)
@@ -51,14 +59,5 @@ func TestModesOrder(t *testing.T) {
 		if got[i] != m {
 			t.Fatalf("Modes() = %v, want %v", got, want)
 		}
-	}
-}
-
-func TestAccessorsCoverAllRanks(t *testing.T) {
-	if len(ContextKinds()) != len(contextRank) {
-		t.Errorf("ContextKinds() has %d entries, contextRank has %d — a map entry was added without updating ContextKinds", len(ContextKinds()), len(contextRank))
-	}
-	if len(Modes()) != len(modeRank) {
-		t.Errorf("Modes() has %d entries, modeRank has %d — a map entry was added without updating Modes", len(Modes()), len(modeRank))
 	}
 }
