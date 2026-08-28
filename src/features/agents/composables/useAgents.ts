@@ -30,10 +30,17 @@ const debouncedQuery = ref('')
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
-function handleAgentData(data: Agent[], _trend?: TrendPoint[], decisions?: PendingCapabilityDecision[]) {
+// Sentinel for "this caller cannot know the current pending-decisions set"
+// (the plain GET /api/agents poll response has no such field at all) — kept
+// distinct from an SSE frame that carries the field and just says "empty",
+// so a future caller can't collapse "none" and "unknown" back into one `?? []`.
+const DECISIONS_UNKNOWN = 'unknown' as const
+type DecisionsUpdate = PendingCapabilityDecision[] | typeof DECISIONS_UNKNOWN
+
+function handleAgentData(data: Agent[], _trend: TrendPoint[] | undefined, decisions: DecisionsUpdate) {
   agents.value = data
-  // The server sends the full set every frame, so an absent field means none pending — not "keep the last known list".
-  pendingCapabilityDecisions.value = decisions ?? []
+  if (decisions !== DECISIONS_UNKNOWN)
+    pendingCapabilityDecisions.value = decisions
 
   // Build the cost trend client-side: the backend streams an empty trend, but
   // every frame carries the running agents, so we sample total cost/tokens here.
@@ -64,7 +71,7 @@ async function fetchAgents() {
     const res = await fetch('/api/agents')
     if (!res.ok)
       throw new Error(`HTTP ${res.status}`)
-    handleAgentData(await res.json())
+    handleAgentData(await res.json(), undefined, DECISIONS_UNKNOWN)
   }
   catch (e) {
     error.value = errorMessage(e)
@@ -78,7 +85,7 @@ async function fetchAgents() {
 function handleSseMessage(data: string) {
   try {
     const payload = JSON.parse(data)
-    handleAgentData(payload.agents, payload.trend, payload.pendingCapabilityDecisions)
+    handleAgentData(payload.agents, payload.trend, payload.pendingCapabilityDecisions ?? [])
   }
   catch { /* ignore parse errors */ }
 }
