@@ -98,6 +98,14 @@ func Open(path string) (*DBBundle, error) {
 		_ = client.Close()
 		return nil, fmt.Errorf("db: ensure resource unique index: %w", err)
 	}
+	if err := migrateEnsureGrantIndexes(sqlDB); err != nil {
+		_ = client.Close()
+		return nil, fmt.Errorf("db: ensure grant indexes: %w", err)
+	}
+	if err := migrateEnsureGrantUsageIndex(sqlDB); err != nil {
+		_ = client.Close()
+		return nil, fmt.Errorf("db: ensure grant_usage index: %w", err)
+	}
 	if err := client.Schema.Create(context.Background()); err != nil {
 		_ = client.Close()
 		return nil, fmt.Errorf("db: auto-migrate: %w", err)
@@ -125,6 +133,14 @@ func Open(path string) (*DBBundle, error) {
 	if err := migrateCopyAuditLogsToAuditEvents(sqlDB); err != nil {
 		_ = client.Close()
 		return nil, fmt.Errorf("db: copy audit_logs → audit_events: %w", err)
+	}
+	// Backfill task_permissions and permission_presets rows into grants, so the
+	// capability gate's grant table starts from the legacy permission tables it
+	// is replacing rather than empty. Idempotent — must run after ent
+	// auto-migrate (task_permissions, permission_presets, and grants all exist).
+	if err := migrateBackfillGrants(sqlDB); err != nil {
+		_ = client.Close()
+		return nil, fmt.Errorf("db: backfill grants: %w", err)
 	}
 	if err := runRawMigrations(sqlDB); err != nil {
 		_ = client.Close()
@@ -343,6 +359,110 @@ func migrateCopyAuditLogsToAuditEvents(db *sql.DB) error {
 	return nil
 }
 
+// migrateBackfillGrants converts existing task_permissions and
+// permission_presets rows into grants, so the capability gate's grant table
+// starts from the legacy permission tables it is replacing instead of empty.
+//
+// task_permissions rows are backfilled only when granted = 1: an ungranted
+// row records a pending or denied request, not a decision the gate should
+// honour as an allow — ListEffectiveTaskPermissions already treats
+// granted = 0 the same way. permission_presets carries no such flag; a
+// preset row is the allow decision by definition, so every preset row is
+// backfilled unconditionally.
+//
+// context_kind/context_ref: task_permissions map to ("task", task_id),
+// permission_presets map to ("project", project_cwd). mode is always
+// "allow". granted_by is "migration:legacy" rather than an empty string —
+// granted_by is required, and an empty string would be indistinguishable
+// from a bug; the marker says "unknown because it predates identity" out
+// loud.
+//
+// Idempotent via a NOT EXISTS guard on the grant's identifying columns
+// (capability_name, context_kind, context_ref, pattern), mirroring
+// migrateCopyAuditLogsToAuditEvents above. Must run after ent auto-migrate,
+// once task_permissions, permission_presets, and grants all exist.
+func migrateBackfillGrants(db *sql.DB) error {
+	var pendingPerms int
+	if err := db.QueryRow(`
+		SELECT COUNT(*) FROM task_permissions tp
+		WHERE tp.granted = 1
+		  AND NOT EXISTS (
+			SELECT 1 FROM grants g
+			WHERE g.capability_name = tp.tool
+			  AND g.context_kind = 'task'
+			  AND g.context_ref = tp.task_id
+			  AND g.pattern = COALESCE(tp.pattern, '')
+		  )
+	`).Scan(&pendingPerms); err != nil {
+		return fmt.Errorf("count pending task_permission backfill: %w", err)
+	}
+	if pendingPerms > 0 {
+		if _, err := db.Exec(`
+			INSERT INTO grants (
+				id, created_at, updated_at, capability_name, context_kind, context_ref,
+				pattern, mode, limit_count, limit_window_seconds, expires_at,
+				granted_by, granted_at, revoked_at, revoked_by, reason, node_id
+			)
+			SELECT
+				lower(hex(randomblob(16))), datetime('now'), datetime('now'), tp.tool, 'task', tp.task_id,
+				COALESCE(tp.pattern, ''), 'allow', 0, 0, tp.expires_at,
+				'migration:legacy', datetime('now'), NULL, '', '', 'local'
+			FROM task_permissions tp
+			WHERE tp.granted = 1
+			  AND NOT EXISTS (
+				SELECT 1 FROM grants g
+				WHERE g.capability_name = tp.tool
+				  AND g.context_kind = 'task'
+				  AND g.context_ref = tp.task_id
+				  AND g.pattern = COALESCE(tp.pattern, '')
+			  )
+		`); err != nil {
+			return fmt.Errorf("backfill grants from task_permissions: %w", err)
+		}
+		slog.Warn("migration: backfilled grants from task_permissions", "count", pendingPerms)
+	}
+
+	var pendingPresets int
+	if err := db.QueryRow(`
+		SELECT COUNT(*) FROM permission_presets pp
+		WHERE NOT EXISTS (
+			SELECT 1 FROM grants g
+			WHERE g.capability_name = pp.tool
+			  AND g.context_kind = 'project'
+			  AND g.context_ref = pp.project_cwd
+			  AND g.pattern = COALESCE(pp.pattern, '')
+		)
+	`).Scan(&pendingPresets); err != nil {
+		return fmt.Errorf("count pending permission_preset backfill: %w", err)
+	}
+	if pendingPresets > 0 {
+		if _, err := db.Exec(`
+			INSERT INTO grants (
+				id, created_at, updated_at, capability_name, context_kind, context_ref,
+				pattern, mode, limit_count, limit_window_seconds, expires_at,
+				granted_by, granted_at, revoked_at, revoked_by, reason, node_id
+			)
+			SELECT
+				lower(hex(randomblob(16))), datetime('now'), datetime('now'), pp.tool, 'project', pp.project_cwd,
+				COALESCE(pp.pattern, ''), 'allow', 0, 0, NULL,
+				'migration:legacy', datetime('now'), NULL, '', '', 'local'
+			FROM permission_presets pp
+			WHERE NOT EXISTS (
+				SELECT 1 FROM grants g
+				WHERE g.capability_name = pp.tool
+				  AND g.context_kind = 'project'
+				  AND g.context_ref = pp.project_cwd
+				  AND g.pattern = COALESCE(pp.pattern, '')
+			)
+		`); err != nil {
+			return fmt.Errorf("backfill grants from permission_presets: %w", err)
+		}
+		slog.Warn("migration: backfilled grants from permission_presets", "count", pendingPresets)
+	}
+
+	return nil
+}
+
 // migrateDedupAgentCostTrends removes duplicate rows in agent_cost_trends that share
 // the same session_id, keeping the row with the latest recorded_at (highest rowid as
 // tie-breaker). Must run before ent auto-migrate adds the UNIQUE index on session_id,
@@ -507,6 +627,69 @@ func migrateEnsureResourceUniqueIndex(db *sql.DB) error {
 			`ON resources (kind, scope_kind, scope_ref, slug)`,
 	); err != nil {
 		return fmt.Errorf("pre-create resource unique index: %w", err)
+	}
+	return nil
+}
+
+// migrateEnsureGrantIndexes pre-creates the grant table's two named indexes
+// under ent's exact generated names before ent auto-migrate runs. The grants
+// table is new in this change, so today's fresh databases hit the no-op path
+// below and ent creates the table with both indexes already declared. The
+// guard exists for the databases that will exist once this ships: a later
+// change to either index would otherwise make ent's diff add it via SQLite's
+// 12-step table rebuild, which crashes on populated databases with
+// "NOT NULL constraint failed" (PR #207) — the same hazard
+// migrateEnsureResourceUniqueIndex guards against, applied here to both of
+// this table's Indexes() entries rather than just the compound one.
+// Idempotent via IF NOT EXISTS.
+func migrateEnsureGrantIndexes(db *sql.DB) error {
+	var exists int
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'grants'`,
+	).Scan(&exists); err != nil {
+		return fmt.Errorf("probe grants table: %w", err)
+	}
+	if exists == 0 {
+		return nil
+	}
+	stmts := []string{
+		`CREATE INDEX IF NOT EXISTS grant_capability_name_context_kind_context_ref ` +
+			`ON grants (capability_name, context_kind, context_ref)`,
+		`CREATE INDEX IF NOT EXISTS grant_revoked_at ON grants (revoked_at)`,
+	}
+	for _, stmt := range stmts {
+		if _, err := db.Exec(stmt); err != nil {
+			return fmt.Errorf("pre-create grant index: %w\nstatement: %s", err, stmt)
+		}
+	}
+	return nil
+}
+
+// migrateEnsureGrantUsageIndex pre-creates the grant_usages table's compound
+// index under ent's exact generated name before ent auto-migrate runs. The
+// grant_usages table is new in this change, so today's fresh databases hit
+// the no-op path below and ent creates the table with the index already
+// declared. The guard exists for the databases that will exist once this
+// ships, exactly like migrateEnsureGrantIndexes above: a brand-new table is
+// not exempt from the hazard, because it is a later index change on a
+// populated database that triggers SQLite's 12-step table rebuild, which
+// crashes on existing databases with "NOT NULL constraint failed" (PR #207).
+// Idempotent via IF NOT EXISTS.
+func migrateEnsureGrantUsageIndex(db *sql.DB) error {
+	var exists int
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'grant_usages'`,
+	).Scan(&exists); err != nil {
+		return fmt.Errorf("probe grant_usages table: %w", err)
+	}
+	if exists == 0 {
+		return nil
+	}
+	if _, err := db.Exec(
+		`CREATE INDEX IF NOT EXISTS grantusage_grant_id_used_at ` +
+			`ON grant_usages (grant_id, used_at)`,
+	); err != nil {
+		return fmt.Errorf("pre-create grant_usage index: %w", err)
 	}
 	return nil
 }

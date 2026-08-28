@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 )
 
 func TestOpen_InMemory(t *testing.T) {
@@ -342,4 +343,128 @@ func TestOpenTwiceWithResourceTable(t *testing.T) {
 	if n != 1 {
 		t.Errorf("resource count after reopen = %d, want 1", n)
 	}
+}
+
+// insertBackfillTask inserts the single task row task_permissions' FK
+// requires, mirroring the fixture TestOpen_DropsBareWebFetchGrants already
+// uses for the same purpose.
+func insertBackfillTask(t *testing.T, sqlDB *sql.DB, id string) {
+	t.Helper()
+	_, err := sqlDB.Exec(
+		`INSERT INTO tasks (id, slug, title, cwd, current_stage, priority, max_iterations, stage_timeout_seconds, silver_bullet, created_at, updated_at)
+		 VALUES (?, ?, 'Test', '', 'concept', 'medium', 20, 1800, 0, datetime('now'), datetime('now'))`,
+		id, id,
+	)
+	require.NoError(t, err)
+}
+
+// TestBackfillGrantsIsIdempotent seeds one task_permission and one
+// permission_preset, reopens the database to trigger the backfill migration,
+// and asserts the grant count is 2 — then reopens once more and asserts the
+// count is still 2. A migration that runs on every boot must be a no-op once
+// settled, and the second-run assertion is the only thing that proves it.
+func TestBackfillGrantsIsIdempotent(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "test.db")
+	ctx := context.Background()
+
+	bundle1, err := db.Open(dbPath)
+	require.NoError(t, err)
+	insertBackfillTask(t, bundle1.DB, "t1")
+
+	pattern := "pnpm test"
+	_, err = repo.NewPermissionRepo(bundle1.Client).CreateTaskPermission(ctx, repo.CreateTaskPermissionInput{
+		TaskID: "t1", Tool: "Bash", Pattern: &pattern, Granted: true,
+	})
+	require.NoError(t, err)
+
+	err = repo.NewPermissionPresetRepo(bundle1.Client).Upsert(ctx, repo.UpsertPresetInput{
+		ProjectCwd: "/repo", Tool: "Read",
+	})
+	require.NoError(t, err)
+	require.NoError(t, bundle1.Close())
+
+	// Second open triggers the backfill migration over the seeded rows.
+	bundle2, err := db.Open(dbPath)
+	require.NoError(t, err)
+	var count int
+	require.NoError(t, bundle2.DB.QueryRow(`SELECT COUNT(*) FROM grants`).Scan(&count))
+	require.Equal(t, 2, count, "expected one grant per backfilled row")
+	require.NoError(t, bundle2.Close())
+
+	// Third open must not duplicate the already-backfilled grants.
+	bundle3, err := db.Open(dbPath)
+	require.NoError(t, err)
+	defer func() { _ = bundle3.Close() }()
+	require.NoError(t, bundle3.DB.QueryRow(`SELECT COUNT(*) FROM grants`).Scan(&count))
+	require.Equal(t, 2, count, "second migration run must not duplicate grants")
+}
+
+// TestBackfillGrantsMarksLegacyIdentity asserts every backfilled grant has
+// granted_by == "migration:legacy". granted_by is required and the legacy
+// rows carry no identity; an empty string would be indistinguishable from a
+// bug, so the marker says "unknown because it predates identity" out loud.
+func TestBackfillGrantsMarksLegacyIdentity(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "test.db")
+	ctx := context.Background()
+
+	bundle1, err := db.Open(dbPath)
+	require.NoError(t, err)
+	insertBackfillTask(t, bundle1.DB, "t1")
+
+	pattern := "pnpm test"
+	_, err = repo.NewPermissionRepo(bundle1.Client).CreateTaskPermission(ctx, repo.CreateTaskPermissionInput{
+		TaskID: "t1", Tool: "Bash", Pattern: &pattern, Granted: true,
+	})
+	require.NoError(t, err)
+	require.NoError(t, bundle1.Close())
+
+	bundle2, err := db.Open(dbPath)
+	require.NoError(t, err)
+	defer func() { _ = bundle2.Close() }()
+
+	rows, err := bundle2.DB.Query(`SELECT granted_by FROM grants`)
+	require.NoError(t, err)
+	defer func() { _ = rows.Close() }()
+	seen := 0
+	for rows.Next() {
+		var grantedBy string
+		require.NoError(t, rows.Scan(&grantedBy))
+		require.Equal(t, "migration:legacy", grantedBy)
+		seen++
+	}
+	require.NoError(t, rows.Err())
+	require.Greater(t, seen, 0, "expected at least one backfilled grant")
+}
+
+// TestBackfillGrantsSkipsUngrantedTaskPermissions proves an ungranted
+// task_permission row (still pending, or denied) does not become an allow
+// grant. Unlike permission_presets — which carry no such flag and are
+// backfilled unconditionally — a task_permission row only reflects an actual
+// decision when granted = 1; ListEffectiveTaskPermissions already treats
+// granted = 0 the same way, and backfilling it as an allow grant would turn a
+// denied or still-pending request into a retroactive allow.
+func TestBackfillGrantsSkipsUngrantedTaskPermissions(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "test.db")
+	ctx := context.Background()
+
+	bundle1, err := db.Open(dbPath)
+	require.NoError(t, err)
+	insertBackfillTask(t, bundle1.DB, "t1")
+
+	_, err = repo.NewPermissionRepo(bundle1.Client).CreateTaskPermission(ctx, repo.CreateTaskPermissionInput{
+		TaskID: "t1", Tool: "Read", Granted: false,
+	})
+	require.NoError(t, err)
+	require.NoError(t, bundle1.Close())
+
+	bundle2, err := db.Open(dbPath)
+	require.NoError(t, err)
+	defer func() { _ = bundle2.Close() }()
+
+	var count int
+	require.NoError(t, bundle2.DB.QueryRow(`SELECT COUNT(*) FROM grants`).Scan(&count))
+	require.Equal(t, 0, count, "an ungranted task_permission must not become a grant")
 }

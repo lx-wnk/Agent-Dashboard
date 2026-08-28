@@ -49,6 +49,11 @@ type GrantEntry struct {
 	Pattern        *string
 	ExpiresAt      *time.Time
 	ManualOverride bool
+	// DecidedBy identifies the authenticated caller who approved this grant
+	// (its identity, not a role placeholder). Left empty for system-derived
+	// grants (preset replay, template materialization, parent inheritance)
+	// where no one actually decided anything.
+	DecidedBy string
 }
 
 type CreateTaskPermissionInput struct {
@@ -59,6 +64,10 @@ type CreateTaskPermissionInput struct {
 	PreApproved    bool
 	ManualOverride bool
 	ExpiresAt      *time.Time
+	// DecidedBy identifies who approved this grant. An empty value is treated
+	// as "no decision recorded" rather than written as a placeholder, so
+	// decided_by and decided_at are only ever set together.
+	DecidedBy string
 }
 
 type CreatePermissionRequestInput struct {
@@ -87,6 +96,9 @@ func (r *entPermissionRepo) CreateTaskPermission(ctx context.Context, in CreateT
 	}
 	if in.ExpiresAt != nil {
 		q = q.SetExpiresAt(*in.ExpiresAt)
+	}
+	if in.DecidedBy != "" {
+		q = q.SetDecidedBy(in.DecidedBy).SetDecidedAt(time.Now())
 	}
 	p, err := q.Save(ctx)
 	if err != nil {
@@ -119,6 +131,7 @@ func (r *entPermissionRepo) BulkGrantPermissions(ctx context.Context, taskID str
 			PreApproved:    true,
 			ManualOverride: e.ManualOverride,
 			ExpiresAt:      e.ExpiresAt,
+			DecidedBy:      e.DecidedBy,
 		})
 		if err != nil {
 			return results, fmt.Errorf("permission.BulkGrantPermissions: %w", err)

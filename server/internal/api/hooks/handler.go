@@ -66,7 +66,7 @@ type Handler struct {
 	// permissions holds PreToolUse calls open for a dashboard decision. Separate
 	// from the edit gate above: that one gates write tools with its own payload
 	// shape, this one speaks Claude Code's native hook protocol for every tool.
-	permissions *PermissionBridge
+	permissions *HookEnforcer
 	// sessionCWD resolves a session id against the live scan. Installed by the
 	// router, which owns the agent accessor. Nil disables the check, which is
 	// what a handler built without one gets.
@@ -103,7 +103,7 @@ type pendingEntry struct {
 // Installing the bridge's change callback is the ROUTER's job, not this
 // constructor's — see NewRouter. A constructor that reconfigures an injected
 // dependency makes "who owns the callback" a question with two answers.
-func New(secret string, store *hookstore.Store, onEvent OnEventFn, bridge *PermissionBridge) *Handler {
+func New(secret string, store *hookstore.Store, onEvent OnEventFn, bridge *HookEnforcer) *Handler {
 	if secret == "" {
 		panic("hooks.Handler requires a non-empty secret")
 	}

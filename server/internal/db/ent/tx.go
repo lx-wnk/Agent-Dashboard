@@ -20,6 +20,8 @@ type Tx struct {
 	AppSetting *AppSettingClient
 	// AuditEvent is the client for interacting with the AuditEvent builders.
 	AuditEvent *AuditEventClient
+	// Capability is the client for interacting with the Capability builders.
+	Capability *CapabilityClient
 	// Checkpoint is the client for interacting with the Checkpoint builders.
 	Checkpoint *CheckpointClient
 	// CoordLock is the client for interacting with the CoordLock builders.
@@ -28,6 +30,10 @@ type Tx struct {
 	DriftAlert *DriftAlertClient
 	// EvalMetricSnapshot is the client for interacting with the EvalMetricSnapshot builders.
 	EvalMetricSnapshot *EvalMetricSnapshotClient
+	// Grant is the client for interacting with the Grant builders.
+	Grant *GrantClient
+	// GrantUsage is the client for interacting with the GrantUsage builders.
+	GrantUsage *GrantUsageClient
 	// PermissionPreset is the client for interacting with the PermissionPreset builders.
 	PermissionPreset *PermissionPresetClient
 	// PermissionRequest is the client for interacting with the PermissionRequest builders.
@@ -205,10 +211,13 @@ func (tx *Tx) init() {
 	tx.ApiKey = NewApiKeyClient(tx.config)
 	tx.AppSetting = NewAppSettingClient(tx.config)
 	tx.AuditEvent = NewAuditEventClient(tx.config)
+	tx.Capability = NewCapabilityClient(tx.config)
 	tx.Checkpoint = NewCheckpointClient(tx.config)
 	tx.CoordLock = NewCoordLockClient(tx.config)
 	tx.DriftAlert = NewDriftAlertClient(tx.config)
 	tx.EvalMetricSnapshot = NewEvalMetricSnapshotClient(tx.config)
+	tx.Grant = NewGrantClient(tx.config)
+	tx.GrantUsage = NewGrantUsageClient(tx.config)
 	tx.PermissionPreset = NewPermissionPresetClient(tx.config)
 	tx.PermissionRequest = NewPermissionRequestClient(tx.config)
 	tx.PipelineConfig = NewPipelineConfigClient(tx.config)

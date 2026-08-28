@@ -116,6 +116,24 @@ var (
 			},
 		},
 	}
+	// CapabilitiesColumns holds the columns for the "capabilities" table.
+	CapabilitiesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "name", Type: field.TypeString, Unique: true},
+		{Name: "class", Type: field.TypeString},
+		{Name: "enforceable_by", Type: field.TypeJSON, Default: "[]"},
+		{Name: "requires_pattern", Type: field.TypeBool, Default: false},
+		{Name: "reversible", Type: field.TypeBool, Default: false},
+		{Name: "description", Type: field.TypeString, Default: ""},
+	}
+	// CapabilitiesTable holds the schema information for the "capabilities" table.
+	CapabilitiesTable = &schema.Table{
+		Name:       "capabilities",
+		Columns:    CapabilitiesColumns,
+		PrimaryKey: []*schema.Column{CapabilitiesColumns[0]},
+	}
 	// CheckpointsColumns holds the columns for the "checkpoints" table.
 	CheckpointsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -244,6 +262,65 @@ var (
 				Name:    "evalmetricsnapshot_spawner_id_model_stage",
 				Unique:  false,
 				Columns: []*schema.Column{EvalMetricSnapshotsColumns[1], EvalMetricSnapshotsColumns[2], EvalMetricSnapshotsColumns[3]},
+			},
+		},
+	}
+	// GrantsColumns holds the columns for the "grants" table.
+	GrantsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "capability_name", Type: field.TypeString},
+		{Name: "context_kind", Type: field.TypeString},
+		{Name: "context_ref", Type: field.TypeString, Default: ""},
+		{Name: "pattern", Type: field.TypeString, Default: ""},
+		{Name: "mode", Type: field.TypeString},
+		{Name: "limit_count", Type: field.TypeInt, Default: 0},
+		{Name: "limit_window_seconds", Type: field.TypeInt, Default: 0},
+		{Name: "expires_at", Type: field.TypeTime, Nullable: true},
+		{Name: "granted_by", Type: field.TypeString},
+		{Name: "granted_at", Type: field.TypeTime},
+		{Name: "revoked_at", Type: field.TypeTime, Nullable: true},
+		{Name: "revoked_by", Type: field.TypeString, Default: ""},
+		{Name: "reason", Type: field.TypeString, Default: ""},
+		{Name: "node_id", Type: field.TypeString, Default: "local"},
+	}
+	// GrantsTable holds the schema information for the "grants" table.
+	GrantsTable = &schema.Table{
+		Name:       "grants",
+		Columns:    GrantsColumns,
+		PrimaryKey: []*schema.Column{GrantsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "grant_capability_name_context_kind_context_ref",
+				Unique:  false,
+				Columns: []*schema.Column{GrantsColumns[3], GrantsColumns[4], GrantsColumns[5]},
+			},
+			{
+				Name:    "grant_revoked_at",
+				Unique:  false,
+				Columns: []*schema.Column{GrantsColumns[13]},
+			},
+		},
+	}
+	// GrantUsagesColumns holds the columns for the "grant_usages" table.
+	GrantUsagesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "grant_id", Type: field.TypeString},
+		{Name: "used_at", Type: field.TypeTime},
+	}
+	// GrantUsagesTable holds the schema information for the "grant_usages" table.
+	GrantUsagesTable = &schema.Table{
+		Name:       "grant_usages",
+		Columns:    GrantUsagesColumns,
+		PrimaryKey: []*schema.Column{GrantUsagesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "grantusage_grant_id_used_at",
+				Unique:  false,
+				Columns: []*schema.Column{GrantUsagesColumns[3], GrantUsagesColumns[4]},
 			},
 		},
 	}
@@ -897,10 +974,13 @@ var (
 		APIKeysTable,
 		AppSettingsTable,
 		AuditEventsTable,
+		CapabilitiesTable,
 		CheckpointsTable,
 		CoordLocksTable,
 		DriftAlertsTable,
 		EvalMetricSnapshotsTable,
+		GrantsTable,
+		GrantUsagesTable,
 		PermissionPresetsTable,
 		PermissionRequestsTable,
 		PipelineConfigsTable,

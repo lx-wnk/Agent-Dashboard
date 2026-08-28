@@ -114,6 +114,122 @@ func TestApproveAllPendingTool_ReturnsCountAndRequeued(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, grants, 1, "expected a persistent grant for the approved request")
 	require.Equal(t, "Bash", grants[0].Tool)
+	// ApproveAllPending resolves decided_by via auth.PayloadFromContext, which
+	// never carries a JWT payload on the MCP leg's ctx. Pinning nil here (rather
+	// than an unattributed literal) is the specific, correct behavior for this
+	// call path — not merely "some identity was recorded".
+	require.Nil(t, grants[0].DecidedBy, "MCP leg has no JWT payload; decided_by must stay unset, not a placeholder")
+}
+
+// TestResolvePermissionRequestTool_RecordsDecidedBy verifies the MCP
+// resolve_permission_request tool stamps decided_by/decided_at on the
+// task_permission it creates for a granted outcome.
+func TestResolvePermissionRequestTool_RecordsDecidedBy(t *testing.T) {
+	bundle, err := db.Open(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+
+	client := bundle.Client
+	ctx := context.Background()
+
+	taskRepo := repo.NewTaskRepo(client)
+	srRepo := repo.NewStageRunRepo(client)
+	permRepo := repo.NewPermissionRepo(client)
+
+	task, err := taskRepo.Create(ctx, repo.CreateTaskInput{
+		Slug:          "mcp-resolve-decided-by",
+		Title:         "MCP Resolve Decided By",
+		Cwd:           t.TempDir(),
+		MaxIterations: 3,
+		Priority:      "normal",
+		CurrentStage:  "implementation",
+	})
+	require.NoError(t, err)
+
+	run, err := srRepo.Create(ctx, repo.CreateStageRunInput{
+		TaskID:    task.ID,
+		Stage:     "implementation",
+		Iteration: 0,
+	})
+	require.NoError(t, err)
+
+	pattern := "echo hello"
+	pendingReq, err := permRepo.CreatePermissionRequest(ctx, repo.CreatePermissionRequestInput{
+		StageRunID: run.ID,
+		Tool:       "Bash",
+		Pattern:    &pattern,
+	})
+	require.NoError(t, err)
+
+	registry := mcp.ToolRegistry{}
+	RegisterControlTools(registry, ControlDeps{
+		TaskRepo: taskRepo,
+		SRRepo:   srRepo,
+		PermRepo: permRepo,
+	})
+
+	tool, ok := registry["resolve_permission_request"]
+	require.True(t, ok)
+
+	// Attach a known API key identity so the assertion can pin the specific
+	// value recorded, not merely that something non-empty landed in the column.
+	authedCtx := mcp.ContextWithAuth(ctx, &mcp.MCPAuthInfo{KeyID: "key-resolve-123"})
+	_, err = tool.Handler(authedCtx, map[string]any{
+		"request_id": pendingReq.ID,
+		"outcome":    repo.OutcomeGranted,
+	})
+	require.NoError(t, err)
+
+	grants, err := permRepo.ListTaskPermissions(ctx, task.ID)
+	require.NoError(t, err)
+	require.Len(t, grants, 1)
+	require.NotNil(t, grants[0].DecidedBy)
+	require.Equal(t, "key-resolve-123", *grants[0].DecidedBy)
+	require.NotNil(t, grants[0].DecidedAt)
+}
+
+// TestGrantPermissionTool_RecordsDecidedBy verifies the direct grant_permission
+// MCP tool records the calling API key's identity, not a role literal.
+func TestGrantPermissionTool_RecordsDecidedBy(t *testing.T) {
+	bundle, err := db.Open(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+
+	client := bundle.Client
+	ctx := context.Background()
+
+	taskRepo := repo.NewTaskRepo(client)
+	permRepo := repo.NewPermissionRepo(client)
+
+	task, err := taskRepo.Create(ctx, repo.CreateTaskInput{
+		Slug:          "mcp-grant-decided-by",
+		Title:         "MCP Grant Decided By",
+		Cwd:           t.TempDir(),
+		MaxIterations: 3,
+		Priority:      "normal",
+		CurrentStage:  "implementation",
+	})
+	require.NoError(t, err)
+
+	registry := mcp.ToolRegistry{}
+	RegisterControlTools(registry, ControlDeps{TaskRepo: taskRepo, PermRepo: permRepo})
+
+	tool, ok := registry["grant_permission"]
+	require.True(t, ok)
+
+	authedCtx := mcp.ContextWithAuth(ctx, &mcp.MCPAuthInfo{KeyID: "key-grant-456"})
+	_, err = tool.Handler(authedCtx, map[string]any{
+		"task_id": task.ID,
+		"tool":    "Bash",
+	})
+	require.NoError(t, err)
+
+	grants, err := permRepo.ListTaskPermissions(ctx, task.ID)
+	require.NoError(t, err)
+	require.Len(t, grants, 1)
+	require.NotNil(t, grants[0].DecidedBy)
+	require.Equal(t, "key-grant-456", *grants[0].DecidedBy)
+	require.NotNil(t, grants[0].DecidedAt)
 }
 
 // stubOrchestrator satisfies ControlOrchestrator for MCP tool tests.

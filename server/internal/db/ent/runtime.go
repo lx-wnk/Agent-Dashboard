@@ -9,10 +9,13 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/apikey"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/appsetting"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/auditevent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/capability"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/checkpoint"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/coordlock"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/driftalert"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/evalmetricsnapshot"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/grant"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/grantusage"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionrequest"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/pipelineconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/plugin"
@@ -94,6 +97,37 @@ func init() {
 	auditeventDescTs := auditeventFields[1].Descriptor()
 	// auditevent.DefaultTs holds the default value on creation for the ts field.
 	auditevent.DefaultTs = auditeventDescTs.Default.(func() time.Time)
+	capabilityMixin := schema.Capability{}.Mixin()
+	capabilityMixinFields0 := capabilityMixin[0].Fields()
+	_ = capabilityMixinFields0
+	capabilityFields := schema.Capability{}.Fields()
+	_ = capabilityFields
+	// capabilityDescCreatedAt is the schema descriptor for created_at field.
+	capabilityDescCreatedAt := capabilityMixinFields0[1].Descriptor()
+	// capability.DefaultCreatedAt holds the default value on creation for the created_at field.
+	capability.DefaultCreatedAt = capabilityDescCreatedAt.Default.(func() time.Time)
+	// capabilityDescUpdatedAt is the schema descriptor for updated_at field.
+	capabilityDescUpdatedAt := capabilityMixinFields0[2].Descriptor()
+	// capability.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	capability.DefaultUpdatedAt = capabilityDescUpdatedAt.Default.(func() time.Time)
+	// capability.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	capability.UpdateDefaultUpdatedAt = capabilityDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// capabilityDescEnforceableBy is the schema descriptor for enforceable_by field.
+	capabilityDescEnforceableBy := capabilityFields[2].Descriptor()
+	// capability.DefaultEnforceableBy holds the default value on creation for the enforceable_by field.
+	capability.DefaultEnforceableBy = capabilityDescEnforceableBy.Default.([]string)
+	// capabilityDescRequiresPattern is the schema descriptor for requires_pattern field.
+	capabilityDescRequiresPattern := capabilityFields[3].Descriptor()
+	// capability.DefaultRequiresPattern holds the default value on creation for the requires_pattern field.
+	capability.DefaultRequiresPattern = capabilityDescRequiresPattern.Default.(bool)
+	// capabilityDescReversible is the schema descriptor for reversible field.
+	capabilityDescReversible := capabilityFields[4].Descriptor()
+	// capability.DefaultReversible holds the default value on creation for the reversible field.
+	capability.DefaultReversible = capabilityDescReversible.Default.(bool)
+	// capabilityDescDescription is the schema descriptor for description field.
+	capabilityDescDescription := capabilityFields[5].Descriptor()
+	// capability.DefaultDescription holds the default value on creation for the description field.
+	capability.DefaultDescription = capabilityDescDescription.Default.(string)
 	checkpointFields := schema.Checkpoint{}.Fields()
 	_ = checkpointFields
 	// checkpointDescFilesChanged is the schema descriptor for files_changed field.
@@ -130,6 +164,74 @@ func init() {
 	evalmetricsnapshotDescRecordedAt := evalmetricsnapshotFields[9].Descriptor()
 	// evalmetricsnapshot.DefaultRecordedAt holds the default value on creation for the recorded_at field.
 	evalmetricsnapshot.DefaultRecordedAt = evalmetricsnapshotDescRecordedAt.Default.(func() time.Time)
+	grantMixin := schema.Grant{}.Mixin()
+	grantMixinFields0 := grantMixin[0].Fields()
+	_ = grantMixinFields0
+	grantFields := schema.Grant{}.Fields()
+	_ = grantFields
+	// grantDescCreatedAt is the schema descriptor for created_at field.
+	grantDescCreatedAt := grantMixinFields0[1].Descriptor()
+	// grant.DefaultCreatedAt holds the default value on creation for the created_at field.
+	grant.DefaultCreatedAt = grantDescCreatedAt.Default.(func() time.Time)
+	// grantDescUpdatedAt is the schema descriptor for updated_at field.
+	grantDescUpdatedAt := grantMixinFields0[2].Descriptor()
+	// grant.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	grant.DefaultUpdatedAt = grantDescUpdatedAt.Default.(func() time.Time)
+	// grant.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	grant.UpdateDefaultUpdatedAt = grantDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// grantDescContextRef is the schema descriptor for context_ref field.
+	grantDescContextRef := grantFields[2].Descriptor()
+	// grant.DefaultContextRef holds the default value on creation for the context_ref field.
+	grant.DefaultContextRef = grantDescContextRef.Default.(string)
+	// grantDescPattern is the schema descriptor for pattern field.
+	grantDescPattern := grantFields[3].Descriptor()
+	// grant.DefaultPattern holds the default value on creation for the pattern field.
+	grant.DefaultPattern = grantDescPattern.Default.(string)
+	// grantDescLimitCount is the schema descriptor for limit_count field.
+	grantDescLimitCount := grantFields[5].Descriptor()
+	// grant.DefaultLimitCount holds the default value on creation for the limit_count field.
+	grant.DefaultLimitCount = grantDescLimitCount.Default.(int)
+	// grant.LimitCountValidator is a validator for the "limit_count" field. It is called by the builders before save.
+	grant.LimitCountValidator = grantDescLimitCount.Validators[0].(func(int) error)
+	// grantDescLimitWindowSeconds is the schema descriptor for limit_window_seconds field.
+	grantDescLimitWindowSeconds := grantFields[6].Descriptor()
+	// grant.DefaultLimitWindowSeconds holds the default value on creation for the limit_window_seconds field.
+	grant.DefaultLimitWindowSeconds = grantDescLimitWindowSeconds.Default.(int)
+	// grantDescGrantedAt is the schema descriptor for granted_at field.
+	grantDescGrantedAt := grantFields[9].Descriptor()
+	// grant.DefaultGrantedAt holds the default value on creation for the granted_at field.
+	grant.DefaultGrantedAt = grantDescGrantedAt.Default.(func() time.Time)
+	// grantDescRevokedBy is the schema descriptor for revoked_by field.
+	grantDescRevokedBy := grantFields[11].Descriptor()
+	// grant.DefaultRevokedBy holds the default value on creation for the revoked_by field.
+	grant.DefaultRevokedBy = grantDescRevokedBy.Default.(string)
+	// grantDescReason is the schema descriptor for reason field.
+	grantDescReason := grantFields[12].Descriptor()
+	// grant.DefaultReason holds the default value on creation for the reason field.
+	grant.DefaultReason = grantDescReason.Default.(string)
+	// grantDescNodeID is the schema descriptor for node_id field.
+	grantDescNodeID := grantFields[13].Descriptor()
+	// grant.DefaultNodeID holds the default value on creation for the node_id field.
+	grant.DefaultNodeID = grantDescNodeID.Default.(string)
+	grantusageMixin := schema.GrantUsage{}.Mixin()
+	grantusageMixinFields0 := grantusageMixin[0].Fields()
+	_ = grantusageMixinFields0
+	grantusageFields := schema.GrantUsage{}.Fields()
+	_ = grantusageFields
+	// grantusageDescCreatedAt is the schema descriptor for created_at field.
+	grantusageDescCreatedAt := grantusageMixinFields0[1].Descriptor()
+	// grantusage.DefaultCreatedAt holds the default value on creation for the created_at field.
+	grantusage.DefaultCreatedAt = grantusageDescCreatedAt.Default.(func() time.Time)
+	// grantusageDescUpdatedAt is the schema descriptor for updated_at field.
+	grantusageDescUpdatedAt := grantusageMixinFields0[2].Descriptor()
+	// grantusage.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	grantusage.DefaultUpdatedAt = grantusageDescUpdatedAt.Default.(func() time.Time)
+	// grantusage.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	grantusage.UpdateDefaultUpdatedAt = grantusageDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// grantusageDescUsedAt is the schema descriptor for used_at field.
+	grantusageDescUsedAt := grantusageFields[1].Descriptor()
+	// grantusage.DefaultUsedAt holds the default value on creation for the used_at field.
+	grantusage.DefaultUsedAt = grantusageDescUsedAt.Default.(func() time.Time)
 	permissionrequestFields := schema.PermissionRequest{}.Fields()
 	_ = permissionrequestFields
 	// permissionrequestDescRequestedAt is the schema descriptor for requested_at field.

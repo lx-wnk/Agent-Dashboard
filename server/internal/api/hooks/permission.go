@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lx-wnk/agent-dashboard/sdk"
+	"github.com/lx-wnk/agent-dashboard/server/internal/capability"
 	"github.com/lx-wnk/agent-dashboard/server/internal/claudesettings"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sanitize"
 )
@@ -107,7 +108,7 @@ type lapse struct {
 	toolUseID string
 }
 
-// PermissionBridge holds PreToolUse hook calls open so a permission prompt can
+// HookEnforcer holds PreToolUse hook calls open so a permission prompt can
 // be answered in the dashboard instead of in the session's terminal.
 //
 // Two signals arrive, and they are mutually exclusive by construction:
@@ -117,7 +118,7 @@ type lapse struct {
 //   - A Notification with notification_type "permission_prompt" means the hold
 //     already lapsed (or never happened) and the terminal is now asking. That is
 //     no longer answerable from here — it is evidence that someone must go look.
-type PermissionBridge struct {
+type HookEnforcer struct {
 	mu      sync.Mutex
 	pending map[string]*permissionRequest // request id -> held call
 	notices map[string]permissionNotice   // session id -> terminal is asking
@@ -138,11 +139,11 @@ type PermissionBridge struct {
 	deny *claudesettings.Reader
 }
 
-// NewPermissionBridge builds a bridge. onChange may be nil; when set it is
+// NewHookEnforcer builds a hook enforcer. onChange may be nil; when set it is
 // called whenever the pending set changes so the caller can push a fresh
 // snapshot to connected clients instead of waiting for the next scan tick.
-func NewPermissionBridge(onChange func()) *PermissionBridge {
-	return &PermissionBridge{
+func NewHookEnforcer(onChange func()) *HookEnforcer {
+	return &HookEnforcer{
 		pending:  map[string]*permissionRequest{},
 		notices:  map[string]permissionNotice{},
 		lapsed:   map[string]lapse{},
@@ -153,11 +154,41 @@ func NewPermissionBridge(onChange func()) *PermissionBridge {
 	}
 }
 
+// Point identifies this enforcement point.
+//
+// Unlike ServerEnforcer and SpawnEnforcer, this one fails OPEN on timeout, by
+// design: hold lapses into writeNoDecision (see PermissionRequest), Claude
+// Code falls back to drawing its own terminal prompt, and the session
+// proceeds unblocked. That is the declared posture, not an oversight — the
+// hold's budget (permissionHoldTimeout) is sized so this side gives up before
+// Claude Code's own hook timeout, so a dashboard outage degrades a
+// hand-started session to its normal prompt instead of hanging it forever.
+// HookEnforcer does not read a capability's EnforceableBy at all — it holds
+// every PreToolUse call that reaches it, regardless of what the capability
+// declares. Whether a given tool call reaches this hook in the first place
+// is decided by Claude Code's own hook wiring, not by this type.
+//
+// The rest of PermissionRequest also answers with no decision, but for two
+// different reasons that must not be read as "fails closed" the way the
+// timeout above does:
+//   - An unarmed session (mayHoldLocked) or a malformed/incomplete payload is
+//     never held at all. Nothing was evaluated, so there is nothing to fail
+//     open or closed -- it is left entirely to Claude Code's own native
+//     prompt, exactly as if the hook were not installed.
+//   - A call the user's own deny rules forbid (deniedBy) IS actively vetoed:
+//     it is held and offered without an Allow, and resolve refuses to turn it
+//     into one even if asked (errDeniedByRule). That is the one guarantee
+//     this type makes.
+//
+// Only a call that was genuinely held and got no answer in time lapses open
+// on the timeout above.
+func (b *HookEnforcer) Point() string { return capability.EnforcerHook }
+
 // SetOnChange installs the callback fired whenever the pending set changes.
 // The bridge is built in the DI container, before the debounced rescan the
 // router owns exists, so the callback arrives afterwards rather than at
 // construction.
-func (b *PermissionBridge) SetOnChange(fn func()) {
+func (b *HookEnforcer) SetOnChange(fn func()) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.noticeFn = fn
@@ -166,13 +197,13 @@ func (b *PermissionBridge) SetOnChange(fn func()) {
 // SetDenyReader installs the source of the user's own permission rules. Until
 // one is set the bridge offers every held call for approval, which is the
 // behaviour a machine without a settings file has anyway.
-func (b *PermissionBridge) SetDenyReader(r *claudesettings.Reader) {
+func (b *HookEnforcer) SetDenyReader(r *claudesettings.Reader) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.deny = r
 }
 
-func (b *PermissionBridge) changed() {
+func (b *HookEnforcer) changed() {
 	b.mu.Lock()
 	fn := b.noticeFn
 	b.mu.Unlock()
@@ -321,7 +352,7 @@ func (h *Handler) PermissionArm(w http.ResponseWriter, r *http.Request) {
 
 // hold registers the request and blocks until a decision arrives, the hold
 // lapses, or the hook hangs up. The bool reports whether a decision was made.
-func (b *PermissionBridge) hold(ctx context.Context, p preToolPayload) (string, bool) {
+func (b *HookEnforcer) hold(ctx context.Context, p preToolPayload) (string, bool) {
 	seq := b.seq.Add(1)
 	id := uuid.New().String()
 	raw := argumentOf(p)
@@ -372,7 +403,7 @@ func (b *PermissionBridge) hold(ctx context.Context, p preToolPayload) (string, 
 	}
 }
 
-func (b *PermissionBridge) noteLapse(sessionID, toolUseID string) {
+func (b *HookEnforcer) noteLapse(sessionID, toolUseID string) {
 	b.mu.Lock()
 	b.lapsed[sessionID] = lapse{at: b.nowFn(), toolUseID: toolUseID}
 	b.mu.Unlock()
@@ -392,7 +423,7 @@ var errDeniedByRule = errors.New("your own permission rules deny this call")
 // in one critical section: releasing the lock before the send let a hold time
 // out in the gap, so the send landed in an orphaned buffer while the caller was
 // told the decision had been delivered.
-func (b *PermissionBridge) resolve(id, decision string) error {
+func (b *HookEnforcer) resolve(id, decision string) error {
 	b.mu.Lock()
 	entry, ok := b.pending[id]
 	if ok && decision == "allow" && entry.perm.DeniedBy != nil {
@@ -417,7 +448,7 @@ func (b *PermissionBridge) resolve(id, decision string) error {
 // The RAW argument is matched, never the display copy: sanitizing collapses
 // whitespace, so "rm  -rf /" would stop matching a `Bash(rm:*)` prefix that the
 // session's own evaluation still applies.
-func (b *PermissionBridge) deniedBy(p preToolPayload, raw string) *string {
+func (b *HookEnforcer) deniedBy(p preToolPayload, raw string) *string {
 	b.mu.Lock()
 	reader := b.deny
 	b.mu.Unlock()
@@ -440,7 +471,7 @@ func (b *PermissionBridge) deniedBy(p preToolPayload, raw string) *string {
 // Arm marks a session's prompts as ones the dashboard should intercept, or
 // clears that mark. Arming is per session and expires: see armedTTL. cwd is the
 // working directory the scanner reported for the session; see armedSession.
-func (b *PermissionBridge) Arm(sessionID, cwd string, armed bool) {
+func (b *HookEnforcer) Arm(sessionID, cwd string, armed bool) {
 	b.mu.Lock()
 	if armed {
 		b.armed[sessionID] = armedSession{at: b.nowFn(), cwd: cwd}
@@ -452,7 +483,7 @@ func (b *PermissionBridge) Arm(sessionID, cwd string, armed bool) {
 }
 
 // mayHoldLocked reports whether a payload claiming this session may be held.
-func (b *PermissionBridge) mayHoldLocked(sessionID, cwd string) bool {
+func (b *HookEnforcer) mayHoldLocked(sessionID, cwd string) bool {
 	a, ok := b.armed[sessionID]
 	if !ok {
 		return false
@@ -466,7 +497,7 @@ func (b *PermissionBridge) mayHoldLocked(sessionID, cwd string) bool {
 	return a.cwd == "" || cwd == "" || a.cwd == cwd
 }
 
-func (b *PermissionBridge) holdsForLocked(sessionID string) int {
+func (b *HookEnforcer) holdsForLocked(sessionID string) int {
 	n := 0
 	for _, e := range b.pending {
 		if e.sessionID == sessionID {
@@ -476,7 +507,7 @@ func (b *PermissionBridge) holdsForLocked(sessionID string) int {
 	return n
 }
 
-func (b *PermissionBridge) noteTerminalPrompt(sessionID string) {
+func (b *HookEnforcer) noteTerminalPrompt(sessionID string) {
 	b.mu.Lock()
 	now := b.nowFn()
 	notice := permissionNotice{at: now}
@@ -500,7 +531,7 @@ func (b *PermissionBridge) noteTerminalPrompt(sessionID string) {
 // and then exited kept its notice for the life of the process.
 // Returns the requests answerable right now in arrival order, whether the
 // session is showing its own prompt instead, and whether it is armed.
-func (b *PermissionBridge) StateForSession(sessionID string) (held []sdk.PendingPermission, atTerminal bool, terminalToolUseID string, armed bool) {
+func (b *HookEnforcer) StateForSession(sessionID string) (held []sdk.PendingPermission, atTerminal bool, terminalToolUseID string, armed bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -534,7 +565,7 @@ func (b *PermissionBridge) StateForSession(sessionID string) (held []sdk.Pending
 // SweepExpired drops armed marks and terminal notices that have aged out. It is
 // the only place either map shrinks on a timer, so it must be called
 // periodically -- the agent scan tick does.
-func (b *PermissionBridge) SweepExpired() {
+func (b *HookEnforcer) SweepExpired() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	now := b.nowFn()
@@ -557,7 +588,7 @@ func (b *PermissionBridge) SweepExpired() {
 }
 
 // isArmedReadLocked is the non-mutating half of mayHoldLocked, for the read path.
-func (b *PermissionBridge) isArmedReadLocked(sessionID string) bool {
+func (b *HookEnforcer) isArmedReadLocked(sessionID string) bool {
 	a, ok := b.armed[sessionID]
 	return ok && b.nowFn().Sub(a.at) <= armedTTL
 }

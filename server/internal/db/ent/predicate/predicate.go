@@ -18,6 +18,9 @@ type AppSetting func(*sql.Selector)
 // AuditEvent is the predicate function for auditevent builders.
 type AuditEvent func(*sql.Selector)
 
+// Capability is the predicate function for capability builders.
+type Capability func(*sql.Selector)
+
 // Checkpoint is the predicate function for checkpoint builders.
 type Checkpoint func(*sql.Selector)
 
@@ -29,6 +32,12 @@ type DriftAlert func(*sql.Selector)
 
 // EvalMetricSnapshot is the predicate function for evalmetricsnapshot builders.
 type EvalMetricSnapshot func(*sql.Selector)
+
+// Grant is the predicate function for grant builders.
+type Grant func(*sql.Selector)
+
+// GrantUsage is the predicate function for grantusage builders.
+type GrantUsage func(*sql.Selector)
 
 // PermissionPreset is the predicate function for permissionpreset builders.
 type PermissionPreset func(*sql.Selector)

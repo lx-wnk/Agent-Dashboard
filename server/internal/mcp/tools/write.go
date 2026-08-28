@@ -334,6 +334,10 @@ func registerCreateTask(registry mcp.ToolRegistry, d WriteDeps) {
 
 			// Apply explicit permissions.
 			if len(grantEntries) > 0 {
+				decidedBy := decidedByFromCtx(ctx)
+				for i := range grantEntries {
+					grantEntries[i].DecidedBy = decidedBy
+				}
 				granted, err := d.PermRepo.BulkGrantPermissions(ctx, task.ID, grantEntries)
 				if err != nil {
 					return nil, mcp.Fail("create_task permissions: " + err.Error())
@@ -564,6 +568,10 @@ func handleGrantPermissions(ctx context.Context, d WriteDeps, taskID string, arg
 		entries, err := permInputsToGrantEntries(rawPerms)
 		if err != nil {
 			return nil, err
+		}
+		decidedBy := decidedByFromCtx(ctx)
+		for i := range entries {
+			entries[i].DecidedBy = decidedBy
 		}
 		granted, err := d.PermRepo.BulkGrantPermissions(ctx, taskID, entries)
 		if err != nil {

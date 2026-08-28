@@ -16,7 +16,7 @@ import (
 // hookstore so the record path is exercised; onEvent is a no-op since tests
 // verify HTTP behaviour and recorded state, not the rescan side effect.
 func newTestHandler(secret string) *Handler {
-	return New(secret, hookstore.New(50, 0), func() {}, NewPermissionBridge(nil))
+	return New(secret, hookstore.New(50, 0), func() {}, NewHookEnforcer(nil))
 }
 
 // -------------------------------------------------------------------
@@ -295,15 +295,12 @@ func TestPending_WithSecret_ReturnsValidJSON(t *testing.T) {
 	}
 }
 
-// TestWriteToolNames_MatchesHookGate asserts that every name in permissions.WriteToolNames
-// is treated as a write tool by isWriteTool, and that isWriteTool returns false for
-// a known non-write tool. This guards against the two lists drifting apart.
+// TestWriteToolNames_MatchesHookGate asserts that a known non-write tool is
+// not treated as a write tool by IsWriteTool. permissions.WriteToolNames and
+// IsWriteTool both read the same underlying set (internal/permissions/allowlist.go),
+// so they cannot drift apart from each other by construction — there is
+// nothing left to pin on that axis.
 func TestWriteToolNames_MatchesHookGate(t *testing.T) {
-	for _, name := range permissions.WriteToolNames {
-		if !permissions.IsWriteTool(name) {
-			t.Errorf("IsWriteTool(%q) = false, want true — permissions.WriteToolNames and the gate are out of sync", name)
-		}
-	}
 	// A tool that must never be gated.
 	if permissions.IsWriteTool("Bash") {
 		t.Error("IsWriteTool(\"Bash\") = true, want false")
@@ -333,7 +330,7 @@ func TestPending_WithSecret_ReturnsEmptyEditsWhenNoPending(t *testing.T) {
 // A nil bridge used to mean "build your own", which fails silently: the
 // endpoints answer and hold calls, but the agent enricher reads the DI
 // instance, so the UI shows nothing while sessions stall with no control.
-func TestNewRequiresAPermissionBridge(t *testing.T) {
+func TestNewRequiresAHookEnforcer(t *testing.T) {
 	defer func() {
 		if recover() == nil {
 			t.Fatal("no panic; a disconnected bridge would have been served as a working one")
@@ -345,7 +342,7 @@ func TestNewRequiresAPermissionBridge(t *testing.T) {
 // The constructor is handed a bridge, not asked to reconfigure one. Installing
 // the change callback belongs to the router, which owns the rescan it wraps.
 func TestNewLeavesTheBridgeCallbackAlone(t *testing.T) {
-	bridge := NewPermissionBridge(nil)
+	bridge := NewHookEnforcer(nil)
 	fired := make(chan struct{}, 1)
 	bridge.SetOnChange(func() { fired <- struct{}{} })
 

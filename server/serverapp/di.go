@@ -46,6 +46,7 @@ import (
 	apivisualizations "github.com/lx-wnk/agent-dashboard/server/internal/api/visualizations"
 	apiwp "github.com/lx-wnk/agent-dashboard/server/internal/api/wphandler"
 	authpkg "github.com/lx-wnk/agent-dashboard/server/internal/auth"
+	"github.com/lx-wnk/agent-dashboard/server/internal/capability"
 	"github.com/lx-wnk/agent-dashboard/server/internal/checkpoint"
 	"github.com/lx-wnk/agent-dashboard/server/internal/claudesettings"
 	"github.com/lx-wnk/agent-dashboard/server/internal/config"
@@ -238,6 +239,30 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 			slog.Warn("registry: plugin reconcile failed", "err", err)
 		} else if linked > 0 {
 			slog.Info("registry: linked plugins to registry identities", "count", linked)
+		}
+
+		// Seed the capability catalogue from the tool allow-list, then load it
+		// back into the pipeline package so BuildAllowList's grant-translation
+		// path reads real rows instead of a fabricated tool-class view. Without
+		// this, the capabilities table stays empty and every lookup resolves to
+		// a zero-value CapabilityView, which the gate's fail-closed default
+		// sends to deny.
+		capabilityRepo := repo.NewCapabilityRepo(entClient)
+		if seeded := repo.SeedCapabilities(ctx, capabilityRepo); seeded > 0 {
+			slog.Info("capability: seeded catalogue", "count", seeded)
+		}
+		if rows, err := capabilityRepo.List(ctx); err != nil {
+			slog.Warn("capability: catalogue load failed", "err", err)
+		} else {
+			catalogue := make(map[string]capability.CapabilityView, len(rows))
+			for _, row := range rows {
+				catalogue[row.Name] = capability.CapabilityView{
+					Name:          row.Name,
+					Class:         row.Class,
+					EnforceableBy: row.EnforceableBy,
+				}
+			}
+			pipeline.SetCapabilityCatalogue(catalogue)
 		}
 	}
 
@@ -581,14 +606,14 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	// config dir their process carries.
 	spawnerEnricher := agentbroadcast.NewSpawnerEnricher(spawnerRepo, taskRepoForResolver)
 
-	// Permission bridge: holds PreToolUse hook calls open so an approval prompt
+	// Hook enforcer: holds PreToolUse hook calls open so an approval prompt
 	// can be answered here instead of in the session's terminal. Built at this
 	// point rather than in the router because the enricher below reads the same
 	// instance, and the enricher has to exist before the router is constructed.
-	permissionBridge := hooks.NewPermissionBridge(nil)
+	hookEnforcer := hooks.NewHookEnforcer(nil)
 	// Every config dir, not just the server's own: a session can run under a
 	// custom CLAUDE_CONFIG_DIR and its deny rules live there.
-	permissionBridge.SetDenyReader(claudesettings.NewReader(parser.AllClaudeConfigDirs()...))
+	hookEnforcer.SetDenyReader(claudesettings.NewReader(parser.AllClaudeConfigDirs()...))
 
 	// Combine the read-only crossings into one enricher applied at every GetAgents
 	// call site. A nil pipelineEnricher (no DB) composes away.
@@ -596,7 +621,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		pipelineEnricher,
 		spawnerEnricher,
 		agentbroadcast.NewHookEventEnricher(hookStore),
-		agentbroadcast.NewPermissionBridgeEnricher(permissionBridge),
+		agentbroadcast.NewPermissionBridgeEnricher(hookEnforcer),
 	)
 
 	// Built here (not earlier) so it captures agentEnricher — admin agent search
@@ -666,7 +691,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		Merger:                 agentMerger,
 		Enricher:               agentEnricher,
 		HookStore:              hookStore,
-		PermissionBridge:       permissionBridge,
+		HookEnforcer:           hookEnforcer,
 		OAuthProvider:          oauthProvider,
 		UserRepo:               userRepo,
 		ApiKeyRepo:             apiKeyRepo,

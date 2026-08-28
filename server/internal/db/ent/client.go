@@ -19,10 +19,13 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/apikey"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/appsetting"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/auditevent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/capability"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/checkpoint"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/coordlock"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/driftalert"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/evalmetricsnapshot"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/grant"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/grantusage"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionpreset"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionrequest"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/pipelineconfig"
@@ -59,6 +62,8 @@ type Client struct {
 	AppSetting *AppSettingClient
 	// AuditEvent is the client for interacting with the AuditEvent builders.
 	AuditEvent *AuditEventClient
+	// Capability is the client for interacting with the Capability builders.
+	Capability *CapabilityClient
 	// Checkpoint is the client for interacting with the Checkpoint builders.
 	Checkpoint *CheckpointClient
 	// CoordLock is the client for interacting with the CoordLock builders.
@@ -67,6 +72,10 @@ type Client struct {
 	DriftAlert *DriftAlertClient
 	// EvalMetricSnapshot is the client for interacting with the EvalMetricSnapshot builders.
 	EvalMetricSnapshot *EvalMetricSnapshotClient
+	// Grant is the client for interacting with the Grant builders.
+	Grant *GrantClient
+	// GrantUsage is the client for interacting with the GrantUsage builders.
+	GrantUsage *GrantUsageClient
 	// PermissionPreset is the client for interacting with the PermissionPreset builders.
 	PermissionPreset *PermissionPresetClient
 	// PermissionRequest is the client for interacting with the PermissionRequest builders.
@@ -124,10 +133,13 @@ func (c *Client) init() {
 	c.ApiKey = NewApiKeyClient(c.config)
 	c.AppSetting = NewAppSettingClient(c.config)
 	c.AuditEvent = NewAuditEventClient(c.config)
+	c.Capability = NewCapabilityClient(c.config)
 	c.Checkpoint = NewCheckpointClient(c.config)
 	c.CoordLock = NewCoordLockClient(c.config)
 	c.DriftAlert = NewDriftAlertClient(c.config)
 	c.EvalMetricSnapshot = NewEvalMetricSnapshotClient(c.config)
+	c.Grant = NewGrantClient(c.config)
+	c.GrantUsage = NewGrantUsageClient(c.config)
 	c.PermissionPreset = NewPermissionPresetClient(c.config)
 	c.PermissionRequest = NewPermissionRequestClient(c.config)
 	c.PipelineConfig = NewPipelineConfigClient(c.config)
@@ -245,10 +257,13 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		ApiKey:             NewApiKeyClient(cfg),
 		AppSetting:         NewAppSettingClient(cfg),
 		AuditEvent:         NewAuditEventClient(cfg),
+		Capability:         NewCapabilityClient(cfg),
 		Checkpoint:         NewCheckpointClient(cfg),
 		CoordLock:          NewCoordLockClient(cfg),
 		DriftAlert:         NewDriftAlertClient(cfg),
 		EvalMetricSnapshot: NewEvalMetricSnapshotClient(cfg),
+		Grant:              NewGrantClient(cfg),
+		GrantUsage:         NewGrantUsageClient(cfg),
 		PermissionPreset:   NewPermissionPresetClient(cfg),
 		PermissionRequest:  NewPermissionRequestClient(cfg),
 		PipelineConfig:     NewPipelineConfigClient(cfg),
@@ -293,10 +308,13 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		ApiKey:             NewApiKeyClient(cfg),
 		AppSetting:         NewAppSettingClient(cfg),
 		AuditEvent:         NewAuditEventClient(cfg),
+		Capability:         NewCapabilityClient(cfg),
 		Checkpoint:         NewCheckpointClient(cfg),
 		CoordLock:          NewCoordLockClient(cfg),
 		DriftAlert:         NewDriftAlertClient(cfg),
 		EvalMetricSnapshot: NewEvalMetricSnapshotClient(cfg),
+		Grant:              NewGrantClient(cfg),
+		GrantUsage:         NewGrantUsageClient(cfg),
 		PermissionPreset:   NewPermissionPresetClient(cfg),
 		PermissionRequest:  NewPermissionRequestClient(cfg),
 		PipelineConfig:     NewPipelineConfigClient(cfg),
@@ -347,13 +365,13 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.AgentCostTrend, c.ApiKey, c.AppSetting, c.AuditEvent, c.Checkpoint,
-		c.CoordLock, c.DriftAlert, c.EvalMetricSnapshot, c.PermissionPreset,
-		c.PermissionRequest, c.PipelineConfig, c.Plugin, c.PluginSetting, c.Project,
-		c.ProjectFolder, c.PromptTemplate, c.ProviderSetting, c.RefinementTurn,
-		c.RemoteRegistration, c.Resource, c.Scratchpad, c.Spawner, c.StageRun,
-		c.SystemPrompt, c.Task, c.TaskDependency, c.TaskPermission, c.TaskSchedule,
-		c.User,
+		c.AgentCostTrend, c.ApiKey, c.AppSetting, c.AuditEvent, c.Capability,
+		c.Checkpoint, c.CoordLock, c.DriftAlert, c.EvalMetricSnapshot, c.Grant,
+		c.GrantUsage, c.PermissionPreset, c.PermissionRequest, c.PipelineConfig,
+		c.Plugin, c.PluginSetting, c.Project, c.ProjectFolder, c.PromptTemplate,
+		c.ProviderSetting, c.RefinementTurn, c.RemoteRegistration, c.Resource,
+		c.Scratchpad, c.Spawner, c.StageRun, c.SystemPrompt, c.Task, c.TaskDependency,
+		c.TaskPermission, c.TaskSchedule, c.User,
 	} {
 		n.Use(hooks...)
 	}
@@ -363,13 +381,13 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.AgentCostTrend, c.ApiKey, c.AppSetting, c.AuditEvent, c.Checkpoint,
-		c.CoordLock, c.DriftAlert, c.EvalMetricSnapshot, c.PermissionPreset,
-		c.PermissionRequest, c.PipelineConfig, c.Plugin, c.PluginSetting, c.Project,
-		c.ProjectFolder, c.PromptTemplate, c.ProviderSetting, c.RefinementTurn,
-		c.RemoteRegistration, c.Resource, c.Scratchpad, c.Spawner, c.StageRun,
-		c.SystemPrompt, c.Task, c.TaskDependency, c.TaskPermission, c.TaskSchedule,
-		c.User,
+		c.AgentCostTrend, c.ApiKey, c.AppSetting, c.AuditEvent, c.Capability,
+		c.Checkpoint, c.CoordLock, c.DriftAlert, c.EvalMetricSnapshot, c.Grant,
+		c.GrantUsage, c.PermissionPreset, c.PermissionRequest, c.PipelineConfig,
+		c.Plugin, c.PluginSetting, c.Project, c.ProjectFolder, c.PromptTemplate,
+		c.ProviderSetting, c.RefinementTurn, c.RemoteRegistration, c.Resource,
+		c.Scratchpad, c.Spawner, c.StageRun, c.SystemPrompt, c.Task, c.TaskDependency,
+		c.TaskPermission, c.TaskSchedule, c.User,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -386,6 +404,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.AppSetting.mutate(ctx, m)
 	case *AuditEventMutation:
 		return c.AuditEvent.mutate(ctx, m)
+	case *CapabilityMutation:
+		return c.Capability.mutate(ctx, m)
 	case *CheckpointMutation:
 		return c.Checkpoint.mutate(ctx, m)
 	case *CoordLockMutation:
@@ -394,6 +414,10 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.DriftAlert.mutate(ctx, m)
 	case *EvalMetricSnapshotMutation:
 		return c.EvalMetricSnapshot.mutate(ctx, m)
+	case *GrantMutation:
+		return c.Grant.mutate(ctx, m)
+	case *GrantUsageMutation:
+		return c.GrantUsage.mutate(ctx, m)
 	case *PermissionPresetMutation:
 		return c.PermissionPreset.mutate(ctx, m)
 	case *PermissionRequestMutation:
@@ -973,6 +997,139 @@ func (c *AuditEventClient) mutate(ctx context.Context, m *AuditEventMutation) (V
 	}
 }
 
+// CapabilityClient is a client for the Capability schema.
+type CapabilityClient struct {
+	config
+}
+
+// NewCapabilityClient returns a client for the Capability from the given config.
+func NewCapabilityClient(c config) *CapabilityClient {
+	return &CapabilityClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `capability.Hooks(f(g(h())))`.
+func (c *CapabilityClient) Use(hooks ...Hook) {
+	c.hooks.Capability = append(c.hooks.Capability, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `capability.Intercept(f(g(h())))`.
+func (c *CapabilityClient) Intercept(interceptors ...Interceptor) {
+	c.inters.Capability = append(c.inters.Capability, interceptors...)
+}
+
+// Create returns a builder for creating a Capability entity.
+func (c *CapabilityClient) Create() *CapabilityCreate {
+	mutation := newCapabilityMutation(c.config, OpCreate)
+	return &CapabilityCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of Capability entities.
+func (c *CapabilityClient) CreateBulk(builders ...*CapabilityCreate) *CapabilityCreateBulk {
+	return &CapabilityCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *CapabilityClient) MapCreateBulk(slice any, setFunc func(*CapabilityCreate, int)) *CapabilityCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &CapabilityCreateBulk{err: fmt.Errorf("calling to CapabilityClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*CapabilityCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &CapabilityCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for Capability.
+func (c *CapabilityClient) Update() *CapabilityUpdate {
+	mutation := newCapabilityMutation(c.config, OpUpdate)
+	return &CapabilityUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *CapabilityClient) UpdateOne(_m *Capability) *CapabilityUpdateOne {
+	mutation := newCapabilityMutation(c.config, OpUpdateOne, withCapability(_m))
+	return &CapabilityUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *CapabilityClient) UpdateOneID(id string) *CapabilityUpdateOne {
+	mutation := newCapabilityMutation(c.config, OpUpdateOne, withCapabilityID(id))
+	return &CapabilityUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for Capability.
+func (c *CapabilityClient) Delete() *CapabilityDelete {
+	mutation := newCapabilityMutation(c.config, OpDelete)
+	return &CapabilityDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *CapabilityClient) DeleteOne(_m *Capability) *CapabilityDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *CapabilityClient) DeleteOneID(id string) *CapabilityDeleteOne {
+	builder := c.Delete().Where(capability.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &CapabilityDeleteOne{builder}
+}
+
+// Query returns a query builder for Capability.
+func (c *CapabilityClient) Query() *CapabilityQuery {
+	return &CapabilityQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeCapability},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a Capability entity by its id.
+func (c *CapabilityClient) Get(ctx context.Context, id string) (*Capability, error) {
+	return c.Query().Where(capability.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *CapabilityClient) GetX(ctx context.Context, id string) *Capability {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *CapabilityClient) Hooks() []Hook {
+	return c.hooks.Capability
+}
+
+// Interceptors returns the client interceptors.
+func (c *CapabilityClient) Interceptors() []Interceptor {
+	return c.inters.Capability
+}
+
+func (c *CapabilityClient) mutate(ctx context.Context, m *CapabilityMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&CapabilityCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&CapabilityUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&CapabilityUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&CapabilityDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown Capability mutation op: %q", m.Op())
+	}
+}
+
 // CheckpointClient is a client for the Checkpoint schema.
 type CheckpointClient struct {
 	config
@@ -1502,6 +1659,272 @@ func (c *EvalMetricSnapshotClient) mutate(ctx context.Context, m *EvalMetricSnap
 		return (&EvalMetricSnapshotDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown EvalMetricSnapshot mutation op: %q", m.Op())
+	}
+}
+
+// GrantClient is a client for the Grant schema.
+type GrantClient struct {
+	config
+}
+
+// NewGrantClient returns a client for the Grant from the given config.
+func NewGrantClient(c config) *GrantClient {
+	return &GrantClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `grant.Hooks(f(g(h())))`.
+func (c *GrantClient) Use(hooks ...Hook) {
+	c.hooks.Grant = append(c.hooks.Grant, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `grant.Intercept(f(g(h())))`.
+func (c *GrantClient) Intercept(interceptors ...Interceptor) {
+	c.inters.Grant = append(c.inters.Grant, interceptors...)
+}
+
+// Create returns a builder for creating a Grant entity.
+func (c *GrantClient) Create() *GrantCreate {
+	mutation := newGrantMutation(c.config, OpCreate)
+	return &GrantCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of Grant entities.
+func (c *GrantClient) CreateBulk(builders ...*GrantCreate) *GrantCreateBulk {
+	return &GrantCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *GrantClient) MapCreateBulk(slice any, setFunc func(*GrantCreate, int)) *GrantCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &GrantCreateBulk{err: fmt.Errorf("calling to GrantClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*GrantCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &GrantCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for Grant.
+func (c *GrantClient) Update() *GrantUpdate {
+	mutation := newGrantMutation(c.config, OpUpdate)
+	return &GrantUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *GrantClient) UpdateOne(_m *Grant) *GrantUpdateOne {
+	mutation := newGrantMutation(c.config, OpUpdateOne, withGrant(_m))
+	return &GrantUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *GrantClient) UpdateOneID(id string) *GrantUpdateOne {
+	mutation := newGrantMutation(c.config, OpUpdateOne, withGrantID(id))
+	return &GrantUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for Grant.
+func (c *GrantClient) Delete() *GrantDelete {
+	mutation := newGrantMutation(c.config, OpDelete)
+	return &GrantDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *GrantClient) DeleteOne(_m *Grant) *GrantDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *GrantClient) DeleteOneID(id string) *GrantDeleteOne {
+	builder := c.Delete().Where(grant.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &GrantDeleteOne{builder}
+}
+
+// Query returns a query builder for Grant.
+func (c *GrantClient) Query() *GrantQuery {
+	return &GrantQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeGrant},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a Grant entity by its id.
+func (c *GrantClient) Get(ctx context.Context, id string) (*Grant, error) {
+	return c.Query().Where(grant.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *GrantClient) GetX(ctx context.Context, id string) *Grant {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *GrantClient) Hooks() []Hook {
+	return c.hooks.Grant
+}
+
+// Interceptors returns the client interceptors.
+func (c *GrantClient) Interceptors() []Interceptor {
+	return c.inters.Grant
+}
+
+func (c *GrantClient) mutate(ctx context.Context, m *GrantMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&GrantCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&GrantUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&GrantUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&GrantDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown Grant mutation op: %q", m.Op())
+	}
+}
+
+// GrantUsageClient is a client for the GrantUsage schema.
+type GrantUsageClient struct {
+	config
+}
+
+// NewGrantUsageClient returns a client for the GrantUsage from the given config.
+func NewGrantUsageClient(c config) *GrantUsageClient {
+	return &GrantUsageClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `grantusage.Hooks(f(g(h())))`.
+func (c *GrantUsageClient) Use(hooks ...Hook) {
+	c.hooks.GrantUsage = append(c.hooks.GrantUsage, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `grantusage.Intercept(f(g(h())))`.
+func (c *GrantUsageClient) Intercept(interceptors ...Interceptor) {
+	c.inters.GrantUsage = append(c.inters.GrantUsage, interceptors...)
+}
+
+// Create returns a builder for creating a GrantUsage entity.
+func (c *GrantUsageClient) Create() *GrantUsageCreate {
+	mutation := newGrantUsageMutation(c.config, OpCreate)
+	return &GrantUsageCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of GrantUsage entities.
+func (c *GrantUsageClient) CreateBulk(builders ...*GrantUsageCreate) *GrantUsageCreateBulk {
+	return &GrantUsageCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *GrantUsageClient) MapCreateBulk(slice any, setFunc func(*GrantUsageCreate, int)) *GrantUsageCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &GrantUsageCreateBulk{err: fmt.Errorf("calling to GrantUsageClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*GrantUsageCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &GrantUsageCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for GrantUsage.
+func (c *GrantUsageClient) Update() *GrantUsageUpdate {
+	mutation := newGrantUsageMutation(c.config, OpUpdate)
+	return &GrantUsageUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *GrantUsageClient) UpdateOne(_m *GrantUsage) *GrantUsageUpdateOne {
+	mutation := newGrantUsageMutation(c.config, OpUpdateOne, withGrantUsage(_m))
+	return &GrantUsageUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *GrantUsageClient) UpdateOneID(id string) *GrantUsageUpdateOne {
+	mutation := newGrantUsageMutation(c.config, OpUpdateOne, withGrantUsageID(id))
+	return &GrantUsageUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for GrantUsage.
+func (c *GrantUsageClient) Delete() *GrantUsageDelete {
+	mutation := newGrantUsageMutation(c.config, OpDelete)
+	return &GrantUsageDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *GrantUsageClient) DeleteOne(_m *GrantUsage) *GrantUsageDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *GrantUsageClient) DeleteOneID(id string) *GrantUsageDeleteOne {
+	builder := c.Delete().Where(grantusage.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &GrantUsageDeleteOne{builder}
+}
+
+// Query returns a query builder for GrantUsage.
+func (c *GrantUsageClient) Query() *GrantUsageQuery {
+	return &GrantUsageQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeGrantUsage},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a GrantUsage entity by its id.
+func (c *GrantUsageClient) Get(ctx context.Context, id string) (*GrantUsage, error) {
+	return c.Query().Where(grantusage.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *GrantUsageClient) GetX(ctx context.Context, id string) *GrantUsage {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *GrantUsageClient) Hooks() []Hook {
+	return c.hooks.GrantUsage
+}
+
+// Interceptors returns the client interceptors.
+func (c *GrantUsageClient) Interceptors() []Interceptor {
+	return c.inters.GrantUsage
+}
+
+func (c *GrantUsageClient) mutate(ctx context.Context, m *GrantUsageMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&GrantUsageCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&GrantUsageUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&GrantUsageUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&GrantUsageDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown GrantUsage mutation op: %q", m.Op())
 	}
 }
 
@@ -4493,19 +4916,19 @@ func (c *UserClient) mutate(ctx context.Context, m *UserMutation) (Value, error)
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		AgentCostTrend, ApiKey, AppSetting, AuditEvent, Checkpoint, CoordLock,
-		DriftAlert, EvalMetricSnapshot, PermissionPreset, PermissionRequest,
-		PipelineConfig, Plugin, PluginSetting, Project, ProjectFolder, PromptTemplate,
-		ProviderSetting, RefinementTurn, RemoteRegistration, Resource, Scratchpad,
-		Spawner, StageRun, SystemPrompt, Task, TaskDependency, TaskPermission,
-		TaskSchedule, User []ent.Hook
+		AgentCostTrend, ApiKey, AppSetting, AuditEvent, Capability, Checkpoint,
+		CoordLock, DriftAlert, EvalMetricSnapshot, Grant, GrantUsage, PermissionPreset,
+		PermissionRequest, PipelineConfig, Plugin, PluginSetting, Project,
+		ProjectFolder, PromptTemplate, ProviderSetting, RefinementTurn,
+		RemoteRegistration, Resource, Scratchpad, Spawner, StageRun, SystemPrompt,
+		Task, TaskDependency, TaskPermission, TaskSchedule, User []ent.Hook
 	}
 	inters struct {
-		AgentCostTrend, ApiKey, AppSetting, AuditEvent, Checkpoint, CoordLock,
-		DriftAlert, EvalMetricSnapshot, PermissionPreset, PermissionRequest,
-		PipelineConfig, Plugin, PluginSetting, Project, ProjectFolder, PromptTemplate,
-		ProviderSetting, RefinementTurn, RemoteRegistration, Resource, Scratchpad,
-		Spawner, StageRun, SystemPrompt, Task, TaskDependency, TaskPermission,
-		TaskSchedule, User []ent.Interceptor
+		AgentCostTrend, ApiKey, AppSetting, AuditEvent, Capability, Checkpoint,
+		CoordLock, DriftAlert, EvalMetricSnapshot, Grant, GrantUsage, PermissionPreset,
+		PermissionRequest, PipelineConfig, Plugin, PluginSetting, Project,
+		ProjectFolder, PromptTemplate, ProviderSetting, RefinementTurn,
+		RemoteRegistration, Resource, Scratchpad, Spawner, StageRun, SystemPrompt,
+		Task, TaskDependency, TaskPermission, TaskSchedule, User []ent.Interceptor
 	}
 )

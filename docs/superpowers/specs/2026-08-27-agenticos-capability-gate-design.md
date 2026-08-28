@@ -198,8 +198,10 @@ Specificity wins, then deny wins, then expiry excludes:
 3. Rank by context specificity: `agent_session` > `task` > `routine` > `application` > `project` >
    `global`.
 4. At the most specific level that has any grant, `deny` beats `allow` beats `ask`.
-5. No grant at any level → the capability's default, which is `ask` for `tool` and `reach`, and
-   `deny` for `spend` above the budget.
+5. No grant at any level → the capability's default: `ask` for `tool`, `reach`, and `resource`;
+   `deny` for `spend` above the budget; `deny` for any class the resolver does not recognise, so a
+   typo'd or future class fails closed instead of silently becoming a prompt a human clicks
+   through.
 
 Pattern matching becomes a small, tested algebra — exact, prefix (`git status*`), and domain
 (`domain:docs.example.com`) — closing **G3**. It lives in one package and is used by both the

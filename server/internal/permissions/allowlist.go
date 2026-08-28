@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -244,14 +245,22 @@ func ValidateGrantEntry(tool, pattern string) error {
 	return ValidateGrantEntryWithOverride(tool, pattern, false)
 }
 
-// WriteToolNames is the canonical list of write-type tools that trigger the edit gate.
-// isWriteTool in the hooks handler derives from this slice — updating this list is sufficient.
-var WriteToolNames = []string{"Edit", "Write", "MultiEdit"}
-
 // IsAllowedTool reports whether name is in the pipeline tool allow-list.
 // Use this instead of accessing allowedToolNames directly so the set
 // cannot be mutated by other packages.
 func IsAllowedTool(name string) bool { return allowedToolNames[name] }
+
+// GrantableToolNames returns the tool names a grant may name, sorted so the
+// order is stable across boots. It reads the same map IsAllowedTool consults,
+// so the catalogue cannot drift from the allow-list.
+func GrantableToolNames() []string {
+	names := make([]string, 0, len(allowedToolNames))
+	for name := range allowedToolNames {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
 
 // writeToolNames is the unexported set of tools that mutate file contents.
 // External packages must use IsWriteTool to prevent mutation of the map.
@@ -265,6 +274,19 @@ var writeToolNames = map[string]bool{
 // Use this instead of accessing writeToolNames directly so the set cannot
 // be mutated by other packages.
 func IsWriteTool(name string) bool { return writeToolNames[name] }
+
+// WriteToolNames returns the edit-gate write tool set as a sorted copy, in the
+// same shape as GrantableToolNames: it reads the same map IsWriteTool
+// consults, so the list cannot drift from the gate, and callers cannot
+// mutate the source of truth through the returned slice.
+func WriteToolNames() []string {
+	names := make([]string, 0, len(writeToolNames))
+	for name := range writeToolNames {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
 
 // allowedToolNames is the unexported source of truth for grantable tools.
 // All callers must go through IsAllowedTool.

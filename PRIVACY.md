@@ -40,6 +40,9 @@ All persistent data stays on your machine. No data is synced to a cloud service 
 | `web_push_subscriptions` | Web-Push endpoint URLs and VAPID keys (see section 3) |
 | `spawners`, `presets`, `remotes`, `refine` | User-configured pipeline settings |
 | `cost_history` | Aggregated per-session token and cost data imported from JSONL files |
+| `capabilities` | The permission catalogue — one row per grantable capability (a Claude Code tool name, or a coarser named action) with its class and which enforcement points may apply it. Seeded from the built-in tool list on boot; no user content. |
+| `grants` | Capability grants bound to a context (global, project, task, routine, or agent session): pattern, mode (allow/deny/ask), optional expiry and rate limit, and who granted or revoked it. Existing `task_permissions` and `permission_presets` rows are backfilled into this table on boot (`granted_by = "migration:legacy"`). |
+| `grant_usages` | Timestamps of successful uses of a rate-limited grant, counted toward that grant's limit. No call content — only the grant id and when it was used. |
 
 ### Hooks secret
 

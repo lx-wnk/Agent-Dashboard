@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
@@ -66,9 +67,17 @@ func ApproveAllPending(ctx context.Context, d ApproveAllPendingDeps, taskID stri
 		}
 	}
 
+	// ctx carries a real JWT payload only on the REST leg (r.Context()); the
+	// MCP leg's ctx never has one, so this correctly resolves empty there
+	// rather than misattributing an MCP-authenticated grant to a REST identity.
+	var decidedBy string
+	if payload, ok := auth.PayloadFromContext(ctx); ok {
+		decidedBy = payload.Sub
+	}
+
 	entries := make([]repo.GrantEntry, 0, len(pending))
 	for _, req := range pending {
-		entries = append(entries, repo.GrantEntry{Tool: req.Tool, Pattern: req.Pattern})
+		entries = append(entries, repo.GrantEntry{Tool: req.Tool, Pattern: req.Pattern, DecidedBy: decidedBy})
 	}
 	if len(entries) > 0 {
 		if _, errs := grantOverrideEntries(ctx, d.PermRepo, taskID, entries); len(errs) > 0 {

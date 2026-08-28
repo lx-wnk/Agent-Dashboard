@@ -7,7 +7,7 @@ import (
 )
 
 // TestWriteToolNames_ContainsExpectedEntries is the CQ-01 SSOT sync test.
-// It verifies that WriteToolNames contains exactly the write-type tools that
+// It verifies that WriteToolNames() contains exactly the write-type tools that
 // the edit gate is expected to intercept.  If a new write tool is added to
 // WriteToolNames, this test must be updated — making the set of gated tools
 // explicit and visible in the test suite.
@@ -18,8 +18,9 @@ func TestWriteToolNames_ContainsExpectedEntries(t *testing.T) {
 		"MultiEdit": true,
 	}
 
-	got := make(map[string]bool, len(permissions.WriteToolNames))
-	for _, name := range permissions.WriteToolNames {
+	names := permissions.WriteToolNames()
+	got := make(map[string]bool, len(names))
+	for _, name := range names {
 		got[name] = true
 	}
 
@@ -38,18 +39,86 @@ func TestWriteToolNames_ContainsExpectedEntries(t *testing.T) {
 	}
 }
 
+// TestGrantableToolNames_MatchesIsAllowedTool proves the accessor cannot
+// drift from the allow-list it is meant to expose: every name it returns
+// must satisfy IsAllowedTool, and every name IsAllowedTool accepts must
+// appear in the returned slice.
+func TestGrantableToolNames_MatchesIsAllowedTool(t *testing.T) {
+	names := permissions.GrantableToolNames()
+	if len(names) == 0 {
+		t.Fatal("GrantableToolNames returned no names")
+	}
+	seen := make(map[string]bool, len(names))
+	for _, name := range names {
+		if !permissions.IsAllowedTool(name) {
+			t.Errorf("GrantableToolNames returned %q, which IsAllowedTool rejects", name)
+		}
+		seen[name] = true
+	}
+	for _, known := range []string{"Read", "Bash", "WebFetch", "mcp__dashboard-channel__dashboard_reply"} {
+		if !seen[known] {
+			t.Errorf("GrantableToolNames is missing known allow-listed tool %q", known)
+		}
+	}
+}
+
+// TestGrantableToolNames_Sorted proves the order is stable across calls, per
+// the accessor's documented contract.
+func TestGrantableToolNames_Sorted(t *testing.T) {
+	names := permissions.GrantableToolNames()
+	for i := 1; i < len(names); i++ {
+		if names[i-1] >= names[i] {
+			t.Errorf("GrantableToolNames not sorted: %q before %q", names[i-1], names[i])
+		}
+	}
+}
+
+// TestGrantableToolNames_ReturnsCopy proves mutating the returned slice
+// cannot corrupt the source of truth — a repeat call must be unaffected.
+func TestGrantableToolNames_ReturnsCopy(t *testing.T) {
+	first := permissions.GrantableToolNames()
+	first[0] = "tampered"
+	second := permissions.GrantableToolNames()
+	if second[0] == "tampered" {
+		t.Error("GrantableToolNames leaked a mutable reference to the source of truth")
+	}
+}
+
 // TestWriteToolNames_NonWriteToolsAreAbsent verifies that commonly used
 // non-write tools are not erroneously listed in WriteToolNames.
 func TestWriteToolNames_NonWriteToolsAreAbsent(t *testing.T) {
 	nonWriteTools := []string{"Bash", "Read", "Glob", "Grep", "LS", "WebFetch", "Task", "Agent"}
-	got := make(map[string]bool, len(permissions.WriteToolNames))
-	for _, name := range permissions.WriteToolNames {
+	names := permissions.WriteToolNames()
+	got := make(map[string]bool, len(names))
+	for _, name := range names {
 		got[name] = true
 	}
 	for _, tool := range nonWriteTools {
 		if got[tool] {
 			t.Errorf("WriteToolNames must not contain non-write tool %q", tool)
 		}
+	}
+}
+
+// TestWriteToolNames_Sorted proves the order is stable across calls, matching
+// the contract GrantableToolNames already established for exposing a name list.
+func TestWriteToolNames_Sorted(t *testing.T) {
+	names := permissions.WriteToolNames()
+	for i := 1; i < len(names); i++ {
+		if names[i-1] >= names[i] {
+			t.Errorf("WriteToolNames not sorted: %q before %q", names[i-1], names[i])
+		}
+	}
+}
+
+// TestWriteToolNames_ReturnsCopy proves mutating the returned slice cannot
+// corrupt the source of truth — a repeat call must be unaffected.
+func TestWriteToolNames_ReturnsCopy(t *testing.T) {
+	first := permissions.WriteToolNames()
+	first[0] = "tampered"
+	second := permissions.WriteToolNames()
+	if second[0] == "tampered" {
+		t.Error("WriteToolNames leaked a mutable reference to the source of truth")
 	}
 }
 

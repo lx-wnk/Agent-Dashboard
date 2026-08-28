@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/lx-wnk/agent-dashboard/sdk"
+	"github.com/lx-wnk/agent-dashboard/server/internal/capability"
 	"github.com/lx-wnk/agent-dashboard/server/internal/claudesettings"
 )
 
@@ -66,8 +67,10 @@ const testCWD = "/work/project"
 // The whole safety story rests on this: when nobody answers, the response must
 // carry NO decision, so Claude Code falls through to its own terminal prompt.
 // A response that said "allow" here would silently approve every tool call the
-// moment the dashboard stopped answering.
-func TestPermissionRequestLapsesWithoutDeciding(t *testing.T) {
+// moment the dashboard stopped answering. This is the fail-OPEN posture
+// documented on HookEnforcer.Point — declared, not a bug — so the assertion
+// checks the exact "carry on as usual" shape rather than just "no error".
+func TestHookEnforcerTimeoutYieldsNoDecision(t *testing.T) {
 	h := newBridgeHandler(t)
 
 	rec := post(t, h.PermissionRequest, "/api/hooks/permission", preToolBody("s1", "Bash", "rm -rf /tmp/x"), true)
@@ -84,6 +87,12 @@ func TestPermissionRequestLapsesWithoutDeciding(t *testing.T) {
 	}
 	if len(out) != 0 {
 		t.Fatalf("body = %q, want an empty object so the hook prints nothing", rec.Body.String())
+	}
+}
+
+func TestHookEnforcerPoint(t *testing.T) {
+	if got := (&HookEnforcer{}).Point(); got != capability.EnforcerHook {
+		t.Errorf("Point() = %q, want %q", got, capability.EnforcerHook)
 	}
 }
 
