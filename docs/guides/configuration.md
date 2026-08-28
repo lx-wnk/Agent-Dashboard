@@ -115,6 +115,19 @@ dashboard settings set auth.mode none
 
 Provider enablement is **not** a `dashboard settings` key — it lives in the `provider_setting` table and is edited through the Providers panel.
 
+### Grants CLI
+
+The `dashboard grants` CLI also operates directly on the SQLite database — no HTTP, no auth gate, no running server required. It is the only way to create or revoke a capability grant today; see [Security](security.md#creating-and-revoking-grants) for what a grant does and its `ask`-mode limitation.
+
+```bash
+dashboard grants add <capability> [--scope kind:ref] [--mode allow|deny|ask]   # create a grant
+dashboard grants list [--capability <name>] [--json]                          # list grants
+dashboard grants revoke <id>                                                  # tombstone a grant
+dashboard grants capabilities                                                 # list grantable capability names
+```
+
+Database resolution uses the same `--db` flag / `DASHBOARD_DB_PATH` / default path as the settings CLI.
+
 ### Plugin CLI / lockout recovery
 
 The `dashboard plugins` CLI also operates directly on the SQLite database — no HTTP, no auth gate, no running server required.

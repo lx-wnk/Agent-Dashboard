@@ -75,9 +75,32 @@ able to give up on purpose:
 
 | Enforcement point | What it covers |
 |---|---|
-| **Server** (`ServerEnforcer`) | The only point with complete coverage once a call site invokes it — nothing routes around it, and it cannot time out into an implicit allow. It is implemented and tested (`server/internal/capability/enforcer_server.go`) and now has a real production caller: every `/api/memory/*` request, both memory MCP tools (`memory_search`, `memory_write`), and the task pipeline's automatic memory push into a stage's spawn prompt go through it via `internal/memory.Authorize`. **No `Asker` is wired to it.** An `ask` decision therefore fails closed to a denial (`ErrAskRequired`) rather than prompting a human — "ask" and "deny" are indistinguishable from a memory caller's point of view today. There is also no grant-management surface: nothing outside a test calls `GrantRepo.Create`, so nobody can turn a `memory.read`/`memory.write` request into an "allow" through any HTTP route, CLI command, or settings page. The two gaps together mean every memory call is denied on a fresh install, with no user-facing fix short of inserting a `grants` row by hand. |
+| **Server** (`ServerEnforcer`) | The only point with complete coverage once a call site invokes it — nothing routes around it, and it cannot time out into an implicit allow. It is implemented and tested (`server/internal/capability/enforcer_server.go`) and now has a real production caller: every `/api/memory/*` request, both memory MCP tools (`memory_search`, `memory_write`), and the task pipeline's automatic memory push into a stage's spawn prompt go through it via `internal/memory.Authorize`. **No `Asker` is wired to it.** An `ask` decision therefore fails closed to a denial (`ErrAskRequired`) rather than prompting a human — "ask" and "deny" are indistinguishable from a memory caller's point of view today, and this holds regardless of how a grant was created. The `dashboard grants` CLI (below) can now turn a `memory.read`/`memory.write` request into an "allow", closing the "nobody can create a grant" half of the old gap — but there is still no HTTP route or settings page that does, and a fresh install still denies every memory call by default until you run it. |
 | **Spawn** (`SpawnEnforcer`) | Complete for every agent the dashboard's task pipeline spawns itself: each granted `TaskPermission` is resolved through the Decider and rendered into that process's `--allowedTools` list (`server/internal/pipeline/spawner.go`). It cannot ask — the file is written before the process starts — so an `ask` decision is simply omitted, and the agent falls back to its own permission prompt for that call. |
 | **Hook** (`HookEnforcer`) | The only point that can reach a session you started by hand, because it rides Claude Code's own `PreToolUse` hook instead of a start-time handshake. **It fails open on a timeout, by design** — see below. |
+
+### Creating and revoking grants
+
+The `dashboard grants` CLI is the only grant-management surface today — no
+HTTP route or settings page creates a `grants` row yet. It opens the SQLite
+database directly, the same way `dashboard settings` and `dashboard plugins`
+do, so it also works while the server is down.
+
+```bash
+dashboard grants add memory.read --scope global --mode allow
+dashboard grants list --capability memory.read
+```
+
+`add`, `list`, `revoke`, and `capabilities` are the four subcommands —
+`capabilities` lists the grantable names, `list` lists existing grants
+(optionally filtered by capability), and `revoke <id>` tombstones a grant
+(`revoked_at`/`revoked_by` set) rather than deleting it, so the audit trail
+survives.
+
+`--mode` accepts `ask` and stores it without complaint, but **the server
+enforcer has no `Asker` wired to it** (see the table above), so an `ask`
+grant resolves to a denial there just like an unset one. `allow` is the only
+mode that actually opens the gate at the server point today.
 
 ### The hook point's three outcomes
 
