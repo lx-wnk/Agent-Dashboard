@@ -22,6 +22,7 @@ import (
 	apianalytics "github.com/lx-wnk/agent-dashboard/server/internal/api/analytics"
 	apikeyhandler "github.com/lx-wnk/agent-dashboard/server/internal/api/apikeys"
 	apiauth "github.com/lx-wnk/agent-dashboard/server/internal/api/auth"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/capabilities"
 	apiconfig "github.com/lx-wnk/agent-dashboard/server/internal/api/config"
 	coordapi "github.com/lx-wnk/agent-dashboard/server/internal/api/coord"
 	apicost "github.com/lx-wnk/agent-dashboard/server/internal/api/cost"
@@ -134,10 +135,14 @@ type RouterDeps struct {
 	// is wired (auth mode none).
 	CapabilityDecisions agentbroadcast.CapabilityDecisionProvider
 	// CapabilityAsker is notified of this router's rescan so a new ask reaches
-	// clients without waiting for the next scan tick. Declared as the one
-	// method used rather than *serverask.Asker: the router needs nothing else
-	// from it, and a nil interface here simply means no asker was wired.
-	CapabilityAsker   interface{ SetOnChange(func()) }
+	// clients without waiting for the next scan tick, and resolves a human's
+	// decision on one. Declared as the two methods used rather than
+	// *serverask.Asker: the router needs nothing else from it, and a nil
+	// interface here simply means no asker was wired.
+	CapabilityAsker interface {
+		SetOnChange(func())
+		Resolve(id, decision string) error
+	}
 	OAuthProvider     authpkg.OAuthProvider
 	UserRepo          repo.UserRepo
 	ApiKeyRepo        repo.ApiKeyRepo
@@ -526,6 +531,12 @@ func NewRouter(deps RouterDeps) http.Handler {
 		if !deps.Config.BypassAuth {
 			r.Post("/api/hooks/permission/respond", hooksHandler.PermissionRespond)
 			r.Post("/api/hooks/permission/arm", hooksHandler.PermissionArm)
+		}
+		// Nil under DASHBOARD_AUTH=none, same as CapabilityDecisions above: with
+		// JWT off there is no human on the other end of this endpoint, only any
+		// local process, so it would offer a decision nothing can meaningfully make.
+		if deps.CapabilityAsker != nil {
+			r.Post("/api/capabilities/decisions/respond", capabilities.New(deps.CapabilityAsker).Respond)
 		}
 
 		// SP1 lifecycle + settings endpoints under the clean /api/plugins namespace.

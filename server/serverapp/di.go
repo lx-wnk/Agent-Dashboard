@@ -865,7 +865,10 @@ func askerArgFor(asker *serverask.Asker) capability.Asker {
 
 // capabilityAskerFor is askerArgFor for the router's narrower interface, and
 // exists for the same reason: the router tests `deps.CapabilityAsker != nil`.
-func capabilityAskerFor(asker *serverask.Asker) interface{ SetOnChange(func()) } {
+func capabilityAskerFor(asker *serverask.Asker) interface {
+	SetOnChange(func())
+	Resolve(id, decision string) error
+} {
 	if asker == nil {
 		return nil
 	}
