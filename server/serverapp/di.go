@@ -272,10 +272,15 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		}
 
 		// Obsidian is a builtin Application: its registry identity and its
-		// four capabilities only exist once Register runs. Nothing else
-		// calls it, so without this every obsidian.* capability check denies
-		// while looking like correct fail-closed behaviour rather than the
-		// missing wiring it actually is. Idempotent, so safe on every boot.
+		// four capabilities only exist once Register runs. obsidian.IndexNotes
+		// (server/internal/apps/obsidian) is the one production caller that
+		// checks obsidian.search/obsidian.read against this catalogue, so
+		// without this call it reads a catalogue row that was never written
+		// (class, enforceable-by, reversible all zero-valued) instead of the
+		// one Register declares. obsidian.write and obsidian.delete have no
+		// caller at all yet — Client.Write/Client.Delete are never invoked in
+		// production — so nothing exercises those two either way. Idempotent,
+		// so safe on every boot.
 		if err := obsidian.Register(ctx, resourceRepo, capabilityRepo); err != nil {
 			return nil, fmt.Errorf("obsidian: register application: %w", err)
 		}
