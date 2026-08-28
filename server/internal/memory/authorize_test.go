@@ -120,6 +120,30 @@ func TestGateNilAskerFailsClosedOnAsk(t *testing.T) {
 	require.ErrorIs(t, err, capability.ErrAskRequired)
 }
 
+// TestGateDenyIsNotAskable proves a deny grant denies through the Gate and
+// never reaches the asker. Routing a deny to a human would let one turn an
+// explicit deny into an allow, which no grant in the model can do.
+//
+// Written after mutation testing: replacing the enforcer's deny branch with
+// "return nil" left every test in this package green, so nothing here pinned
+// that a deny denies at the layer production actually calls.
+func TestGateDenyIsNotAskable(t *testing.T) {
+	asker := &recordingAsker{answer: true}
+	gate, ctx := newAuthorizeGateForTest(t, asker)
+	_, err := gate.Grants.Create(ctx, repo.CreateGrantInput{
+		CapabilityName: repo.CapabilityMemoryRead,
+		Context:        repo.GrantContextFor(repo.GrantContextGlobal, ""),
+		Pattern:        "",
+		Mode:           repo.GrantModeDeny,
+		GrantedBy:      "test",
+	})
+	require.NoError(t, err)
+
+	err = gate.Authorize(ctx, repo.CapabilityMemoryRead, "", repo.GlobalScope())
+	require.ErrorIs(t, err, capability.ErrDenied)
+	require.False(t, asker.called, "a deny must never be offered to a human")
+}
+
 // TestGateAskerGrantedAllowsAndSeesTheRequest proves a wired Asker that
 // answers yes lets the call through, and that it receives the capability
 // name and value being asked about — the whole point of Problem 1.
