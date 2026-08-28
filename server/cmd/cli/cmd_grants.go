@@ -4,8 +4,11 @@ import (
 	"context"
 	"fmt"
 	"os/user"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/spf13/cobra"
 
@@ -23,6 +26,7 @@ func newGrantsCmd() *cobra.Command {
 		opts.Scope, _ = cmd.Flags().GetString("scope")
 		opts.Mode, _ = cmd.Flags().GetString("mode")
 		opts.Pattern, _ = cmd.Flags().GetString("pattern")
+		opts.PatternSet = cmd.Flags().Changed("pattern")
 		opts.LimitCount, _ = cmd.Flags().GetInt("limit-count")
 		opts.LimitWindow, _ = cmd.Flags().GetInt("limit-window")
 		opts.ExpiresIn, _ = cmd.Flags().GetString("expires-in")
@@ -34,14 +38,20 @@ func newGrantsCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Printf("granted %s: capability=%s mode=%s scope=%s pattern=%s\n",
+			fmt.Fprintf(cmd.OutOrStdout(), "granted %s: capability=%s mode=%s scope=%s pattern=%s\n",
 				g.ID, g.CapabilityName, g.Mode, scopeString(g.ContextKind, g.ContextRef), patternOrWildcard(g.Pattern))
+			// Grants have exactly one production reader (memory.Authorize); spawn
+			// builds its allow-list from task_permissions and hook runs its own
+			// matcher, so neither ever queries this table.
+			if c, err := s.caps.Get(ctx, g.CapabilityName); err == nil && !isServerEnforceable(c) {
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: no enforcement point reads stored grants for capability %q today — the spawn point builds its allow-list from task_permissions, and the hook point runs its own matcher; the grant is recorded and will apply once a reader exists\n", g.CapabilityName)
+			}
 			return nil
 		})
 	}}
 	add.Flags().String("scope", repo.GrantContextGlobal, "Context to grant in: kind or kind:ref (e.g. project:/home/x)")
 	add.Flags().String("mode", repo.GrantModeAllow, "Grant mode: allow, deny, ask")
-	add.Flags().String("pattern", "", `Pattern to match ("" = wildcard, matches anything)`)
+	add.Flags().String("pattern", "", `Pattern to match — required; pass "*" to grant every value, or a specific pattern (prefix patterns end in *)`)
 	add.Flags().Int("limit-count", 0, "Rate limit count (0 = unlimited)")
 	add.Flags().Int("limit-window", 0, "Rate limit window, in seconds")
 	add.Flags().String("expires-in", "", "Expiry as a Go duration (e.g. 24h, 30m); empty = never expires")
@@ -62,10 +72,15 @@ func newGrantsCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			sort.Slice(rows, func(i, j int) bool { return rows[i].GrantedAt.After(rows[j].GrantedAt) })
 			if asJSON {
 				return printJSON(rows)
 			}
-			printGrantsTable(rows)
+			caps, err := s.caps.List(ctx)
+			if err != nil {
+				return err
+			}
+			printGrantsTable(rows, enforcementByCapability(caps))
 			return nil
 		})
 	}}
@@ -119,6 +134,7 @@ type grantAddOpts struct {
 	Scope       string
 	Mode        string
 	Pattern     string
+	PatternSet  bool
 	LimitCount  int
 	LimitWindow int
 	ExpiresIn   string
@@ -133,6 +149,13 @@ type grantAddOpts struct {
 // class) and deny forever — the grant would write successfully and then never
 // take effect.
 func addGrant(ctx context.Context, s *dbStore, capName string, opts grantAddOpts) (*ent.Grant, error) {
+	// Three defaults (scope, mode, pattern) would otherwise compound silently
+	// into the widest grant the system can express; require the caller to say
+	// what they mean.
+	if !opts.PatternSet {
+		return nil, fmt.Errorf("--pattern is required; pass --pattern '*' to grant every value, or a specific pattern (prefix patterns end in *, e.g. 'git status*')")
+	}
+
 	repo.SeedCapabilities(ctx, s.caps) // never-opened DB has an empty catalogue; this is the only place that seeds it before a grant is written
 
 	if _, err := s.caps.Get(ctx, capName); err != nil {
@@ -158,6 +181,9 @@ func addGrant(ctx context.Context, s *dbStore, capName string, opts grantAddOpts
 		d, err := time.ParseDuration(opts.ExpiresIn)
 		if err != nil {
 			return nil, fmt.Errorf("--expires-in: %w", err)
+		}
+		if d <= 0 {
+			return nil, fmt.Errorf("--expires-in must be a positive duration, got %q", opts.ExpiresIn)
 		}
 		t := time.Now().Add(d)
 		expiresAt = &t
@@ -207,15 +233,58 @@ func defaultActor() string {
 	return "cli:" + u.Username
 }
 
-func printGrantsTable(rows []*ent.Grant) {
+func printGrantsTable(rows []*ent.Grant, enforcement map[string]string) {
 	w := newTabWriter()
-	fmt.Fprintln(w, "ID\tCAPABILITY\tMODE\tSCOPE\tPATTERN\tEXPIRES\tSTATUS")
+	fmt.Fprintln(w, "ID\tCAPABILITY\tMODE\tSCOPE\tPATTERN\tEXPIRES\tSTATUS\tENFORCEMENT\tGRANTED-BY")
 	for _, g := range rows {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+		enf, ok := enforcement[g.CapabilityName]
+		if !ok {
+			enf = "unknown"
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			g.ID, g.CapabilityName, g.Mode, scopeString(g.ContextKind, g.ContextRef),
-			patternOrWildcard(g.Pattern), formatExpires(g.ExpiresAt), grantStatus(g))
+			quoteIfControl(patternOrWildcard(g.Pattern)), formatExpires(g.ExpiresAt), grantStatus(g),
+			enf, quoteIfControl(g.GrantedBy))
 	}
 	w.Flush()
+}
+
+// isServerEnforceable reports whether c is read by the one production
+// enforcement point that queries stored grants (internal/memory.Authorize).
+func isServerEnforceable(c *ent.Capability) bool {
+	for _, e := range c.EnforceableBy {
+		if e == capability.EnforcerServer {
+			return true
+		}
+	}
+	return false
+}
+
+// enforcementByCapability maps a capability name to "server" or "none" for
+// the list table's ENFORCEMENT column, built once from the whole catalogue
+// rather than queried per row.
+func enforcementByCapability(caps []*ent.Capability) map[string]string {
+	m := make(map[string]string, len(caps))
+	for _, c := range caps {
+		if isServerEnforceable(c) {
+			m[c.Name] = capability.EnforcerServer
+		} else {
+			m[c.Name] = "none"
+		}
+	}
+	return m
+}
+
+// quoteIfControl guards against a stored pattern or actor value carrying a
+// terminal control sequence (patterns can originate from an unsanitized
+// permission request) that would otherwise rewrite prior lines in the table.
+func quoteIfControl(s string) string {
+	for _, r := range s {
+		if unicode.IsControl(r) {
+			return strconv.Quote(s)
+		}
+	}
+	return s
 }
 
 func scopeString(kind, ref string) string {

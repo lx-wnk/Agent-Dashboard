@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"io"
+	"strconv"
 	"testing"
 	"time"
 
@@ -56,7 +58,7 @@ func TestAddGrant_GlobalScopeWithRef_RejectedByRepoCreate(t *testing.T) {
 	assert.Equal(t, "global", gctx.Kind)
 	assert.Equal(t, "x", gctx.Ref)
 
-	_, err = addGrant(ctx, store, repo.CapabilityMemoryRead, grantAddOpts{Scope: "global:x", Mode: repo.GrantModeAllow})
+	_, err = addGrant(ctx, store, repo.CapabilityMemoryRead, grantAddOpts{Scope: "global:x", Mode: repo.GrantModeAllow, Pattern: "", PatternSet: true})
 	require.Error(t, err)
 }
 
@@ -66,7 +68,7 @@ func TestAddGrant_RejectsUnknownCapability(t *testing.T) {
 	defer store.Close()
 	ctx := context.Background()
 
-	_, err = addGrant(ctx, store, "not.a.real.capability", grantAddOpts{Scope: "global", Mode: repo.GrantModeAllow})
+	_, err = addGrant(ctx, store, "not.a.real.capability", grantAddOpts{Scope: "global", Mode: repo.GrantModeAllow, Pattern: "", PatternSet: true})
 	require.Error(t, err)
 
 	rows, err := store.grants.List(ctx)
@@ -81,9 +83,10 @@ func TestAddGrant_SucceedsForSeededCapability(t *testing.T) {
 	ctx := context.Background()
 
 	g, err := addGrant(ctx, store, repo.CapabilityMemoryRead, grantAddOpts{
-		Scope:   "global",
-		Mode:    repo.GrantModeAllow,
-		Pattern: "",
+		Scope:      "global",
+		Mode:       repo.GrantModeAllow,
+		Pattern:    "",
+		PatternSet: true,
 	})
 	require.NoError(t, err)
 
@@ -106,9 +109,11 @@ func TestAddGrant_ExpiresIn(t *testing.T) {
 
 	before := time.Now()
 	g, err := addGrant(ctx, store, repo.CapabilityMemoryRead, grantAddOpts{
-		Scope:     "global",
-		Mode:      repo.GrantModeAllow,
-		ExpiresIn: "1h",
+		Scope:      "global",
+		Mode:       repo.GrantModeAllow,
+		Pattern:    "",
+		PatternSet: true,
+		ExpiresIn:  "1h",
 	})
 	require.NoError(t, err)
 	after := time.Now()
@@ -124,7 +129,7 @@ func TestRevokeGrant_TombstonesNotDeletes(t *testing.T) {
 	defer store.Close()
 	ctx := context.Background()
 
-	g, err := addGrant(ctx, store, repo.CapabilityMemoryRead, grantAddOpts{Scope: "global", Mode: repo.GrantModeAllow})
+	g, err := addGrant(ctx, store, repo.CapabilityMemoryRead, grantAddOpts{Scope: "global", Mode: repo.GrantModeAllow, Pattern: "", PatternSet: true})
 	require.NoError(t, err)
 
 	require.NoError(t, store.grants.Revoke(ctx, g.ID, "cli:tester"))
@@ -151,9 +156,10 @@ func TestGrantCLI_OpensTheAuthorizeGate(t *testing.T) {
 	require.Error(t, err, "no grant exists yet — the gate must deny")
 
 	_, err = addGrant(ctx, store, repo.CapabilityMemoryRead, grantAddOpts{
-		Scope:   "global",
-		Mode:    repo.GrantModeAllow,
-		Pattern: "",
+		Scope:      "global",
+		Mode:       repo.GrantModeAllow,
+		Pattern:    "",
+		PatternSet: true,
 	})
 	require.NoError(t, err)
 
@@ -170,6 +176,8 @@ func TestAddGrantRejectsALimitCountWithoutAWindow(t *testing.T) {
 	_, err = addGrant(ctx, store, repo.CapabilityMemoryRead, grantAddOpts{
 		Scope:      "global",
 		Mode:       repo.GrantModeAllow,
+		Pattern:    "",
+		PatternSet: true,
 		LimitCount: 2,
 	})
 	require.Error(t, err, "a limit with a zero window is counted since now and never triggers")
@@ -182,8 +190,123 @@ func TestAddGrantRejectsALimitCountWithoutAWindow(t *testing.T) {
 	_, err = addGrant(ctx, store, repo.CapabilityMemoryRead, grantAddOpts{
 		Scope:       "global",
 		Mode:        repo.GrantModeAllow,
+		Pattern:     "",
+		PatternSet:  true,
 		LimitCount:  2,
 		LimitWindow: 60,
 	})
 	require.NoError(t, err)
+}
+
+func TestAddGrant_PatternRequired(t *testing.T) {
+	store, err := openDBStore(t.TempDir() + "/test.db")
+	require.NoError(t, err)
+	defer store.Close()
+	ctx := context.Background()
+
+	_, err = addGrant(ctx, store, repo.CapabilityMemoryRead, grantAddOpts{Scope: "global", Mode: repo.GrantModeAllow})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--pattern is required")
+
+	rows, err := store.grants.List(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, rows, "a rejected grant must not be written")
+}
+
+func TestAddGrant_WildcardPatternStoredLiterally(t *testing.T) {
+	store, err := openDBStore(t.TempDir() + "/test.db")
+	require.NoError(t, err)
+	defer store.Close()
+	ctx := context.Background()
+
+	g, err := addGrant(ctx, store, repo.CapabilityMemoryRead, grantAddOpts{
+		Scope:      "global",
+		Mode:       repo.GrantModeAllow,
+		Pattern:    "*",
+		PatternSet: true,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "*", g.Pattern)
+
+	rows, err := store.grants.List(ctx)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, "*", rows[0].Pattern)
+}
+
+// TestGrantCLI_WildcardPatternOpensTheAuthorizeGate is TestGrantCLI_OpensTheAuthorizeGate's
+// deny-before/allow-after shape, but with an explicit "*" pattern against a
+// non-empty value — proving change 1 did not break Match's wildcard handling.
+func TestGrantCLI_WildcardPatternOpensTheAuthorizeGate(t *testing.T) {
+	store, err := openDBStore(t.TempDir() + "/test.db")
+	require.NoError(t, err)
+	defer store.Close()
+	ctx := context.Background()
+
+	require.NotZero(t, repo.SeedCapabilities(ctx, store.caps))
+
+	err = memory.Authorize(ctx, store.caps, store.grants, store.grantUsage, repo.CapabilityMemoryRead, "some/value", repo.GlobalScope())
+	require.Error(t, err, "no grant exists yet — the gate must deny")
+
+	_, err = addGrant(ctx, store, repo.CapabilityMemoryRead, grantAddOpts{
+		Scope:      "global",
+		Mode:       repo.GrantModeAllow,
+		Pattern:    "*",
+		PatternSet: true,
+	})
+	require.NoError(t, err)
+
+	err = memory.Authorize(ctx, store.caps, store.grants, store.grantUsage, repo.CapabilityMemoryRead, "some/value", repo.GlobalScope())
+	assert.NoError(t, err, "a literal '*' pattern must match just like the empty-string wildcard")
+}
+
+func TestAddGrant_RejectsNonPositiveExpiresIn(t *testing.T) {
+	store, err := openDBStore(t.TempDir() + "/test.db")
+	require.NoError(t, err)
+	defer store.Close()
+	ctx := context.Background()
+
+	for _, d := range []string{"-1h", "0s"} {
+		_, err = addGrant(ctx, store, repo.CapabilityMemoryRead, grantAddOpts{
+			Scope:      "global",
+			Mode:       repo.GrantModeAllow,
+			Pattern:    "*",
+			PatternSet: true,
+			ExpiresIn:  d,
+		})
+		require.Error(t, err, "duration %q must be rejected", d)
+	}
+
+	rows, err := store.grants.List(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, rows, "a rejected grant must not be written")
+}
+
+// TestGrantsAddCmd_DefaultsReachTheDatabase is the only test in this file that
+// drives a RunE through cobra rather than calling addGrant directly — the
+// documented --scope/--mode defaults are worthless if cobra never wires them
+// to the flags addGrant reads.
+func TestGrantsAddCmd_DefaultsReachTheDatabase(t *testing.T) {
+	dbPath := t.TempDir() + "/test.db"
+
+	cmd := newGrantsCmd()
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs([]string{"add", repo.CapabilityMemoryRead, "--db", dbPath, "--pattern", "*"})
+	require.NoError(t, cmd.Execute())
+
+	store, err := openDBStore(dbPath)
+	require.NoError(t, err)
+	defer store.Close()
+
+	rows, err := store.grants.List(context.Background())
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, repo.GrantModeAllow, rows[0].Mode)
+	assert.Equal(t, "global", rows[0].ContextKind)
+}
+
+func TestQuoteIfControl(t *testing.T) {
+	assert.Equal(t, "plain-value", quoteIfControl("plain-value"))
+	assert.Equal(t, strconv.Quote("\x1b[1A"), quoteIfControl("\x1b[1A"))
 }
