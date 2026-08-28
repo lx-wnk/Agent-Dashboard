@@ -27,11 +27,13 @@ const (
 	// trust store. Works only if the user has installed and trusted the
 	// vault's certificate.
 	TLSVerify = "verify"
-	// TLSPinned is the default. It trusts the certificate presented on the
-	// first connection (no install step required) and refuses any later
-	// connection whose leaf certificate has a different SHA-256 fingerprint.
-	// A changed fingerprint is usually a harmless reinstall on loopback, but
-	// the user confirms that, the client does not assume it.
+	// TLSPinned trusts the certificate presented on the first connection (no
+	// install step required) and refuses any later connection whose leaf
+	// certificate has a different SHA-256 fingerprint. A changed fingerprint
+	// is usually a harmless reinstall on loopback, but the user confirms
+	// that, the client does not assume it. Not a default: NewClient requires
+	// TLSMode to be set explicitly, empty included, so nothing defaults to
+	// this or any other mode.
 	TLSPinned = "pinned"
 	// TLSInsecureLoopback disables certificate verification outright.
 	// NewClient refuses this mode unless the configured host resolves to
@@ -131,8 +133,11 @@ func NewClient(cfg Config) (*Client, error) {
 
 // PinnedFingerprint returns the SHA-256 hex fingerprint pinned on first
 // connect under TLSPinned, or "" before any connection or under a different
-// TLSMode. A UI asking the user to confirm a vault's certificate reads this
-// value; wiring that display is a later task's concern.
+// TLSMode. Built ahead of its consumer, the same treatment Reversible
+// (apps/obsidian/app.go) and ResolveEffort (services/effort_resolver.go)
+// get: nothing outside client_test.go calls it. A UI asking the user to
+// confirm a vault's certificate would read this value; no such UI exists,
+// and none is scheduled to build it.
 func (c *Client) PinnedFingerprint() string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -245,6 +250,13 @@ func (c *Client) newRequest(ctx context.Context, method, notePath string, body i
 	return req, nil
 }
 
+// ErrNotFound indicates the note does not exist at the requested path — a
+// 404 from the vault. Read's other error returns (a network failure, a 500,
+// a decode error) are transient vault conditions instead: distinguishing the
+// two is what lets a caller expire a pointer only on an actual deletion, not
+// on a blip.
+var ErrNotFound = errors.New("obsidian: note not found")
+
 // Read returns the raw content of the note at notePath.
 func (c *Client) Read(ctx context.Context, notePath string) (string, error) {
 	req, err := c.newRequest(ctx, http.MethodGet, notePath, nil)
@@ -256,6 +268,10 @@ func (c *Client) Read(ctx context.Context, notePath string) (string, error) {
 		return "", fmt.Errorf("obsidian: read %s: %w", notePath, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return "", fmt.Errorf("obsidian: read %s: %w", notePath, ErrNotFound)
+	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

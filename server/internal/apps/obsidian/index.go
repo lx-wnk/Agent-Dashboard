@@ -2,6 +2,7 @@ package obsidian
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path"
 	"strings"
@@ -40,10 +41,13 @@ const summaryMaxRunes = 200
 //
 // A previous run's pointers are reconciled on every call: a note that
 // disappeared from the vault since it was indexed is discovered by directly
-// re-reading its path, and on that failed access the existing entry is
-// expired (repo.MemoryRepo.ExpireEntry) rather than deleted, so the
-// contradiction between "memory says this exists" and "the vault does not
-// have it" stays visible instead of quietly vanishing.
+// re-reading its path, and only a confirmed ErrNotFound (a 404) expires the
+// existing entry (repo.MemoryRepo.ExpireEntry) rather than deleting it, so
+// the contradiction between "memory says this exists" and "the vault does
+// not have it" stays visible instead of quietly vanishing. Any other read
+// error — a closed connection, a 500 — is treated as transient and leaves
+// the pointer valid, the same as the indexing loop below already does for a
+// Read that fails on a note Search just reported.
 func IndexNotes(
 	ctx context.Context,
 	client *Client,
@@ -152,10 +156,19 @@ func IndexNotes(
 		if seen[notePath] {
 			continue
 		}
-		if _, err := client.Read(ctx, notePath); err != nil {
-			if expireErr := mem.ExpireEntry(ctx, entryID, now); expireErr != nil {
-				return indexed, fmt.Errorf("obsidian.IndexNotes: expire stale pointer for %s: %w", notePath, expireErr)
-			}
+		_, err := client.Read(ctx, notePath)
+		if err == nil {
+			continue
+		}
+		if !errors.Is(err, ErrNotFound) {
+			// A closed connection, a 500, an expired TLS pin — the same
+			// transient conditions the main loop above skips rather than
+			// treats as proof of anything. Only a confirmed 404 means the
+			// note is actually gone.
+			continue
+		}
+		if expireErr := mem.ExpireEntry(ctx, entryID, now); expireErr != nil {
+			return indexed, fmt.Errorf("obsidian.IndexNotes: expire stale pointer for %s: %w", notePath, expireErr)
 		}
 	}
 

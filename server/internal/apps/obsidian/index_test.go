@@ -306,3 +306,57 @@ func TestIndexRequiresObsidianReadGrant(t *testing.T) {
 		t.Fatalf("IndexNotes: want the vault never contacted before the grant is checked, got %d calls", got)
 	}
 }
+
+func TestTransientReadFailureDoesNotExpireStalePointer(t *testing.T) {
+	mem, caps, grants, grantUsage, ctx := newIndexTestDeps(t)
+	grantMemoryWrite(t, ctx, grants)
+	grantObsidianSearch(t, ctx, grants)
+	grantObsidianRead(t, ctx, grants)
+	spaceID := *createTestSpace(t, ctx, mem)
+
+	ts, _ := newFakeVault(map[string]string{"root/a.md": "hello"})
+	client := newTestClient(t, ts, "root")
+	if _, err := obsidian.IndexNotes(ctx, client, mem, caps, grants, grantUsage, spaceID); err != nil {
+		t.Fatalf("first IndexNotes: %v", err)
+	}
+	ts.Close()
+
+	entries, err := mem.ListValid(ctx, spaceID, time.Now())
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("after first index: want 1 entry, got %d (err %v)", len(entries), err)
+	}
+	entryID := entries[0].ID
+
+	// Second run: the note is missing from search results (as a stale search
+	// index would report it) and a direct read of it 500s — a transient
+	// vault condition, not the 404 that would actually prove it is gone.
+	mux := http.NewServeMux()
+	mux.HandleFunc("/search/simple/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]struct {
+			Filename string  `json:"filename"`
+			Score    float64 `json:"score"`
+		}{})
+	})
+	mux.HandleFunc("/vault/", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	})
+	ts2 := httptest.NewTLSServer(mux)
+	defer ts2.Close()
+	client2 := newTestClient(t, ts2, "root")
+
+	if _, err := obsidian.IndexNotes(ctx, client2, mem, caps, grants, grantUsage, spaceID); err != nil {
+		t.Fatalf("second IndexNotes: %v", err)
+	}
+
+	stillValid, err := mem.ListValid(ctx, spaceID, time.Now())
+	if err != nil {
+		t.Fatalf("ListValid: %v", err)
+	}
+	for _, e := range stillValid {
+		if e.ID == entryID {
+			return
+		}
+	}
+	t.Fatal("pointer was expired on a transient read failure (500), not a confirmed 404")
+}
