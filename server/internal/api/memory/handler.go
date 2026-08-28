@@ -24,16 +24,14 @@ import (
 // rawrepo.SearchRepo uses for user_id — there is no separate filter layer
 // here to keep in sync with it.
 type Handler struct {
-	repo         repo.MemoryRepo
-	retriever    *mem.Retriever
-	capabilities repo.CapabilityRepo
-	grants       repo.GrantRepo
-	grantUsage   repo.GrantUsageRepo
+	repo      repo.MemoryRepo
+	retriever *mem.Retriever
+	gate      mem.Gate
 }
 
 // NewHandler creates a Handler.
-func NewHandler(r repo.MemoryRepo, retriever *mem.Retriever, capabilities repo.CapabilityRepo, grants repo.GrantRepo, grantUsage repo.GrantUsageRepo) *Handler {
-	return &Handler{repo: r, retriever: retriever, capabilities: capabilities, grants: grants, grantUsage: grantUsage}
+func NewHandler(r repo.MemoryRepo, retriever *mem.Retriever, gate mem.Gate) *Handler {
+	return &Handler{repo: r, retriever: retriever, gate: gate}
 }
 
 // Mount registers all /api/memory/* routes on r.
@@ -58,11 +56,11 @@ func scopeFromQuery(q url.Values) (repo.Scope, error) {
 	return scope, nil
 }
 
-// authorize gates capName against value in scope via mem.Authorize, the same
+// authorize gates capName against value in scope via h.gate, the same
 // capability check the MCP memory tools enforce for the same actions — an
 // HTTP caller gets no wider access than an MCP one.
 func (h *Handler) authorize(ctx context.Context, capName, value string, scope repo.Scope) error {
-	if err := mem.Authorize(ctx, h.capabilities, h.grants, h.grantUsage, capName, value, scope); err != nil {
+	if err := h.gate.Authorize(ctx, capName, value, scope); err != nil {
 		return apierr.NewAppError(http.StatusForbidden, err.Error())
 	}
 	return nil

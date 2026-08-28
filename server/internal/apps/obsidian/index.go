@@ -26,12 +26,10 @@ const summaryMaxRunes = 200
 // Writing requires memory.write against the space, exactly like an agent
 // write — the application holds no privileged path around the capability
 // gate. Searching the vault requires obsidian.search, and reading a note
-// requires obsidian.read, checked the same way. capabilities, grants and
-// grantUsage are the three repos memory.Authorize needs to enforce all
-// three; they are parameters here (rather than the plan's original mem-only
-// signature) because nothing else in scope could supply them to the gate —
-// a signature that cannot call the authorization it is required to perform
-// is not a smaller signature, it is a broken one.
+// requires obsidian.read, checked the same way. gate is a parameter here
+// (rather than the plan's original mem-only signature) because nothing else
+// in scope could supply it — a signature that cannot call the authorization
+// it is required to perform is not a smaller signature, it is a broken one.
 //
 // This is the only production path that reaches Client.Search or
 // Client.Read. The gate lives here, not in Client itself: Client.Read,
@@ -52,9 +50,7 @@ func IndexNotes(
 	ctx context.Context,
 	client *Client,
 	mem repo.MemoryRepo,
-	capabilities repo.CapabilityRepo,
-	grants repo.GrantRepo,
-	grantUsage repo.GrantUsageRepo,
+	gate memory.Gate,
 	spaceID string,
 ) (int, error) {
 	space, err := mem.GetSpaceByID(ctx, spaceID)
@@ -63,7 +59,7 @@ func IndexNotes(
 	}
 	scope := repo.Scope{Kind: repo.ScopeKind(space.ScopeKind), Ref: space.ScopeRef}.Normalize()
 
-	if err := memory.Authorize(ctx, capabilities, grants, grantUsage, repo.CapabilityMemoryWrite, space.Slug, scope); err != nil {
+	if err := gate.Authorize(ctx, repo.CapabilityMemoryWrite, space.Slug, scope); err != nil {
 		return 0, fmt.Errorf("obsidian.IndexNotes: %w", err)
 	}
 
@@ -79,7 +75,7 @@ func IndexNotes(
 		}
 	}
 
-	if err := memory.Authorize(ctx, capabilities, grants, grantUsage, CapabilitySearch, "", scope); err != nil {
+	if err := gate.Authorize(ctx, CapabilitySearch, "", scope); err != nil {
 		return 0, fmt.Errorf("obsidian.IndexNotes: %w", err)
 	}
 	// obsidian.read covers every Client.Read call this function makes below
@@ -89,7 +85,7 @@ func IndexNotes(
 	// grant here is a grant to read the vault this run touches, not to any
 	// one note, and nothing in the capability schema expresses a
 	// per-note-path pattern for it to check instead.
-	if err := memory.Authorize(ctx, capabilities, grants, grantUsage, CapabilityRead, "", scope); err != nil {
+	if err := gate.Authorize(ctx, CapabilityRead, "", scope); err != nil {
 		return 0, fmt.Errorf("obsidian.IndexNotes: %w", err)
 	}
 

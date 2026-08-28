@@ -8,13 +8,14 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/memory"
 )
 
-// MemoryDeps holds the dependencies required by the memory MCP tools.
+// MemoryDeps holds the dependencies required by the memory MCP tools. Gate is
+// the second, independent authorization layer: the MCP scope on
+// ToolScopeMap only authorises the caller's key to reach the transport, Gate
+// authorises the action itself.
 type MemoryDeps struct {
-	Repo         repo.MemoryRepo
-	Retriever    *memory.Retriever
-	Capabilities repo.CapabilityRepo
-	Grants       repo.GrantRepo
-	GrantUsage   repo.GrantUsageRepo
+	Repo      repo.MemoryRepo
+	Retriever *memory.Retriever
+	Gate      memory.Gate
 }
 
 // RegisterMemoryTools registers the 2 memory MCP tools into the given registry.
@@ -34,15 +35,6 @@ func parseMemoryScope(args map[string]any) (repo.Scope, error) {
 		return repo.Scope{}, mcp.Fail(err.Error())
 	}
 	return scope, nil
-}
-
-// authorizeMemory resolves and enforces a capability.Decide request for
-// capName against value in scope's context chain, via memory.Authorize — the
-// same gate the HTTP API uses. The MCP scope on ToolScopeMap only authorises
-// the caller's key to reach the transport; this is the second, independent
-// layer that authorises the action itself.
-func authorizeMemory(ctx context.Context, d MemoryDeps, capName, value string, scope repo.Scope) error {
-	return memory.Authorize(ctx, d.Capabilities, d.Grants, d.GrantUsage, capName, value, scope)
 }
 
 func registerMemorySearch(registry mcp.ToolRegistry, d MemoryDeps) {
@@ -73,7 +65,7 @@ func registerMemorySearch(registry mcp.ToolRegistry, d MemoryDeps) {
 			// fans out across every space visible in scope, so there is no
 			// single space identity to match a grant pattern against. The
 			// empty value is capability.Match's documented wildcard.
-			if err := authorizeMemory(ctx, d, repo.CapabilityMemoryRead, "", scope); err != nil {
+			if err := d.Gate.Authorize(ctx, repo.CapabilityMemoryRead, "", scope); err != nil {
 				return nil, mcp.Fail("memory_search: " + err.Error())
 			}
 
@@ -139,7 +131,7 @@ func registerMemoryWrite(registry mcp.ToolRegistry, d MemoryDeps) {
 			// an ungranted caller distinguish "unknown space" (404-shaped
 			// error) from "denied" (403-shaped error) without ever holding a
 			// grant — a space-existence oracle ahead of the gate.
-			if err := authorizeMemory(ctx, d, repo.CapabilityMemoryWrite, spaceSlug, scope); err != nil {
+			if err := d.Gate.Authorize(ctx, repo.CapabilityMemoryWrite, spaceSlug, scope); err != nil {
 				return nil, mcp.Fail("memory_write: " + err.Error())
 			}
 
