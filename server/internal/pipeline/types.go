@@ -299,6 +299,17 @@ type OrchestratorOptions struct {
 	// tells OnTaskChanged to fall back to a live read. The pipeline package does not
 	// interpret the returned value — callers own its type.
 	BuildTaskPayload func(ctx context.Context, taskID string, srRepo repo.StageRunRepo, permRepo repo.PermissionRepo) any
+
+	// InjectMemory, MemoryBudget and RecordMemoryInjection are forwarded
+	// verbatim onto every StageContext this orchestrator builds — see the
+	// matching fields there for what each one does. Production wires a bound
+	// (*memory.Retriever).Retrieve, a positive character budget, and
+	// repo.MemoryRepo.RecordInjection at DI time (serverapp/di_pipeline.go);
+	// leaving InjectMemory nil or MemoryBudget <= 0 disables the push
+	// entirely rather than treating it as unbounded.
+	InjectMemory          memory.InjectorFunc
+	MemoryBudget          int
+	RecordMemoryInjection func(ctx context.Context, in repo.RecordInjectionInput) (*ent.MemoryInjection, error)
 }
 
 // StageFailedInfo carries failure metadata to the OnStageFailed callback.

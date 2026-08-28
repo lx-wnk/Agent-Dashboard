@@ -8,6 +8,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	mcp "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
 	mcptools "github.com/lx-wnk/agent-dashboard/server/internal/mcp/tools"
+	"github.com/lx-wnk/agent-dashboard/server/internal/memory"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 	"github.com/lx-wnk/agent-dashboard/server/internal/refine"
 	"github.com/lx-wnk/agent-dashboard/server/internal/scheduler"
@@ -21,6 +22,8 @@ func provideMCPHandler(
 	tb *sse.TaskBroadcaster,
 	pb *sse.ProjectBroadcaster,
 	refineRunner *refine.Runner,
+	memRepo repo.MemoryRepo,
+	memRetriever *memory.Retriever,
 ) http.Handler {
 	if client == nil || orch == nil {
 		return nil
@@ -109,5 +112,11 @@ func provideMCPHandler(
 		Broadcast:  broadcast,
 	})
 	mcptools.RegisterCoordTools(registry, mcptools.CoordDeps{Scratch: scratchRepo, Locks: lockRepo})
+	mcptools.RegisterMemoryTools(registry, mcptools.MemoryDeps{
+		Repo:         memRepo,
+		Retriever:    memRetriever,
+		Capabilities: repo.NewCapabilityRepo(client),
+		Grants:       repo.NewGrantRepo(client),
+	})
 	return mcp.MCPHandler(registry)
 }
