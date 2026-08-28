@@ -22,7 +22,7 @@ func TestSanitizeForStoreStripsBidiControls(t *testing.T) {
 	// Escaped, not written literally: a raw U+202E in this file would reverse
 	// the rendering of the source line that documents it, which is the very
 	// attack the function under test defends against.
-	_, content, err := memory.SanitizeForStore("summary", "safe‮txet desrever‬")
+	_, content, err := memory.SanitizeForStore("summary", "safe\u202etxet desrever\u202c")
 	if err != nil {
 		t.Fatalf("sanitize: %v", err)
 	}
@@ -32,7 +32,7 @@ func TestSanitizeForStoreStripsBidiControls(t *testing.T) {
 }
 
 func TestSanitizeForStoreRefusesWhenEmptied(t *testing.T) {
-	_, _, err := memory.SanitizeForStore("", "‮‬")
+	_, _, err := memory.SanitizeForStore("", "\u202e\u202c")
 	if !errors.Is(err, memory.ErrEmptyAfterSanitize) {
 		t.Fatalf("err = %v, want ErrEmptyAfterSanitize — a silently emptied entry is worse than a rejected one", err)
 	}

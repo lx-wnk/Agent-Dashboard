@@ -180,7 +180,7 @@ func TestMemoryWriteFailsClosedWhenContentEmptiedBySanitize(t *testing.T) {
 
 	// Escaped, not written literally — see ingest_test.go's identical fixture.
 	_, err = registry["memory_write"].Handler(ctx, map[string]any{
-		"spaceSlug": "notes", "summary": "", "content": "‮‬", "kind": "fact", "sourceKind": "user",
+		"spaceSlug": "notes", "summary": "", "content": "\u202e\u202c", "kind": "fact", "sourceKind": "user",
 	})
 	require.ErrorContains(t, err, "memory_write")
 }

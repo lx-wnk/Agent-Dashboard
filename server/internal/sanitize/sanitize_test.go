@@ -114,13 +114,13 @@ func TestForDisplayCappedCountsTheSeparator(t *testing.T) {
 }
 
 func TestForStoragePreservesNewlinesButStripsDeceptiveRunes(t *testing.T) {
-	in := "line one​\nline two‮\n\nline three"
+	in := "line one\u200b\nline two\u202e\n\nline three"
 	got := sanitize.ForStorage(in)
 	want := "line one\nline two\n\nline three"
 	if got != want {
 		t.Errorf("ForStorage(%q) = %q, want %q", in, got, want)
 	}
-	for _, bad := range []rune{'‮', '​'} {
+	for _, bad := range []rune{'\u202e', '\u200b'} {
 		if strings.ContainsRune(got, bad) {
 			t.Errorf("result still carries %U: %q", bad, got)
 		}

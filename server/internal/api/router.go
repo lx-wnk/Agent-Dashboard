@@ -489,7 +489,9 @@ func NewRouter(deps RouterDeps) http.Handler {
 		// client built against the old path keeps working. Logs once per
 		// process (see Handler.Memory, which also names what to rename here
 		// when this route goes).
-		r.Get("/api/config/memory", configHandler.Memory)
+		// This is the one caller the deprecation marker is meant to allow:
+		// keeping the alias registered is the whole point of the window.
+		r.Get("/api/config/memory", configHandler.Memory) //nolint:staticcheck // SA1019: intentional alias
 		// Single-file read/write for editable (user/project) config files. Writes
 		// are authorized only against the scope's enumerated editable set.
 		r.Get("/api/config/file", configHandler.File)
