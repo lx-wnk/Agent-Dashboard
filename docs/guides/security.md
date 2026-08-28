@@ -34,20 +34,24 @@ ranks grants across all six, with a deny beating an allow beating an ask
 within whichever level wins. Grants are rows with an optional expiry and
 rate limit, bound to one of those contexts.
 
-**State this plainly: that ranking cannot change an outcome today.** The
-only enforcement path that resolves real requests, `SpawnEnforcer`
-(`server/internal/pipeline/spawner.go`), never reads the `grants` table —
-it builds a `GrantView` on the fly from each granted `TaskPermission` row,
-pinned to one fixed, synthetic task-level context. A migration does
-backfill real rows into `grants` (`task` context from `task_permissions`,
-`project` context from `permission_presets`, both idempotent — see
-[`PRIVACY.md`](../../PRIVACY.md)), but nothing in production reads them
-back: the only reader of the `grants` table, `GrantRepo.ListForCapability`,
-has no caller. With a single context level ever actually in play, the
-six-level hierarchy has no second level to rank against — it is implemented
-and tested in the Decider, but the data path that would give it something
-to rank has not landed. The grants table is being written in preparation
-for a read path that does not exist yet.
+**State this plainly: that ranking is now partially exercised, not entirely
+theoretical.** `SpawnEnforcer` (`server/internal/pipeline/spawner.go`),
+which resolves every spawned task-pipeline agent's permissions, still never
+reads the `grants` table — it builds a `GrantView` on the fly from each
+granted `TaskPermission` row, pinned to one fixed, synthetic task-level
+context. A migration does backfill real rows into `grants` (`task` context
+from `task_permissions`, `project` context from `permission_presets`, both
+idempotent — see [`PRIVACY.md`](../../PRIVACY.md)). The memory store's
+`internal/memory.Authorize` (gating `memory.read`/`memory.write` for both
+`/api/memory/*` and the `memory_search`/`memory_write` MCP tools — see
+[`CHANGELOG.md`](../../CHANGELOG.md)) is now a real, production caller of
+`GrantRepo.ListForCapability`, and it resolves against up to two context
+levels — a memory scope's own context (project or application) plus the
+global fallback, or just the global level alone when the request itself is
+global-scoped — rather than one fixed level. So the six-level hierarchy has
+a second level to rank against for memory today; agent session, task, and
+routine still have no `grants`-table reader, and `SpawnEnforcer` still
+bypasses the table entirely via the mechanism above.
 
 A capability also declares which enforcement points it can be applied at,
 and a resolved decision carries that same list forward — but the two wired
@@ -71,7 +75,7 @@ able to give up on purpose:
 
 | Enforcement point | What it covers |
 |---|---|
-| **Server** (`ServerEnforcer`) | The only point with complete coverage once a call site invokes it — nothing routes around it, and it cannot time out into an implicit allow. It is implemented and tested (`server/internal/capability/enforcer_server.go`), but as of this writing no request path calls it yet: it enforces nothing in production today. |
+| **Server** (`ServerEnforcer`) | The only point with complete coverage once a call site invokes it — nothing routes around it, and it cannot time out into an implicit allow. It is implemented and tested (`server/internal/capability/enforcer_server.go`) and now has a real production caller: every `/api/memory/*` request and both memory MCP tools (`memory_search`, `memory_write`) go through it via `internal/memory.Authorize`. **No `Asker` is wired to it.** An `ask` decision therefore fails closed to a denial (`ErrAskRequired`) rather than prompting a human — "ask" and "deny" are indistinguishable from a memory caller's point of view today. There is also no grant-management surface: nothing outside a test calls `GrantRepo.Create`, so nobody can turn a `memory.read`/`memory.write` request into an "allow" through any HTTP route, CLI command, or settings page. The two gaps together mean every memory call is denied on a fresh install, with no user-facing fix short of inserting a `grants` row by hand. |
 | **Spawn** (`SpawnEnforcer`) | Complete for every agent the dashboard's task pipeline spawns itself: each granted `TaskPermission` is resolved through the Decider and rendered into that process's `--allowedTools` list (`server/internal/pipeline/spawner.go`). It cannot ask — the file is written before the process starts — so an `ask` decision is simply omitted, and the agent falls back to its own permission prompt for that call. |
 | **Hook** (`HookEnforcer`) | The only point that can reach a session you started by hand, because it rides Claude Code's own `PreToolUse` hook instead of a start-time handshake. **It fails open on a timeout, by design** — see below. |
 
