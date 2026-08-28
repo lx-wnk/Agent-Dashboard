@@ -1,3 +1,4 @@
+import type { PendingCapabilityDecision } from '@/sdk.generated'
 import type { Agent } from '@/types'
 import { computed, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { startNowTicking } from '@/composables/useNow'
@@ -19,6 +20,7 @@ export interface TrendPoint {
 const TREND_RETENTION_MS = 10 * 60 * 1000
 
 const agents = shallowRef<Agent[]>([])
+const pendingCapabilityDecisions = shallowRef<PendingCapabilityDecision[]>([])
 const costTrend = ref<TrendPoint[]>([])
 const selectedAgent = ref<Agent | null>(null)
 const isLoading = ref(true)
@@ -28,8 +30,10 @@ const debouncedQuery = ref('')
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
-function handleAgentData(data: Agent[], _trend?: TrendPoint[]) {
+function handleAgentData(data: Agent[], _trend?: TrendPoint[], decisions?: PendingCapabilityDecision[]) {
   agents.value = data
+  // The server sends the full set every frame, so an absent field means none pending — not "keep the last known list".
+  pendingCapabilityDecisions.value = decisions ?? []
 
   // Build the cost trend client-side: the backend streams an empty trend, but
   // every frame carries the running agents, so we sample total cost/tokens here.
@@ -68,12 +72,13 @@ async function fetchAgents() {
   }
 }
 
-// SSE frame carries { agents, trend }; handleAgentData rebuilds the cost trend
-// client-side so the streamed trend is intentionally ignored.
+// SSE frame carries { agents, trend, pendingCapabilityDecisions }; handleAgentData rebuilds
+// the cost trend client-side so the streamed trend is intentionally ignored, but
+// pendingCapabilityDecisions is authoritative server state and is passed through as-is.
 function handleSseMessage(data: string) {
   try {
     const payload = JSON.parse(data)
-    handleAgentData(payload.agents, payload.trend)
+    handleAgentData(payload.agents, payload.trend, payload.pendingCapabilityDecisions)
   }
   catch { /* ignore parse errors */ }
 }
@@ -178,6 +183,7 @@ export function useAgents(options?: { autoStart?: boolean }) {
 
   return {
     agents,
+    pendingCapabilityDecisions,
     costTrend,
     filteredAgents,
     attentionAgents,
