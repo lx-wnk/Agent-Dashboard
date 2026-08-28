@@ -27,7 +27,11 @@ var AvailableAdapters = []AdapterMeta{
 		Name:        "claude",
 		Description: "Default Claude CLI adapter — spawns a detached claude process per stage.",
 		ConfigKeys: []ConfigKeyDoc{
-			{Key: "effort", Type: "string", Required: false, Note: "Reasoning effort: low, medium, or high. Resolved per task/stage through the spawner chain."},
+			// Values hand-kept in parity with services.ValidEffortLevels
+			// (server/internal/services/effort_resolver.go) and
+			// EFFORT_OPTIONS (src/utils/models.ts) — this is the third of
+			// the three copies those two name.
+			{Key: "effort", Type: "string", Required: false, Note: "Reasoning effort: low, medium, high, xhigh, or max. Resolved per task/stage through the spawner chain."},
 		},
 	},
 	{
