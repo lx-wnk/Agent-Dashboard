@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { SelectOption } from '@/components/ui/selectOption'
 import type { Spawner, SpawnerAdapterType } from '@/types'
 import { computed, ref, watch } from 'vue'
 import AppButton from '@/components/ui/AppButton.vue'
@@ -14,6 +15,7 @@ import {
 import { toast } from '@/composables/useToast'
 import SpawnerDetailView from '@/features/settings/components/SpawnerDetailView.vue'
 import { errorMessage } from '@/utils/errorMessage'
+import { EFFORT_OPTIONS } from '@/utils/models'
 import { isAllowedSpawnerCommand } from '@/utils/validation'
 
 withDefaults(defineProps<{ hideTitle?: boolean }>(), { hideTitle: false })
@@ -87,6 +89,27 @@ const form = ref<SpawnerFormState>(emptyForm())
 const currentAdapterMeta = computed(() => getByType(form.value.adapterType))
 const adapterTypeOptions = computed(() => catalog.value.map(meta => ({ value: meta.name, label: meta.name })))
 const showCommandFields = computed(() => usesCommandFields(form.value.adapterType))
+// Effort gets its own control (a select with a stated "not supported"
+// reason) rather than the generic Adapter Config loop below, so it is
+// excluded there to avoid rendering it twice.
+const genericConfigKeys = computed(() => currentAdapterMeta.value?.configKeys.filter(k => k.key !== 'effort') ?? [])
+// The claude adapter is the only one the server resolves effort for
+// (services.effortSupportingAdapterTypes) — kept in parity with that list by hand.
+const effortSupported = computed(() => form.value.adapterType === 'claude')
+const effortValue = computed(() => form.value.adapterConfig.effort ?? '')
+const effortSelectOptions = computed<SelectOption<string>[]>(() => [
+  { value: '', label: 'Not set (adapter default)' },
+  ...EFFORT_OPTIONS,
+])
+// A value outside EFFORT_OPTIONS (hand-edited via the API, or a retired
+// level) must not render as if one of the known levels were silently
+// chosen — AppSelect already shows a blank trigger for it, this makes the
+// reason visible instead of just empty.
+const effortUnrecognized = computed(() => effortValue.value !== '' && !EFFORT_OPTIONS.some(o => o.value === effortValue.value))
+
+function onEffortSelect(value: string): void {
+  form.value.adapterConfig.effort = value
+}
 // Editing a built-in: every field is editable except the slug, which the
 // resolution backstop GetBySlug("claude-default") depends on.
 const editingBuiltIn = computed(() => !isCreating.value && !!editingSpawner.value?.builtIn)
@@ -541,15 +564,37 @@ async function handleSetDefault(id: string) {
               >
             </div>
           </template>
+
+          <!-- Reasoning effort: claude-only, always shown so the other adapter
+               types state why it does not apply rather than omitting it. -->
+          <div class="col-span-2">
+            <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1" for="sp-effort">
+              Reasoning Effort (optional)
+            </label>
+            <AppSelect
+              id="sp-effort"
+              :model-value="effortValue"
+              :options="effortSelectOptions"
+              :disabled="!effortSupported"
+              class="w-full"
+              @update:model-value="onEffortSelect"
+            />
+            <p v-if="!effortSupported" class="text-[10px] text-fg-mute mt-0.5">
+              Not supported by the {{ form.adapterType }} adapter — only claude reads this setting.
+            </p>
+            <p v-else-if="effortUnrecognized" class="text-[10px] text-danger-text mt-0.5">
+              Stored value "{{ effortValue }}" is not one of the known levels — pick one or clear it.
+            </p>
+          </div>
         </div>
 
         <!-- Adapter-specific config keys (dynamic) -->
-        <div v-if="currentAdapterMeta && currentAdapterMeta.configKeys.length > 0">
+        <div v-if="genericConfigKeys.length > 0">
           <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-2">
             Adapter Config
           </label>
           <div class="flex flex-col gap-2">
-            <div v-for="k in currentAdapterMeta.configKeys" :key="k.key">
+            <div v-for="k in genericConfigKeys" :key="k.key">
               <label class="block text-[11px] font-medium text-fg-mute mb-1" :for="`sp-cfg-${k.key}`">
                 <span class="font-mono">{{ k.key }}</span>
                 <span v-if="k.required" class="text-danger-text ml-0.5">*</span>

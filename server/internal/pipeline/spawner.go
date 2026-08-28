@@ -68,6 +68,13 @@ type SpawnAgentOptions struct {
 	// AllowGitPush is the global git-push setting ("git.allowPush"). Combined with
 	// the per-task metadata override inside IsGitPushAllowed.
 	AllowGitPush bool
+
+	// Effort is the resolved reasoning-effort level (e.g. "low"/"high") for
+	// this spawn. Empty means "no --effort flag" — the caller (stage_handlers.go)
+	// only populates it for an adapter type that supports it and only with a
+	// value the claude CLI actually recognizes (services.IsValidEffortLevel);
+	// an unresolved or unrecognized value must reach here as "", never a guess.
+	Effort string
 }
 
 type SpawnResult struct {
@@ -246,6 +253,9 @@ func BuildSpawnArgs(opts SpawnAgentOptions) []string {
 	}
 	if opts.Model != "" {
 		args = append(args, "--model", opts.Model)
+	}
+	if opts.Effort != "" {
+		args = append(args, "--effort", opts.Effort)
 	}
 	if opts.SystemPrompt != "" {
 		sp := opts.SystemPrompt

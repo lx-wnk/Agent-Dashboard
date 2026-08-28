@@ -12,6 +12,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/llmadapter"
 	"github.com/lx-wnk/agent-dashboard/server/internal/memory"
+	"github.com/lx-wnk/agent-dashboard/server/internal/services"
 )
 
 // SpawnFunc launches the agent process for native (claude) stages.
@@ -153,6 +154,24 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 		}
 	}
 
+	// Reasoning effort: read straight off the spawner already resolved above
+	// rather than calling services.ResolveEffort again — resolving a second
+	// time through the SpawnerResolver would repeat the same DB lookups this
+	// function just made to get `resolved`. Reaching this point in the
+	// function already means resolved is nil, "", or "claude" (any other
+	// adapter_type took the LLM-adapter branch above and returned), which is
+	// exactly the set services.effortSupportingAdapterTypes encodes, so no
+	// separate "supported" check is needed here. A resolver error can never
+	// leave effort unresolved silently — it already aborted the spawn above,
+	// same as it does for the model. An unrecognized value is dropped rather
+	// than guessed, so a bad stored string can never break the CLI call.
+	nativeEffort := ""
+	if resolved != nil {
+		if v, ok := resolved.AdapterConfig[services.AdapterConfigEffortKey]; ok && services.IsValidEffortLevel(v) {
+			nativeEffort = v
+		}
+	}
+
 	result, err := h.spawnFn(SpawnAgentOptions{
 		Task:            ctx.Task,
 		StageRun:        ctx.StageRun,
@@ -165,6 +184,7 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 		MCPUrl:          ctx.MCPUrl,
 		Spawner:         resolved,
 		Model:           nativeModel,
+		Effort:          nativeEffort,
 		AdditionalDirs:  ctx.AdditionalDirs,
 		AllowGitPush:    ctx.AllowGitPush,
 	})

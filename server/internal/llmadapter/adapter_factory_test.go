@@ -130,3 +130,26 @@ func TestCatalogListsTheACPAdapter(t *testing.T) {
 	require.NotNil(t, found, "the settings UI reads this catalog")
 	require.NotEmpty(t, found.Description)
 }
+
+// TestCatalogClaudeAdapterDeclaresEffortKey guards the save path in
+// SpawnerSettings.vue's buildAdapterConfig(), which only sends a key that
+// appears in this catalog's configKeys — removing this entry would break
+// saving effort in production while every Go test outside this one and the
+// Vue test's own mocked catalog stayed green.
+func TestCatalogClaudeAdapterDeclaresEffortKey(t *testing.T) {
+	var found *llmadapter.AdapterMeta
+	for i := range llmadapter.AvailableAdapters {
+		if llmadapter.AvailableAdapters[i].Name == "claude" {
+			found = &llmadapter.AvailableAdapters[i]
+		}
+	}
+	require.NotNil(t, found, "the settings UI reads this catalog")
+
+	hasEffort := false
+	for _, k := range found.ConfigKeys {
+		if k.Key == "effort" {
+			hasEffort = true
+		}
+	}
+	require.True(t, hasEffort, "claude adapter must declare the effort config key")
+}

@@ -78,6 +78,28 @@ func TestBuildSpawnArgs_WithResume(t *testing.T) {
 	require.Contains(t, args, "abc123")
 }
 
+func TestBuildSpawnArgs_WithEffort(t *testing.T) {
+	opts := pipeline.SpawnAgentOptions{
+		Task:     &ent.Task{},
+		StageRun: &ent.StageRun{},
+		Prompt:   "p",
+		Effort:   "high",
+	}
+	args := pipeline.BuildSpawnArgs(opts)
+	require.Contains(t, args, "--effort")
+	require.Contains(t, args, "high")
+}
+
+func TestBuildSpawnArgs_NoEffortFlagWhenUnset(t *testing.T) {
+	opts := pipeline.SpawnAgentOptions{
+		Task:     &ent.Task{},
+		StageRun: &ent.StageRun{},
+		Prompt:   "p",
+	}
+	args := pipeline.BuildSpawnArgs(opts)
+	require.NotContains(t, args, "--effort")
+}
+
 func TestBuildSpawnArgs_DefaultPermissionModeWithoutSkip(t *testing.T) {
 	opts := pipeline.SpawnAgentOptions{
 		Task:     &ent.Task{},

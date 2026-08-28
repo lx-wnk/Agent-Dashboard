@@ -158,6 +158,49 @@ func TestCreate_AcceptsAllowlistedAcpAdapterConfigCommand(t *testing.T) {
 	}
 }
 
+// TestCreate_SavesEffortForClaudeAdapter verifies effort can be persisted
+// through the real create endpoint, not merely accepted by the resolver in
+// isolation.
+func TestCreate_SavesEffortForClaudeAdapter(t *testing.T) {
+	h := newTestHandlerForPkg(t)
+	r := chi.NewRouter()
+	h.Mount(r)
+
+	body := `{"name":"Claude High","slug":"claude-high","command":"claude","adapterType":"claude","adapterConfig":{"effort":"high"}}`
+	req := httptest.NewRequest("POST", "/api/spawners", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != 201 {
+		t.Fatalf("create with effort adapter_config: got %d, want 201; body=%s", rr.Code, rr.Body.String())
+	}
+	var v spawnerView
+	if err := json.Unmarshal(rr.Body.Bytes(), &v); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if v.AdapterConfig["effort"] != "high" {
+		t.Fatalf("adapterConfig.effort: got %q, want %q", v.AdapterConfig["effort"], "high")
+	}
+}
+
+// TestCreate_RejectsUnrecognisedEffortLevel verifies the trust boundary
+// refuses an effort value outside the known set through the real create
+// endpoint, not merely in the resolver's own validation-only tests.
+func TestCreate_RejectsUnrecognisedEffortLevel(t *testing.T) {
+	h := newTestHandlerForPkg(t)
+	r := chi.NewRouter()
+	h.Mount(r)
+
+	body := `{"name":"Claude Ultra","slug":"claude-ultra","command":"claude","adapterType":"claude","adapterConfig":{"effort":"ultra"}}`
+	req := httptest.NewRequest("POST", "/api/spawners", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != 400 {
+		t.Fatalf("create with unrecognised effort adapter_config: got %d, want 400; body=%s", rr.Code, rr.Body.String())
+	}
+}
+
 // TestUpdate_RejectsUntrustedAcpAdapterConfigCommand mirrors the create-path check
 // on PATCH, where effectiveAdapterType may come from the existing row.
 func TestUpdate_RejectsUntrustedAcpAdapterConfigCommand(t *testing.T) {

@@ -46,6 +46,7 @@ import (
 	apiusage "github.com/lx-wnk/agent-dashboard/server/internal/api/usage"
 	apivisualizations "github.com/lx-wnk/agent-dashboard/server/internal/api/visualizations"
 	apiwp "github.com/lx-wnk/agent-dashboard/server/internal/api/wphandler"
+	"github.com/lx-wnk/agent-dashboard/server/internal/apps/obsidian"
 	authpkg "github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/capability"
 	"github.com/lx-wnk/agent-dashboard/server/internal/checkpoint"
@@ -269,6 +270,21 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		if seeded := repo.SeedCapabilities(ctx, capabilityRepo); seeded > 0 {
 			slog.Info("capability: seeded catalogue", "count", seeded)
 		}
+
+		// Obsidian is a builtin Application: its registry identity and its
+		// four capabilities only exist once Register runs. obsidian.IndexNotes
+		// (server/internal/apps/obsidian) is the one production caller that
+		// checks obsidian.search/obsidian.read against this catalogue, so
+		// without this call it reads a catalogue row that was never written
+		// (class, enforceable-by, reversible all zero-valued) instead of the
+		// one Register declares. obsidian.write and obsidian.delete have no
+		// caller at all yet — Client.Write/Client.Delete are never invoked in
+		// production — so nothing exercises those two either way. Idempotent,
+		// so safe on every boot.
+		if err := obsidian.Register(ctx, resourceRepo, capabilityRepo); err != nil {
+			return nil, fmt.Errorf("obsidian: register application: %w", err)
+		}
+
 		if rows, err := capabilityRepo.List(ctx); err != nil {
 			slog.Warn("capability: catalogue load failed", "err", err)
 		} else {
