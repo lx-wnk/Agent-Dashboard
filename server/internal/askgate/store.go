@@ -43,6 +43,11 @@ type Store[T any] struct {
 	pending  map[string]*held[T]
 	holdFor  time.Duration
 	onChange func()
+
+	// testBeforeLapseLock, when set, runs immediately before lapseOrStolen
+	// takes the lock. Production code never sets it; store_test.go uses it to
+	// pin the timing of a lapse against a concurrent Resolve deterministically.
+	testBeforeLapseLock func()
 }
 
 // New returns a Store whose Ask waits up to holdFor for a decision. onChange,
@@ -68,9 +73,19 @@ func (s *Store[T]) SetHoldFor(d time.Duration) {
 //
 // ok is false for every way of getting no decision — timeout or ctx.Done —
 // and callers map that outcome to their own fallback; this package has none.
+//
+// Ask panics if id is already pending: overwriting it would let the first
+// caller's cleanup delete the second caller's entry out from under it, which
+// starves the second Ask to its own timeout with no error anywhere. Callers
+// are expected to generate unique ids (both callers today use uuid.New()), so
+// a collision is a caller bug, not a runtime condition to handle.
 func (s *Store[T]) Ask(ctx context.Context, id string, meta T) (decision string, ok bool) {
 	ch := make(chan string, 1)
 	s.mu.Lock()
+	if _, exists := s.pending[id]; exists {
+		s.mu.Unlock()
+		panic("askgate: Ask called with an id already pending: " + id)
+	}
 	holdFor := s.holdFor
 	s.pending[id] = &held[T]{meta: meta, ch: ch}
 	s.mu.Unlock()
@@ -87,10 +102,31 @@ func (s *Store[T]) Ask(ctx context.Context, id string, meta T) (decision string,
 	case decision := <-ch:
 		return decision, true
 	case <-time.After(holdFor):
-		return "", false
+		return s.lapseOrStolen(id, ch)
 	case <-ctx.Done():
+		return s.lapseOrStolen(id, ch)
+	}
+}
+
+// lapseOrStolen resolves the ambiguity a timeout or ctx.Done leaves open: if
+// the entry is already gone, Resolve claimed it under the same lock and owns
+// the one send on ch, so receiving it reports that decision instead of a
+// lapse Resolve has already overruled. Otherwise it claims the entry itself
+// here, so Resolve can no longer win it and the lapse is genuine.
+func (s *Store[T]) lapseOrStolen(id string, ch chan string) (string, bool) {
+	if s.testBeforeLapseLock != nil {
+		s.testBeforeLapseLock()
+	}
+	s.mu.Lock()
+	_, stillPending := s.pending[id]
+	if stillPending {
+		delete(s.pending, id)
+	}
+	s.mu.Unlock()
+	if stillPending {
 		return "", false
 	}
+	return <-ch, true
 }
 
 // Resolve delivers a decision to the request named by id.

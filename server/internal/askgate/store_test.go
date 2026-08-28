@@ -204,6 +204,68 @@ func TestConcurrentAskAndResolve(t *testing.T) {
 	}
 }
 
+func TestAskPanicsOnADuplicateID(t *testing.T) {
+	s := New[string](2*time.Second, nil)
+	go func() { _, _ = s.Ask(context.Background(), "id-1", "meta-1") }()
+	waitUntil(t, func() bool { return len(s.List()) == 1 })
+
+	defer func() {
+		if recover() == nil {
+			t.Fatal("Ask with an id already pending did not panic")
+		}
+	}()
+	s.Ask(context.Background(), "id-1", "meta-2")
+}
+
+// TestResolveWinningTheLapseRaceDeliversItsDecision pins the exact race from
+// the review: Ask's timeout branch and a concurrent Resolve both reach for
+// the same entry. It uses testBeforeLapseLock to pause Ask right after it has
+// committed to the timeout branch but before it takes the lock, so Resolve is
+// given the chance to run to completion first — deterministically, not by
+// timing luck. Without the fix, Ask would already have decided "", false
+// before this checkpoint, disagreeing with Resolve's nil error.
+func TestResolveWinningTheLapseRaceDeliversItsDecision(t *testing.T) {
+	s := New[string](20*time.Millisecond, nil)
+	hookEntered := make(chan struct{})
+	proceed := make(chan struct{})
+	s.testBeforeLapseLock = func() {
+		close(hookEntered)
+		<-proceed
+	}
+
+	done := make(chan struct {
+		decision string
+		ok       bool
+	}, 1)
+	go func() {
+		decision, ok := s.Ask(context.Background(), "id-1", "meta")
+		done <- struct {
+			decision string
+			ok       bool
+		}{decision, ok}
+	}()
+
+	select {
+	case <-hookEntered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Ask never reached the lapse checkpoint — did the seam get removed?")
+	}
+
+	if err := s.Resolve("id-1", func(string) (string, error) { return "allow", nil }); err != nil {
+		t.Fatalf("Resolve during the lapse race: %v", err)
+	}
+	close(proceed)
+
+	select {
+	case got := <-done:
+		if !got.ok || got.decision != "allow" {
+			t.Fatalf("Ask = (%q, %v), want (\"allow\", true) — Resolve won the race and its decision must not be discarded", got.decision, got.ok)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Ask never returned")
+	}
+}
+
 func waitUntil(t *testing.T, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
