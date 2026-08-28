@@ -166,6 +166,28 @@ func TestGetSpaceAndListSpaces(t *testing.T) {
 	}
 }
 
+func TestGetSpaceByID(t *testing.T) {
+	r, ctx := newMemoryRepo(t)
+	space := mustSpace(t, r, ctx, "project-a")
+
+	got, err := r.GetSpaceByID(ctx, space.ID)
+	if err != nil {
+		t.Fatalf("get space by id: %v", err)
+	}
+	if got.Slug != "project-a" {
+		t.Errorf("GetSpaceByID returned slug %q, want %q", got.Slug, "project-a")
+	}
+}
+
+func TestGetSpaceByIDRejectsNonSpaceResource(t *testing.T) {
+	r, ctx := newMemoryRepo(t)
+	entry := mustEntry(t, r, ctx, mustSpace(t, r, ctx, "project-a").ID, "not a space")
+
+	if _, err := r.GetSpaceByID(ctx, entry.ID); err == nil {
+		t.Error("GetSpaceByID must refuse an id that is not a memory_space resource row")
+	}
+}
+
 func TestCreateEntryRejectsUnknownSpace(t *testing.T) {
 	r, ctx := newMemoryRepo(t)
 	_, err := r.CreateEntry(ctx, repo.CreateEntryInput{
@@ -219,6 +241,37 @@ func TestRecordInjectionPersistsEntryIDs(t *testing.T) {
 	}
 	if got.CharBudget != 4000 || got.CharsUsed != 120 || got.CandidateCount != 3 {
 		t.Errorf("counters not persisted as given: %+v", got)
+	}
+}
+
+func TestListInjectionsByStageRunReturnsOnlyThatStageRun(t *testing.T) {
+	r, ctx, stageRunID := newMemoryRepoWithStageRun(t)
+	space := mustSpace(t, r, ctx, "project-a")
+	entry := mustEntry(t, r, ctx, space.ID, "used in a spawn")
+
+	_, err := r.RecordInjection(ctx, repo.RecordInjectionInput{
+		StageRunID: stageRunID,
+		EntryIDs:   []string{entry.ID},
+		CharBudget: 4000, CharsUsed: 120, CandidateCount: 3,
+	})
+	if err != nil {
+		t.Fatalf("record injection: %v", err)
+	}
+
+	got, err := r.ListInjectionsByStageRun(ctx, stageRunID)
+	if err != nil {
+		t.Fatalf("list injections: %v", err)
+	}
+	if len(got) != 1 || got[0].StageRunID != stageRunID {
+		t.Errorf("ListInjectionsByStageRun = %v, want exactly the one injection for %s", got, stageRunID)
+	}
+
+	other, err := r.ListInjectionsByStageRun(ctx, "does-not-exist")
+	if err != nil {
+		t.Fatalf("list injections for unknown stage run: %v", err)
+	}
+	if len(other) != 0 {
+		t.Errorf("ListInjectionsByStageRun for an unrelated stage run = %v, want none", other)
 	}
 }
 

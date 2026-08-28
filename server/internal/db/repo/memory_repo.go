@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/memoryentry"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/memoryinjection"
 )
 
 // CreateSpaceInput is the named input for CreateSpace.
@@ -48,6 +49,11 @@ type MemoryRepo interface {
 	// resource row of kind ResourceKindMemorySpace.
 	CreateSpace(ctx context.Context, in CreateSpaceInput) (*ent.Resource, error)
 	GetSpace(ctx context.Context, scope Scope, slug string) (*ent.Resource, error)
+	// GetSpaceByID resolves a space by its bare resource id, for a caller
+	// that only holds an entry's space_id (e.g. an HTTP handler authorizing a
+	// mutation on one entry) and needs the owning space's scope and slug to
+	// check a capability grant against.
+	GetSpaceByID(ctx context.Context, id string) (*ent.Resource, error)
 	ListSpaces(ctx context.Context, scope Scope) ([]*ent.Resource, error)
 	CreateEntry(ctx context.Context, in CreateEntryInput) (*ent.MemoryEntry, error)
 	GetEntry(ctx context.Context, id string) (*ent.MemoryEntry, error)
@@ -62,6 +68,9 @@ type MemoryRepo interface {
 	// now nor superseded.
 	ListValid(ctx context.Context, spaceID string, now time.Time) ([]*ent.MemoryEntry, error)
 	RecordInjection(ctx context.Context, in RecordInjectionInput) (*ent.MemoryInjection, error)
+	// ListInjectionsByStageRun returns the injection records for one stage
+	// run, for surfacing what memory was offered to a spawn.
+	ListInjectionsByStageRun(ctx context.Context, stageRunID string) ([]*ent.MemoryInjection, error)
 }
 
 type entMemoryRepo struct {
@@ -106,6 +115,17 @@ func (r *entMemoryRepo) GetSpace(ctx context.Context, scope Scope, slug string) 
 	row, err := r.resources.Get(ctx, ResourceKindMemorySpace, scope, slug)
 	if err != nil {
 		return nil, fmt.Errorf("memory.GetSpace: %w", err)
+	}
+	return row, nil
+}
+
+func (r *entMemoryRepo) GetSpaceByID(ctx context.Context, id string) (*ent.Resource, error) {
+	row, err := r.client.Resource.Get(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("memory.GetSpaceByID: %w", err)
+	}
+	if row.Kind != ResourceKindMemorySpace {
+		return nil, fmt.Errorf("memory.GetSpaceByID: %s: not a memory space", id)
 	}
 	return row, nil
 }
@@ -274,4 +294,15 @@ func (r *entMemoryRepo) RecordInjection(ctx context.Context, in RecordInjectionI
 		return nil, fmt.Errorf("memory.RecordInjection: %w", err)
 	}
 	return row, nil
+}
+
+func (r *entMemoryRepo) ListInjectionsByStageRun(ctx context.Context, stageRunID string) ([]*ent.MemoryInjection, error) {
+	rows, err := r.client.MemoryInjection.Query().
+		Where(memoryinjection.StageRunIDEQ(stageRunID)).
+		Order(ent.Asc(memoryinjection.FieldCreatedAt)).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("memory.ListInjectionsByStageRun: %w", err)
+	}
+	return rows, nil
 }

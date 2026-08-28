@@ -15,6 +15,7 @@ import (
 	apianalytics "github.com/lx-wnk/agent-dashboard/server/internal/api/analytics"
 	apicost "github.com/lx-wnk/agent-dashboard/server/internal/api/cost"
 	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
+	apimemory "github.com/lx-wnk/agent-dashboard/server/internal/api/memory"
 	apiplugins "github.com/lx-wnk/agent-dashboard/server/internal/api/plugins"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/presets"
 	refineapi "github.com/lx-wnk/agent-dashboard/server/internal/api/refine"
@@ -29,6 +30,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/rawrepo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	histsvc "github.com/lx-wnk/agent-dashboard/server/internal/history"
+	"github.com/lx-wnk/agent-dashboard/server/internal/memory"
 	"github.com/lx-wnk/agent-dashboard/server/internal/merger"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
@@ -121,6 +123,12 @@ func buildBypassRouter(t *testing.T) http.Handler {
 		SystemPromptsHandler: systemprompts.NewHandler(repo.NewSystemPromptRepo(c)),
 		SearchHandler:        search.NewHandler(rawrepo.NewSearchRepo(rawDB), merger.New(), nil),
 		HistoryHandler:       apihistory.NewHandler(histsvc.NewImporter(repo.NewAgentCostTrendRepo(c))),
+		MemoryHandler: apimemory.NewHandler(
+			repo.NewMemoryRepo(c),
+			memory.NewRetriever(rawDB, repo.NewMemoryRepo(c)),
+			repo.NewCapabilityRepo(c),
+			repo.NewGrantRepo(c),
+		),
 		RefineHandler: refineapi.NewHandler(refineapi.Deps{
 			Turns:     repo.NewRefinementTurnRepo(c),
 			Tasks:     repo.NewTaskRepo(c),
@@ -161,6 +169,10 @@ func bypassSkip(method, pattern string) bool {
 		pattern == "/api/spawners/stream", pattern == "/api/projects/stream": // long-lived SSE
 		return true
 	case method == http.MethodDelete && pattern == "/api/me": // account deletion disabled in bypass mode (by design)
+		return true
+	case strings.HasPrefix(pattern, "/api/memory/"): // capability-gated (memory.read/memory.write), not JWT-gated —
+		// a 403 here with no grant seeded is the fail-closed default this gate is
+		// built to produce, not the bypass-auth bug class this test guards against.
 		return true
 	}
 	return false

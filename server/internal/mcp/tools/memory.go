@@ -2,9 +2,7 @@ package tools
 
 import (
 	"context"
-	"fmt"
 
-	"github.com/lx-wnk/agent-dashboard/server/internal/capability"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	mcp "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
 	"github.com/lx-wnk/agent-dashboard/server/internal/memory"
@@ -24,92 +22,26 @@ func RegisterMemoryTools(registry mcp.ToolRegistry, d MemoryDeps) {
 	registerMemoryWrite(registry, d)
 }
 
-var memoryScopeEnum = []string{string(repo.ScopeGlobal), string(repo.ScopeProject), string(repo.ScopeApplication)}
+var memoryScopeEnum = memory.ScopeKinds
 
 // parseMemoryScope builds a repo.Scope from the tool's "scope"/"scopeRef"
-// arguments, defaulting to global. An unrecognised scope kind, or a missing
-// ref for a non-global scope, fails closed rather than silently resolving to
-// some other scope's spaces.
+// arguments. Delegates to memory.ParseScope, the transport-agnostic core
+// shared with the HTTP API, and wraps its error as an mcp.Fail.
 func parseMemoryScope(args map[string]any) (repo.Scope, error) {
-	kind := mcp.OptionalString(args, "scope")
-	if kind == "" {
-		kind = string(repo.ScopeGlobal)
+	scope, err := memory.ParseScope(mcp.OptionalString(args, "scope"), mcp.OptionalString(args, "scopeRef"))
+	if err != nil {
+		return repo.Scope{}, mcp.Fail(err.Error())
 	}
-	ref := mcp.OptionalString(args, "scopeRef")
-	switch repo.ScopeKind(kind) {
-	case repo.ScopeGlobal:
-		return repo.GlobalScope(), nil
-	case repo.ScopeProject:
-		if ref == "" {
-			return repo.Scope{}, mcp.Fail(`scopeRef is required when scope is "project"`)
-		}
-		return repo.ProjectScope(ref), nil
-	case repo.ScopeApplication:
-		if ref == "" {
-			return repo.Scope{}, mcp.Fail(`scopeRef is required when scope is "application"`)
-		}
-		return repo.ApplicationScope(ref), nil
-	default:
-		return repo.Scope{}, mcp.Fail(fmt.Sprintf("scope must be one of %v", memoryScopeEnum))
-	}
-}
-
-// memoryContexts builds the capability-context chain for a request scoped to
-// scope: the scope's own context plus global, the level every grant chain
-// falls back to. This lets a project- or application-scoped grant win on
-// specificity while a global grant still backs up a scope that has none of
-// its own — the same union visibleSpaceScopes (retrieve.go) already applies
-// to which spaces are visible, mirrored here for which grants apply.
-func memoryContexts(scope repo.Scope) []capability.Context {
-	scope = scope.Normalize()
-	if scope.IsGlobal() {
-		return []capability.Context{{Kind: string(repo.ScopeGlobal)}}
-	}
-	return []capability.Context{
-		{Kind: string(scope.Kind), Ref: scope.Ref},
-		{Kind: string(repo.ScopeGlobal)},
-	}
+	return scope, nil
 }
 
 // authorizeMemory resolves and enforces a capability.Decide request for
-// capName against value in scope's context chain. The MCP scope on
-// ToolScopeMap only authorises the caller's key to reach the transport; this
-// is the second, independent layer that authorises the action itself. A
-// capability catalogue lookup miss resolves to a zero-value CapabilityView
-// (empty Class), which capability.Decide's defaultEffect sends to deny —
-// the fail-closed behaviour SeedCapabilities exists to make the normal case.
+// capName against value in scope's context chain, via memory.Authorize — the
+// same gate the HTTP API uses. The MCP scope on ToolScopeMap only authorises
+// the caller's key to reach the transport; this is the second, independent
+// layer that authorises the action itself.
 func authorizeMemory(ctx context.Context, d MemoryDeps, capName, value string, scope repo.Scope) error {
-	var capView capability.CapabilityView
-	if row, err := d.Capabilities.Get(ctx, capName); err == nil {
-		capView = capability.CapabilityView{Name: row.Name, Class: row.Class, EnforceableBy: row.EnforceableBy}
-	}
-
-	grantRows, err := d.Grants.ListForCapability(ctx, capName)
-	if err != nil {
-		return fmt.Errorf("list grants for %s: %w", capName, err)
-	}
-	grants := make([]capability.GrantView, len(grantRows))
-	for i, g := range grantRows {
-		grants[i] = capability.GrantView{
-			ID:                 g.ID,
-			Capability:         g.CapabilityName,
-			ContextKind:        g.ContextKind,
-			ContextRef:         g.ContextRef,
-			Pattern:            g.Pattern,
-			Mode:               g.Mode,
-			LimitCount:         g.LimitCount,
-			LimitWindowSeconds: g.LimitWindowSeconds,
-			ExpiresAt:          g.ExpiresAt,
-			RevokedAt:          g.RevokedAt,
-		}
-	}
-
-	req := capability.Request{Capability: capName, Value: value, Contexts: memoryContexts(scope)}
-	decision := capability.Decide(req, grants, capView)
-	// GrantView{} / 0: no rate limit is tracked for memory grants today, the
-	// same no-limit shape enforcer_server_test.go exercises for every
-	// non-rate-limited caller.
-	return capability.ServerEnforcer{}.Enforce(ctx, decision, capability.GrantView{}, 0)
+	return memory.Authorize(ctx, d.Capabilities, d.Grants, capName, value, scope)
 }
 
 func registerMemorySearch(registry mcp.ToolRegistry, d MemoryDeps) {

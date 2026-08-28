@@ -29,6 +29,7 @@ import (
 	apieval "github.com/lx-wnk/agent-dashboard/server/internal/api/eval"
 	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/hooks"
+	apimemory "github.com/lx-wnk/agent-dashboard/server/internal/api/memory"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/onboarding"
 	planapi "github.com/lx-wnk/agent-dashboard/server/internal/api/plan"
 	apiplugins "github.com/lx-wnk/agent-dashboard/server/internal/api/plugins"
@@ -519,6 +520,14 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		historyHandler = apihistory.NewHandler(histImporter)
 	}
 
+	// Memory HTTP surface — reuses the single memRepo/memRetriever built above
+	// (same rule as the MCP tools and the pipeline's push-at-spawn seam) plus
+	// its own capability/grant repos, matching provideMCPHandler's wiring.
+	var memoryHandler *apimemory.Handler
+	if entClient != nil {
+		memoryHandler = apimemory.NewHandler(memRepo, memRetriever, repo.NewCapabilityRepo(entClient), repo.NewGrantRepo(entClient))
+	}
+
 	// Eval / drift-detection subsystem. The onDrift callback is the only outward
 	// hook — eval/ stays notifications-agnostic; wiring lives here in the root.
 	var evalService *eval.Service
@@ -726,6 +735,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		SettingsHandler:        settingsHandler,
 		SearchHandler:          searchHandler,
 		HistoryHandler:         historyHandler,
+		MemoryHandler:          memoryHandler,
 		RefineHandler:          refineHandler,
 		PlanHandler:            planHandler,
 		AnalyticsHandler:       analyticsHandler,
