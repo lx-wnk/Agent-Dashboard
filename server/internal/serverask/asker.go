@@ -22,19 +22,6 @@ import (
 // is coincidence, not a shared constant, and either may change independently.
 const askHoldTimeout = 25 * time.Second
 
-// contextSpecificity mirrors capability's own (unexported) context ranking,
-// duplicated here for display only: it only picks which context label a
-// pending ask shows a human, never a decision, so a stale copy costs a wrong
-// label, not a wrong enforcement outcome.
-var contextSpecificity = map[string]int{
-	"agent_session": 0,
-	"task":          1,
-	"routine":       2,
-	"application":   3,
-	"project":       4,
-	"global":        5,
-}
-
 // Pending is one server-point decision waiting for a human, as shown in the UI.
 type Pending struct {
 	Capability  string
@@ -81,25 +68,12 @@ func (a *Asker) Ask(ctx context.Context, req capability.Request, d capability.De
 }
 
 // mostSpecificContext renders the context a human approving this ask should
-// see. req.Contexts' order is documented as not load-bearing, so this ranks
-// by contextSpecificity instead of assuming index 0 is the most specific.
+// see. req.Contexts' order is documented as not load-bearing, so the ranking
+// comes from capability itself rather than from a second copy of it here.
 func mostSpecificContext(contexts []capability.Context) string {
-	if len(contexts) == 0 {
-		return ""
-	}
-	best := contexts[0]
-	bestRank, ok := contextSpecificity[best.Kind]
+	best, ok := capability.MostSpecific(contexts)
 	if !ok {
-		bestRank = len(contextSpecificity)
-	}
-	for _, c := range contexts[1:] {
-		rank, ok := contextSpecificity[c.Kind]
-		if !ok {
-			rank = len(contextSpecificity)
-		}
-		if rank < bestRank {
-			best, bestRank = c, rank
-		}
+		return ""
 	}
 	if best.Ref == "" {
 		return best.Kind

@@ -153,7 +153,9 @@ func TestResolveRejectsInvalidDecision(t *testing.T) {
 	a := New(nil)
 	a.store.SetHoldFor(2 * time.Second)
 
-	go func() { _, _ = a.Ask(context.Background(), capability.Request{Capability: "cap", Value: "v"}, capability.Decision{}) }()
+	go func() {
+		_, _ = a.Ask(context.Background(), capability.Request{Capability: "cap", Value: "v"}, capability.Decision{})
+	}()
 	waitUntil(t, func() bool { return len(a.Pending()) == 1 })
 	id := a.Pending()[0].ID
 

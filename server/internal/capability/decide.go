@@ -87,6 +87,25 @@ var contextRank = map[string]int{
 	"global":        5,
 }
 
+// MostSpecific returns the narrowest of contexts — the level Decide would let
+// decide if every level had a matching grant. Kinds contextRank does not know
+// are skipped, the same ones Decide drops; ok is false when none is known.
+//
+// Exported so callers that need to name a request's level (a UI label, an
+// audit line) rank it against contextRank itself rather than keeping a second
+// copy of the ordering.
+func MostSpecific(contexts []Context) (best Context, ok bool) {
+	bestRank := -1
+	for _, c := range contexts {
+		rank, known := contextRank[c.Kind]
+		if !known || (bestRank != -1 && rank >= bestRank) {
+			continue
+		}
+		best, bestRank = c, rank
+	}
+	return best, bestRank != -1
+}
+
 // modeRank orders grant modes within one context level: deny beats allow
 // beats ask; lower wins. This map is the single source of truth for which
 // modes are valid. Decide drops any grant whose Mode isn't a key below, on
