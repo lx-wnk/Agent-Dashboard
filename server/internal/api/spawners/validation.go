@@ -28,6 +28,11 @@ var ValidAdapterTypes = []string{"claude", "ollama", "openai", "custom", "acp"}
 // - openai:  required api_key_env; optional base_url, default_model.
 // - custom:  no adapter_config keys; reuses the row's command/args/env.
 // - acp:     optional command, args.
+//
+// This is the server-side acceptance list; llmadapter.AvailableAdapters is a
+// separate UI-metadata catalog consumed by the settings form and the
+// /api/adapters response. The two are hand-kept in parity — a key added here
+// without a matching ConfigKeyDoc entry saves but never renders a control.
 var allowedAdapterConfigKeys = map[string]map[string]struct{}{
 	"claude": {
 		"effort": {},

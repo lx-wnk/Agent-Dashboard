@@ -26,7 +26,9 @@ var AvailableAdapters = []AdapterMeta{
 	{
 		Name:        "claude",
 		Description: "Default Claude CLI adapter — spawns a detached claude process per stage.",
-		ConfigKeys:  []ConfigKeyDoc{},
+		ConfigKeys: []ConfigKeyDoc{
+			{Key: "effort", Type: "string", Required: false, Note: "Reasoning effort: low, medium, or high. Resolved per task/stage through the spawner chain."},
+		},
 	},
 	{
 		Name:        "ollama",
