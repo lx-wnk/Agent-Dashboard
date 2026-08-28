@@ -2,6 +2,7 @@ package repo_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -17,7 +18,7 @@ func newMemoryRepo(t *testing.T) (repo.MemoryRepo, context.Context) {
 		t.Fatalf("db.Open: %v", err)
 	}
 	t.Cleanup(func() { _ = bundle.Client.Close() })
-	return repo.NewMemoryRepo(bundle.Client), context.Background()
+	return repo.NewMemoryRepo(bundle.Client, bundle.WriteClient), context.Background()
 }
 
 // newMemoryRepoWithStageRun is newMemoryRepo plus a real stage_run row, for
@@ -41,7 +42,7 @@ func newMemoryRepoWithStageRun(t *testing.T) (repo.MemoryRepo, context.Context, 
 	if err != nil {
 		t.Fatalf("create stage run: %v", err)
 	}
-	return repo.NewMemoryRepo(bundle.Client), ctx, run.ID
+	return repo.NewMemoryRepo(bundle.Client, bundle.WriteClient), ctx, run.ID
 }
 
 func mustSpace(t *testing.T, r repo.MemoryRepo, ctx context.Context, slug string) *ent.Resource {
@@ -200,6 +201,38 @@ func TestCreateEntryRejectsUnknownSpace(t *testing.T) {
 	})
 	if err == nil {
 		t.Error("an entry referencing an unrecognised space_id must be refused, not written")
+	}
+}
+
+func TestCreateEntryRejectsUnknownKind(t *testing.T) {
+	r, ctx := newMemoryRepo(t)
+	space := mustSpace(t, r, ctx, "project-a")
+	_, err := r.CreateEntry(ctx, repo.CreateEntryInput{
+		SpaceID:    space.ID,
+		Summary:    "s",
+		Content:    "c",
+		Kind:       "wharrgarbl",
+		SourceKind: "user",
+		Confidence: 1,
+	})
+	if !errors.Is(err, repo.ErrInvalidKind) {
+		t.Errorf("err = %v, want ErrInvalidKind — an unrecognised kind must be refused, not silently deranked forever at read time", err)
+	}
+}
+
+func TestCreateEntryRejectsUnknownSourceKind(t *testing.T) {
+	r, ctx := newMemoryRepo(t)
+	space := mustSpace(t, r, ctx, "project-a")
+	_, err := r.CreateEntry(ctx, repo.CreateEntryInput{
+		SpaceID:    space.ID,
+		Summary:    "s",
+		Content:    "c",
+		Kind:       "fact",
+		SourceKind: "wharrgarbl",
+		Confidence: 1,
+	})
+	if !errors.Is(err, repo.ErrInvalidSourceKind) {
+		t.Errorf("err = %v, want ErrInvalidSourceKind", err)
 	}
 }
 

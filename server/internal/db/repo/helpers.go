@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/db"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 )
 
@@ -56,11 +57,15 @@ func WithTx(ctx context.Context, client *ent.Client, fn func(tx *ent.Tx) error) 
 // busy_timeout's wait-and-retry applies to ordinary lock contention, which is
 // what BEGIN IMMEDIATE turns this into.
 //
-// client must be a client opened onto a connection pool started with the
-// driver's `_txlock=immediate` DSN parameter (db.DBBundle.WriteClient) — not
-// the plain client WithTx takes. This is a distinct entry point rather than
-// an option on WithTx because modernc.org/sqlite (the driver in use) only
-// exposes BEGIN IMMEDIATE as a per-connection DSN setting: sql.TxOptions'
+// client must be db.DBBundle.WriteClient — a client opened onto a connection
+// pool started with the driver's `_txlock=immediate` DSN parameter, not the
+// plain client WithTx takes. The db.WriteClient type makes that a compile-time
+// requirement rather than a convention: it cannot be constructed from a bare
+// *ent.Client without an explicit db.WriteClient{Client: ...} conversion at
+// the one place (db.Open) that knows the pool was actually opened that way —
+// see db.WriteClient's doc comment. This is a distinct entry point rather
+// than an option on WithTx because modernc.org/sqlite (the driver in use)
+// only exposes BEGIN IMMEDIATE as a per-connection DSN setting: sql.TxOptions'
 // Isolation field is ignored by the driver's transaction begin (verified by
 // reading modernc.org/sqlite@v1.57.0's tx.go — only opts.ReadOnly is
 // consulted), so there is no per-call ent or database/sql option that
@@ -74,8 +79,8 @@ func WithTx(ctx context.Context, client *ent.Client, fn func(tx *ent.Tx) error) 
 // concurrent connection to race against — WriteClient equals Client there.
 // Do not add a ":memory:"-backed test that claims to cover the race; it
 // cannot fail even if BEGIN IMMEDIATE were silently dropped.
-func WithWriteTx(ctx context.Context, client *ent.Client, fn func(tx *ent.Tx) error) error {
-	return WithTx(ctx, client, fn)
+func WithWriteTx(ctx context.Context, client db.WriteClient, fn func(tx *ent.Tx) error) error {
+	return WithTx(ctx, client.Client, fn)
 }
 
 // Deletion refusals shared by managed resources. Only the spawner repository

@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lx-wnk/agent-dashboard/server/internal/capability"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/grantusage"
 )
@@ -38,14 +39,14 @@ type GrantUsageRepo interface {
 
 type entGrantUsageRepo struct {
 	client      *ent.Client
-	writeClient *ent.Client
+	writeClient db.WriteClient
 }
 
 // NewGrantUsageRepo returns a GrantUsageRepo backed by the ent client.
-// writeClient must be a client wired for BEGIN IMMEDIATE (db.DBBundle.WriteClient)
-// — see WithWriteTx's doc comment for why RecordIfWithinLimit needs it and
-// client alone is not enough.
-func NewGrantUsageRepo(client, writeClient *ent.Client) GrantUsageRepo {
+// writeClient must be db.DBBundle.WriteClient — see WithWriteTx's doc
+// comment for why RecordIfWithinLimit needs it and client alone is not
+// enough.
+func NewGrantUsageRepo(client *ent.Client, writeClient db.WriteClient) GrantUsageRepo {
 	return &entGrantUsageRepo{client: client, writeClient: writeClient}
 }
 

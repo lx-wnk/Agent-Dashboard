@@ -16,6 +16,16 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/task"
 )
 
+// WriteClient marks an *ent.Client as opened onto the connection pool wired
+// for BEGIN IMMEDIATE (the driver's `_txlock=immediate` DSN parameter).
+// repo.WithWriteTx requires this named type rather than a plain *ent.Client
+// so that passing the ordinary (deferred-BEGIN) client is a compile error
+// instead of a silent downgrade to the semantics WithWriteTx exists to
+// prevent — see its doc comment.
+type WriteClient struct {
+	*ent.Client
+}
+
 // DBBundle holds both the ent client and the underlying *sql.DB.
 // The raw *sql.DB is needed for repositories that execute hand-written SQL
 // (e.g. FTS5 queries, notification_config, push_subscriptions).
@@ -36,14 +46,14 @@ type DBBundle struct {
 	// shares one in-memory database, and a second, independently-opened
 	// ":memory:" pool would just be a second, empty database sitting next to
 	// it — not a race-safe stand-in for a real second connection.
-	WriteClient *ent.Client
+	WriteClient WriteClient
 }
 
 // Close closes the database connection(s). Client, DB, and WriteClient all
 // become invalid after this call.
 // Note: Client.Close() also closes DB because the ent driver wraps the same *sql.DB.
 func (b *DBBundle) Close() error {
-	if b.WriteClient != nil && b.WriteClient != b.Client {
+	if b.WriteClient.Client != nil && b.WriteClient.Client != b.Client {
 		if err := b.WriteClient.Close(); err != nil {
 			_ = b.Client.Close()
 			return fmt.Errorf("db: close write pool: %w", err)
@@ -185,7 +195,7 @@ func Open(path string) (*DBBundle, error) {
 		}
 		writeClient = ent.NewClient(ent.Driver(entsql.OpenDB(dialect.SQLite, writeSQLDB)))
 	}
-	return &DBBundle{Client: client, DB: sqlDB, WriteClient: writeClient}, nil
+	return &DBBundle{Client: client, DB: sqlDB, WriteClient: WriteClient{Client: writeClient}}, nil
 }
 
 // runRawMigrations creates tables and FTS5 virtual tables that are not managed

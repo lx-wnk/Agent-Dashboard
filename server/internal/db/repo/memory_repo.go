@@ -2,13 +2,36 @@ package repo
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/memoryentry"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/memoryinjection"
+)
+
+// MemoryKinds and MemorySourceKinds list the values CreateEntry accepts for
+// a memory entry's Kind and SourceKind. Shared by every transport that
+// accepts one from outside (the memory_write MCP tool's InputSchema enum,
+// the HTTP API) so the advertised set can never drift from what CreateEntry
+// actually enforces — an unrecognised value used to store cleanly and only
+// silently derank at read time (score.go's kindWeightUnknown), forever.
+var (
+	MemoryKinds       = []string{"fact", "preference", "lesson", "entity", "pointer"}
+	MemorySourceKinds = []string{"agent", "user", "application", "import"}
+)
+
+// ErrInvalidKind and ErrInvalidSourceKind mean CreateEntry was called with a
+// Kind or SourceKind outside MemoryKinds / MemorySourceKinds. Named so a
+// caller can distinguish this from any other validation failure.
+var (
+	ErrInvalidKind       = errors.New("memory: kind must be one of " + strings.Join(MemoryKinds, ", "))
+	ErrInvalidSourceKind = errors.New("memory: source_kind must be one of " + strings.Join(MemorySourceKinds, ", "))
 )
 
 // CreateSpaceInput is the named input for CreateSpace.
@@ -74,15 +97,18 @@ type MemoryRepo interface {
 }
 
 type entMemoryRepo struct {
-	client    *ent.Client
-	resources ResourceRepo
+	client      *ent.Client
+	writeClient db.WriteClient
+	resources   ResourceRepo
 }
 
 // NewMemoryRepo returns a MemoryRepo backed by the ent client. Space
 // operations are delegated to a ResourceRepo built on the same client, rather
-// than reimplementing resource identity handling here.
-func NewMemoryRepo(client *ent.Client) MemoryRepo {
-	return &entMemoryRepo{client: client, resources: NewResourceRepo(client)}
+// than reimplementing resource identity handling here. writeClient must be
+// db.DBBundle.WriteClient — SupersedeEntry is a read-then-write and needs
+// the BEGIN IMMEDIATE pool WithWriteTx requires; see its doc comment.
+func NewMemoryRepo(client *ent.Client, writeClient db.WriteClient) MemoryRepo {
+	return &entMemoryRepo{client: client, writeClient: writeClient, resources: NewResourceRepo(client)}
 }
 
 // CreateSpace creates or refreshes a memory space's resource row.
@@ -166,6 +192,17 @@ func (r *entMemoryRepo) CreateEntry(ctx context.Context, in CreateEntryInput) (*
 	if in.SourceKind == "" {
 		return nil, fmt.Errorf("memory.CreateEntry: source_kind is required")
 	}
+	// Both transports (memory_write's InputSchema enum, the HTTP API) only
+	// checked non-empty, so an unrecognised value stored cleanly and then
+	// silently deranked forever at read time (score.go's kindComponent
+	// default). Reject it here instead — the one place both transports
+	// route through.
+	if !slices.Contains(MemoryKinds, in.Kind) {
+		return nil, fmt.Errorf("memory.CreateEntry: %w: %q", ErrInvalidKind, in.Kind)
+	}
+	if !slices.Contains(MemorySourceKinds, in.SourceKind) {
+		return nil, fmt.Errorf("memory.CreateEntry: %w: %q", ErrInvalidSourceKind, in.SourceKind)
+	}
 	if err := r.mustBeSpace(ctx, in.SpaceID); err != nil {
 		return nil, fmt.Errorf("memory.CreateEntry: %w", err)
 	}
@@ -205,7 +242,12 @@ func (r *entMemoryRepo) SupersedeEntry(ctx context.Context, oldID, newID string)
 	if oldID == newID {
 		return fmt.Errorf("memory.SupersedeEntry: an entry cannot supersede itself")
 	}
-	err := WithTx(ctx, r.client, func(tx *ent.Tx) error {
+	// WithWriteTx (BEGIN IMMEDIATE), not WithTx: this is a read-then-write —
+	// verify newID exists, then write a pointer at it — and a deferred
+	// transaction can race a concurrent delete of newID into
+	// SQLITE_BUSY_SNAPSHOT rather than failing the way a dangling
+	// superseded_by must never be observable requires.
+	err := WithWriteTx(ctx, r.writeClient, func(tx *ent.Tx) error {
 		// Verify the replacement exists before writing a pointer at it, in the
 		// same transaction as the write: a dangling superseded_by must never
 		// be observable, not even under a concurrent delete of newID.
