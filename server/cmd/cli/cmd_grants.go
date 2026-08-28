@@ -101,7 +101,7 @@ func newGrantsCmd() *cobra.Command {
 				if err := s.grants.Revoke(ctx, args[0], revokedBy); err != nil {
 					return err
 				}
-				fmt.Printf("revoked %s\n", args[0])
+				fmt.Fprintf(cmd.OutOrStdout(), "revoked %s\n", args[0])
 				return nil
 			})
 		},
