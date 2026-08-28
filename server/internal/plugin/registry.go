@@ -11,18 +11,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/envsec"
+	"github.com/lx-wnk/agent-dashboard/server/internal/validation"
 )
-
-// pluginIDRe restricts plugin IDs to lowercase alphanumeric and hyphens, starting
-// with an alphanumeric character. This prevents path traversal via malformed IDs.
-var pluginIDRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 
 // Registry discovers, starts, and health-checks plugins from a directory.
 type Registry struct {
@@ -157,8 +153,8 @@ func (r *Registry) Load(serverCtx context.Context, hooks Hooks) error {
 			slog.Warn("plugin: skip — invalid plugin.json", "dir", entry.Name(), "err", err)
 			continue
 		}
-		if !pluginIDRe.MatchString(desc.ID) {
-			slog.Warn("plugin: skip — id must match ^[a-z0-9][a-z0-9-]*$", "dir", entry.Name(), "id", desc.ID)
+		if !ValidID(desc.ID) {
+			slog.Warn("plugin: skip — "+validation.SlugPatternMessage, "dir", entry.Name(), "id", desc.ID)
 			continue
 		}
 		if !r.isEnabled(desc.ID) {
@@ -242,7 +238,7 @@ func (r *Registry) startEntry(serverCtx, startupCtx context.Context, pluginDir s
 // StartOne starts a single plugin by id (reads its plugin.json fresh from the
 // dir). Used by the live-enable path. No-op if already running.
 func (r *Registry) StartOne(ctx context.Context, id string) error {
-	if !pluginIDRe.MatchString(id) {
+	if !ValidID(id) {
 		return fmt.Errorf("plugin: invalid id %q", id)
 	}
 	r.mu.RLock()

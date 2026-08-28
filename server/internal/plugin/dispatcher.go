@@ -23,7 +23,7 @@ type ProxyResolver interface {
 func NewDispatcher(res ProxyResolver) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
-		if !pluginIDRe.MatchString(id) {
+		if !ValidID(id) {
 			http.Error(w, "invalid plugin id", http.StatusBadRequest)
 			return
 		}

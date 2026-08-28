@@ -25,6 +25,8 @@ const (
 	FieldPath = "path"
 	// FieldManifestHash holds the string denoting the manifest_hash field in the database.
 	FieldManifestHash = "manifest_hash"
+	// FieldResourceID holds the string denoting the resource_id field in the database.
+	FieldResourceID = "resource_id"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
@@ -42,6 +44,7 @@ var Columns = []string{
 	FieldActive,
 	FieldPath,
 	FieldManifestHash,
+	FieldResourceID,
 	FieldCreatedAt,
 	FieldUpdatedAt,
 }
@@ -67,6 +70,8 @@ var (
 	DefaultPath string
 	// DefaultManifestHash holds the default value on creation for the "manifest_hash" field.
 	DefaultManifestHash string
+	// DefaultResourceID holds the default value on creation for the "resource_id" field.
+	DefaultResourceID string
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 	// DefaultUpdatedAt holds the default value on creation for the "updated_at" field.
@@ -111,6 +116,11 @@ func ByPath(opts ...sql.OrderTermOption) OrderOption {
 // ByManifestHash orders the results by the manifest_hash field.
 func ByManifestHash(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldManifestHash, opts...).ToFunc()
+}
+
+// ByResourceID orders the results by the resource_id field.
+func ByResourceID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldResourceID, opts...).ToFunc()
 }
 
 // ByCreatedAt orders the results by the created_at field.

@@ -118,6 +118,20 @@ func (_u *PluginUpdate) SetNillableManifestHash(v *string) *PluginUpdate {
 	return _u
 }
 
+// SetResourceID sets the "resource_id" field.
+func (_u *PluginUpdate) SetResourceID(v string) *PluginUpdate {
+	_u.mutation.SetResourceID(v)
+	return _u
+}
+
+// SetNillableResourceID sets the "resource_id" field if the given value is not nil.
+func (_u *PluginUpdate) SetNillableResourceID(v *string) *PluginUpdate {
+	if v != nil {
+		_u.SetResourceID(*v)
+	}
+	return _u
+}
+
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *PluginUpdate) SetUpdatedAt(v time.Time) *PluginUpdate {
 	_u.mutation.SetUpdatedAt(v)
@@ -194,6 +208,9 @@ func (_u *PluginUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.ManifestHash(); ok {
 		_spec.SetField(plugin.FieldManifestHash, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ResourceID(); ok {
+		_spec.SetField(plugin.FieldResourceID, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(plugin.FieldUpdatedAt, field.TypeTime, value)
@@ -308,6 +325,20 @@ func (_u *PluginUpdateOne) SetNillableManifestHash(v *string) *PluginUpdateOne {
 	return _u
 }
 
+// SetResourceID sets the "resource_id" field.
+func (_u *PluginUpdateOne) SetResourceID(v string) *PluginUpdateOne {
+	_u.mutation.SetResourceID(v)
+	return _u
+}
+
+// SetNillableResourceID sets the "resource_id" field if the given value is not nil.
+func (_u *PluginUpdateOne) SetNillableResourceID(v *string) *PluginUpdateOne {
+	if v != nil {
+		_u.SetResourceID(*v)
+	}
+	return _u
+}
+
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *PluginUpdateOne) SetUpdatedAt(v time.Time) *PluginUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
@@ -414,6 +445,9 @@ func (_u *PluginUpdateOne) sqlSave(ctx context.Context) (_node *Plugin, err erro
 	}
 	if value, ok := _u.mutation.ManifestHash(); ok {
 		_spec.SetField(plugin.FieldManifestHash, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ResourceID(); ok {
+		_spec.SetField(plugin.FieldResourceID, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(plugin.FieldUpdatedAt, field.TypeTime, value)

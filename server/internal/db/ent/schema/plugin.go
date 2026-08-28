@@ -22,6 +22,9 @@ func (Plugin) Fields() []ent.Field {
 		field.Bool("active").Default(false),
 		field.String("path").Default(""),
 		field.String("manifest_hash").Default(""),
+		// resource_id links this plugin to its registry identity row. Empty on
+		// rows written before the registry existed; the boot reconciler fills it.
+		field.String("resource_id").Default(""),
 		field.Time("created_at").Default(time.Now).Immutable(),
 		field.Time("updated_at").Default(time.Now).UpdateDefault(time.Now),
 	}

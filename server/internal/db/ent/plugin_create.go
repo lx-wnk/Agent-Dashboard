@@ -107,6 +107,20 @@ func (_c *PluginCreate) SetNillableManifestHash(v *string) *PluginCreate {
 	return _c
 }
 
+// SetResourceID sets the "resource_id" field.
+func (_c *PluginCreate) SetResourceID(v string) *PluginCreate {
+	_c.mutation.SetResourceID(v)
+	return _c
+}
+
+// SetNillableResourceID sets the "resource_id" field if the given value is not nil.
+func (_c *PluginCreate) SetNillableResourceID(v *string) *PluginCreate {
+	if v != nil {
+		_c.SetResourceID(*v)
+	}
+	return _c
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (_c *PluginCreate) SetCreatedAt(v time.Time) *PluginCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -196,6 +210,10 @@ func (_c *PluginCreate) defaults() {
 		v := plugin.DefaultManifestHash
 		_c.mutation.SetManifestHash(v)
 	}
+	if _, ok := _c.mutation.ResourceID(); !ok {
+		v := plugin.DefaultResourceID
+		_c.mutation.SetResourceID(v)
+	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		v := plugin.DefaultCreatedAt()
 		_c.mutation.SetCreatedAt(v)
@@ -222,6 +240,9 @@ func (_c *PluginCreate) check() error {
 	}
 	if _, ok := _c.mutation.ManifestHash(); !ok {
 		return &ValidationError{Name: "manifest_hash", err: errors.New(`ent: missing required field "Plugin.manifest_hash"`)}
+	}
+	if _, ok := _c.mutation.ResourceID(); !ok {
+		return &ValidationError{Name: "resource_id", err: errors.New(`ent: missing required field "Plugin.resource_id"`)}
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "Plugin.created_at"`)}
@@ -288,6 +309,10 @@ func (_c *PluginCreate) createSpec() (*Plugin, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.ManifestHash(); ok {
 		_spec.SetField(plugin.FieldManifestHash, field.TypeString, value)
 		_node.ManifestHash = value
+	}
+	if value, ok := _c.mutation.ResourceID(); ok {
+		_spec.SetField(plugin.FieldResourceID, field.TypeString, value)
+		_node.ResourceID = value
 	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(plugin.FieldCreatedAt, field.TypeTime, value)
@@ -424,6 +449,18 @@ func (u *PluginUpsert) SetManifestHash(v string) *PluginUpsert {
 // UpdateManifestHash sets the "manifest_hash" field to the value that was provided on create.
 func (u *PluginUpsert) UpdateManifestHash() *PluginUpsert {
 	u.SetExcluded(plugin.FieldManifestHash)
+	return u
+}
+
+// SetResourceID sets the "resource_id" field.
+func (u *PluginUpsert) SetResourceID(v string) *PluginUpsert {
+	u.Set(plugin.FieldResourceID, v)
+	return u
+}
+
+// UpdateResourceID sets the "resource_id" field to the value that was provided on create.
+func (u *PluginUpsert) UpdateResourceID() *PluginUpsert {
+	u.SetExcluded(plugin.FieldResourceID)
 	return u
 }
 
@@ -578,6 +615,20 @@ func (u *PluginUpsertOne) SetManifestHash(v string) *PluginUpsertOne {
 func (u *PluginUpsertOne) UpdateManifestHash() *PluginUpsertOne {
 	return u.Update(func(s *PluginUpsert) {
 		s.UpdateManifestHash()
+	})
+}
+
+// SetResourceID sets the "resource_id" field.
+func (u *PluginUpsertOne) SetResourceID(v string) *PluginUpsertOne {
+	return u.Update(func(s *PluginUpsert) {
+		s.SetResourceID(v)
+	})
+}
+
+// UpdateResourceID sets the "resource_id" field to the value that was provided on create.
+func (u *PluginUpsertOne) UpdateResourceID() *PluginUpsertOne {
+	return u.Update(func(s *PluginUpsert) {
+		s.UpdateResourceID()
 	})
 }
 
@@ -901,6 +952,20 @@ func (u *PluginUpsertBulk) SetManifestHash(v string) *PluginUpsertBulk {
 func (u *PluginUpsertBulk) UpdateManifestHash() *PluginUpsertBulk {
 	return u.Update(func(s *PluginUpsert) {
 		s.UpdateManifestHash()
+	})
+}
+
+// SetResourceID sets the "resource_id" field.
+func (u *PluginUpsertBulk) SetResourceID(v string) *PluginUpsertBulk {
+	return u.Update(func(s *PluginUpsert) {
+		s.SetResourceID(v)
+	})
+}
+
+// UpdateResourceID sets the "resource_id" field to the value that was provided on create.
+func (u *PluginUpsertBulk) UpdateResourceID() *PluginUpsertBulk {
+	return u.Update(func(s *PluginUpsert) {
+		s.UpdateResourceID()
 	})
 }
 

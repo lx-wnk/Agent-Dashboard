@@ -1854,3 +1854,5 @@ Recorded so the next plan does not have to rediscover the boundary.
 | Marking a registry row `orphaned` when its kind row disappears | The spec's failure table names it, but with one kind reconciled there is no producer yet. The state value exists; the detector lands with the second kind |
 | An HTTP endpoint over the registry | Nothing consumes it yet. YAGNI until the shell needs it |
 | Versioned migration files | A known gap independent of this work |
+| Adopting `WithTx` in the repositories that still hand-roll transactions | `project_folder_repo.go`, `task_repo.go`, `coord_lock_repo.go`, `drift_alert_repo.go`, `eval_metric_repo.go`, `agent_cost_trend_repo.go`, `permission_preset_repo.go`, `user_repo.go` — the spec called for one idiom, this plan only created the helper |
+| Routing the hardcoded slug-pattern message strings through `validation.SlugPatternMessage` | `api/projects/handler.go:251,314` and `api/spawners/handler.go:168,253` — not even textually identical to the constant today |

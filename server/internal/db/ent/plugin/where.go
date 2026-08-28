@@ -94,6 +94,11 @@ func ManifestHash(v string) predicate.Plugin {
 	return predicate.Plugin(sql.FieldEQ(FieldManifestHash, v))
 }
 
+// ResourceID applies equality check predicate on the "resource_id" field. It's identical to ResourceIDEQ.
+func ResourceID(v string) predicate.Plugin {
+	return predicate.Plugin(sql.FieldEQ(FieldResourceID, v))
+}
+
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
 func CreatedAt(v time.Time) predicate.Plugin {
 	return predicate.Plugin(sql.FieldEQ(FieldCreatedAt, v))
@@ -422,6 +427,71 @@ func ManifestHashEqualFold(v string) predicate.Plugin {
 // ManifestHashContainsFold applies the ContainsFold predicate on the "manifest_hash" field.
 func ManifestHashContainsFold(v string) predicate.Plugin {
 	return predicate.Plugin(sql.FieldContainsFold(FieldManifestHash, v))
+}
+
+// ResourceIDEQ applies the EQ predicate on the "resource_id" field.
+func ResourceIDEQ(v string) predicate.Plugin {
+	return predicate.Plugin(sql.FieldEQ(FieldResourceID, v))
+}
+
+// ResourceIDNEQ applies the NEQ predicate on the "resource_id" field.
+func ResourceIDNEQ(v string) predicate.Plugin {
+	return predicate.Plugin(sql.FieldNEQ(FieldResourceID, v))
+}
+
+// ResourceIDIn applies the In predicate on the "resource_id" field.
+func ResourceIDIn(vs ...string) predicate.Plugin {
+	return predicate.Plugin(sql.FieldIn(FieldResourceID, vs...))
+}
+
+// ResourceIDNotIn applies the NotIn predicate on the "resource_id" field.
+func ResourceIDNotIn(vs ...string) predicate.Plugin {
+	return predicate.Plugin(sql.FieldNotIn(FieldResourceID, vs...))
+}
+
+// ResourceIDGT applies the GT predicate on the "resource_id" field.
+func ResourceIDGT(v string) predicate.Plugin {
+	return predicate.Plugin(sql.FieldGT(FieldResourceID, v))
+}
+
+// ResourceIDGTE applies the GTE predicate on the "resource_id" field.
+func ResourceIDGTE(v string) predicate.Plugin {
+	return predicate.Plugin(sql.FieldGTE(FieldResourceID, v))
+}
+
+// ResourceIDLT applies the LT predicate on the "resource_id" field.
+func ResourceIDLT(v string) predicate.Plugin {
+	return predicate.Plugin(sql.FieldLT(FieldResourceID, v))
+}
+
+// ResourceIDLTE applies the LTE predicate on the "resource_id" field.
+func ResourceIDLTE(v string) predicate.Plugin {
+	return predicate.Plugin(sql.FieldLTE(FieldResourceID, v))
+}
+
+// ResourceIDContains applies the Contains predicate on the "resource_id" field.
+func ResourceIDContains(v string) predicate.Plugin {
+	return predicate.Plugin(sql.FieldContains(FieldResourceID, v))
+}
+
+// ResourceIDHasPrefix applies the HasPrefix predicate on the "resource_id" field.
+func ResourceIDHasPrefix(v string) predicate.Plugin {
+	return predicate.Plugin(sql.FieldHasPrefix(FieldResourceID, v))
+}
+
+// ResourceIDHasSuffix applies the HasSuffix predicate on the "resource_id" field.
+func ResourceIDHasSuffix(v string) predicate.Plugin {
+	return predicate.Plugin(sql.FieldHasSuffix(FieldResourceID, v))
+}
+
+// ResourceIDEqualFold applies the EqualFold predicate on the "resource_id" field.
+func ResourceIDEqualFold(v string) predicate.Plugin {
+	return predicate.Plugin(sql.FieldEqualFold(FieldResourceID, v))
+}
+
+// ResourceIDContainsFold applies the ContainsFold predicate on the "resource_id" field.
+func ResourceIDContainsFold(v string) predicate.Plugin {
+	return predicate.Plugin(sql.FieldContainsFold(FieldResourceID, v))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.

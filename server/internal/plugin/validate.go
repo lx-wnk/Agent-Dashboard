@@ -1,7 +1,11 @@
 package plugin
 
-// ValidID reports whether id is a well-formed plugin identifier.
-// Uses pluginIDRe as the single source of truth for the validation pattern.
+import "github.com/lx-wnk/agent-dashboard/server/internal/validation"
+
+// ValidID reports whether id is a well-formed plugin id. Plugin ids are slugs
+// and use the canonical rule — validation.SlugRE — rather than a local copy.
+// The id becomes a path segment under the plugin directory, so rejecting
+// anything outside the pattern is also the traversal guard.
 func ValidID(id string) bool {
-	return pluginIDRe.MatchString(id)
+	return validation.IsValidSlug(id)
 }

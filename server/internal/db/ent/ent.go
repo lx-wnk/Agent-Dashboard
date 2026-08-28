@@ -31,6 +31,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/providersetting"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/refinementturn"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/remoteregistration"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/resource"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/scratchpad"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/spawner"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/stagerun"
@@ -119,6 +120,7 @@ func checkColumn(t, c string) error {
 			providersetting.Table:    providersetting.ValidColumn,
 			refinementturn.Table:     refinementturn.ValidColumn,
 			remoteregistration.Table: remoteregistration.ValidColumn,
+			resource.Table:           resource.ValidColumn,
 			scratchpad.Table:         scratchpad.ValidColumn,
 			spawner.Table:            spawner.ValidColumn,
 			stagerun.Table:           stagerun.ValidColumn,
