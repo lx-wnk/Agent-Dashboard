@@ -1,10 +1,29 @@
 package agentbroadcast
 
 import (
+	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
+
+// TestCapabilityDecisionsOrEmpty_NilProviderMarshalsEmptyArray confirms a nil
+// CapabilityDecisionProvider produces "[]" in the marshalled frame, not
+// "null" — the SPA iterates this field.
+func TestCapabilityDecisionsOrEmpty_NilProviderMarshalsEmptyArray(t *testing.T) {
+	got := capabilityDecisionsOrEmpty(context.Background(), nil)
+	require.NotNil(t, got, "nil provider must yield an empty slice, not nil")
+
+	data, err := json.Marshal(broadcastFrame{
+		Agents:                     nil,
+		Trend:                      emptyTrend,
+		PendingCapabilityDecisions: got,
+	})
+	require.NoError(t, err)
+	require.Contains(t, string(data), `"pendingCapabilityDecisions":[]`)
+	require.NotContains(t, string(data), `"pendingCapabilityDecisions":null`)
+}
 
 // TestFnv64a_Deterministic confirms that identical inputs produce the same hash
 // and different inputs produce different hashes. (F-PERF-006)

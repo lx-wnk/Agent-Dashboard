@@ -77,7 +77,14 @@ func runComponents(runCtx context.Context, cancel context.CancelFunc, comps *Ser
 	interval := time.Duration(comps.Settings.Int("sse.intervalMs")) * time.Millisecond
 	parser.SessionCacheTTL = max(interval, parser.SessionCacheTTL)
 	g.Go(func() error {
-		agentbroadcast.Run(gCtx, comps.Merger, comps.Broadcaster, interval, comps.Baseline, comps.Enricher)
+		// CapabilityDecisions: nil until Components grows an asker field (next unit).
+		agentbroadcast.Run(gCtx, agentbroadcast.RunOptions{
+			Merger:      comps.Merger,
+			Broadcaster: comps.Broadcaster,
+			Interval:    interval,
+			Baseline:    comps.Baseline,
+			Enricher:    comps.Enricher,
+		})
 		return nil
 	})
 

@@ -22,11 +22,17 @@ const heartbeatInterval = 30 * time.Second
 // avoid a per-tick heap allocation for the "trend" field. (F-PERF-014)
 var emptyTrend = []any{}
 
+// emptyCapabilityDecisions is the pre-allocated empty slice substituted when
+// no CapabilityDecisionProvider is configured, mirroring emptyTrend.
+// (F-PERF-014)
+var emptyCapabilityDecisions = []sdk.PendingCapabilityDecision{}
+
 // broadcastFrame is the JSON envelope expected by the SSE client.
 // Typed struct avoids reflection-based marshaling of map[string]any.
 type broadcastFrame struct {
-	Agents []sdk.Agent `json:"agents"`
-	Trend  []any       `json:"trend"`
+	Agents                     []sdk.Agent                     `json:"agents"`
+	Trend                      []any                           `json:"trend"`
+	PendingCapabilityDecisions []sdk.PendingCapabilityDecision `json:"pendingCapabilityDecisions"`
 }
 
 // BaselineProvider returns the average per-session cost over the past 7 days
@@ -35,24 +41,60 @@ type broadcastFrame struct {
 // tick.
 type BaselineProvider func(ctx context.Context) float64
 
+// CapabilityDecisionProvider returns the capability decisions currently
+// awaiting a human at a server enforcement point, included in each broadcast
+// frame for the SPA's approval queue. A nil provider (e.g. a server built
+// without an asker, auth mode none) yields an empty list, never a panic. It
+// is called once per scan tick.
+type CapabilityDecisionProvider func(ctx context.Context) []sdk.PendingCapabilityDecision
+
+// capabilityDecisionsOrEmpty resolves provider's result, substituting
+// emptyCapabilityDecisions when provider is nil or returns nil so the frame
+// always marshals "[]", never "null".
+func capabilityDecisionsOrEmpty(ctx context.Context, provider CapabilityDecisionProvider) []sdk.PendingCapabilityDecision {
+	if provider == nil {
+		return emptyCapabilityDecisions
+	}
+	if d := provider(ctx); d != nil {
+		return d
+	}
+	return emptyCapabilityDecisions
+}
+
+// RunOptions is the named input for Run. Named rather than positional because
+// the call has more than four parameters, which is where this codebase's
+// convention switches (see repo.CreateGrantInput).
+type RunOptions struct {
+	Merger              *merger.Merger
+	Broadcaster         *sse.Broadcaster
+	Interval            time.Duration
+	Baseline            BaselineProvider
+	Enricher            merger.Enricher
+	CapabilityDecisions CapabilityDecisionProvider
+}
+
 // Run starts a ticker loop that scans agents every interval and broadcasts
 // the JSON result to all SSE subscribers. Stops when ctx is cancelled.
 //
-// baseline, when non-nil, is consulted once per tick to derive the cost
+// opts.Baseline, when non-nil, is consulted once per tick to derive the cost
 // baseline injected into m.GetAgents for the health score. It may be nil
 // (no baseline → no cost penalty), which preserves correct behaviour.
 //
-// enricher, when non-nil, annotates each scanned agent with its linked pipeline
-// task (read-only SQLite crossing). It may be nil (no enrichment), which leaves
-// PipelineTaskID/Title empty — the same as before the crossing existed.
+// opts.Enricher, when non-nil, annotates each scanned agent with its linked
+// pipeline task (read-only SQLite crossing). It may be nil (no enrichment),
+// which leaves PipelineTaskID/Title empty — the same as before the crossing
+// existed.
+//
+// opts.CapabilityDecisions, when non-nil, is consulted once per tick to
+// populate the frame's pending-decisions list. It may be nil.
 //
 // Optimisations applied:
 //   - F-PERF-001: Skip scan entirely when SubscriberCount == 0.
 //   - F-PERF-006: Hash-dedupe frames with FNV-64a; send a heartbeat comment
 //     every 30 s so reverse-proxies do not close idle connections.
 //   - F-PERF-014: emptyTrend is a package-level var, not a per-tick literal.
-func Run(ctx context.Context, m *merger.Merger, broadcaster *sse.Broadcaster, interval time.Duration, baseline BaselineProvider, enricher merger.Enricher) {
-	ticker := time.NewTicker(interval)
+func Run(ctx context.Context, opts RunOptions) {
+	ticker := time.NewTicker(opts.Interval)
 	defer ticker.Stop()
 
 	heartbeat := time.NewTicker(heartbeatInterval)
@@ -65,25 +107,30 @@ func Run(ctx context.Context, m *merger.Merger, broadcaster *sse.Broadcaster, in
 		select {
 		case <-ticker.C:
 			// F-PERF-001: no subscribers — skip the expensive scan entirely.
-			if broadcaster.SubscriberCount() == 0 {
+			if opts.Broadcaster.SubscriberCount() == 0 {
 				continue
 			}
 
 			var baselineCost float64
-			if baseline != nil {
-				baselineCost = baseline(ctx)
+			if opts.Baseline != nil {
+				baselineCost = opts.Baseline(ctx)
 			}
 
-			agents, err := m.GetAgents(ctx, merger.GetAgentsOpts{
+			agents, err := opts.Merger.GetAgents(ctx, merger.GetAgentsOpts{
 				BaselinePerSessionCostUSD: baselineCost,
-				Enricher:                  enricher,
+				Enricher:                  opts.Enricher,
 			})
 			if err != nil {
 				slog.Error("agent scan failed", "err", err)
 				continue
 			}
 
-			data, err := json.Marshal(broadcastFrame{Agents: agents, Trend: emptyTrend})
+			frame := broadcastFrame{
+				Agents:                     agents,
+				Trend:                      emptyTrend,
+				PendingCapabilityDecisions: capabilityDecisionsOrEmpty(ctx, opts.CapabilityDecisions),
+			}
+			data, err := json.Marshal(frame)
 			if err != nil {
 				slog.Error("agent marshal failed", "err", err)
 				continue
@@ -98,16 +145,16 @@ func Run(ctx context.Context, m *merger.Merger, broadcaster *sse.Broadcaster, in
 
 			lastHash = h
 			lastBroadcast = time.Now()
-			broadcaster.Broadcast(data)
+			opts.Broadcaster.Broadcast(data)
 
 		case t := <-heartbeat.C:
 			// F-PERF-006: send a heartbeat comment frame so proxies/load-balancers
 			// do not close idle SSE connections when there is no data change.
-			if broadcaster.SubscriberCount() == 0 {
+			if opts.Broadcaster.SubscriberCount() == 0 {
 				continue
 			}
 			if t.Sub(lastBroadcast) >= heartbeatInterval {
-				broadcaster.BroadcastComment([]byte("heartbeat"))
+				opts.Broadcaster.BroadcastComment([]byte("heartbeat"))
 				lastBroadcast = t
 			}
 
