@@ -24,12 +24,19 @@ const summaryMaxRunes = 200
 //
 // Writing requires memory.write against the space, exactly like an agent
 // write — the application holds no privileged path around the capability
-// gate. capabilities, grants and grantUsage are the three repos
-// memory.Authorize needs to enforce that; they are parameters here (rather
-// than the plan's original mem-only signature) because nothing else in
-// scope could supply them to the gate — a signature that cannot call the
-// authorization it is required to perform is not a smaller signature, it is
-// a broken one.
+// gate. Searching the vault requires obsidian.search, and reading a note
+// requires obsidian.read, checked the same way. capabilities, grants and
+// grantUsage are the three repos memory.Authorize needs to enforce all
+// three; they are parameters here (rather than the plan's original mem-only
+// signature) because nothing else in scope could supply them to the gate —
+// a signature that cannot call the authorization it is required to perform
+// is not a smaller signature, it is a broken one.
+//
+// This is the only production path that reaches Client.Search or
+// Client.Read. The gate lives here, not in Client itself: Client.Read,
+// Client.Write, Client.Search and Client.Delete take no capability repos
+// and enforce nothing, so a future caller that reaches the vault client
+// directly instead of through IndexNotes bypasses this check entirely.
 //
 // A previous run's pointers are reconciled on every call: a note that
 // disappeared from the vault since it was indexed is discovered by directly
@@ -68,15 +75,30 @@ func IndexNotes(
 		}
 	}
 
+	if err := memory.Authorize(ctx, capabilities, grants, grantUsage, CapabilitySearch, "", scope); err != nil {
+		return 0, fmt.Errorf("obsidian.IndexNotes: %w", err)
+	}
+	// obsidian.read covers every Client.Read call this function makes below
+	// — both the new-note reads in the main loop and the existence probes
+	// in the reconciliation loop. One check up front, mirroring
+	// obsidian.search and memory.write above, rather than one per note: a
+	// grant here is a grant to read the vault this run touches, not to any
+	// one note, and nothing in the capability schema expresses a
+	// per-note-path pattern for it to check instead.
+	if err := memory.Authorize(ctx, capabilities, grants, grantUsage, CapabilityRead, "", scope); err != nil {
+		return 0, fmt.Errorf("obsidian.IndexNotes: %w", err)
+	}
+
 	// Client.Search searches the whole vault, not just VaultRoot (see its
 	// doc comment) — this is the boundary question the client's own task
 	// left open. An empty query is relied on to mean "every note"; that
-	// assumption is exercised here against a fake server and gets its real
-	// proof in the live-vault walkthrough the settings task runs. Results
-	// are then confined to VaultRoot by pathUnderRoot below: the configured
-	// root is the only boundary this application models, so it is the
-	// boundary enforced here — a memory grant's scope (global/project/
-	// application) carries no vault-path semantics to narrow this further.
+	// assumption is exercised here against a fake server. Its proof against
+	// a live vault has no test today, and none is scheduled — the settings
+	// surface that would let it run at all does not exist. Results are then
+	// confined to VaultRoot by pathUnderRoot below: the configured root is
+	// the only boundary this application models, so it is the boundary
+	// enforced here — a memory grant's scope (global/project/application)
+	// carries no vault-path semantics to narrow this further.
 	results, err := client.Search(ctx, "")
 	if err != nil {
 		return 0, fmt.Errorf("obsidian.IndexNotes: search: %w", err)

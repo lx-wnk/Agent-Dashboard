@@ -107,14 +107,29 @@ func newIndexTestDeps(t *testing.T) (repo.MemoryRepo, repo.CapabilityRepo, repo.
 
 func grantMemoryWrite(t *testing.T, ctx context.Context, grants repo.GrantRepo) {
 	t.Helper()
+	grantCapability(t, ctx, grants, repo.CapabilityMemoryWrite)
+}
+
+func grantObsidianSearch(t *testing.T, ctx context.Context, grants repo.GrantRepo) {
+	t.Helper()
+	grantCapability(t, ctx, grants, obsidian.CapabilitySearch)
+}
+
+func grantObsidianRead(t *testing.T, ctx context.Context, grants repo.GrantRepo) {
+	t.Helper()
+	grantCapability(t, ctx, grants, obsidian.CapabilityRead)
+}
+
+func grantCapability(t *testing.T, ctx context.Context, grants repo.GrantRepo, capName string) {
+	t.Helper()
 	if _, err := grants.Create(ctx, repo.CreateGrantInput{
-		CapabilityName: repo.CapabilityMemoryWrite,
+		CapabilityName: capName,
 		Context:        repo.GrantContextFor(repo.GrantContextGlobal, ""),
 		Pattern:        "",
 		Mode:           repo.GrantModeAllow,
 		GrantedBy:      "test",
 	}); err != nil {
-		t.Fatalf("grant memory.write: %v", err)
+		t.Fatalf("grant %s: %v", capName, err)
 	}
 }
 
@@ -130,6 +145,8 @@ func createTestSpace(t *testing.T, ctx context.Context, mem repo.MemoryRepo) *st
 func TestIndexWritesPointersNotBodies(t *testing.T) {
 	mem, caps, grants, grantUsage, ctx := newIndexTestDeps(t)
 	grantMemoryWrite(t, ctx, grants)
+	grantObsidianSearch(t, ctx, grants)
+	grantObsidianRead(t, ctx, grants)
 	spaceID := *createTestSpace(t, ctx, mem)
 
 	body := strings.Repeat("this note has a very long body that must never end up in memory. ", 100)
@@ -201,6 +218,8 @@ func TestIndexRequiresMemoryWriteGrant(t *testing.T) {
 func TestStalePointerIsMarkedInvalidNotDeleted(t *testing.T) {
 	mem, caps, grants, grantUsage, ctx := newIndexTestDeps(t)
 	grantMemoryWrite(t, ctx, grants)
+	grantObsidianSearch(t, ctx, grants)
+	grantObsidianRead(t, ctx, grants)
 	spaceID := *createTestSpace(t, ctx, mem)
 
 	ts, fv := newFakeVault(map[string]string{"root/a.md": "hello"})
@@ -239,5 +258,51 @@ func TestStalePointerIsMarkedInvalidNotDeleted(t *testing.T) {
 	}
 	if row.ID != entryID {
 		t.Fatal("GetEntry: returned a different row")
+	}
+}
+
+func TestIndexRequiresObsidianSearchGrant(t *testing.T) {
+	mem, caps, grants, grantUsage, ctx := newIndexTestDeps(t)
+	grantMemoryWrite(t, ctx, grants)
+	// No obsidian.search grant — the gate the docs claim exists must
+	// actually deny, not let the first wired-in caller through.
+	spaceID := *createTestSpace(t, ctx, mem)
+
+	ts, fv := newFakeVault(map[string]string{"root/a.md": "hello"})
+	defer ts.Close()
+	client := newTestClient(t, ts, "root")
+
+	count, err := obsidian.IndexNotes(ctx, client, mem, caps, grants, grantUsage, spaceID)
+	if err == nil {
+		t.Fatal("IndexNotes: want error with no obsidian.search grant, got nil")
+	}
+	if count != 0 {
+		t.Fatalf("IndexNotes: want 0 indexed, got %d", count)
+	}
+	if got := fv.callCount(); got != 0 {
+		t.Fatalf("IndexNotes: want the vault never contacted before the grant is checked, got %d calls", got)
+	}
+}
+
+func TestIndexRequiresObsidianReadGrant(t *testing.T) {
+	mem, caps, grants, grantUsage, ctx := newIndexTestDeps(t)
+	grantMemoryWrite(t, ctx, grants)
+	grantObsidianSearch(t, ctx, grants)
+	// No obsidian.read grant.
+	spaceID := *createTestSpace(t, ctx, mem)
+
+	ts, fv := newFakeVault(map[string]string{"root/a.md": "hello"})
+	defer ts.Close()
+	client := newTestClient(t, ts, "root")
+
+	count, err := obsidian.IndexNotes(ctx, client, mem, caps, grants, grantUsage, spaceID)
+	if err == nil {
+		t.Fatal("IndexNotes: want error with no obsidian.read grant, got nil")
+	}
+	if count != 0 {
+		t.Fatalf("IndexNotes: want 0 indexed, got %d", count)
+	}
+	if got := fv.callCount(); got != 0 {
+		t.Fatalf("IndexNotes: want the vault never contacted before the grant is checked, got %d calls", got)
 	}
 }
