@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import type { PermissionItem } from '@/composables/usePendingPermissions'
+import type { PendingCapabilityDecision } from '@/sdk.generated'
 import type { Agent, PendingPermission, PermissionRequest } from '@/types'
 import type { AnswerIntent } from '@/utils/answerKeys'
 import { computed, nextTick, ref, watch } from 'vue'
 import ConfirmCard from '@/components/ConfirmCard.vue'
 import QuestionCard from '@/components/QuestionCard.vue'
 import AppButton from '@/components/ui/AppButton.vue'
+import { useCapabilityDecisions } from '@/composables/useCapabilityDecisions'
 import { useNow } from '@/composables/useNow'
 import { usePermissionResolve } from '@/composables/usePermissionResolve'
 import { toast } from '@/composables/useToast'
@@ -17,6 +19,7 @@ import { friendlyProjectName } from '@/utils/friendlyProjectName'
 const props = defineProps<{
   agents: Agent[]
   permissionItems: PermissionItem[]
+  capabilityDecisions?: PendingCapabilityDecision[]
   focusedSessionId?: string | null
 }>()
 const emit = defineEmits<{
@@ -29,6 +32,13 @@ const emit = defineEmits<{
 const { getIdentity } = useAgentIdentity()
 const { nowMs } = useNow()
 const { resolveAgent } = usePermissionResolve()
+const { resolvingIds: resolvingCapabilityIds, resolve: resolveCapability } = useCapabilityDecisions()
+
+const capabilityDecisions = computed(() => props.capabilityDecisions ?? [])
+
+function capabilityValueLabel(decision: PendingCapabilityDecision): string {
+  return decision.value || 'Everything'
+}
 
 // Tone → Tailwind border + text classes
 const toneBorderClass: Record<string, string> = {
@@ -104,9 +114,12 @@ const breakdown = computed(() => {
     if (att && att.kind !== 'permission')
       counts[att.kind] = (counts[att.kind] ?? 0) + 1
   }
+  if (capabilityDecisions.value.length > 0)
+    counts.capability = capabilityDecisions.value.length
   const PARTS: [string, string, string][] = [
     ['question', 'question', 'questions'],
     ['permission', 'permission request', 'permission requests'],
+    ['capability', 'capability ask', 'capability asks'],
     ['error', 'failed run', 'failed runs'],
     ['stalled', 'stalled', 'stalled'],
   ]
@@ -116,7 +129,7 @@ const breakdown = computed(() => {
     .join(' · ')
 })
 
-const totalCount = computed(() => props.permissionItems.length + visibleAgentCards.value.length)
+const totalCount = computed(() => props.permissionItems.length + visibleAgentCards.value.length + capabilityDecisions.value.length)
 
 const isClear = computed(() => totalCount.value === 0 && props.permissionItems.length === 0)
 
@@ -585,7 +598,7 @@ watch(() => props.focusedSessionId, (id) => {
           class="text-[10px] transition-transform duration-150"
           :class="cardsVisible ? 'rotate-90' : ''"
         >▸</span>
-        {{ cardsVisible ? 'Hide individual requests' : `Review individually (${permissionItems.length + visibleAgentCards.length})` }}
+        {{ cardsVisible ? 'Hide individual requests' : `Review individually (${permissionItems.length + visibleAgentCards.length + capabilityDecisions.length})` }}
       </button>
 
       <div v-if="cardsVisible" class="flex flex-wrap gap-2.5">
@@ -645,6 +658,51 @@ watch(() => props.focusedSessionId, (id) => {
               >
               <span class="font-mono">Don't ask again for {{ item.projectName }}</span>
             </label>
+          </div>
+        </div>
+
+        <!-- Capability decision cards: a server enforcement point is asking a
+             human to allow or deny a capability, not a Claude Code session. -->
+        <div
+          v-for="decision in capabilityDecisions"
+          :key="decision.id"
+          data-testid="capability-decision-card"
+          class="min-w-[280px] flex-1 basis-[280px] max-w-[420px] rounded-lg bg-card border border-l-[3px] border-warning-dot border-l-warning-dot p-3 flex flex-col gap-2"
+        >
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="font-semibold text-[13px] text-fg truncate">{{ decision.capability }}</span>
+            <span class="ml-auto text-[10px] font-bold uppercase tracking-wide shrink-0 text-warning-text">Needs decision</span>
+          </div>
+
+          <span class="font-mono text-[12px] text-fg bg-app border border-line rounded px-2.5 py-1 leading-snug">
+            {{ capabilityValueLabel(decision) }}
+          </span>
+          <span class="text-[11px] text-fg-faint px-0.5">Scope: {{ decision.context }}</span>
+          <span v-if="decision.reason" class="text-[11px] text-fg-faint px-0.5">{{ decision.reason }}</span>
+
+          <div class="flex items-center gap-2 flex-wrap">
+            <AppButton
+              variant="success"
+              size="sm"
+              :disabled="resolvingCapabilityIds[decision.id]"
+              :aria-busy="resolvingCapabilityIds[decision.id] ? 'true' : undefined"
+              :aria-label="`Allow ${decision.capability} for ${capabilityValueLabel(decision)}`"
+              data-testid="capability-decision-allow"
+              @click="resolveCapability(decision.id, 'allow')"
+            >
+              Allow
+            </AppButton>
+            <AppButton
+              variant="danger"
+              size="sm"
+              :disabled="resolvingCapabilityIds[decision.id]"
+              :aria-busy="resolvingCapabilityIds[decision.id] ? 'true' : undefined"
+              :aria-label="`Deny ${decision.capability} for ${capabilityValueLabel(decision)}`"
+              data-testid="capability-decision-deny"
+              @click="resolveCapability(decision.id, 'deny')"
+            >
+              Deny
+            </AppButton>
           </div>
         </div>
 

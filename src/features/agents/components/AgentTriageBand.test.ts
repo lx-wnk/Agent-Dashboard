@@ -1,6 +1,7 @@
-import type { PendingPermission, PendingToolUse } from '@/sdk.generated'
+import type { PermissionItem } from '@/composables/usePendingPermissions'
+import type { PendingCapabilityDecision, PendingPermission, PendingToolUse } from '@/sdk.generated'
 import type { Agent } from '@/types'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import AgentTriageBand from './AgentTriageBand.vue'
 
@@ -377,5 +378,107 @@ describe('agentTriageBand permission bridge', () => {
 
     expect(live.text()).toContain('npm publish')
     expect(live.text()).toContain('git push --force')
+  })
+})
+
+describe('agentTriageBand capability decisions', () => {
+  function capabilityDecision(o: Partial<PendingCapabilityDecision> = {}): PendingCapabilityDecision {
+    return {
+      id: 'cap-1',
+      capability: 'network.egress',
+      value: 'api.stripe.com',
+      context: 'project:demo',
+      reason: 'Outbound call to a new host',
+      requestedAt: new Date().toISOString(),
+      ...o,
+    }
+  }
+
+  function mountWithDecisions(decisions: PendingCapabilityDecision[]) {
+    return mount(AgentTriageBand, {
+      props: { agents: [], permissionItems: [], capabilityDecisions: decisions },
+    })
+  }
+
+  it('renders the capability, value and context of a decision', () => {
+    const wrapper = mountWithDecisions([capabilityDecision()])
+    expect(wrapper.text()).toContain('network.egress')
+    expect(wrapper.text()).toContain('api.stripe.com')
+    expect(wrapper.text()).toContain('project:demo')
+  })
+
+  it('renders "Everything" instead of a blank when value is empty', () => {
+    const wrapper = mountWithDecisions([capabilityDecision({ value: '' })])
+    expect(wrapper.text()).toContain('Everything')
+  })
+
+  it('posts allow for the decision id when Allow is clicked', async () => {
+    const calls: { url: string, body: unknown }[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
+      calls.push({ url, body: JSON.parse(String(init.body)) })
+      return { ok: true, status: 200 } as Response
+    }))
+
+    const wrapper = mountWithDecisions([capabilityDecision({ id: 'cap-42' })])
+    await wrapper.get('[data-testid="capability-decision-allow"]').trigger('click')
+
+    expect(calls).toEqual([{ url: '/api/capabilities/decisions/respond', body: { id: 'cap-42', decision: 'allow' } }])
+    vi.unstubAllGlobals()
+  })
+
+  it('posts deny for the decision id when Deny is clicked', async () => {
+    const calls: { url: string, body: unknown }[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
+      calls.push({ url, body: JSON.parse(String(init.body)) })
+      return { ok: true, status: 200 } as Response
+    }))
+
+    const wrapper = mountWithDecisions([capabilityDecision({ id: 'cap-43' })])
+    await wrapper.get('[data-testid="capability-decision-deny"]').trigger('click')
+
+    expect(calls).toEqual([{ url: '/api/capabilities/decisions/respond', body: { id: 'cap-43', decision: 'deny' } }])
+    vi.unstubAllGlobals()
+  })
+
+  it('disables both buttons for a decision while its resolve is in flight', async () => {
+    let resolveFetch: (() => void) | null = null
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((resolve) => {
+      resolveFetch = () => resolve({ ok: true, status: 200 } as Response)
+    })))
+
+    const wrapper = mountWithDecisions([capabilityDecision({ id: 'cap-44' })])
+    const allow = wrapper.get('[data-testid="capability-decision-allow"]')
+    const deny = wrapper.get('[data-testid="capability-decision-deny"]')
+    await allow.trigger('click')
+
+    expect(allow.attributes('disabled')).toBeDefined()
+    expect(deny.attributes('disabled')).toBeDefined()
+
+    resolveFetch!()
+    await flushPromises()
+    vi.unstubAllGlobals()
+  })
+
+  it('renders no capability cards for an empty list and leaves permission cards intact', () => {
+    const item: PermissionItem = {
+      taskId: 'task-1',
+      projectName: 'demo',
+      title: 'Ship it',
+      requests: [{
+        id: 'req-1',
+        stageRunId: 'run-1',
+        tool: 'Bash',
+        pattern: 'npm publish',
+        reason: null,
+        requestedAt: new Date().toISOString(),
+        resolvedAt: null,
+        outcome: null,
+      }],
+    }
+    const wrapper = mount(AgentTriageBand, {
+      props: { agents: [], permissionItems: [item], capabilityDecisions: [] },
+    })
+    expect(wrapper.find('[data-testid="capability-decision-card"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('Ship it')
   })
 })

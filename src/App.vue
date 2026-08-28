@@ -84,10 +84,10 @@ onMounted(() => {
   void loadServerConfig()
 })
 
-const { agents, costTrend, filteredAgents, attentionAgents, attentionCount, selectedAgent, isLoading, error, searchQuery, selectAgent, dismissAgent, selectAgentWhenAvailable, startStream: startAgents } = useAgents({ autoStart: false })
+const { agents, costTrend, filteredAgents, attentionAgents, attentionCount, pendingCapabilityDecisions, selectedAgent, isLoading, error, searchQuery, selectAgent, dismissAgent, selectAgentWhenAvailable, startStream: startAgents } = useAgents({ autoStart: false })
 const { tasks, selectedTask, selectTask, startStream: startTasks } = useTasks({ autoStart: false })
 const { items: permissionItems, approve: approvePermission, deny: denyPermission } = usePendingPermissions(tasks)
-const combinedAttentionCount = computed(() => attentionCount.value + permissionItems.value.length)
+const combinedAttentionCount = computed(() => attentionCount.value + permissionItems.value.length + pendingCapabilityDecisions.value.length)
 // Today's persisted spend — reuses the shared cost-summary logic so the footer
 // and Cost view agree. Distinct from totalCost (cost of agents running now).
 const { todayUsd, start: startTodayCost } = useTodayCost()
@@ -344,6 +344,7 @@ onMounted(() => usageComposable.start())
           <AgentTriageBand
             :agents="attentionAgents"
             :permission-items="permissionItems"
+            :capability-decisions="pendingCapabilityDecisions"
             :focused-session-id="focusedSessionId"
             @select="selectAgent"
             @remembered="autoApprovingStrip?.load()"
