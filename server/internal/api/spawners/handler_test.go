@@ -183,6 +183,24 @@ func TestCreate_SavesEffortForClaudeAdapter(t *testing.T) {
 	}
 }
 
+// TestCreate_RejectsUnrecognisedEffortLevel verifies the trust boundary
+// refuses an effort value outside the known set through the real create
+// endpoint, not merely in the resolver's own validation-only tests.
+func TestCreate_RejectsUnrecognisedEffortLevel(t *testing.T) {
+	h := newTestHandlerForPkg(t)
+	r := chi.NewRouter()
+	h.Mount(r)
+
+	body := `{"name":"Claude Ultra","slug":"claude-ultra","command":"claude","adapterType":"claude","adapterConfig":{"effort":"ultra"}}`
+	req := httptest.NewRequest("POST", "/api/spawners", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != 400 {
+		t.Fatalf("create with unrecognised effort adapter_config: got %d, want 400; body=%s", rr.Code, rr.Body.String())
+	}
+}
+
 // TestUpdate_RejectsUntrustedAcpAdapterConfigCommand mirrors the create-path check
 // on PATCH, where effectiveAdapterType may come from the existing row.
 func TestUpdate_RejectsUntrustedAcpAdapterConfigCommand(t *testing.T) {

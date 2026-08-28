@@ -95,6 +95,8 @@ func ValidateAdapterType(t string) (string, bool) {
 //     services.ValidateSpawnerCommand
 //   - the args key (adapterConfigArgsKeys), if non-empty, has every
 //     path-shaped token pass the same check (see validateArgsPathTokens)
+//   - the claude adapter's effort key, if non-empty, must be one of
+//     services.ValidEffortLevels
 func ValidateAdapterConfig(adapterType string, cfg map[string]string) (string, bool) {
 	allowed, ok := allowedAdapterConfigKeys[adapterType]
 	if !ok {
@@ -112,6 +114,9 @@ func ValidateAdapterConfig(adapterType string, cfg map[string]string) (string, b
 		}
 		if len(v) > envValueMaxLen {
 			return "adapter_config value exceeds 4096 chars", false
+		}
+		if adapterType == "claude" && k == services.AdapterConfigEffortKey && v != "" && !services.IsValidEffortLevel(v) {
+			return "adapter_config." + k + ": unrecognised effort level " + v, false
 		}
 		if _, isCommand := adapterConfigCommandKeys[adapterType][k]; isCommand && v != "" {
 			if ok, reason := services.ValidateSpawnerCommand(v); !ok {

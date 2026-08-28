@@ -66,6 +66,20 @@ func TestValidateAdapterConfig_ClaudeAcceptsEffort(t *testing.T) {
 	require.Empty(t, msg)
 }
 
+func TestValidateAdapterConfig_ClaudeRejectsUnrecognisedEffortLevel(t *testing.T) {
+	for _, v := range []string{"HIGH", "ultra", " high", "extreme"} {
+		msg, ok := ValidateAdapterConfig("claude", map[string]string{"effort": v})
+		require.False(t, ok, "effort %q must be refused", v)
+		require.Equal(t, "adapter_config.effort: unrecognised effort level "+v, msg)
+	}
+}
+
+func TestValidateAdapterConfig_ClaudeAcceptsEmptyEffort(t *testing.T) {
+	msg, ok := ValidateAdapterConfig("claude", map[string]string{"effort": ""})
+	require.True(t, ok)
+	require.Empty(t, msg)
+}
+
 func TestValidateAdapterConfig_OllamaRejectsEffort(t *testing.T) {
 	msg, ok := ValidateAdapterConfig("ollama", map[string]string{"effort": "high"})
 	require.False(t, ok)
