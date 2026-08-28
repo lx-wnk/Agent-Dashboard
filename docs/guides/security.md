@@ -81,21 +81,72 @@ able to give up on purpose:
 
 ### Creating and revoking grants
 
-The `dashboard grants` CLI is the only grant-management surface today — no
-HTTP route or settings page creates a `grants` row yet. It opens the SQLite
-database directly, the same way `dashboard settings` and `dashboard plugins`
-do, so it also works while the server is down.
+The `dashboard grants` CLI is the only user-facing grant-management surface
+today — no HTTP route or settings page creates a `grants` row (the boot
+backfill migration writes rows too, but nobody invokes it by hand). It opens
+the SQLite database directly, the same way `dashboard settings` and
+`dashboard plugins` do, so it also works while the server is down.
 
 ```bash
-dashboard grants add memory.read --scope global --mode allow
+dashboard grants add memory.read --pattern '*' --scope global --mode allow
 dashboard grants list --capability memory.read
 ```
 
 `add`, `list`, `revoke`, and `capabilities` are the four subcommands —
 `capabilities` lists the grantable names, `list` lists existing grants
-(optionally filtered by capability), and `revoke <id>` tombstones a grant
-(`revoked_at`/`revoked_by` set) rather than deleting it, so the audit trail
-survives.
+(newest first, optionally filtered by capability, with an `ENFORCEMENT`
+column saying whether anything reads that capability's grants and a
+`GRANTED-BY` column saying who created each one), and `revoke <id>`
+tombstones a grant (`revoked_at`/`revoked_by` set) rather than deleting it,
+so the audit trail survives. `revoke` refuses a grant that is already
+revoked, so a second call can never overwrite who revoked it first.
+
+`--pattern` is required on `add`: pass `--pattern '*'` to cover every value,
+or a specific pattern (a prefix pattern ends in `*`, e.g. `'git status*'`).
+`*` is stored literally and behaves exactly like the empty wildcard the
+schema already uses, because the matcher routes a trailing `*` through a
+prefix test with an empty prefix — the requirement exists so the widest grant
+the system can express has to be asked for out loud, not arrived at by
+accepting three defaults.
+
+Two further inputs are rejected rather than stored inert: `--expires-in` must
+be a positive duration (a zero or negative one used to create a grant that
+was already expired), and a non-`global` `--scope` must carry a ref —
+`--scope project:/home/me/app`, not bare `--scope project`. A scope with an
+empty ref can never match anything, because the caller's context chain
+collapses an empty ref to `global` and the Decider's scope test is an exact
+match on kind *and* ref.
+
+`add` also warns on stderr when nothing reads the grant it just wrote. The
+`grants` table has exactly one production reader — `internal/memory.Authorize`
+via the server enforcer — so a grant for a capability that is not enforceable
+at the **server** point (which is every Claude Code tool name, `Bash`
+included) is recorded and read by nobody. The grant is still created and the
+exit code is unchanged; the warning only says it will take effect once a
+reader exists.
+
+#### Specificity is resolved before mode
+
+**A narrower grant wins outright, whatever its mode.** `capability.Decide`
+ranks matching grants by context specificity first (agent session → task →
+routine → application → project → global) and the most specific level with
+*any* matching grant decides on its own; `deny` beats `allow` beats `ask`
+only among grants at that same level. A broader grant never gets a vote once
+a narrower one matches.
+
+So these two grants do **not** compose the way they read:
+
+```bash
+dashboard grants add memory.read --pattern '*' --scope global --mode deny
+dashboard grants add memory.read --pattern '*' --scope project:/home/me/app --mode allow
+```
+
+Inside `/home/me/app` the request is **allowed**. The global `deny` is not a
+safety net over the project `allow` — it only applies where no project-,
+application-, task-, routine-, or session-level grant matches. To close a
+capability off in one project, revoke the project-level grant; a global deny
+cannot do it. (Pinned by "a global deny does NOT overrule a task allow" in
+`server/internal/capability/decide_test.go`.)
 
 `--mode` accepts `ask` and stores it without complaint, but **the server
 enforcer has no `Asker` wired to it** (see the table above), so an `ask`
