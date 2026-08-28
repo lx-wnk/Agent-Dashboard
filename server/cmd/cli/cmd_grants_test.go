@@ -160,3 +160,30 @@ func TestGrantCLI_OpensTheAuthorizeGate(t *testing.T) {
 	err = memory.Authorize(ctx, store.caps, store.grants, store.grantUsage, repo.CapabilityMemoryRead, "", repo.GlobalScope())
 	assert.NoError(t, err, "the grant just created must be the one Authorize matches")
 }
+
+func TestAddGrantRejectsALimitCountWithoutAWindow(t *testing.T) {
+	store, err := openDBStore(t.TempDir() + "/test.db")
+	require.NoError(t, err)
+	defer store.Close()
+	ctx := context.Background()
+
+	_, err = addGrant(ctx, store, repo.CapabilityMemoryRead, grantAddOpts{
+		Scope:      "global",
+		Mode:       repo.GrantModeAllow,
+		LimitCount: 2,
+	})
+	require.Error(t, err, "a limit with a zero window is counted since now and never triggers")
+	assert.Contains(t, err.Error(), "--limit-window")
+
+	rows, err := store.grants.List(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, rows, "a rejected grant must not be written")
+
+	_, err = addGrant(ctx, store, repo.CapabilityMemoryRead, grantAddOpts{
+		Scope:       "global",
+		Mode:        repo.GrantModeAllow,
+		LimitCount:  2,
+		LimitWindow: 60,
+	})
+	require.NoError(t, err)
+}

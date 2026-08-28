@@ -147,6 +147,12 @@ func addGrant(ctx context.Context, s *dbStore, capName string, opts grantAddOpts
 		return nil, fmt.Errorf("--scope: %w", err)
 	}
 
+	// A zero window is counted as "usages since now", which is always none, so
+	// a limit paired with it never triggers and reads as unlimited.
+	if opts.LimitCount > 0 && opts.LimitWindow <= 0 {
+		return nil, fmt.Errorf("--limit-window must be greater than 0 when --limit-count is set, or the limit never triggers")
+	}
+
 	var expiresAt *time.Time
 	if opts.ExpiresIn != "" {
 		d, err := time.ParseDuration(opts.ExpiresIn)
