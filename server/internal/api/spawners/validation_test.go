@@ -60,6 +60,18 @@ func TestValidateAdapterConfig_AcpAcceptsEmptyCommand(t *testing.T) {
 	require.Empty(t, msg)
 }
 
+func TestValidateAdapterConfig_ClaudeAcceptsEffort(t *testing.T) {
+	msg, ok := ValidateAdapterConfig("claude", map[string]string{"effort": "high"})
+	require.True(t, ok)
+	require.Empty(t, msg)
+}
+
+func TestValidateAdapterConfig_OllamaRejectsEffort(t *testing.T) {
+	msg, ok := ValidateAdapterConfig("ollama", map[string]string{"effort": "high"})
+	require.False(t, ok)
+	require.Equal(t, "unknown adapter_config key: effort", msg)
+}
+
 func TestValidateAdapterConfig_OllamaUnaffectedByCommandCheck(t *testing.T) {
 	msg, ok := ValidateAdapterConfig("ollama", map[string]string{"host": "http://localhost:11434"})
 	require.True(t, ok)

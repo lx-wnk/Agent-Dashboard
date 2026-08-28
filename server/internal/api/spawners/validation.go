@@ -23,13 +23,15 @@ var ValidAdapterTypes = []string{"claude", "ollama", "openai", "custom", "acp"}
 // allowedAdapterConfigKeys lists permitted adapter_config keys per adapter_type.
 // Required keys are listed in requiredAdapterConfigKeys below.
 //
-// - claude:  no adapter_config keys (config flows via command/args/env columns).
+// - claude:  optional effort; everything else flows via command/args/env.
 // - ollama:  optional host, default_model.
 // - openai:  required api_key_env; optional base_url, default_model.
 // - custom:  no adapter_config keys; reuses the row's command/args/env.
 // - acp:     optional command, args.
 var allowedAdapterConfigKeys = map[string]map[string]struct{}{
-	"claude": {},
+	"claude": {
+		"effort": {},
+	},
 	"ollama": {
 		"host":          {},
 		"default_model": {},
