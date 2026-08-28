@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -64,6 +65,8 @@ type CreateGrantInput struct {
 type GrantRepo interface {
 	Create(ctx context.Context, in CreateGrantInput) (*ent.Grant, error)
 	ListForCapability(ctx context.Context, capabilityName string) ([]*ent.Grant, error)
+	// List returns every grant row, newest first, across all capabilities.
+	List(ctx context.Context) ([]*ent.Grant, error)
 	// Revoke tombstones a grant: revoked_at and revoked_by are set, the row
 	// stays — history is never lost to a DELETE. revokedBy is required for
 	// the same reason granted_by is: a revocation is a security decision,
@@ -86,6 +89,15 @@ func (r *entGrantRepo) Create(ctx context.Context, in CreateGrantInput) (*ent.Gr
 	}
 	if _, err := capability.ParsePattern(in.Pattern); err != nil {
 		return nil, fmt.Errorf("grant.Create: invalid pattern: %w", err)
+	}
+	if !capability.IsValidMode(in.Mode) {
+		return nil, fmt.Errorf("grant.Create: invalid mode %q (valid: %s)", in.Mode, strings.Join(capability.Modes(), ", "))
+	}
+	if !capability.IsValidContextKind(in.Context.Kind) {
+		return nil, fmt.Errorf("grant.Create: invalid context kind %q (valid: %s)", in.Context.Kind, strings.Join(capability.ContextKinds(), ", "))
+	}
+	if in.Context.Kind == GrantContextGlobal && in.Context.Ref != "" {
+		return nil, fmt.Errorf("grant.Create: context ref must be empty for the global context, got %q", in.Context.Ref)
 	}
 	row, err := r.client.Grant.Create().
 		SetID(uuid.New().String()).
@@ -114,6 +126,16 @@ func (r *entGrantRepo) ListForCapability(ctx context.Context, capabilityName str
 		All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("grant.ListForCapability: %w", err)
+	}
+	return rows, nil
+}
+
+func (r *entGrantRepo) List(ctx context.Context) ([]*ent.Grant, error) {
+	rows, err := r.client.Grant.Query().
+		Order(ent.Desc(grant.FieldGrantedAt)).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("grant.List: %w", err)
 	}
 	return rows, nil
 }
