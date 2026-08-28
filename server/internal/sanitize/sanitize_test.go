@@ -113,6 +113,27 @@ func TestForDisplayCappedCountsTheSeparator(t *testing.T) {
 	}
 }
 
+func TestForStoragePreservesNewlinesButStripsDeceptiveRunes(t *testing.T) {
+	in := "line one​\nline two‮\n\nline three"
+	got := sanitize.ForStorage(in)
+	want := "line one\nline two\n\nline three"
+	if got != want {
+		t.Errorf("ForStorage(%q) = %q, want %q", in, got, want)
+	}
+	for _, bad := range []rune{'‮', '​'} {
+		if strings.ContainsRune(got, bad) {
+			t.Errorf("result still carries %U: %q", bad, got)
+		}
+	}
+}
+
+func TestForStorageKeepsIndentation(t *testing.T) {
+	in := "func f() {\n\treturn nil\n}"
+	if got := sanitize.ForStorage(in); got != in {
+		t.Errorf("ForStorage(%q) = %q, want unchanged (tabs are whitespace, not control)", in, got)
+	}
+}
+
 // The whole point of the one-pass form: cost must not scale with the length of
 // text that is thrown away.
 func BenchmarkForDisplayCappedLongInput(b *testing.B) {

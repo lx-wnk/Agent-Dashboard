@@ -124,10 +124,11 @@ func buildBypassRouter(t *testing.T) http.Handler {
 		SearchHandler:        search.NewHandler(rawrepo.NewSearchRepo(rawDB), merger.New(), nil),
 		HistoryHandler:       apihistory.NewHandler(histsvc.NewImporter(repo.NewAgentCostTrendRepo(c))),
 		MemoryHandler: apimemory.NewHandler(
-			repo.NewMemoryRepo(c),
-			memory.NewRetriever(rawDB, repo.NewMemoryRepo(c)),
+			repo.NewMemoryRepo(c, bundle.WriteClient),
+			memory.NewRetriever(rawDB, repo.NewMemoryRepo(c, bundle.WriteClient)),
 			repo.NewCapabilityRepo(c),
 			repo.NewGrantRepo(c),
+			repo.NewGrantUsageRepo(c, bundle.WriteClient),
 		),
 		RefineHandler: refineapi.NewHandler(refineapi.Deps{
 			Turns:     repo.NewRefinementTurnRepo(c),
@@ -170,12 +171,39 @@ func bypassSkip(method, pattern string) bool {
 		return true
 	case method == http.MethodDelete && pattern == "/api/me": // account deletion disabled in bypass mode (by design)
 		return true
-	case strings.HasPrefix(pattern, "/api/memory/"): // capability-gated (memory.read/memory.write), not JWT-gated —
-		// a 403 here with no grant seeded is the fail-closed default this gate is
-		// built to produce, not the bypass-auth bug class this test guards against.
-		return true
 	}
 	return false
+}
+
+// bypassMemoryRequestBody is the JSON body driveRequest sends for every
+// /api/memory/* write route in this test, a superset of the fields any one
+// of them requires (slug, spaceSlug, summary, content, kind, sourceKind,
+// supersededBy). An empty "{}" body — every other route's default — would
+// hit a route's own required-field validation (400) before the request ever
+// reaches h.authorize, masking whichever capability check this test exists
+// to guard.
+const bypassMemoryRequestBody = `{"slug":"smoke-test","spaceSlug":"smoke-test","summary":"s","content":"c","kind":"fact","sourceKind":"user","supersededBy":"smoke-test"}`
+
+// bypassMemoryExpectedStatus reports the status a /api/memory/* route must
+// answer with here, with capabilities seeded but no grant at all: these
+// routes are capability-gated (memory.read/memory.write), not JWT-gated, so
+// 403 — not 401/403-as-bug — is the fail-closed default the gate is built to
+// produce; skipping the whole prefix left a future route that forgets to
+// call authorize invisible to this test, so every one of them is asserted
+// against a concrete expected code instead.
+//
+// The two id-addressed routes (supersede, expire) still resolve a different,
+// but equally deterministic, code: spaceOfEntry looks the entry up before
+// either one reaches authorize, and "smoke-test" is never a real id, so both
+// 404 regardless of grants — a real fixture entry would be needed to drive
+// them as far as the capability check, which this smoke test does not carry.
+func bypassMemoryExpectedStatus(pattern string) int {
+	switch {
+	case strings.HasSuffix(pattern, "/entries/{id}"):
+		return http.StatusNotFound
+	default:
+		return http.StatusForbidden
+	}
 }
 
 // concretePath substitutes chi path params ({id}, {taskId:...}) and wildcards with
@@ -193,7 +221,10 @@ func concretePath(pattern string) string {
 // driveRequest runs one request against h with a hard deadline so streaming /
 // blocking handlers can't hang the test. The status code is read only after the
 // handler goroutine has returned, so there is no race on the recorder.
-func driveRequest(h http.Handler, method, path string) int {
+// jsonBody is ignored for GET/HEAD/OPTIONS; "{}" is the default body every
+// route but the memory ones need — an empty object satisfies handlers that
+// don't check for required fields and 400s harmlessly on the ones that do.
+func driveRequest(h http.Handler, method, path, jsonBody string) int {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -201,7 +232,7 @@ func driveRequest(h http.Handler, method, path string) int {
 	if method == http.MethodGet || method == http.MethodHead || method == http.MethodOptions {
 		body = strings.NewReader("")
 	} else {
-		body = strings.NewReader("{}")
+		body = strings.NewReader(jsonBody)
 	}
 	req := httptest.NewRequest(method, path, body).WithContext(ctx)
 	// Loopback host + matching Origin so RequireLoopbackHost and
@@ -254,11 +285,25 @@ func TestBypassAuth_NoProtectedRouteReturnsAuthError(t *testing.T) {
 			return nil
 		}
 		path := concretePath(route)
-		code := driveRequest(router, method, path)
+		body := "{}"
+		if strings.HasPrefix(route, "/api/memory/") {
+			body = bypassMemoryRequestBody
+			if route == "/api/memory/injections" { // stageRun is a required query param, not a body field
+				path += "?stageRun=smoke-test"
+			}
+		}
+		code := driveRequest(router, method, path, body)
 
 		mu.Lock()
 		checked++
 		mu.Unlock()
+
+		if strings.HasPrefix(route, "/api/memory/") {
+			if want := bypassMemoryExpectedStatus(route); code != want {
+				t.Errorf("bypass mode: %s %s returned %d, want %d — a capability-gated memory route must fail closed the same way every time; a 200-level response here means a handler forgot to call authorize", method, route, code, want)
+			}
+			return nil
+		}
 
 		if code == http.StatusUnauthorized || code == http.StatusForbidden {
 			t.Errorf("bypass mode: %s %s returned %d — handler must not hard-gate on a JWT payload that bypass never sets (use auth.BypassPayload() on !ok, or drop the guard)", method, route, code)

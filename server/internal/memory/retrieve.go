@@ -22,6 +22,15 @@ const (
 	// resolution (superseded or expired since the index was written, or a
 	// space outside the query's scope), so fetching exactly `limit` rows
 	// could return fewer than that even when enough valid entries exist.
+	//
+	// Known limitation, not fixed here: searchFTS ranks by bm25 across every
+	// space in the index, not just the ones q.Scope can see — visibility is
+	// applied afterward, by dropping hits outside spaceScope. A project with
+	// few entries can therefore lose its own matches: if enough higher-bm25
+	// entries exist in spaces the caller cannot see, they fill the
+	// limit*candidateOverfetch window before the visible ones are ever
+	// fetched. Raising the factor narrows the window but cannot close it.
+	// A real fix needs the space filter pushed into the FTS query itself.
 	candidateOverfetch = 4
 )
 

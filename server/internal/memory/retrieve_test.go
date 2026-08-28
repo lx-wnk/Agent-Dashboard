@@ -20,7 +20,7 @@ func newRetriever(t *testing.T) (*memory.Retriever, repo.MemoryRepo, context.Con
 		t.Fatalf("db.Open: %v", err)
 	}
 	t.Cleanup(func() { _ = bundle.Client.Close() })
-	memRepo := repo.NewMemoryRepo(bundle.Client)
+	memRepo := repo.NewMemoryRepo(bundle.Client, bundle.WriteClient)
 	return memory.NewRetriever(bundle.DB, memRepo), memRepo, context.Background()
 }
 
