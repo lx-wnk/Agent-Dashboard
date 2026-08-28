@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/askgate"
 	"github.com/lx-wnk/agent-dashboard/server/internal/capability"
+	"github.com/lx-wnk/agent-dashboard/server/internal/sanitize"
 )
 
 type askResult struct {
@@ -130,6 +132,10 @@ func TestPendingShowsWhatIsBeingAskedAndClearsAfter(t *testing.T) {
 	if pending.Meta.Context != "task t1" {
 		t.Fatalf("Pending()[0].Meta.Context = %q, want the more specific %q", pending.Meta.Context, "task t1")
 	}
+	if pending.Meta.ValueElided != 0 || pending.Meta.ContextElided != 0 {
+		t.Fatalf("Pending()[0].Meta elision = (%d, %d), want (0, 0) for a normal short request",
+			pending.Meta.ValueElided, pending.Meta.ContextElided)
+	}
 
 	if err := a.Resolve(pending.ID, "allow"); err != nil {
 		t.Fatalf("Resolve: %v", err)
@@ -139,6 +145,81 @@ func TestPendingShowsWhatIsBeingAskedAndClearsAfter(t *testing.T) {
 	if got := a.Pending(); len(got) != 0 {
 		t.Fatalf("Pending after resolve = %+v, want empty", got)
 	}
+}
+
+func TestPendingCapsOversizedValueAndCarriesElisionSignal(t *testing.T) {
+	a := New(nil)
+	a.store.SetHoldFor(5 * time.Second)
+
+	huge := strings.Repeat("x", maxDisplayRunes*10)
+	go func() {
+		_, _ = a.Ask(context.Background(), capability.Request{Capability: "cap", Value: huge}, capability.Decision{})
+	}()
+
+	waitUntil(t, func() bool { return len(a.Pending()) == 1 })
+	pending := a.Pending()[0]
+
+	wantValue, wantElided := sanitize.ForDisplayCapped(huge, maxDisplayRunes)
+	if pending.Meta.Value != wantValue {
+		t.Fatalf("Pending Value = %q, want the capped form", pending.Meta.Value)
+	}
+	if pending.Meta.ValueElided != wantElided || pending.Meta.ValueElided == 0 {
+		t.Fatalf("Pending ValueElided = %d, want the nonzero drop count %d", pending.Meta.ValueElided, wantElided)
+	}
+
+	_ = a.Resolve(pending.ID, "deny")
+}
+
+func TestPendingValueDoesNotCarryControlCharsOrNewlines(t *testing.T) {
+	a := New(nil)
+	a.store.SetHoldFor(5 * time.Second)
+
+	raw := "line1\nline2\x00\x1b[31mred"
+	go func() {
+		_, _ = a.Ask(context.Background(), capability.Request{Capability: "cap", Value: raw}, capability.Decision{})
+	}()
+
+	waitUntil(t, func() bool { return len(a.Pending()) == 1 })
+	pending := a.Pending()[0]
+
+	want, _ := sanitize.ForDisplayCapped(raw, maxDisplayRunes)
+	if pending.Meta.Value != want {
+		t.Fatalf("Pending Value = %q, want the sanitized form %q", pending.Meta.Value, want)
+	}
+	if strings.ContainsAny(pending.Meta.Value, "\n\x00\x1b") {
+		t.Fatalf("Pending Value = %q, control characters and newlines must not survive", pending.Meta.Value)
+	}
+
+	_ = a.Resolve(pending.ID, "deny")
+}
+
+func TestPendingSanitizesScopeRefInsideContext(t *testing.T) {
+	a := New(nil)
+	a.store.SetHoldFor(5 * time.Second)
+
+	badRef := "proj\n" + strings.Repeat("y", maxDisplayRunes*3)
+	req := capability.Request{
+		Capability: "cap",
+		Value:      "v",
+		Contexts:   []capability.Context{{Kind: "project", Ref: badRef}},
+	}
+	go func() { _, _ = a.Ask(context.Background(), req, capability.Decision{}) }()
+
+	waitUntil(t, func() bool { return len(a.Pending()) == 1 })
+	pending := a.Pending()[0]
+
+	wantContext, wantElided := sanitize.ForDisplayCapped("project "+badRef, maxDisplayRunes)
+	if pending.Meta.Context != wantContext {
+		t.Fatalf("Pending Context = %q, want the capped, sanitized form", pending.Meta.Context)
+	}
+	if pending.Meta.ContextElided != wantElided || pending.Meta.ContextElided == 0 {
+		t.Fatalf("Pending ContextElided = %d, want the nonzero drop count %d", pending.Meta.ContextElided, wantElided)
+	}
+	if strings.Contains(pending.Meta.Context, "\n") {
+		t.Fatalf("Pending Context = %q, must not contain a newline", pending.Meta.Context)
+	}
+
+	_ = a.Resolve(pending.ID, "deny")
 }
 
 func TestResolveOnUnknownIDFails(t *testing.T) {

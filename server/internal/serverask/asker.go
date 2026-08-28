@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lx-wnk/agent-dashboard/server/internal/askgate"
 	"github.com/lx-wnk/agent-dashboard/server/internal/capability"
+	"github.com/lx-wnk/agent-dashboard/server/internal/sanitize"
 )
 
 // askHoldTimeout is how long Ask waits for a human decision before failing
@@ -22,13 +23,24 @@ import (
 // is coincidence, not a shared constant, and either may change independently.
 const askHoldTimeout = 25 * time.Second
 
+// maxDisplayRunes bounds Value and Context, mirroring the hook bridge's
+// maxPatternRunes (permission.go): both sit next to an Allow button, and both
+// are authored by the party the decision judges.
+const maxDisplayRunes = 400
+
 // Pending is one server-point decision waiting for a human, as shown in the UI.
 type Pending struct {
-	Capability  string
-	Value       string
-	Context     string // the most specific context of the request, rendered
-	Reason      string
-	RequestedAt time.Time
+	Capability string
+	// Value and Context come from the caller being judged (capability.Request,
+	// mostSpecificContext) and are rendered next to an Allow button, so both
+	// are sanitized and capped before storage; ValueElided/ContextElided carry
+	// the cut count separately so a truncated value cannot forge its own "…".
+	Value         string
+	ValueElided   int
+	Context       string // the most specific context of the request, rendered
+	ContextElided int
+	Reason        string
+	RequestedAt   time.Time
 }
 
 // Asker answers capability.EffectAsk decisions raised by ServerEnforcer by
@@ -53,12 +65,16 @@ func New(onChange func()) *Asker {
 // refuse, never proceed.
 func (a *Asker) Ask(ctx context.Context, req capability.Request, d capability.Decision) (bool, error) {
 	id := uuid.New().String()
+	value, valueElided := sanitize.ForDisplayCapped(req.Value, maxDisplayRunes)
+	askContext, contextElided := sanitize.ForDisplayCapped(mostSpecificContext(req.Contexts), maxDisplayRunes)
 	meta := Pending{
-		Capability:  req.Capability,
-		Value:       req.Value,
-		Context:     mostSpecificContext(req.Contexts),
-		Reason:      d.Reason,
-		RequestedAt: time.Now(),
+		Capability:    req.Capability,
+		Value:         value,
+		ValueElided:   valueElided,
+		Context:       askContext,
+		ContextElided: contextElided,
+		Reason:        d.Reason,
+		RequestedAt:   time.Now(),
 	}
 	decision, ok := a.store.Ask(ctx, id, meta)
 	if !ok {
