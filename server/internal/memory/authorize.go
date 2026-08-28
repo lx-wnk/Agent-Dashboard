@@ -57,48 +57,61 @@ func Contexts(scope repo.Scope) []capability.Context {
 	}
 }
 
+// Gate resolves and enforces capability.Decide requests for one caller. This
+// is the single gate shared by every transport that reaches a memory action
+// in-process (MCP tools, the HTTP API, the pipeline's automatic memory push)
+// — the enforcement point capability.EnforcerServer names.
+//
+// A nil Asker means this caller must never block for a human: an ask
+// decision denies, per ServerEnforcer's own fail-closed rule. This makes
+// "must never ask" a property of how a Gate is constructed rather than a
+// rule every call site has to remember to honour.
+type Gate struct {
+	Capabilities repo.CapabilityRepo
+	Grants       repo.GrantRepo
+	GrantUsage   repo.GrantUsageRepo
+	Asker        capability.Asker
+}
+
 // Authorize resolves and enforces a capability.Decide request for capName
-// against value in scope's context chain. This is the single gate shared by
-// every transport that reaches a memory action in-process (MCP tools, the
-// HTTP API, the pipeline's automatic memory push) — the enforcement point
-// capability.EnforcerServer names. A capability catalogue lookup miss
+// against value in scope's context chain. A capability catalogue lookup miss
 // resolves to a zero-value CapabilityView (empty Class), which
 // capability.Decide's defaultEffect sends to deny — the fail-closed
 // behaviour SeedCapabilities exists to make the normal case.
-func Authorize(ctx context.Context, capabilities repo.CapabilityRepo, grants repo.GrantRepo, grantUsage repo.GrantUsageRepo, capName, value string, scope repo.Scope) error {
+func (g Gate) Authorize(ctx context.Context, capName, value string, scope repo.Scope) error {
 	var capView capability.CapabilityView
-	if row, err := capabilities.Get(ctx, capName); err == nil {
+	if row, err := g.Capabilities.Get(ctx, capName); err == nil {
 		capView = capability.CapabilityView{Name: row.Name, Class: row.Class, EnforceableBy: row.EnforceableBy}
 	}
 
-	grantRows, err := grants.ListForCapability(ctx, capName)
+	grantRows, err := g.Grants.ListForCapability(ctx, capName)
 	if err != nil {
 		return fmt.Errorf("list grants for %s: %w", capName, err)
 	}
 	grantViews := make([]capability.GrantView, len(grantRows))
-	for i, g := range grantRows {
+	for i, gr := range grantRows {
 		grantViews[i] = capability.GrantView{
-			ID:                 g.ID,
-			Capability:         g.CapabilityName,
-			ContextKind:        g.ContextKind,
-			ContextRef:         g.ContextRef,
-			Pattern:            g.Pattern,
-			Mode:               g.Mode,
-			LimitCount:         g.LimitCount,
-			LimitWindowSeconds: g.LimitWindowSeconds,
-			ExpiresAt:          g.ExpiresAt,
-			RevokedAt:          g.RevokedAt,
+			ID:                 gr.ID,
+			Capability:         gr.CapabilityName,
+			ContextKind:        gr.ContextKind,
+			ContextRef:         gr.ContextRef,
+			Pattern:            gr.Pattern,
+			Mode:               gr.Mode,
+			LimitCount:         gr.LimitCount,
+			LimitWindowSeconds: gr.LimitWindowSeconds,
+			ExpiresAt:          gr.ExpiresAt,
+			RevokedAt:          gr.RevokedAt,
 		}
 	}
 
 	req := capability.Request{Capability: capName, Value: value, Contexts: Contexts(scope)}
 	decision := capability.Decide(req, grantViews, capView)
 
-	grantView, usedInWindow, err := rateLimitUsage(ctx, grantUsage, decision, grantViews)
+	grantView, usedInWindow, err := rateLimitUsage(ctx, g.GrantUsage, decision, grantViews)
 	if err != nil {
 		return err
 	}
-	return capability.ServerEnforcer{}.Enforce(ctx, decision, grantView, usedInWindow)
+	return capability.ServerEnforcer{Asker: g.Asker}.Enforce(ctx, req, decision, grantView, usedInWindow)
 }
 
 // rateLimitUsage recovers the grant that won decision (by Decision.GrantID,
