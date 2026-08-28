@@ -30,6 +30,7 @@ GET /api/auth/github
 GET /api/auth/login
 GET /api/config
 GET /api/config/commands
+GET /api/config/context-files
 GET /api/config/file
 GET /api/config/memory
 GET /api/config/skills
