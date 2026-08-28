@@ -50,12 +50,13 @@ func newMemoryDepsForTest(t *testing.T) (MemoryDeps, repo.GrantRepo, repo.Capabi
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = bundle.Client.Close() })
 
-	memRepo := repo.NewMemoryRepo(bundle.Client)
+	memRepo := repo.NewMemoryRepo(bundle.Client, bundle.WriteClient)
 	deps := MemoryDeps{
 		Repo:         memRepo,
 		Retriever:    memory.NewRetriever(bundle.DB, memRepo),
 		Capabilities: repo.NewCapabilityRepo(bundle.Client),
 		Grants:       repo.NewGrantRepo(bundle.Client),
+		GrantUsage:   repo.NewGrantUsageRepo(bundle.Client, bundle.WriteClient),
 	}
 	return deps, deps.Grants, deps.Capabilities, context.Background()
 }
@@ -84,6 +85,24 @@ func TestMemoryWriteFailsClosedOnUnknownSpace(t *testing.T) {
 		"spaceSlug": "does-not-exist", "summary": "s", "content": "c", "kind": "fact", "sourceKind": "user",
 	})
 	require.Error(t, err)
+}
+
+// TestMemoryWriteDeniedBeforeSpaceLookup is the regression test for the
+// space-existence oracle: with the capability seeded but no grant at all,
+// the denial must happen before GetSpace runs, so an ungranted caller's
+// error never reveals whether "does-not-exist" is actually a real space.
+func TestMemoryWriteDeniedBeforeSpaceLookup(t *testing.T) {
+	deps, _, capRepo, ctx := newMemoryDepsForTest(t)
+	repo.SeedCapabilities(ctx, capRepo)
+	registry := mcp.ToolRegistry{}
+	RegisterMemoryTools(registry, deps)
+
+	_, err := registry["memory_write"].Handler(ctx, map[string]any{
+		"spaceSlug": "does-not-exist", "summary": "s", "content": "c", "kind": "fact", "sourceKind": "user",
+	})
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "unknown space",
+		"authorization must run before the space lookup so an ungranted caller cannot use the error to probe space existence")
 }
 
 func TestMemoryWriteFailsClosedOnUnknownScope(t *testing.T) {
@@ -162,6 +181,22 @@ func TestMemoryWriteFailsClosedWhenContentEmptiedBySanitize(t *testing.T) {
 	// Escaped, not written literally — see ingest_test.go's identical fixture.
 	_, err = registry["memory_write"].Handler(ctx, map[string]any{
 		"spaceSlug": "notes", "summary": "", "content": "‮‬", "kind": "fact", "sourceKind": "user",
+	})
+	require.ErrorContains(t, err, "memory_write")
+}
+
+func TestMemoryWriteFailsClosedOnUnknownKind(t *testing.T) {
+	deps, grants, capRepo, ctx := newMemoryDepsForTest(t)
+	repo.SeedCapabilities(ctx, capRepo)
+	_, err := deps.Repo.CreateSpace(ctx, repo.CreateSpaceInput{Slug: "notes", Name: "Notes", Scope: repo.GlobalScope()})
+	require.NoError(t, err)
+	mustAllowMemoryGrant(t, grants, ctx, repo.CapabilityMemoryWrite)
+
+	registry := mcp.ToolRegistry{}
+	RegisterMemoryTools(registry, deps)
+
+	_, err = registry["memory_write"].Handler(ctx, map[string]any{
+		"spaceSlug": "notes", "summary": "s", "content": "c", "kind": "wharrgarbl", "sourceKind": "user",
 	})
 	require.ErrorContains(t, err, "memory_write")
 }

@@ -24,6 +24,7 @@ func provideMCPHandler(
 	refineRunner *refine.Runner,
 	memRepo repo.MemoryRepo,
 	memRetriever *memory.Retriever,
+	grantUsageRepo repo.GrantUsageRepo,
 ) http.Handler {
 	if client == nil || orch == nil {
 		return nil
@@ -117,6 +118,7 @@ func provideMCPHandler(
 		Retriever:    memRetriever,
 		Capabilities: repo.NewCapabilityRepo(client),
 		Grants:       repo.NewGrantRepo(client),
+		GrantUsage:   grantUsageRepo,
 	})
 	return mcp.MCPHandler(registry)
 }

@@ -28,10 +28,11 @@ func newMux(t *testing.T) (*chi.Mux, *ent.Client, repo.MemoryRepo, repo.GrantRep
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = bundle.Client.Close() })
 
-	memRepo := repo.NewMemoryRepo(bundle.Client)
+	memRepo := repo.NewMemoryRepo(bundle.Client, bundle.WriteClient)
 	capRepo := repo.NewCapabilityRepo(bundle.Client)
 	grantRepo := repo.NewGrantRepo(bundle.Client)
-	h := apimemory.NewHandler(memRepo, memory.NewRetriever(bundle.DB, memRepo), capRepo, grantRepo)
+	grantUsageRepo := repo.NewGrantUsageRepo(bundle.Client, bundle.WriteClient)
+	h := apimemory.NewHandler(memRepo, memory.NewRetriever(bundle.DB, memRepo), capRepo, grantRepo, grantUsageRepo)
 
 	mux := chi.NewRouter()
 	h.Mount(mux)
@@ -155,6 +156,34 @@ func TestCreateEntryFailsClosedOnUnknownSpace(t *testing.T) {
 		"spaceSlug": "does-not-exist", "summary": "s", "content": "c", "kind": "fact", "sourceKind": "user",
 	})
 	require.Equal(t, http.StatusNotFound, w.Code)
+}
+
+// TestCreateEntryDeniedBeforeSpaceLookup is the regression test for the
+// space-existence oracle: without any memory.write grant, an unknown space
+// must still come back as a denial (403), not a not-found (404) — otherwise
+// an ungranted caller could probe whether a space exists by reading the
+// status code alone.
+func TestCreateEntryDeniedBeforeSpaceLookup(t *testing.T) {
+	mux, _, _, _, capRepo, ctx := newMux(t)
+	repo.SeedCapabilities(ctx, capRepo)
+
+	w := doJSON(t, mux, http.MethodPost, "/api/memory/entries", map[string]any{
+		"spaceSlug": "does-not-exist", "summary": "s", "content": "c", "kind": "fact", "sourceKind": "user",
+	})
+	require.Equal(t, http.StatusForbidden, w.Code)
+}
+
+func TestCreateEntryFailsClosedOnUnknownKind(t *testing.T) {
+	mux, _, memRepo, grants, capRepo, ctx := newMux(t)
+	repo.SeedCapabilities(ctx, capRepo)
+	mustAllowGrant(t, grants, ctx, repo.CapabilityMemoryWrite, repo.GrantContextGlobal, "")
+	_, err := memRepo.CreateSpace(ctx, repo.CreateSpaceInput{Slug: "notes", Name: "Notes", Scope: repo.GlobalScope()})
+	require.NoError(t, err)
+
+	w := doJSON(t, mux, http.MethodPost, "/api/memory/entries", map[string]any{
+		"spaceSlug": "notes", "summary": "s", "content": "c", "kind": "wharrgarbl", "sourceKind": "user",
+	})
+	require.Equal(t, http.StatusBadRequest, w.Code)
 }
 
 func TestCreateEntryThenSearchFindsIt(t *testing.T) {

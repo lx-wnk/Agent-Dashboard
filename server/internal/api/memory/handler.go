@@ -28,11 +28,12 @@ type Handler struct {
 	retriever    *mem.Retriever
 	capabilities repo.CapabilityRepo
 	grants       repo.GrantRepo
+	grantUsage   repo.GrantUsageRepo
 }
 
 // NewHandler creates a Handler.
-func NewHandler(r repo.MemoryRepo, retriever *mem.Retriever, capabilities repo.CapabilityRepo, grants repo.GrantRepo) *Handler {
-	return &Handler{repo: r, retriever: retriever, capabilities: capabilities, grants: grants}
+func NewHandler(r repo.MemoryRepo, retriever *mem.Retriever, capabilities repo.CapabilityRepo, grants repo.GrantRepo, grantUsage repo.GrantUsageRepo) *Handler {
+	return &Handler{repo: r, retriever: retriever, capabilities: capabilities, grants: grants, grantUsage: grantUsage}
 }
 
 // Mount registers all /api/memory/* routes on r.
@@ -61,7 +62,7 @@ func scopeFromQuery(q url.Values) (repo.Scope, error) {
 // capability check the MCP memory tools enforce for the same actions — an
 // HTTP caller gets no wider access than an MCP one.
 func (h *Handler) authorize(ctx context.Context, capName, value string, scope repo.Scope) error {
-	if err := mem.Authorize(ctx, h.capabilities, h.grants, capName, value, scope); err != nil {
+	if err := mem.Authorize(ctx, h.capabilities, h.grants, h.grantUsage, capName, value, scope); err != nil {
 		return apierr.NewAppError(http.StatusForbidden, err.Error())
 	}
 	return nil
@@ -177,6 +178,17 @@ func (h *Handler) createEntry(w http.ResponseWriter, r *http.Request) error {
 		return apierr.NewAppError(http.StatusBadRequest, err.Error())
 	}
 
+	// Authorize before resolving the space: resolving first would let an
+	// ungranted caller distinguish "unknown space" (404) from "denied"
+	// (403) without ever holding a grant — a space-existence oracle ahead
+	// of the gate. in.SpaceSlug is caller-supplied, so unlike
+	// supersedeEntry/expireEntry (which must look an entry's space up
+	// before they even know which slug to check), the value needed to
+	// authorize is available before the space is resolved at all.
+	if err := h.authorize(r.Context(), repo.CapabilityMemoryWrite, in.SpaceSlug, scope); err != nil {
+		return err
+	}
+
 	// The space must already exist — this never creates one on the fly, the
 	// same rule memory_write enforces: auto-creating here would let any
 	// caller invent an arbitrary space identity no grant was ever written
@@ -184,10 +196,6 @@ func (h *Handler) createEntry(w http.ResponseWriter, r *http.Request) error {
 	space, err := h.repo.GetSpace(r.Context(), scope, in.SpaceSlug)
 	if err != nil {
 		return apierr.NewAppError(http.StatusNotFound, "unknown space "+in.SpaceSlug)
-	}
-
-	if err := h.authorize(r.Context(), repo.CapabilityMemoryWrite, in.SpaceSlug, scope); err != nil {
-		return err
 	}
 
 	cleanSummary, cleanContent, err := mem.SanitizeForStore(in.Summary, in.Content)

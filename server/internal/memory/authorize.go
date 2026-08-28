@@ -3,6 +3,7 @@ package memory
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/capability"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
@@ -59,11 +60,12 @@ func Contexts(scope repo.Scope) []capability.Context {
 // Authorize resolves and enforces a capability.Decide request for capName
 // against value in scope's context chain. This is the single gate shared by
 // every transport that reaches a memory action in-process (MCP tools, the
-// HTTP API) — the enforcement point capability.EnforcerServer names. A
-// capability catalogue lookup miss resolves to a zero-value CapabilityView
-// (empty Class), which capability.Decide's defaultEffect sends to deny — the
-// fail-closed behaviour SeedCapabilities exists to make the normal case.
-func Authorize(ctx context.Context, capabilities repo.CapabilityRepo, grants repo.GrantRepo, capName, value string, scope repo.Scope) error {
+// HTTP API, the pipeline's automatic memory push) — the enforcement point
+// capability.EnforcerServer names. A capability catalogue lookup miss
+// resolves to a zero-value CapabilityView (empty Class), which
+// capability.Decide's defaultEffect sends to deny — the fail-closed
+// behaviour SeedCapabilities exists to make the normal case.
+func Authorize(ctx context.Context, capabilities repo.CapabilityRepo, grants repo.GrantRepo, grantUsage repo.GrantUsageRepo, capName, value string, scope repo.Scope) error {
 	var capView capability.CapabilityView
 	if row, err := capabilities.Get(ctx, capName); err == nil {
 		capView = capability.CapabilityView{Name: row.Name, Class: row.Class, EnforceableBy: row.EnforceableBy}
@@ -91,8 +93,58 @@ func Authorize(ctx context.Context, capabilities repo.CapabilityRepo, grants rep
 
 	req := capability.Request{Capability: capName, Value: value, Contexts: Contexts(scope)}
 	decision := capability.Decide(req, grantViews, capView)
-	// GrantView{} / 0: no rate limit is tracked for memory grants today, the
-	// same no-limit shape enforcer_server_test.go exercises for every
-	// non-rate-limited caller.
-	return capability.ServerEnforcer{}.Enforce(ctx, decision, capability.GrantView{}, 0)
+
+	grantView, usedInWindow, err := rateLimitUsage(ctx, grantUsage, decision, grantViews)
+	if err != nil {
+		return err
+	}
+	return capability.ServerEnforcer{}.Enforce(ctx, decision, grantView, usedInWindow)
+}
+
+// rateLimitUsage recovers the grant that won decision (by Decision.GrantID,
+// trivially findable in grantViews since Authorize just built it from the
+// same rows Decide ranked) and reports its rate-limit usage for
+// ServerEnforcer.Enforce. A grant with no rate limit configured (LimitCount
+// 0) needs no usage lookup at all — this is the "callers with nothing to
+// rate-limit" case Enforce's own doc comment names, so it returns
+// GrantView{}, 0 unchanged, same as before this existed.
+//
+// A limited grant's usage is recorded, not merely read:
+// GrantUsageRepo.RecordIfWithinLimit atomically checks the window and
+// inserts one use in the same write transaction, so two concurrent callers
+// against the same grant cannot both observe "one below the limit" and both
+// proceed — a plain count-then-compare here would reopen exactly the race
+// RecordIfWithinLimit exists to close. Enforce still re-checks WithinLimit
+// itself (only EffectAllow is limit-checked, per its own doc comment), so
+// the returned usedInWindow is translated from RecordIfWithinLimit's
+// permitted bool rather than the raw count: 0 when permitted (always under
+// any positive limit), the limit itself when not (guaranteed to fail
+// Enforce's own check identically, with a real "grant %s allows %d..."
+// reason instead of a fabricated one).
+func rateLimitUsage(ctx context.Context, grantUsage repo.GrantUsageRepo, decision capability.Decision, grantViews []capability.GrantView) (capability.GrantView, int, error) {
+	if decision.Effect != capability.EffectAllow || decision.GrantID == "" {
+		return capability.GrantView{}, 0, nil
+	}
+	var winner capability.GrantView
+	found := false
+	for _, g := range grantViews {
+		if g.ID == decision.GrantID {
+			winner = g
+			found = true
+			break
+		}
+	}
+	if !found || winner.LimitCount == 0 {
+		return capability.GrantView{}, 0, nil
+	}
+
+	window := time.Duration(winner.LimitWindowSeconds) * time.Second
+	permitted, err := grantUsage.RecordIfWithinLimit(ctx, winner.ID, winner.LimitCount, window)
+	if err != nil {
+		return capability.GrantView{}, 0, fmt.Errorf("rate-limit check for grant %s: %w", winner.ID, err)
+	}
+	if permitted {
+		return winner, 0, nil
+	}
+	return winner, winner.LimitCount, nil
 }

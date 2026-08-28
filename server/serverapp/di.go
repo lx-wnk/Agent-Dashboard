@@ -232,14 +232,20 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	// consumers — the same rule Retriever's own doc comment states.
 	var memRepo repo.MemoryRepo
 	var memRetriever *memory.Retriever
+	// grantUsageRepo backs the rate-limit check inside memory.Authorize
+	// (mem HTTP handler, MCP memory tools, and the pipeline's memory push
+	// closure below all share it) — built once here since it needs
+	// bundle.WriteClient, which only this function has in scope.
+	var grantUsageRepo repo.GrantUsageRepo
 
 	// The plugin table is the source of truth for enablement. Build the repo
 	// early so the boot predicate can read it, and migrate the legacy #230
 	// "plugins.enabled" setting into the table once (idempotent).
 	var pluginRepo repo.PluginRepo
 	if entClient != nil {
-		memRepo = repo.NewMemoryRepo(entClient)
+		memRepo = repo.NewMemoryRepo(entClient, bundle.WriteClient)
 		memRetriever = memory.NewRetriever(bundle.DB, memRepo)
+		grantUsageRepo = repo.NewGrantUsageRepo(entClient, bundle.WriteClient)
 
 		pluginRepo = repo.NewPluginRepo(entClient)
 		if err := seedPluginsFromEnabledList(ctx, settingsSvc, pluginRepo); err != nil {
@@ -477,7 +483,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		}
 	}
 
-	orch, err = provideOrchestrator(cfg, settingsSvc, entClient, taskBroadcaster, systemPromptRepo, spawnerResolver, cpStart, cpStop, memRepo, memRetriever)
+	orch, err = provideOrchestrator(cfg, settingsSvc, entClient, taskBroadcaster, systemPromptRepo, spawnerResolver, cpStart, cpStop, memRepo, memRetriever, grantUsageRepo)
 	if err != nil {
 		return &ServerComponents{Cleanup: cleanup}, err
 	}
@@ -509,7 +515,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	// handler's create core, so it must be built after taskHandler. nil when no DB.
 	sched, schedulesHandler := provideScheduler(entClient, taskHandler, taskBroadcaster)
 
-	mcpHandler := provideMCPHandler(entClient, orch, sched, taskBroadcaster, projectBroadcaster, refineRunner, memRepo, memRetriever)
+	mcpHandler := provideMCPHandler(entClient, orch, sched, taskBroadcaster, projectBroadcaster, refineRunner, memRepo, memRetriever, grantUsageRepo)
 
 	var histImporter *histsvc.Importer
 	var historyHandler *apihistory.Handler
@@ -525,7 +531,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	// its own capability/grant repos, matching provideMCPHandler's wiring.
 	var memoryHandler *apimemory.Handler
 	if entClient != nil {
-		memoryHandler = apimemory.NewHandler(memRepo, memRetriever, repo.NewCapabilityRepo(entClient), repo.NewGrantRepo(entClient))
+		memoryHandler = apimemory.NewHandler(memRepo, memRetriever, repo.NewCapabilityRepo(entClient), repo.NewGrantRepo(entClient), grantUsageRepo)
 	}
 
 	// Eval / drift-detection subsystem. The onDrift callback is the only outward

@@ -14,6 +14,7 @@ type MemoryDeps struct {
 	Retriever    *memory.Retriever
 	Capabilities repo.CapabilityRepo
 	Grants       repo.GrantRepo
+	GrantUsage   repo.GrantUsageRepo
 }
 
 // RegisterMemoryTools registers the 2 memory MCP tools into the given registry.
@@ -41,7 +42,7 @@ func parseMemoryScope(args map[string]any) (repo.Scope, error) {
 // the caller's key to reach the transport; this is the second, independent
 // layer that authorises the action itself.
 func authorizeMemory(ctx context.Context, d MemoryDeps, capName, value string, scope repo.Scope) error {
-	return memory.Authorize(ctx, d.Capabilities, d.Grants, capName, value, scope)
+	return memory.Authorize(ctx, d.Capabilities, d.Grants, d.GrantUsage, capName, value, scope)
 }
 
 func registerMemorySearch(registry mcp.ToolRegistry, d MemoryDeps) {
@@ -101,8 +102,8 @@ func registerMemoryWrite(registry mcp.ToolRegistry, d MemoryDeps) {
 				"scopeRef":   map[string]any{"type": "string", "description": "Scope reference (project path or application id); required unless scope is global"},
 				"summary":    map[string]any{"type": "string", "description": "Short text pushed into a spawn's prompt"},
 				"content":    map[string]any{"type": "string", "description": "Full text retrievable on demand"},
-				"kind":       map[string]any{"type": "string", "enum": []string{"fact", "preference", "lesson", "entity", "pointer"}},
-				"sourceKind": map[string]any{"type": "string", "enum": []string{"agent", "user", "application", "import"}},
+				"kind":       map[string]any{"type": "string", "enum": repo.MemoryKinds},
+				"sourceKind": map[string]any{"type": "string", "enum": repo.MemorySourceKinds},
 				"sourceRef":  map[string]any{"type": "string", "description": "Origin identifier: stage-run id, application id, file path"},
 				"confidence": map[string]any{"type": "number", "description": "Confidence 0..1 (default 1)"},
 			},
@@ -134,6 +135,14 @@ func registerMemoryWrite(registry mcp.ToolRegistry, d MemoryDeps) {
 				return nil, err
 			}
 
+			// Authorize before resolving the space: resolving first would let
+			// an ungranted caller distinguish "unknown space" (404-shaped
+			// error) from "denied" (403-shaped error) without ever holding a
+			// grant — a space-existence oracle ahead of the gate.
+			if err := authorizeMemory(ctx, d, repo.CapabilityMemoryWrite, spaceSlug, scope); err != nil {
+				return nil, mcp.Fail("memory_write: " + err.Error())
+			}
+
 			// The space must already exist — memory_write never creates one
 			// on the fly. Auto-creating here would let any caller with the
 			// MCP transport scope invent an arbitrary space identity, which
@@ -141,10 +150,6 @@ func registerMemoryWrite(registry mcp.ToolRegistry, d MemoryDeps) {
 			space, err := d.Repo.GetSpace(ctx, scope, spaceSlug)
 			if err != nil {
 				return nil, mcp.Fail("memory_write: unknown space " + spaceSlug + ": " + err.Error())
-			}
-
-			if err := authorizeMemory(ctx, d, repo.CapabilityMemoryWrite, spaceSlug, scope); err != nil {
-				return nil, mcp.Fail("memory_write: " + err.Error())
 			}
 
 			cleanSummary, cleanContent, err := memory.SanitizeForStore(summary, content)
