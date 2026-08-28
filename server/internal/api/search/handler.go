@@ -123,7 +123,7 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) error {
 
 // searchTasks executes an FTS5 query via the SearchRepo and returns matching tasks.
 func (h *Handler) searchTasks(r *http.Request, q, userID string, isAdmin bool, limit int) ([]taskSearchResult, error) {
-	ftsQuery := sanitizeFtsQuery(q)
+	ftsQuery := rawrepo.SanitizeFTSQuery(q)
 
 	rows, err := h.searchRepo.SearchTasks(r.Context(), ftsQuery, userID, isAdmin, limit)
 	if err != nil {
@@ -150,24 +150,6 @@ func (h *Handler) searchTasks(r *http.Request, q, userID string, isAdmin bool, l
 		results = append(results, res)
 	}
 	return results, nil
-}
-
-// sanitizeFtsQuery converts a raw query string into a safe FTS5 MATCH expression.
-// Each whitespace-separated token is wrapped in double quotes (internal quotes doubled)
-// and given a prefix-match suffix (*).
-//
-// Example: `hello world` → `"hello"* "world"*`
-func sanitizeFtsQuery(raw string) string {
-	tokens := strings.Fields(raw)
-	if len(tokens) == 0 {
-		return ""
-	}
-	parts := make([]string, 0, len(tokens))
-	for _, tok := range tokens {
-		escaped := strings.ReplaceAll(tok, `"`, `""`)
-		parts = append(parts, `"`+escaped+`"*`)
-	}
-	return strings.Join(parts, " ")
 }
 
 // filterAgents returns agents matching the query by case-insensitive substring on

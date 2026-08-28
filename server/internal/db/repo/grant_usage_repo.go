@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lx-wnk/agent-dashboard/server/internal/capability"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/grantusage"
 )
@@ -15,10 +16,11 @@ import (
 // fall inside a sliding window.
 type GrantUsageRepo interface {
 	// RecordIfWithinLimit atomically checks limit/window and records one use
-	// of grantID inside a single write transaction (repo.WithTx), so the
+	// of grantID inside a single write transaction (repo.WithWriteTx), so the
 	// check and the insert cannot interleave with a concurrent caller's —
-	// SQLite serializes writers, so a write transaction is what makes the
-	// pair atomic. limit and its WithinLimit semantics (0 unlimited,
+	// BEGIN IMMEDIATE takes the write lock up front, so SQLite serializes
+	// writers instead of letting the read-then-write pair race a concurrent
+	// commit into SQLITE_BUSY_SNAPSHOT. limit and its WithinLimit semantics (0 unlimited,
 	// negative exhausted) are capability.WithinLimit's, reused here rather
 	// than reimplemented, so the boundary can never drift between the two.
 	//
@@ -36,12 +38,16 @@ type GrantUsageRepo interface {
 }
 
 type entGrantUsageRepo struct {
-	client *ent.Client
+	client      *ent.Client
+	writeClient db.WriteClient
 }
 
 // NewGrantUsageRepo returns a GrantUsageRepo backed by the ent client.
-func NewGrantUsageRepo(client *ent.Client) GrantUsageRepo {
-	return &entGrantUsageRepo{client: client}
+// writeClient must be db.DBBundle.WriteClient — see WithWriteTx's doc
+// comment for why RecordIfWithinLimit needs it and client alone is not
+// enough.
+func NewGrantUsageRepo(client *ent.Client, writeClient db.WriteClient) GrantUsageRepo {
+	return &entGrantUsageRepo{client: client, writeClient: writeClient}
 }
 
 func (r *entGrantUsageRepo) RecordIfWithinLimit(ctx context.Context, grantID string, limit int, window time.Duration) (bool, error) {
@@ -49,7 +55,7 @@ func (r *entGrantUsageRepo) RecordIfWithinLimit(ctx context.Context, grantID str
 		return false, fmt.Errorf("grant_usage.RecordIfWithinLimit: grant_id is required")
 	}
 	permitted := false
-	err := WithTx(ctx, r.client, func(tx *ent.Tx) error {
+	err := WithWriteTx(ctx, r.writeClient, func(tx *ent.Tx) error {
 		used, err := countGrantUsageSince(ctx, tx.GrantUsage, grantID, time.Now().Add(-window))
 		if err != nil {
 			return err

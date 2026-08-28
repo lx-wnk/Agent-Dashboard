@@ -15,7 +15,7 @@ function makeFetch() {
       return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ skills: [] }) })
     if (url.startsWith('/api/config/commands'))
       return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ commands: [] }) })
-    if (url.startsWith('/api/config/memory'))
+    if (url.startsWith('/api/config/context-files'))
       return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ memory: [memEntry] }) })
     if (url.startsWith('/api/config/file') && method === 'PUT')
       return Promise.resolve({ ok: putStatus === 200, status: putStatus, json: () => Promise.resolve({ path: memEntry.path, mtime: 99, size: 5 }) })

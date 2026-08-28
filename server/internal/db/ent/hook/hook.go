@@ -141,6 +141,30 @@ func (f GrantUsageFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, 
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.GrantUsageMutation", m)
 }
 
+// The MemoryEntryFunc type is an adapter to allow the use of ordinary
+// function as MemoryEntry mutator.
+type MemoryEntryFunc func(context.Context, *ent.MemoryEntryMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f MemoryEntryFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.MemoryEntryMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.MemoryEntryMutation", m)
+}
+
+// The MemoryInjectionFunc type is an adapter to allow the use of ordinary
+// function as MemoryInjection mutator.
+type MemoryInjectionFunc func(context.Context, *ent.MemoryInjectionMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f MemoryInjectionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.MemoryInjectionMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.MemoryInjectionMutation", m)
+}
+
 // The PermissionPresetFunc type is an adapter to allow the use of ordinary
 // function as PermissionPreset mutator.
 type PermissionPresetFunc func(context.Context, *ent.PermissionPresetMutation) (ent.Value, error)

@@ -13,7 +13,7 @@ function makeFetch(file: (url: string, init?: RequestInit) => any) {
       return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ skills: [] }) })
     if (url.startsWith('/api/config/commands'))
       return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ commands: [] }) })
-    if (url.startsWith('/api/config/memory'))
+    if (url.startsWith('/api/config/context-files'))
       return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ memory: [] }) })
     throw new Error(`unexpected ${init?.method ?? 'GET'} ${url}`)
   })

@@ -18,6 +18,16 @@ const (
 	CapClassSpend    = "spend"
 )
 
+// Memory capability names. Unlike Claude Code tool names (seeded from
+// permissions.GrantableToolNames), these gate resource access with no
+// on-disk tool to enumerate, so they are named here directly and shared by
+// the seeder (capability_seed.go) and the memory MCP tools — one definition
+// rather than the same two literals copied into both places.
+const (
+	CapabilityMemoryRead  = "memory.read"
+	CapabilityMemoryWrite = "memory.write"
+)
+
 // UpsertCapabilityInput is the named input for Upsert. Named rather than
 // positional because the call has more than four parameters, which is where
 // this codebase's convention switches.

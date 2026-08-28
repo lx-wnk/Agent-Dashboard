@@ -14,11 +14,16 @@ type KeyDeps struct {
 }
 
 // validKeyScopes is the set of accepted scope values for API keys.
+// agent:coord is deliberately absent: it exists in mcp.ToolScopeMap and is
+// reachable through keys:manage's implication, but a key may not be granted
+// it directly.
 var validKeyScopes = map[string]bool{
 	"tasks:read":       true,
 	"tasks:write":      true,
 	"pipeline:control": true,
 	"keys:manage":      true,
+	"memory:read":      true,
+	"memory:write":     true,
 }
 
 // RegisterKeyTools registers all 3 API key tools into the given registry.
@@ -75,7 +80,7 @@ func registerCreateAPIKey(registry mcp.ToolRegistry, d KeyDeps) {
 					"type": "array",
 					"items": map[string]any{
 						"type": "string",
-						"enum": []string{"tasks:read", "tasks:write", "pipeline:control", "keys:manage"},
+						"enum": []string{"tasks:read", "tasks:write", "pipeline:control", "keys:manage", "memory:read", "memory:write"},
 					},
 					"description": "List of scopes to grant to this key",
 				},
@@ -105,7 +110,7 @@ func registerCreateAPIKey(registry mcp.ToolRegistry, d KeyDeps) {
 				}
 				s = strings.TrimSpace(s)
 				if !validKeyScopes[s] {
-					return nil, mcp.Fail("invalid scope: " + s + " (allowed: tasks:read, tasks:write, pipeline:control, keys:manage)")
+					return nil, mcp.Fail("invalid scope: " + s + " (allowed: tasks:read, tasks:write, pipeline:control, keys:manage, memory:read, memory:write)")
 				}
 				scopes = append(scopes, s)
 			}

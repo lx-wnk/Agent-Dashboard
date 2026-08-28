@@ -6,6 +6,7 @@ import (
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	"github.com/lx-wnk/agent-dashboard/server/internal/memory"
 )
 
 // StageTransition is a sealed interface. Only types in this package satisfy it.
@@ -139,6 +140,31 @@ type StageContext struct {
 	// by its ID. Kept acp-agnostic: it returns the ent row, not an acp-package
 	// type, so this file does not need to import the acp adapter.
 	PermissionStatus func(ctx context.Context, id string) (*ent.PermissionRequest, error)
+
+	// InjectMemory retrieves ranked memory entries for the stage's spawn user
+	// prompt — typically a bound (*memory.Retriever).Retrieve method value.
+	// Nil disables the memory push outright: memory being unavailable must
+	// never block a spawn, so "no injector wired" means "no injection" rather
+	// than a best-effort partial one.
+	InjectMemory memory.InjectorFunc
+
+	// MemoryBudget bounds the injected memory block in characters. <= 0
+	// disables injection — a non-positive value must never be read as
+	// "unbounded", so this fails closed rather than risking an uncapped block.
+	MemoryBudget int
+
+	// RecordMemoryInjection persists what memory was offered and what fit for
+	// this stage run. Nil skips recording: it is best-effort bookkeeping and
+	// must not fail a spawn.
+	RecordMemoryInjection func(ctx context.Context, in repo.RecordInjectionInput) (*ent.MemoryInjection, error)
+
+	// AuthorizeMemory gates the automatic memory push behind the same
+	// memory.Authorize capability check every human-facing memory route
+	// (MCP tools, HTTP API) already goes through — the push is otherwise the
+	// one memory read in the system with no capability gate. Nil disables
+	// the push the same way a nil InjectMemory does; a denial degrades to no
+	// memory block rather than failing the spawn (see injectMemoryBlock).
+	AuthorizeMemory func(ctx context.Context, scope repo.Scope) error
 }
 
 // StageHandler is implemented by each pipeline stage.
@@ -281,6 +307,24 @@ type OrchestratorOptions struct {
 	// tells OnTaskChanged to fall back to a live read. The pipeline package does not
 	// interpret the returned value — callers own its type.
 	BuildTaskPayload func(ctx context.Context, taskID string, srRepo repo.StageRunRepo, permRepo repo.PermissionRepo) any
+
+	// InjectMemory, MemoryBudget and RecordMemoryInjection are forwarded
+	// verbatim onto every StageContext this orchestrator builds — see the
+	// matching fields there for what each one does. Production wires a bound
+	// (*memory.Retriever).Retrieve, a positive character budget, and
+	// repo.MemoryRepo.RecordInjection at DI time (serverapp/di_pipeline.go);
+	// leaving InjectMemory nil or MemoryBudget <= 0 disables the push
+	// entirely rather than treating it as unbounded.
+	InjectMemory          memory.InjectorFunc
+	MemoryBudget          int
+	RecordMemoryInjection func(ctx context.Context, in repo.RecordInjectionInput) (*ent.MemoryInjection, error)
+
+	// AuthorizeMemory is forwarded verbatim onto every StageContext this
+	// orchestrator builds — see the matching StageContext field for what it
+	// gates. Production wires a closure over repo.CapabilityRepo/GrantRepo
+	// calling memory.Authorize at DI time (serverapp/di_pipeline.go); nil
+	// disables the push the same way a nil InjectMemory does.
+	AuthorizeMemory func(ctx context.Context, scope repo.Scope) error
 }
 
 // StageFailedInfo carries failure metadata to the OnStageFailed callback.

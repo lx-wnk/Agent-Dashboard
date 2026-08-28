@@ -1,0 +1,322 @@
+// Package memory implements the HTTP surface over the system memory store:
+// spaces, entries, and the record of what got injected into a spawn.
+package memory
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/url"
+	"strconv"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+
+	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	mem "github.com/lx-wnk/agent-dashboard/server/internal/memory"
+)
+
+// Handler serves the /api/memory/* endpoints. Row scoping (which spaces and
+// entries a given scope may see) is carried by the repo and Retriever
+// queries this handler calls, the same per-query-not-middleware pattern
+// rawrepo.SearchRepo uses for user_id — there is no separate filter layer
+// here to keep in sync with it.
+type Handler struct {
+	repo         repo.MemoryRepo
+	retriever    *mem.Retriever
+	capabilities repo.CapabilityRepo
+	grants       repo.GrantRepo
+	grantUsage   repo.GrantUsageRepo
+}
+
+// NewHandler creates a Handler.
+func NewHandler(r repo.MemoryRepo, retriever *mem.Retriever, capabilities repo.CapabilityRepo, grants repo.GrantRepo, grantUsage repo.GrantUsageRepo) *Handler {
+	return &Handler{repo: r, retriever: retriever, capabilities: capabilities, grants: grants, grantUsage: grantUsage}
+}
+
+// Mount registers all /api/memory/* routes on r.
+func (h *Handler) Mount(r chi.Router) {
+	r.Get("/api/memory/spaces", apierr.ErrorMiddleware(h.listSpaces))
+	r.Post("/api/memory/spaces", apierr.ErrorMiddleware(h.createSpace))
+	r.Get("/api/memory/entries", apierr.ErrorMiddleware(h.searchEntries))
+	r.Post("/api/memory/entries", apierr.ErrorMiddleware(h.createEntry))
+	r.Patch("/api/memory/entries/{id}", apierr.ErrorMiddleware(h.supersedeEntry))
+	r.Delete("/api/memory/entries/{id}", apierr.ErrorMiddleware(h.expireEntry))
+	r.Get("/api/memory/injections", apierr.ErrorMiddleware(h.listInjections))
+}
+
+// scopeFromQuery parses the "scope"/"scopeRef" query params shared by every
+// GET route, via mem.ParseScope — the same fail-closed core the MCP memory
+// tools parse their own scope/scopeRef arguments with.
+func scopeFromQuery(q url.Values) (repo.Scope, error) {
+	scope, err := mem.ParseScope(q.Get("scope"), q.Get("scopeRef"))
+	if err != nil {
+		return repo.Scope{}, apierr.NewAppError(http.StatusBadRequest, err.Error())
+	}
+	return scope, nil
+}
+
+// authorize gates capName against value in scope via mem.Authorize, the same
+// capability check the MCP memory tools enforce for the same actions — an
+// HTTP caller gets no wider access than an MCP one.
+func (h *Handler) authorize(ctx context.Context, capName, value string, scope repo.Scope) error {
+	if err := mem.Authorize(ctx, h.capabilities, h.grants, h.grantUsage, capName, value, scope); err != nil {
+		return apierr.NewAppError(http.StatusForbidden, err.Error())
+	}
+	return nil
+}
+
+func (h *Handler) listSpaces(w http.ResponseWriter, r *http.Request) error {
+	scope, err := scopeFromQuery(r.URL.Query())
+	if err != nil {
+		return err
+	}
+	// Read access is granted per scope, not per space — listing fans out
+	// across every space visible in scope, so there is no single space
+	// identity to match a grant pattern against. Mirrors memory_search.
+	if err := h.authorize(r.Context(), repo.CapabilityMemoryRead, "", scope); err != nil {
+		return err
+	}
+	spaces, err := h.repo.ListSpaces(r.Context(), scope)
+	if err != nil {
+		return err
+	}
+	if spaces == nil {
+		spaces = []*ent.Resource{}
+	}
+	apierr.WriteJSON(w, http.StatusOK, spaces)
+	return nil
+}
+
+type createSpaceBody struct {
+	Slug     string `json:"slug"`
+	Name     string `json:"name"`
+	Scope    string `json:"scope"`
+	ScopeRef string `json:"scopeRef"`
+}
+
+func (h *Handler) createSpace(w http.ResponseWriter, r *http.Request) error {
+	var in createSpaceBody
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		return apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
+	}
+	if in.Slug == "" {
+		return apierr.NewAppError(http.StatusBadRequest, "slug is required")
+	}
+	scope, err := mem.ParseScope(in.Scope, in.ScopeRef)
+	if err != nil {
+		return apierr.NewAppError(http.StatusBadRequest, err.Error())
+	}
+	if err := h.authorize(r.Context(), repo.CapabilityMemoryWrite, in.Slug, scope); err != nil {
+		return err
+	}
+
+	name := in.Name
+	if name == "" {
+		name = in.Slug
+	}
+	space, err := h.repo.CreateSpace(r.Context(), repo.CreateSpaceInput{Slug: in.Slug, Name: name, Scope: scope})
+	if err != nil {
+		return apierr.NewAppError(http.StatusBadRequest, err.Error())
+	}
+	apierr.WriteJSON(w, http.StatusCreated, space)
+	return nil
+}
+
+func (h *Handler) searchEntries(w http.ResponseWriter, r *http.Request) error {
+	q := r.URL.Query()
+	scope, err := scopeFromQuery(q)
+	if err != nil {
+		return err
+	}
+	if err := h.authorize(r.Context(), repo.CapabilityMemoryRead, "", scope); err != nil {
+		return err
+	}
+
+	// An unparseable or absent limit is ignored rather than rejected — same
+	// as GET /api/search — and Retriever.Retrieve clamps whatever comes
+	// through (<=0 to its default, above its ceiling down to it), so a zero,
+	// negative or enormous limit can never reach an unbounded query.
+	limit := 0
+	if s := q.Get("limit"); s != "" {
+		if n, err := strconv.Atoi(s); err == nil {
+			limit = n
+		}
+	}
+	entries, err := h.retriever.Retrieve(r.Context(), mem.Query{Text: q.Get("q"), Scope: scope, Limit: limit})
+	if err != nil {
+		return err
+	}
+	apierr.WriteJSON(w, http.StatusOK, entries)
+	return nil
+}
+
+type createEntryBody struct {
+	SpaceSlug  string   `json:"spaceSlug"`
+	Scope      string   `json:"scope"`
+	ScopeRef   string   `json:"scopeRef"`
+	Summary    string   `json:"summary"`
+	Content    string   `json:"content"`
+	Kind       string   `json:"kind"`
+	SourceKind string   `json:"sourceKind"`
+	SourceRef  string   `json:"sourceRef"`
+	Confidence *float64 `json:"confidence"`
+}
+
+func (h *Handler) createEntry(w http.ResponseWriter, r *http.Request) error {
+	var in createEntryBody
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		return apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
+	}
+	if in.SpaceSlug == "" || in.Summary == "" || in.Content == "" || in.Kind == "" || in.SourceKind == "" {
+		return apierr.NewAppError(http.StatusBadRequest, "spaceSlug, summary, content, kind and sourceKind are required")
+	}
+	scope, err := mem.ParseScope(in.Scope, in.ScopeRef)
+	if err != nil {
+		return apierr.NewAppError(http.StatusBadRequest, err.Error())
+	}
+
+	// Authorize before resolving the space: resolving first would let an
+	// ungranted caller distinguish "unknown space" (404) from "denied"
+	// (403) without ever holding a grant — a space-existence oracle ahead
+	// of the gate. in.SpaceSlug is caller-supplied, so unlike
+	// supersedeEntry/expireEntry (which must look an entry's space up
+	// before they even know which slug to check), the value needed to
+	// authorize is available before the space is resolved at all.
+	if err := h.authorize(r.Context(), repo.CapabilityMemoryWrite, in.SpaceSlug, scope); err != nil {
+		return err
+	}
+
+	// The space must already exist — this never creates one on the fly, the
+	// same rule memory_write enforces: auto-creating here would let any
+	// caller invent an arbitrary space identity no grant was ever written
+	// against.
+	space, err := h.repo.GetSpace(r.Context(), scope, in.SpaceSlug)
+	if err != nil {
+		return apierr.NewAppError(http.StatusNotFound, "unknown space "+in.SpaceSlug)
+	}
+
+	cleanSummary, cleanContent, err := mem.SanitizeForStore(in.Summary, in.Content)
+	if err != nil {
+		return apierr.NewAppError(http.StatusBadRequest, err.Error())
+	}
+
+	confidence := 1.0
+	if in.Confidence != nil {
+		confidence = *in.Confidence
+	}
+	var sourceRef *string
+	if in.SourceRef != "" {
+		sourceRef = &in.SourceRef
+	}
+
+	entry, err := h.repo.CreateEntry(r.Context(), repo.CreateEntryInput{
+		SpaceID:    space.ID,
+		Summary:    cleanSummary,
+		Content:    cleanContent,
+		Kind:       in.Kind,
+		SourceKind: in.SourceKind,
+		SourceRef:  sourceRef,
+		Confidence: confidence,
+	})
+	if err != nil {
+		return apierr.NewAppError(http.StatusBadRequest, err.Error())
+	}
+	apierr.WriteJSON(w, http.StatusCreated, entry)
+	return nil
+}
+
+// spaceOfEntry resolves the space owning entry id, for authorizing a
+// mutation addressed by entry id alone (the path carries no scope or slug).
+// Fails closed (404, not 500) on an id that does not resolve to a live entry
+// or whose space has since gone missing — indistinguishable from "not found"
+// to the caller either way.
+func (h *Handler) spaceOfEntry(ctx context.Context, id string) (*ent.Resource, error) {
+	entry, err := h.repo.GetEntry(ctx, id)
+	if err != nil {
+		return nil, apierr.NewAppError(http.StatusNotFound, "entry not found")
+	}
+	space, err := h.repo.GetSpaceByID(ctx, entry.SpaceID)
+	if err != nil {
+		return nil, apierr.NewAppError(http.StatusNotFound, "entry not found")
+	}
+	return space, nil
+}
+
+type supersedeBody struct {
+	SupersededBy string `json:"supersededBy"`
+}
+
+func (h *Handler) supersedeEntry(w http.ResponseWriter, r *http.Request) error {
+	id := chi.URLParam(r, "id")
+	var in supersedeBody
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		return apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
+	}
+	if in.SupersededBy == "" {
+		return apierr.NewAppError(http.StatusBadRequest, "supersededBy is required")
+	}
+
+	space, err := h.spaceOfEntry(r.Context(), id)
+	if err != nil {
+		return err
+	}
+	scope := repo.Scope{Kind: repo.ScopeKind(space.ScopeKind), Ref: space.ScopeRef}.Normalize()
+	if err := h.authorize(r.Context(), repo.CapabilityMemoryWrite, space.Slug, scope); err != nil {
+		return err
+	}
+
+	if err := h.repo.SupersedeEntry(r.Context(), id, in.SupersededBy); err != nil {
+		return apierr.NewAppError(http.StatusBadRequest, err.Error())
+	}
+	updated, err := h.repo.GetEntry(r.Context(), id)
+	if err != nil {
+		return err
+	}
+	apierr.WriteJSON(w, http.StatusOK, updated)
+	return nil
+}
+
+func (h *Handler) expireEntry(w http.ResponseWriter, r *http.Request) error {
+	id := chi.URLParam(r, "id")
+
+	space, err := h.spaceOfEntry(r.Context(), id)
+	if err != nil {
+		return err
+	}
+	scope := repo.Scope{Kind: repo.ScopeKind(space.ScopeKind), Ref: space.ScopeRef}.Normalize()
+	if err := h.authorize(r.Context(), repo.CapabilityMemoryWrite, space.Slug, scope); err != nil {
+		return err
+	}
+
+	if err := h.repo.ExpireEntry(r.Context(), id, time.Now()); err != nil {
+		return apierr.NewAppError(http.StatusBadRequest, err.Error())
+	}
+	w.WriteHeader(http.StatusNoContent)
+	return nil
+}
+
+func (h *Handler) listInjections(w http.ResponseWriter, r *http.Request) error {
+	stageRun := r.URL.Query().Get("stageRun")
+	if stageRun == "" {
+		return apierr.NewAppError(http.StatusBadRequest, "stageRun is required")
+	}
+	// An injection record has no single owning space to match a grant
+	// pattern against (it can span several), so this is gated the same way
+	// listSpaces and searchEntries are: a wildcard read at global — a project-
+	// or application-scoped grant only backs a request in that same context.
+	if err := h.authorize(r.Context(), repo.CapabilityMemoryRead, "", repo.GlobalScope()); err != nil {
+		return err
+	}
+	injections, err := h.repo.ListInjectionsByStageRun(r.Context(), stageRun)
+	if err != nil {
+		return err
+	}
+	if injections == nil {
+		injections = []*ent.MemoryInjection{}
+	}
+	apierr.WriteJSON(w, http.StatusOK, injections)
+	return nil
+}

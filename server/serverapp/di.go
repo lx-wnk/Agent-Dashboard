@@ -29,6 +29,7 @@ import (
 	apieval "github.com/lx-wnk/agent-dashboard/server/internal/api/eval"
 	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/hooks"
+	apimemory "github.com/lx-wnk/agent-dashboard/server/internal/api/memory"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/onboarding"
 	planapi "github.com/lx-wnk/agent-dashboard/server/internal/api/plan"
 	apiplugins "github.com/lx-wnk/agent-dashboard/server/internal/api/plugins"
@@ -56,6 +57,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/eval"
 	histsvc "github.com/lx-wnk/agent-dashboard/server/internal/history"
 	"github.com/lx-wnk/agent-dashboard/server/internal/hookstore"
+	"github.com/lx-wnk/agent-dashboard/server/internal/memory"
 	"github.com/lx-wnk/agent-dashboard/server/internal/merger"
 	"github.com/lx-wnk/agent-dashboard/server/internal/parser"
 	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
@@ -224,11 +226,27 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	spawnerBroadcaster := sse.NewSpawnerBroadcaster(sse.NewBroadcaster())
 	projectBroadcaster := sse.NewProjectBroadcaster(sse.NewBroadcaster())
 
+	// memRepo and memRetriever back both the memory_search/memory_write MCP
+	// tools (di_mcp.go) and the pipeline's push-at-spawn seam
+	// (di_pipeline.go): one Retriever, constructed once, given to both
+	// consumers — the same rule Retriever's own doc comment states.
+	var memRepo repo.MemoryRepo
+	var memRetriever *memory.Retriever
+	// grantUsageRepo backs the rate-limit check inside memory.Authorize
+	// (mem HTTP handler, MCP memory tools, and the pipeline's memory push
+	// closure below all share it) — built once here since it needs
+	// bundle.WriteClient, which only this function has in scope.
+	var grantUsageRepo repo.GrantUsageRepo
+
 	// The plugin table is the source of truth for enablement. Build the repo
 	// early so the boot predicate can read it, and migrate the legacy #230
 	// "plugins.enabled" setting into the table once (idempotent).
 	var pluginRepo repo.PluginRepo
 	if entClient != nil {
+		memRepo = repo.NewMemoryRepo(entClient, bundle.WriteClient)
+		memRetriever = memory.NewRetriever(bundle.DB, memRepo)
+		grantUsageRepo = repo.NewGrantUsageRepo(entClient, bundle.WriteClient)
+
 		pluginRepo = repo.NewPluginRepo(entClient)
 		if err := seedPluginsFromEnabledList(ctx, settingsSvc, pluginRepo); err != nil {
 			return nil, fmt.Errorf("seed plugins from enabled list: %w", err)
@@ -465,7 +483,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		}
 	}
 
-	orch, err = provideOrchestrator(cfg, settingsSvc, entClient, taskBroadcaster, systemPromptRepo, spawnerResolver, cpStart, cpStop)
+	orch, err = provideOrchestrator(cfg, settingsSvc, entClient, taskBroadcaster, systemPromptRepo, spawnerResolver, cpStart, cpStop, memRepo, memRetriever, grantUsageRepo)
 	if err != nil {
 		return &ServerComponents{Cleanup: cleanup}, err
 	}
@@ -497,7 +515,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	// handler's create core, so it must be built after taskHandler. nil when no DB.
 	sched, schedulesHandler := provideScheduler(entClient, taskHandler, taskBroadcaster)
 
-	mcpHandler := provideMCPHandler(entClient, orch, sched, taskBroadcaster, projectBroadcaster, refineRunner)
+	mcpHandler := provideMCPHandler(entClient, orch, sched, taskBroadcaster, projectBroadcaster, refineRunner, memRepo, memRetriever, grantUsageRepo)
 
 	var histImporter *histsvc.Importer
 	var historyHandler *apihistory.Handler
@@ -506,6 +524,14 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		costProjectResolver := services.NewCostProjectResolver(projectFolderRepo)
 		histImporter = histsvc.NewImporter(costRepo).WithProjectResolver(costProjectResolver)
 		historyHandler = apihistory.NewHandler(histImporter)
+	}
+
+	// Memory HTTP surface — reuses the single memRepo/memRetriever built above
+	// (same rule as the MCP tools and the pipeline's push-at-spawn seam) plus
+	// its own capability/grant repos, matching provideMCPHandler's wiring.
+	var memoryHandler *apimemory.Handler
+	if entClient != nil {
+		memoryHandler = apimemory.NewHandler(memRepo, memRetriever, repo.NewCapabilityRepo(entClient), repo.NewGrantRepo(entClient), grantUsageRepo)
 	}
 
 	// Eval / drift-detection subsystem. The onDrift callback is the only outward
@@ -715,6 +741,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		SettingsHandler:        settingsHandler,
 		SearchHandler:          searchHandler,
 		HistoryHandler:         historyHandler,
+		MemoryHandler:          memoryHandler,
 		RefineHandler:          refineHandler,
 		PlanHandler:            planHandler,
 		AnalyticsHandler:       analyticsHandler,

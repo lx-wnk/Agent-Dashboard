@@ -11,6 +11,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/config"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	"github.com/lx-wnk/agent-dashboard/server/internal/memory"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 	"github.com/lx-wnk/agent-dashboard/server/internal/services"
 	"github.com/lx-wnk/agent-dashboard/server/internal/settings"
@@ -71,6 +72,14 @@ func runSetupCommand(ctx context.Context, dir, cmd string) error {
 	return nil
 }
 
+// memoryPushBudgetChars bounds the memory block injected into a stage's user
+// prompt. Chosen well under systemPromptMaxChars (10,000, spawner.go) even
+// though the push lands in the user prompt rather than the system prompt: a
+// few thousand characters of prior context is enough to be useful without
+// crowding out the stage's own instructions or the user's additional prompt,
+// both of which share that same prompt.
+const memoryPushBudgetChars = 2000
+
 func provideOrchestrator(
 	cfg config.Config,
 	settingsSvc *settings.Service,
@@ -80,6 +89,9 @@ func provideOrchestrator(
 	spawnerResolver services.SpawnerResolver,
 	checkpointerStart func(taskID, worktreePath string),
 	checkpointerStop func(taskID string),
+	memRepo repo.MemoryRepo,
+	memRetriever *memory.Retriever,
+	grantUsageRepo repo.GrantUsageRepo,
 ) (*pipeline.PipelineOrchestrator, error) {
 	if client == nil {
 		return nil, nil
@@ -92,6 +104,8 @@ func provideOrchestrator(
 	folderRepo := repo.NewProjectFolderRepo(client)
 	projectRepo := repo.NewProjectRepo(client)
 	worktreeManager := services.NewWorktreeManager(taskRepo)
+	capabilityRepo := repo.NewCapabilityRepo(client)
+	grantRepo := repo.NewGrantRepo(client)
 
 	var resolveFn pipeline.SpawnerResolverFunc
 	if spawnerResolver != nil {
@@ -128,6 +142,21 @@ func provideOrchestrator(
 		},
 		ResolveSpawner:        resolveFn,
 		ResolveAdditionalDirs: resolveAdditionalDirs(folderRepo),
+		// InjectMemory is a bound method value, not a function reference: it
+		// closes over memRetriever the same way ResolveAdditionalDirs above
+		// closes over folderRepo. memRepo.RecordInjection matches
+		// RecordMemoryInjection's signature directly, no adapter needed.
+		InjectMemory:          memRetriever.Retrieve,
+		MemoryBudget:          memoryPushBudgetChars,
+		RecordMemoryInjection: memRepo.RecordInjection,
+		// AuthorizeMemory gates the push behind the same memory.Authorize
+		// capability check every human-facing memory route already uses
+		// (mcp/tools/memory.go, api/memory/handler.go). The push reads
+		// across the whole scope rather than one space, so it authorizes
+		// with the empty wildcard value, same as memory_search.
+		AuthorizeMemory: func(ctx context.Context, scope repo.Scope) error {
+			return memory.Authorize(ctx, capabilityRepo, grantRepo, grantUsageRepo, repo.CapabilityMemoryRead, "", scope)
+		},
 		// BuildTaskPayload is called inside applyTransitionWrites, bound to the
 		// active transaction, so the returned snapshot reflects the just-applied
 		// writes before tx.Commit(). The result is forwarded to OnTaskChanged

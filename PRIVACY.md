@@ -40,9 +40,12 @@ All persistent data stays on your machine. No data is synced to a cloud service 
 | `web_push_subscriptions` | Web-Push endpoint URLs and VAPID keys (see section 3) |
 | `spawners`, `presets`, `remotes`, `refine` | User-configured pipeline settings |
 | `cost_history` | Aggregated per-session token and cost data imported from JSONL files |
-| `capabilities` | The permission catalogue — one row per grantable capability (a Claude Code tool name, or a coarser named action) with its class and which enforcement points may apply it. Seeded from the built-in tool list on boot; no user content. |
+| `capabilities` | The permission catalogue — one row per grantable capability (a Claude Code tool name, or a coarser named action such as `memory.read`/`memory.write`) with its class and which enforcement points may apply it. Seeded on boot from the built-in tool list plus a small fixed set of non-tool actions; no user content. |
 | `grants` | Capability grants bound to a context (global, project, task, routine, or agent session): pattern, mode (allow/deny/ask), optional expiry and rate limit, and who granted or revoked it. Existing `task_permissions` and `permission_presets` rows are backfilled into this table on boot (`granted_by = "migration:legacy"`). |
 | `grant_usages` | Timestamps of successful uses of a rate-limited grant, counted toward that grant's limit. No call content — only the grant id and when it was used. |
+| Memory spaces (`resource` rows, `kind = "memory_space"`) | A memory space's identity: slug, display name, and scope (global/project/application). Not a separate table — a space is one row in the same `resource` table used for plugins, routines, and applications. No entry content is stored here. |
+| `memory_entries` | Facts, preferences, and lessons written by agents (via the `memory_write` MCP tool) or you (via `POST /api/memory/entries`): a short `summary` (what gets pushed into a spawn's prompt, see below) and a full `content` (retrievable on demand), plus `kind`, `source_kind`/`source_ref`, `confidence`, a validity window, and an optional `user_id`. Both `summary` and `content` are sanitized before being written — invisible/control characters (e.g. bidi overrides) are stripped, then known secret patterns (API keys, tokens, PEM blocks, JWTs, and similar) are redacted to `[REDACTED]`. This is a best-effort, pattern-based scrub, not a guarantee that no sensitive text survives it. The two fields are sanitized asymmetrically: `summary` is also collapsed to a single line, since it is concatenated into a prompt and must never be able to forge a section boundary there; `content` keeps its original line structure (code blocks, PEM bodies, numbered steps) intact. |
+| `memory_injections` | An audit record of what memory was offered to a stage's spawn: the stage-run id, which entry ids were selected, the character budget, how many characters were used, and how many candidates existed. No entry content — only ids and counts. |
 
 ### Hooks secret
 
@@ -54,7 +57,7 @@ The VAPID private key used for Web-Push is stored in the SQLite database under a
 
 ### Retention & deletion
 
-There is **no automatic expiry** for any persisted data — rows live until you delete them. Concrete deletion paths:
+Most persisted data has **no automatic expiry** — rows live until you delete them via the paths below. Memory is the one exception, and it needs a more careful description than "delete": `DELETE /api/memory/entries/{id}` does not remove the row. It sets the entry's `valid_until` to the current time (`server/internal/db/repo/memory_repo.go`, `ExpireEntry`), which hides the entry from future retrieval but leaves its `summary`/`content` in the database indefinitely. Nothing runs on a schedule to expire an entry by age — expiry only happens when a caller with a `memory.write` grant makes that call. `PATCH /api/memory/entries/{id}` behaves the same way for the opposite reason: it marks an entry superseded rather than removing it, so the chain of what replaced what survives as an audit trail. Concrete deletion paths:
 
 | Data | How to delete |
 |---|---|
@@ -62,6 +65,7 @@ There is **no automatic expiry** for any persisted data — rows live until you 
 | `tasks` + their `stage_runs`, `permission_requests` | `DELETE /api/tasks/{id}` — deletes the task and cascades its stage history. |
 | `web_push_subscriptions` | Unsubscribe in the browser, or delete the row. |
 | `audit_events`, `agent_cost_trends` | **No API delete path.** Prune manually with a SQLite client (e.g. `DELETE FROM audit_events;`) or delete the entire database file at `DASHBOARD_DB_PATH` (default `~/.claude/dashboard-tasks.db`). |
+| `memory_entries`, `memory_injections`, and memory spaces (`resource` rows) | **No delete path of any kind exists today**, not even the manual-prune kind above. `DELETE`/`PATCH /api/memory/entries/{id}` mark a row expired or superseded (see above) but never remove it, and there is no path at all for a memory space or an injection record. A future deletion path for a space must first refuse while any `memory_entries` still reference it — `memory_entry.space_id` is a loose string with no foreign key, so deleting the space row out from under existing entries would silently orphan them instead of failing loudly (`CreateSpace`'s own comment in `memory_repo.go` records this constraint). Until such a path exists, the only way to remove memory content is to delete the entire database file, which erases everything else in it too. |
 
 To erase everything at once, stop the dashboard and delete the database file at `DASHBOARD_DB_PATH`. Filesystem-derived monitoring data (the JSONL session logs under `~/.claude/projects/`) is never written by the dashboard — delete those files directly if needed.
 
@@ -94,6 +98,8 @@ None of the following integrations are active by default. Data only leaves your 
 **Ollama** — Defaults to `http://localhost:11434`; in the default configuration no data leaves the machine. If you configure a remote `base_url`, full stage-agent prompts (task descriptions, stage outputs, possibly source-code excerpts) are sent to that host. You are responsible for that host's data-residency and applicable transfer basis.
 
 **Anthropic** — If you configure an `anthropic` spawner (`adapter_type: "anthropic"`), stage-agent prompts (task descriptions, stage outputs, and possibly source-code excerpts) are sent to `api.anthropic.com` (US) via the `anthropic-spawner` binary, which reads the `ANTHROPIC_API_KEY` environment variable from the server process. **Transfer basis:** Anthropic PBC is a US entity covered by the EU–US Data Privacy Framework (DPF) where applicable.
+
+**Memory content in a stage prompt:** every one of the three bullets above says "stage agent prompts" leave the machine when a remote adapter is configured. As of the memory store (section 2), that prompt can include up to 2,000 characters of ranked memory-entry summaries — text you or an agent previously wrote into the memory store — appended to the stage's own instructions before the spawn happens. This travels to whichever provider that stage's spawner targets, under the same transfer basis named above; it never goes anywhere on its own, and a stage run against a local adapter (default Ollama, or no adapter at all) keeps that memory content on your machine like everything else in the prompt.
 
 ### Office365 OAuth plugin (if configured)
 
@@ -159,4 +165,4 @@ When using `DASHBOARD_REMOTES` to aggregate agents across machines:
 
 ## Questions
 
-This is an open-source tool (MIT license). If you have questions about data handling, open an issue in the repository or inspect the source code directly — the relevant files are `server/internal/parser/`, `server/internal/merger/`, `server/internal/api/`, and the plugin directories.
+This is an open-source tool (MIT license). If you have questions about data handling, open an issue in the repository or inspect the source code directly — the relevant files are `server/internal/parser/`, `server/internal/merger/`, `server/internal/memory/`, `server/internal/api/`, and the plugin directories.

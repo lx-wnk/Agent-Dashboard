@@ -26,6 +26,8 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/evalmetricsnapshot"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/grant"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/grantusage"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/memoryentry"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/memoryinjection"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionpreset"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionrequest"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/pipelineconfig"
@@ -76,6 +78,10 @@ type Client struct {
 	Grant *GrantClient
 	// GrantUsage is the client for interacting with the GrantUsage builders.
 	GrantUsage *GrantUsageClient
+	// MemoryEntry is the client for interacting with the MemoryEntry builders.
+	MemoryEntry *MemoryEntryClient
+	// MemoryInjection is the client for interacting with the MemoryInjection builders.
+	MemoryInjection *MemoryInjectionClient
 	// PermissionPreset is the client for interacting with the PermissionPreset builders.
 	PermissionPreset *PermissionPresetClient
 	// PermissionRequest is the client for interacting with the PermissionRequest builders.
@@ -140,6 +146,8 @@ func (c *Client) init() {
 	c.EvalMetricSnapshot = NewEvalMetricSnapshotClient(c.config)
 	c.Grant = NewGrantClient(c.config)
 	c.GrantUsage = NewGrantUsageClient(c.config)
+	c.MemoryEntry = NewMemoryEntryClient(c.config)
+	c.MemoryInjection = NewMemoryInjectionClient(c.config)
 	c.PermissionPreset = NewPermissionPresetClient(c.config)
 	c.PermissionRequest = NewPermissionRequestClient(c.config)
 	c.PipelineConfig = NewPipelineConfigClient(c.config)
@@ -264,6 +272,8 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		EvalMetricSnapshot: NewEvalMetricSnapshotClient(cfg),
 		Grant:              NewGrantClient(cfg),
 		GrantUsage:         NewGrantUsageClient(cfg),
+		MemoryEntry:        NewMemoryEntryClient(cfg),
+		MemoryInjection:    NewMemoryInjectionClient(cfg),
 		PermissionPreset:   NewPermissionPresetClient(cfg),
 		PermissionRequest:  NewPermissionRequestClient(cfg),
 		PipelineConfig:     NewPipelineConfigClient(cfg),
@@ -315,6 +325,8 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		EvalMetricSnapshot: NewEvalMetricSnapshotClient(cfg),
 		Grant:              NewGrantClient(cfg),
 		GrantUsage:         NewGrantUsageClient(cfg),
+		MemoryEntry:        NewMemoryEntryClient(cfg),
+		MemoryInjection:    NewMemoryInjectionClient(cfg),
 		PermissionPreset:   NewPermissionPresetClient(cfg),
 		PermissionRequest:  NewPermissionRequestClient(cfg),
 		PipelineConfig:     NewPipelineConfigClient(cfg),
@@ -367,11 +379,12 @@ func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
 		c.AgentCostTrend, c.ApiKey, c.AppSetting, c.AuditEvent, c.Capability,
 		c.Checkpoint, c.CoordLock, c.DriftAlert, c.EvalMetricSnapshot, c.Grant,
-		c.GrantUsage, c.PermissionPreset, c.PermissionRequest, c.PipelineConfig,
-		c.Plugin, c.PluginSetting, c.Project, c.ProjectFolder, c.PromptTemplate,
-		c.ProviderSetting, c.RefinementTurn, c.RemoteRegistration, c.Resource,
-		c.Scratchpad, c.Spawner, c.StageRun, c.SystemPrompt, c.Task, c.TaskDependency,
-		c.TaskPermission, c.TaskSchedule, c.User,
+		c.GrantUsage, c.MemoryEntry, c.MemoryInjection, c.PermissionPreset,
+		c.PermissionRequest, c.PipelineConfig, c.Plugin, c.PluginSetting, c.Project,
+		c.ProjectFolder, c.PromptTemplate, c.ProviderSetting, c.RefinementTurn,
+		c.RemoteRegistration, c.Resource, c.Scratchpad, c.Spawner, c.StageRun,
+		c.SystemPrompt, c.Task, c.TaskDependency, c.TaskPermission, c.TaskSchedule,
+		c.User,
 	} {
 		n.Use(hooks...)
 	}
@@ -383,11 +396,12 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
 		c.AgentCostTrend, c.ApiKey, c.AppSetting, c.AuditEvent, c.Capability,
 		c.Checkpoint, c.CoordLock, c.DriftAlert, c.EvalMetricSnapshot, c.Grant,
-		c.GrantUsage, c.PermissionPreset, c.PermissionRequest, c.PipelineConfig,
-		c.Plugin, c.PluginSetting, c.Project, c.ProjectFolder, c.PromptTemplate,
-		c.ProviderSetting, c.RefinementTurn, c.RemoteRegistration, c.Resource,
-		c.Scratchpad, c.Spawner, c.StageRun, c.SystemPrompt, c.Task, c.TaskDependency,
-		c.TaskPermission, c.TaskSchedule, c.User,
+		c.GrantUsage, c.MemoryEntry, c.MemoryInjection, c.PermissionPreset,
+		c.PermissionRequest, c.PipelineConfig, c.Plugin, c.PluginSetting, c.Project,
+		c.ProjectFolder, c.PromptTemplate, c.ProviderSetting, c.RefinementTurn,
+		c.RemoteRegistration, c.Resource, c.Scratchpad, c.Spawner, c.StageRun,
+		c.SystemPrompt, c.Task, c.TaskDependency, c.TaskPermission, c.TaskSchedule,
+		c.User,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -418,6 +432,10 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.Grant.mutate(ctx, m)
 	case *GrantUsageMutation:
 		return c.GrantUsage.mutate(ctx, m)
+	case *MemoryEntryMutation:
+		return c.MemoryEntry.mutate(ctx, m)
+	case *MemoryInjectionMutation:
+		return c.MemoryInjection.mutate(ctx, m)
 	case *PermissionPresetMutation:
 		return c.PermissionPreset.mutate(ctx, m)
 	case *PermissionRequestMutation:
@@ -1925,6 +1943,272 @@ func (c *GrantUsageClient) mutate(ctx context.Context, m *GrantUsageMutation) (V
 		return (&GrantUsageDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown GrantUsage mutation op: %q", m.Op())
+	}
+}
+
+// MemoryEntryClient is a client for the MemoryEntry schema.
+type MemoryEntryClient struct {
+	config
+}
+
+// NewMemoryEntryClient returns a client for the MemoryEntry from the given config.
+func NewMemoryEntryClient(c config) *MemoryEntryClient {
+	return &MemoryEntryClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `memoryentry.Hooks(f(g(h())))`.
+func (c *MemoryEntryClient) Use(hooks ...Hook) {
+	c.hooks.MemoryEntry = append(c.hooks.MemoryEntry, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `memoryentry.Intercept(f(g(h())))`.
+func (c *MemoryEntryClient) Intercept(interceptors ...Interceptor) {
+	c.inters.MemoryEntry = append(c.inters.MemoryEntry, interceptors...)
+}
+
+// Create returns a builder for creating a MemoryEntry entity.
+func (c *MemoryEntryClient) Create() *MemoryEntryCreate {
+	mutation := newMemoryEntryMutation(c.config, OpCreate)
+	return &MemoryEntryCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of MemoryEntry entities.
+func (c *MemoryEntryClient) CreateBulk(builders ...*MemoryEntryCreate) *MemoryEntryCreateBulk {
+	return &MemoryEntryCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *MemoryEntryClient) MapCreateBulk(slice any, setFunc func(*MemoryEntryCreate, int)) *MemoryEntryCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &MemoryEntryCreateBulk{err: fmt.Errorf("calling to MemoryEntryClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*MemoryEntryCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &MemoryEntryCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for MemoryEntry.
+func (c *MemoryEntryClient) Update() *MemoryEntryUpdate {
+	mutation := newMemoryEntryMutation(c.config, OpUpdate)
+	return &MemoryEntryUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *MemoryEntryClient) UpdateOne(_m *MemoryEntry) *MemoryEntryUpdateOne {
+	mutation := newMemoryEntryMutation(c.config, OpUpdateOne, withMemoryEntry(_m))
+	return &MemoryEntryUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *MemoryEntryClient) UpdateOneID(id string) *MemoryEntryUpdateOne {
+	mutation := newMemoryEntryMutation(c.config, OpUpdateOne, withMemoryEntryID(id))
+	return &MemoryEntryUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for MemoryEntry.
+func (c *MemoryEntryClient) Delete() *MemoryEntryDelete {
+	mutation := newMemoryEntryMutation(c.config, OpDelete)
+	return &MemoryEntryDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *MemoryEntryClient) DeleteOne(_m *MemoryEntry) *MemoryEntryDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *MemoryEntryClient) DeleteOneID(id string) *MemoryEntryDeleteOne {
+	builder := c.Delete().Where(memoryentry.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &MemoryEntryDeleteOne{builder}
+}
+
+// Query returns a query builder for MemoryEntry.
+func (c *MemoryEntryClient) Query() *MemoryEntryQuery {
+	return &MemoryEntryQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeMemoryEntry},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a MemoryEntry entity by its id.
+func (c *MemoryEntryClient) Get(ctx context.Context, id string) (*MemoryEntry, error) {
+	return c.Query().Where(memoryentry.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *MemoryEntryClient) GetX(ctx context.Context, id string) *MemoryEntry {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *MemoryEntryClient) Hooks() []Hook {
+	return c.hooks.MemoryEntry
+}
+
+// Interceptors returns the client interceptors.
+func (c *MemoryEntryClient) Interceptors() []Interceptor {
+	return c.inters.MemoryEntry
+}
+
+func (c *MemoryEntryClient) mutate(ctx context.Context, m *MemoryEntryMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&MemoryEntryCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&MemoryEntryUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&MemoryEntryUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&MemoryEntryDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown MemoryEntry mutation op: %q", m.Op())
+	}
+}
+
+// MemoryInjectionClient is a client for the MemoryInjection schema.
+type MemoryInjectionClient struct {
+	config
+}
+
+// NewMemoryInjectionClient returns a client for the MemoryInjection from the given config.
+func NewMemoryInjectionClient(c config) *MemoryInjectionClient {
+	return &MemoryInjectionClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `memoryinjection.Hooks(f(g(h())))`.
+func (c *MemoryInjectionClient) Use(hooks ...Hook) {
+	c.hooks.MemoryInjection = append(c.hooks.MemoryInjection, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `memoryinjection.Intercept(f(g(h())))`.
+func (c *MemoryInjectionClient) Intercept(interceptors ...Interceptor) {
+	c.inters.MemoryInjection = append(c.inters.MemoryInjection, interceptors...)
+}
+
+// Create returns a builder for creating a MemoryInjection entity.
+func (c *MemoryInjectionClient) Create() *MemoryInjectionCreate {
+	mutation := newMemoryInjectionMutation(c.config, OpCreate)
+	return &MemoryInjectionCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of MemoryInjection entities.
+func (c *MemoryInjectionClient) CreateBulk(builders ...*MemoryInjectionCreate) *MemoryInjectionCreateBulk {
+	return &MemoryInjectionCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *MemoryInjectionClient) MapCreateBulk(slice any, setFunc func(*MemoryInjectionCreate, int)) *MemoryInjectionCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &MemoryInjectionCreateBulk{err: fmt.Errorf("calling to MemoryInjectionClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*MemoryInjectionCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &MemoryInjectionCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for MemoryInjection.
+func (c *MemoryInjectionClient) Update() *MemoryInjectionUpdate {
+	mutation := newMemoryInjectionMutation(c.config, OpUpdate)
+	return &MemoryInjectionUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *MemoryInjectionClient) UpdateOne(_m *MemoryInjection) *MemoryInjectionUpdateOne {
+	mutation := newMemoryInjectionMutation(c.config, OpUpdateOne, withMemoryInjection(_m))
+	return &MemoryInjectionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *MemoryInjectionClient) UpdateOneID(id string) *MemoryInjectionUpdateOne {
+	mutation := newMemoryInjectionMutation(c.config, OpUpdateOne, withMemoryInjectionID(id))
+	return &MemoryInjectionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for MemoryInjection.
+func (c *MemoryInjectionClient) Delete() *MemoryInjectionDelete {
+	mutation := newMemoryInjectionMutation(c.config, OpDelete)
+	return &MemoryInjectionDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *MemoryInjectionClient) DeleteOne(_m *MemoryInjection) *MemoryInjectionDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *MemoryInjectionClient) DeleteOneID(id string) *MemoryInjectionDeleteOne {
+	builder := c.Delete().Where(memoryinjection.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &MemoryInjectionDeleteOne{builder}
+}
+
+// Query returns a query builder for MemoryInjection.
+func (c *MemoryInjectionClient) Query() *MemoryInjectionQuery {
+	return &MemoryInjectionQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeMemoryInjection},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a MemoryInjection entity by its id.
+func (c *MemoryInjectionClient) Get(ctx context.Context, id string) (*MemoryInjection, error) {
+	return c.Query().Where(memoryinjection.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *MemoryInjectionClient) GetX(ctx context.Context, id string) *MemoryInjection {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *MemoryInjectionClient) Hooks() []Hook {
+	return c.hooks.MemoryInjection
+}
+
+// Interceptors returns the client interceptors.
+func (c *MemoryInjectionClient) Interceptors() []Interceptor {
+	return c.inters.MemoryInjection
+}
+
+func (c *MemoryInjectionClient) mutate(ctx context.Context, m *MemoryInjectionMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&MemoryInjectionCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&MemoryInjectionUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&MemoryInjectionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&MemoryInjectionDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown MemoryInjection mutation op: %q", m.Op())
 	}
 }
 
@@ -4917,18 +5201,20 @@ func (c *UserClient) mutate(ctx context.Context, m *UserMutation) (Value, error)
 type (
 	hooks struct {
 		AgentCostTrend, ApiKey, AppSetting, AuditEvent, Capability, Checkpoint,
-		CoordLock, DriftAlert, EvalMetricSnapshot, Grant, GrantUsage, PermissionPreset,
-		PermissionRequest, PipelineConfig, Plugin, PluginSetting, Project,
-		ProjectFolder, PromptTemplate, ProviderSetting, RefinementTurn,
-		RemoteRegistration, Resource, Scratchpad, Spawner, StageRun, SystemPrompt,
-		Task, TaskDependency, TaskPermission, TaskSchedule, User []ent.Hook
+		CoordLock, DriftAlert, EvalMetricSnapshot, Grant, GrantUsage, MemoryEntry,
+		MemoryInjection, PermissionPreset, PermissionRequest, PipelineConfig, Plugin,
+		PluginSetting, Project, ProjectFolder, PromptTemplate, ProviderSetting,
+		RefinementTurn, RemoteRegistration, Resource, Scratchpad, Spawner, StageRun,
+		SystemPrompt, Task, TaskDependency, TaskPermission, TaskSchedule,
+		User []ent.Hook
 	}
 	inters struct {
 		AgentCostTrend, ApiKey, AppSetting, AuditEvent, Capability, Checkpoint,
-		CoordLock, DriftAlert, EvalMetricSnapshot, Grant, GrantUsage, PermissionPreset,
-		PermissionRequest, PipelineConfig, Plugin, PluginSetting, Project,
-		ProjectFolder, PromptTemplate, ProviderSetting, RefinementTurn,
-		RemoteRegistration, Resource, Scratchpad, Spawner, StageRun, SystemPrompt,
-		Task, TaskDependency, TaskPermission, TaskSchedule, User []ent.Interceptor
+		CoordLock, DriftAlert, EvalMetricSnapshot, Grant, GrantUsage, MemoryEntry,
+		MemoryInjection, PermissionPreset, PermissionRequest, PipelineConfig, Plugin,
+		PluginSetting, Project, ProjectFolder, PromptTemplate, ProviderSetting,
+		RefinementTurn, RemoteRegistration, Resource, Scratchpad, Spawner, StageRun,
+		SystemPrompt, Task, TaskDependency, TaskPermission, TaskSchedule,
+		User []ent.Interceptor
 	}
 )

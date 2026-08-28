@@ -39,6 +39,12 @@ type Grant func(*sql.Selector)
 // GrantUsage is the predicate function for grantusage builders.
 type GrantUsage func(*sql.Selector)
 
+// MemoryEntry is the predicate function for memoryentry builders.
+type MemoryEntry func(*sql.Selector)
+
+// MemoryInjection is the predicate function for memoryinjection builders.
+type MemoryInjection func(*sql.Selector)
+
 // PermissionPreset is the predicate function for permissionpreset builders.
 type PermissionPreset func(*sql.Selector)
 

@@ -31,16 +31,32 @@ func DefaultCapabilityView(name string) capability.CapabilityView {
 	}
 }
 
-// SeedCapabilities gives every grantable tool name a capability catalogue
-// row. Without this, the capabilities table stays empty and every lookup
-// resolves to a zero-value CapabilityView — an unrecognised class, which
-// defaultEffect sends to deny. Seeding is what makes the gate's fail-closed
-// default apply only to capabilities that were never named, not to every
-// capability that exists.
+// memoryCapabilityViews are the resource-class capabilities memory access
+// needs. permissions.GrantableToolNames does not carry them — they are not
+// Claude Code tool names — and DefaultCapabilityView's tool/reach split does
+// not apply, so they get their own views here.
 //
-// Names come from permissions.GrantableToolNames, the same set
+// Enforceable only at EnforcerServer: memory access arrives through the
+// server process and the MCP endpoint it exposes, never through a spawn
+// allow-list (written before a process starts, so it has nothing to check
+// against) or a PreToolUse hook (which sees tool calls, not resource reads
+// or writes).
+var memoryCapabilityViews = []capability.CapabilityView{
+	{Name: CapabilityMemoryRead, Class: CapClassResource, EnforceableBy: []string{capability.EnforcerServer}},
+	{Name: CapabilityMemoryWrite, Class: CapClassResource, EnforceableBy: []string{capability.EnforcerServer}},
+}
+
+// SeedCapabilities gives every grantable tool name, plus the memory
+// capabilities, a capability catalogue row. Without this, the capabilities
+// table stays empty and every lookup resolves to a zero-value
+// CapabilityView — an unrecognised class, which defaultEffect sends to deny.
+// Seeding is what makes the gate's fail-closed default apply only to
+// capabilities that were never named, not to every capability that exists.
+//
+// Tool names come from permissions.GrantableToolNames, the same set
 // permissions.IsAllowedTool reads, so the catalogue cannot drift from the
-// allow-list. Class and enforcement come from DefaultCapabilityView.
+// allow-list; their class and enforcement come from DefaultCapabilityView.
+// The memory capabilities come from memoryCapabilityViews above.
 //
 // Idempotent: a name that already has a row is left untouched rather than
 // upserted, so a human who has since edited a row's class through the
@@ -53,32 +69,39 @@ func DefaultCapabilityView(name string) capability.CapabilityView {
 // the returned count and the logged warnings do not already.
 func SeedCapabilities(ctx context.Context, capabilities CapabilityRepo) int {
 	seeded, skipped := 0, 0
-	for _, name := range permissions.GrantableToolNames() {
+	seedOne := func(view capability.CapabilityView) {
 		// "not found" is detected via ent.IsNotFound unwrapping through Get's
 		// fmt.Errorf("capability.Get: %w", err) — errors.As traverses that
 		// wrap today. If Get's error wrapping ever changes to something
 		// ent.IsNotFound can no longer see through, every name silently takes
 		// the "skip and warn" branch below instead of being seeded.
-		if _, err := capabilities.Get(ctx, name); err == nil {
-			continue // already catalogued — do not overwrite a class a human may have changed
+		if _, err := capabilities.Get(ctx, view.Name); err == nil {
+			return // already catalogued — do not overwrite a class a human may have changed
 		} else if !ent.IsNotFound(err) {
 			skipped++
-			slog.Warn("seed capabilities: skipped", "name", name, "err", err)
-			continue
+			slog.Warn("seed capabilities: skipped", "name", view.Name, "err", err)
+			return
 		}
 
-		view := DefaultCapabilityView(name)
 		if _, err := capabilities.Upsert(ctx, UpsertCapabilityInput{
 			Name:          view.Name,
 			Class:         view.Class,
 			EnforceableBy: view.EnforceableBy,
 		}); err != nil {
 			skipped++
-			slog.Warn("seed capabilities: skipped", "name", name, "err", err)
-			continue
+			slog.Warn("seed capabilities: skipped", "name", view.Name, "err", err)
+			return
 		}
 		seeded++
 	}
+
+	for _, name := range permissions.GrantableToolNames() {
+		seedOne(DefaultCapabilityView(name))
+	}
+	for _, view := range memoryCapabilityViews {
+		seedOne(view)
+	}
+
 	if skipped > 0 {
 		slog.Warn("seed capabilities: some names were not seeded", "seeded", seeded, "skipped", skipped)
 	}

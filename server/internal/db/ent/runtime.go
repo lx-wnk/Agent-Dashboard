@@ -16,6 +16,8 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/evalmetricsnapshot"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/grant"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/grantusage"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/memoryentry"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/memoryinjection"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionrequest"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/pipelineconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/plugin"
@@ -232,6 +234,62 @@ func init() {
 	grantusageDescUsedAt := grantusageFields[1].Descriptor()
 	// grantusage.DefaultUsedAt holds the default value on creation for the used_at field.
 	grantusage.DefaultUsedAt = grantusageDescUsedAt.Default.(func() time.Time)
+	memoryentryMixin := schema.MemoryEntry{}.Mixin()
+	memoryentryMixinFields0 := memoryentryMixin[0].Fields()
+	_ = memoryentryMixinFields0
+	memoryentryFields := schema.MemoryEntry{}.Fields()
+	_ = memoryentryFields
+	// memoryentryDescCreatedAt is the schema descriptor for created_at field.
+	memoryentryDescCreatedAt := memoryentryMixinFields0[1].Descriptor()
+	// memoryentry.DefaultCreatedAt holds the default value on creation for the created_at field.
+	memoryentry.DefaultCreatedAt = memoryentryDescCreatedAt.Default.(func() time.Time)
+	// memoryentryDescUpdatedAt is the schema descriptor for updated_at field.
+	memoryentryDescUpdatedAt := memoryentryMixinFields0[2].Descriptor()
+	// memoryentry.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	memoryentry.DefaultUpdatedAt = memoryentryDescUpdatedAt.Default.(func() time.Time)
+	// memoryentry.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	memoryentry.UpdateDefaultUpdatedAt = memoryentryDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// memoryentryDescConfidence is the schema descriptor for confidence field.
+	memoryentryDescConfidence := memoryentryFields[6].Descriptor()
+	// memoryentry.ConfidenceValidator is a validator for the "confidence" field. It is called by the builders before save.
+	memoryentry.ConfidenceValidator = func() func(float64) error {
+		validators := memoryentryDescConfidence.Validators
+		fns := [...]func(float64) error{
+			validators[0].(func(float64) error),
+			validators[1].(func(float64) error),
+		}
+		return func(confidence float64) error {
+			for _, fn := range fns {
+				if err := fn(confidence); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// memoryentryDescValidFrom is the schema descriptor for valid_from field.
+	memoryentryDescValidFrom := memoryentryFields[7].Descriptor()
+	// memoryentry.DefaultValidFrom holds the default value on creation for the valid_from field.
+	memoryentry.DefaultValidFrom = memoryentryDescValidFrom.Default.(func() time.Time)
+	memoryinjectionMixin := schema.MemoryInjection{}.Mixin()
+	memoryinjectionMixinFields0 := memoryinjectionMixin[0].Fields()
+	_ = memoryinjectionMixinFields0
+	memoryinjectionFields := schema.MemoryInjection{}.Fields()
+	_ = memoryinjectionFields
+	// memoryinjectionDescCreatedAt is the schema descriptor for created_at field.
+	memoryinjectionDescCreatedAt := memoryinjectionMixinFields0[1].Descriptor()
+	// memoryinjection.DefaultCreatedAt holds the default value on creation for the created_at field.
+	memoryinjection.DefaultCreatedAt = memoryinjectionDescCreatedAt.Default.(func() time.Time)
+	// memoryinjectionDescUpdatedAt is the schema descriptor for updated_at field.
+	memoryinjectionDescUpdatedAt := memoryinjectionMixinFields0[2].Descriptor()
+	// memoryinjection.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	memoryinjection.DefaultUpdatedAt = memoryinjectionDescUpdatedAt.Default.(func() time.Time)
+	// memoryinjection.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	memoryinjection.UpdateDefaultUpdatedAt = memoryinjectionDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// memoryinjectionDescEntryIds is the schema descriptor for entry_ids field.
+	memoryinjectionDescEntryIds := memoryinjectionFields[1].Descriptor()
+	// memoryinjection.DefaultEntryIds holds the default value on creation for the entry_ids field.
+	memoryinjection.DefaultEntryIds = memoryinjectionDescEntryIds.Default.([]string)
 	permissionrequestFields := schema.PermissionRequest{}.Fields()
 	_ = permissionrequestFields
 	// permissionrequestDescRequestedAt is the schema descriptor for requested_at field.

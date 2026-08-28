@@ -21,11 +21,13 @@ func TestSeedCapabilitiesIsIdempotent(t *testing.T) {
 	ctx := context.Background()
 
 	capRepo := repo.NewCapabilityRepo(bundle.Client)
-	want := len(permissions.GrantableToolNames())
+	// One row per grantable tool, plus the two memory capabilities
+	// (memory.read, memory.write) that SeedCapabilities seeds alongside them.
+	want := len(permissions.GrantableToolNames()) + 2
 
 	seeded := repo.SeedCapabilities(ctx, capRepo)
 	if seeded != want {
-		t.Errorf("first seed created %d rows, want %d (one per grantable tool)", seeded, want)
+		t.Errorf("first seed created %d rows, want %d (one per grantable tool, plus memory.read/memory.write)", seeded, want)
 	}
 
 	again := repo.SeedCapabilities(ctx, capRepo)
@@ -160,8 +162,10 @@ func TestSeedCapabilitiesSkipsUnseedableNameButSeedsTheRest(t *testing.T) {
 	fake := &failingUpsertCapabilityRepo{CapabilityRepo: real, failName: failName}
 
 	seeded := repo.SeedCapabilities(ctx, fake)
-	if want := len(names) - 1; seeded != want {
-		t.Errorf("seeded = %d, want %d (every name except the failing one)", seeded, want)
+	// Every tool name except the failing one, plus the two memory
+	// capabilities — failName never matches either of those.
+	if want := len(names) - 1 + 2; seeded != want {
+		t.Errorf("seeded = %d, want %d (every name except the failing one, plus memory.read/memory.write)", seeded, want)
 	}
 
 	if _, err := real.Get(ctx, failName); err == nil {
@@ -172,5 +176,72 @@ func TestSeedCapabilitiesSkipsUnseedableNameButSeedsTheRest(t *testing.T) {
 		if _, err := real.Get(ctx, later); err != nil {
 			t.Errorf("name %q ordered after the failing one was not seeded: %v", later, err)
 		}
+	}
+}
+
+// TestSeedCapabilitiesSeedsMemoryCapabilities proves memory.read and
+// memory.write land in the catalogue with class "resource" and enforcement
+// at the server point — without this, Decide looks up either name, gets a
+// zero-value CapabilityView, and denies every memory access even after a
+// human issues a grant.
+func TestSeedCapabilitiesSeedsMemoryCapabilities(t *testing.T) {
+	bundle, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("db.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+	ctx := context.Background()
+
+	capRepo := repo.NewCapabilityRepo(bundle.Client)
+	repo.SeedCapabilities(ctx, capRepo)
+
+	for _, name := range []string{repo.CapabilityMemoryRead, repo.CapabilityMemoryWrite} {
+		row, err := capRepo.Get(ctx, name)
+		if err != nil {
+			t.Fatalf("get %s: %v", name, err)
+		}
+		if row.Class != repo.CapClassResource {
+			t.Errorf("%s class = %q, want %q", name, row.Class, repo.CapClassResource)
+		}
+		want := []string{capability.EnforcerServer}
+		if len(row.EnforceableBy) != len(want) || row.EnforceableBy[0] != want[0] {
+			t.Errorf("%s enforceable_by = %v, want %v", name, row.EnforceableBy, want)
+		}
+	}
+}
+
+// TestSeedCapabilitiesMemoryCapabilitiesAreIdempotent proves a second seed
+// pass neither duplicates nor overwrites the memory capability rows.
+func TestSeedCapabilitiesMemoryCapabilitiesAreIdempotent(t *testing.T) {
+	bundle, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("db.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+	ctx := context.Background()
+
+	capRepo := repo.NewCapabilityRepo(bundle.Client)
+	repo.SeedCapabilities(ctx, capRepo)
+
+	// A human edits memory.write's class after the first seed.
+	if _, err := capRepo.Upsert(ctx, repo.UpsertCapabilityInput{
+		Name:          repo.CapabilityMemoryWrite,
+		Class:         repo.CapClassSpend,
+		EnforceableBy: []string{capability.EnforcerServer},
+	}); err != nil {
+		t.Fatalf("human edit: %v", err)
+	}
+
+	again := repo.SeedCapabilities(ctx, capRepo)
+	if again != 0 {
+		t.Errorf("second seed created %d rows, want 0 — it must be idempotent", again)
+	}
+
+	row, err := capRepo.Get(ctx, repo.CapabilityMemoryWrite)
+	if err != nil {
+		t.Fatalf("get memory.write: %v", err)
+	}
+	if row.Class != repo.CapClassSpend {
+		t.Errorf("memory.write class = %q, want %q (human edit must survive a re-seed)", row.Class, repo.CapClassSpend)
 	}
 }

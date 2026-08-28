@@ -92,3 +92,28 @@ func ForDisplayCapped(s string, maxRunes int) (string, int) {
 	}
 	return b.String(), dropped
 }
+
+// ForStorage strips invisible and deceptive runes the same way ForDisplay
+// does, but preserves whitespace instead of collapsing it: newlines, tabs
+// and spaces all survive as authored, so code blocks, PEM bodies and
+// markdown lists round-trip intact. Use this for text that is read back
+// structured rather than rendered as a single line; use ForDisplay where a
+// value must never be able to forge a line break (e.g. a summary
+// concatenated into a prompt).
+func ForStorage(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		switch {
+		case unicode.IsSpace(r):
+			b.WriteRune(r)
+		case unicode.IsControl(r), unicode.Is(unicode.Cf, r):
+			// Cf covers bidi overrides and zero-width runes; IsControl adds
+			// the non-whitespace C0/C1 range (e.g. NUL, DEL).
+			continue
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}

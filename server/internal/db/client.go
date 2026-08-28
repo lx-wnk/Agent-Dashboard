@@ -16,6 +16,16 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/task"
 )
 
+// WriteClient marks an *ent.Client as opened onto the connection pool wired
+// for BEGIN IMMEDIATE (the driver's `_txlock=immediate` DSN parameter).
+// repo.WithWriteTx requires this named type rather than a plain *ent.Client
+// so that passing the ordinary (deferred-BEGIN) client is a compile error
+// instead of a silent downgrade to the semantics WithWriteTx exists to
+// prevent — see its doc comment.
+type WriteClient struct {
+	*ent.Client
+}
+
 // DBBundle holds both the ent client and the underlying *sql.DB.
 // The raw *sql.DB is needed for repositories that execute hand-written SQL
 // (e.g. FTS5 queries, notification_config, push_subscriptions).
@@ -23,11 +33,32 @@ import (
 type DBBundle struct {
 	Client *ent.Client
 	DB     *sql.DB
+	// WriteClient is a second connection pool onto the same database, opened
+	// with the driver's `_txlock=immediate` DSN parameter so its transactions
+	// take the write lock at BEGIN instead of deferring it to the first write
+	// statement. Use it via repo.WithWriteTx for read-then-write sequences
+	// that must not race a concurrent committer into SQLITE_BUSY_SNAPSHOT —
+	// see the doc comment on WithWriteTx for why a second pool, rather than a
+	// per-call option, is what the driver actually offers.
+	//
+	// Equal to Client when path is ":memory:": that fixture pins the whole
+	// pool to a single connection (see below) specifically so every query
+	// shares one in-memory database, and a second, independently-opened
+	// ":memory:" pool would just be a second, empty database sitting next to
+	// it — not a race-safe stand-in for a real second connection.
+	WriteClient WriteClient
 }
 
-// Close closes the database connection. Both Client and DB become invalid after this call.
+// Close closes the database connection(s). Client, DB, and WriteClient all
+// become invalid after this call.
 // Note: Client.Close() also closes DB because the ent driver wraps the same *sql.DB.
 func (b *DBBundle) Close() error {
+	if b.WriteClient.Client != nil && b.WriteClient.Client != b.Client {
+		if err := b.WriteClient.Close(); err != nil {
+			_ = b.Client.Close()
+			return fmt.Errorf("db: close write pool: %w", err)
+		}
+	}
 	return b.Client.Close()
 }
 
@@ -106,6 +137,10 @@ func Open(path string) (*DBBundle, error) {
 		_ = client.Close()
 		return nil, fmt.Errorf("db: ensure grant_usage index: %w", err)
 	}
+	if err := migrateEnsureMemoryEntryIndexes(sqlDB); err != nil {
+		_ = client.Close()
+		return nil, fmt.Errorf("db: ensure memory_entry indexes: %w", err)
+	}
 	if err := client.Schema.Create(context.Background()); err != nil {
 		_ = client.Close()
 		return nil, fmt.Errorf("db: auto-migrate: %w", err)
@@ -146,7 +181,21 @@ func Open(path string) (*DBBundle, error) {
 		_ = client.Close()
 		return nil, fmt.Errorf("db: raw migrations: %w", err)
 	}
-	return &DBBundle{Client: client, DB: sqlDB}, nil
+	writeClient := client
+	if path != ":memory:" {
+		// A second pool onto the same file, opened after migrations so it
+		// sees the finished schema. _txlock=immediate is this driver's only
+		// way to select BEGIN IMMEDIATE — it is a per-connection setting, not
+		// a per-transaction option, hence the separate pool. See WriteClient's
+		// doc comment and repo.WithWriteTx.
+		writeSQLDB, err := sql.Open("sqlite", dsn+"&_txlock=immediate")
+		if err != nil {
+			_ = client.Close()
+			return nil, fmt.Errorf("db: open write pool for %q: %w", path, err)
+		}
+		writeClient = ent.NewClient(ent.Driver(entsql.OpenDB(dialect.SQLite, writeSQLDB)))
+	}
+	return &DBBundle{Client: client, DB: sqlDB, WriteClient: WriteClient{Client: writeClient}}, nil
 }
 
 // runRawMigrations creates tables and FTS5 virtual tables that are not managed
@@ -160,6 +209,9 @@ func runRawMigrations(db *sql.DB) error {
 		`DROP TRIGGER IF EXISTS tasks_ai`,
 		`DROP TRIGGER IF EXISTS tasks_au`,
 		`DROP TRIGGER IF EXISTS tasks_ad`,
+		`DROP TRIGGER IF EXISTS memory_entries_ai`,
+		`DROP TRIGGER IF EXISTS memory_entries_au`,
+		`DROP TRIGGER IF EXISTS memory_entries_ad`,
 	} {
 		if _, err := db.Exec(stmt); err != nil {
 			return fmt.Errorf("raw migration (drop trigger): %w\nstatement: %s", err, stmt)
@@ -205,6 +257,41 @@ func runRawMigrations(db *sql.DB) error {
 		// Sync trigger: DELETE on tasks.
 		`CREATE TRIGGER IF NOT EXISTS tasks_ad AFTER DELETE ON tasks BEGIN
 			DELETE FROM task_fts WHERE rowid = old.rowid;
+		END`,
+
+		// FTS5 virtual table for full-text search over memory entries.
+		`CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
+			entry_id UNINDEXED,
+			summary,
+			content
+		)`,
+
+		// Sync trigger: INSERT on memory_entries.
+		`CREATE TRIGGER IF NOT EXISTS memory_entries_ai AFTER INSERT ON memory_entries BEGIN
+			INSERT INTO memory_fts(rowid, entry_id, summary, content)
+			VALUES (new.rowid, new.id, new.summary, new.content);
+		END`,
+
+		// Sync trigger: UPDATE on memory_entries (delete old index entry, insert new one).
+		// memory_fts is a regular (content-owning) FTS5 table like task_fts, so plain
+		// DELETE by rowid is required; the "INSERT INTO ft(ft, rowid) VALUES('delete', ...)"
+		// form is only valid for contentless FTS5 tables (content='').
+		`CREATE TRIGGER IF NOT EXISTS memory_entries_au AFTER UPDATE ON memory_entries BEGIN
+			DELETE FROM memory_fts WHERE rowid = old.rowid;
+			INSERT INTO memory_fts(rowid, entry_id, summary, content)
+			VALUES (new.rowid, new.id, new.summary, new.content);
+		END`,
+
+		// Sync trigger: DELETE on memory_entries. No repository method deletes
+		// a memory_entry row today (MemoryRepo only supersedes/expires them,
+		// and DeleteSpace was removed as dead code), so this trigger is
+		// unreached in practice. It stays: it is correct at the database
+		// layer, and a future deletion path will need it to keep memory_fts
+		// from accumulating rows for entries that no longer exist. Proven
+		// directly against the ent client in client_test.go, bypassing the
+		// (currently nonexistent) repository layer.
+		`CREATE TRIGGER IF NOT EXISTS memory_entries_ad AFTER DELETE ON memory_entries BEGIN
+			DELETE FROM memory_fts WHERE rowid = old.rowid;
 		END`,
 
 		// workflow_patterns: top ngrams discovered from JSONL session files.
@@ -690,6 +777,43 @@ func migrateEnsureGrantUsageIndex(db *sql.DB) error {
 			`ON grant_usages (grant_id, used_at)`,
 	); err != nil {
 		return fmt.Errorf("pre-create grant_usage index: %w", err)
+	}
+	return nil
+}
+
+// migrateEnsureMemoryEntryIndexes pre-creates the memory_entries table's three
+// named indexes under ent's exact generated names before ent auto-migrate
+// runs. The memory_entries table is new in this change, so today's fresh
+// databases hit the no-op path below and ent creates the table with all three
+// indexes already declared. The guard exists for the databases that will
+// exist once this ships: a later change to any of these indexes would
+// otherwise make ent's diff add it via SQLite's 12-step table rebuild, which
+// crashes on populated databases with "NOT NULL constraint failed" (PR #207)
+// — the same hazard migrateEnsureGrantIndexes guards against, applied here to
+// a new table with only non-unique indexes.
+// Idempotent via IF NOT EXISTS.
+func migrateEnsureMemoryEntryIndexes(db *sql.DB) error {
+	var exists int
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'memory_entries'`,
+	).Scan(&exists); err != nil {
+		return fmt.Errorf("probe memory_entries table: %w", err)
+	}
+	if exists == 0 {
+		return nil
+	}
+	stmts := []string{
+		`CREATE INDEX IF NOT EXISTS memoryentry_space_id_valid_until ` +
+			`ON memory_entries (space_id, valid_until)`,
+		`CREATE INDEX IF NOT EXISTS memoryentry_space_id_kind ` +
+			`ON memory_entries (space_id, kind)`,
+		`CREATE INDEX IF NOT EXISTS memoryentry_superseded_by ` +
+			`ON memory_entries (superseded_by)`,
+	}
+	for _, stmt := range stmts {
+		if _, err := db.Exec(stmt); err != nil {
+			return fmt.Errorf("pre-create memory_entry index: %w\nstatement: %s", err, stmt)
+		}
 	}
 	return nil
 }

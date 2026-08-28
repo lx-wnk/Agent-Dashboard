@@ -34,6 +34,10 @@ type Tx struct {
 	Grant *GrantClient
 	// GrantUsage is the client for interacting with the GrantUsage builders.
 	GrantUsage *GrantUsageClient
+	// MemoryEntry is the client for interacting with the MemoryEntry builders.
+	MemoryEntry *MemoryEntryClient
+	// MemoryInjection is the client for interacting with the MemoryInjection builders.
+	MemoryInjection *MemoryInjectionClient
 	// PermissionPreset is the client for interacting with the PermissionPreset builders.
 	PermissionPreset *PermissionPresetClient
 	// PermissionRequest is the client for interacting with the PermissionRequest builders.
@@ -218,6 +222,8 @@ func (tx *Tx) init() {
 	tx.EvalMetricSnapshot = NewEvalMetricSnapshotClient(tx.config)
 	tx.Grant = NewGrantClient(tx.config)
 	tx.GrantUsage = NewGrantUsageClient(tx.config)
+	tx.MemoryEntry = NewMemoryEntryClient(tx.config)
+	tx.MemoryInjection = NewMemoryInjectionClient(tx.config)
 	tx.PermissionPreset = NewPermissionPresetClient(tx.config)
 	tx.PermissionRequest = NewPermissionRequestClient(tx.config)
 	tx.PipelineConfig = NewPipelineConfigClient(tx.config)

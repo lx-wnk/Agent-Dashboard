@@ -468,3 +468,121 @@ func TestBackfillGrantsSkipsUngrantedTaskPermissions(t *testing.T) {
 	require.NoError(t, bundle2.DB.QueryRow(`SELECT COUNT(*) FROM grants`).Scan(&count))
 	require.Equal(t, 0, count, "an ungranted task_permission must not become a grant")
 }
+
+// TestOpenTwiceWithMemoryTables proves the memory_entries and
+// memory_injections tables and memory_entries' three indexes survive a second
+// Open on an existing database. An ent index change triggers SQLite's 12-step
+// table rebuild, which fails on populated tables with "NOT NULL constraint
+// failed" — the pre-migration exists to make ent's diff find the indexes
+// already present so it never rebuilds.
+func TestOpenTwiceWithMemoryTables(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "twice-memory.db")
+
+	first, err := db.Open(path)
+	if err != nil {
+		t.Fatalf("first Open: %v", err)
+	}
+	ctx := context.Background()
+	if _, err := first.Client.MemoryEntry.Create().
+		SetID("entry-1").
+		SetSpaceID("space-1").
+		SetSummary("example summary").
+		SetContent("example content").
+		SetKind("fact").
+		SetSourceKind("agent").
+		SetConfidence(0.9).
+		Save(ctx); err != nil {
+		t.Fatalf("insert memory_entry: %v", err)
+	}
+	if _, err := first.Client.MemoryInjection.Create().
+		SetID("injection-1").
+		SetStageRunID("stage-run-1").
+		SetCharBudget(1000).
+		SetCharsUsed(200).
+		SetCandidateCount(3).
+		Save(ctx); err != nil {
+		t.Fatalf("insert memory_injection: %v", err)
+	}
+	if err := first.Client.Close(); err != nil {
+		t.Fatalf("close first: %v", err)
+	}
+
+	second, err := db.Open(path)
+	if err != nil {
+		t.Fatalf("second Open on a populated database: %v", err)
+	}
+	t.Cleanup(func() { _ = second.Client.Close() })
+
+	entries, err := second.Client.MemoryEntry.Query().Count(ctx)
+	if err != nil {
+		t.Fatalf("count memory_entries after reopen: %v", err)
+	}
+	if entries != 1 {
+		t.Errorf("memory_entry count after reopen = %d, want 1", entries)
+	}
+
+	injections, err := second.Client.MemoryInjection.Query().Count(ctx)
+	if err != nil {
+		t.Fatalf("count memory_injections after reopen: %v", err)
+	}
+	if injections != 1 {
+		t.Errorf("memory_injection count after reopen = %d, want 1", injections)
+	}
+}
+
+// TestMemoryFTSRoundTrip proves memory_fts stays in sync with memory_entries
+// across insert, update, and delete. The delete leg is the one that matters:
+// a contentless-form trigger against a content-owning table fails at runtime,
+// not at boot, so only an actual delete exercises it.
+func TestMemoryFTSRoundTrip(t *testing.T) {
+	bundle, err := db.Open(":memory:")
+	require.NoError(t, err)
+	defer func() { _ = bundle.Client.Close() }()
+	ctx := t.Context()
+
+	entry, err := bundle.Client.MemoryEntry.Create().
+		SetID("entry-fts-1").
+		SetSpaceID("space-1").
+		SetSummary("Observability Dashboard Feature").
+		SetContent("initial content").
+		SetKind("fact").
+		SetSourceKind("agent").
+		SetConfidence(0.9).
+		Save(ctx)
+	require.NoError(t, err)
+
+	// FTS5 content= tables cannot return UNINDEXED columns directly via SELECT because the
+	// engine re-fetches columns from the content table (memory_entries) by name, and
+	// memory_entries has no "entry_id" column. Use a rowid-based subquery, mirroring
+	// TestOpen_FTS5TriggerRoundTrip.
+	matchID := func(term string) (string, error) {
+		var id string
+		err := bundle.DB.QueryRow(
+			`SELECT id FROM memory_entries WHERE rowid IN (SELECT rowid FROM memory_fts WHERE memory_fts MATCH ?)`,
+			term,
+		).Scan(&id)
+		return id, err
+	}
+
+	id, err := matchID("Observability")
+	require.NoError(t, err)
+	require.Equal(t, entry.ID, id)
+
+	_, err = bundle.Client.MemoryEntry.UpdateOneID(entry.ID).
+		SetSummary("Renamed Feature Summary").
+		Save(ctx)
+	require.NoError(t, err)
+
+	_, err = matchID("Observability")
+	require.ErrorIs(t, err, sql.ErrNoRows, "old summary term must no longer match after update")
+
+	id, err = matchID("Renamed")
+	require.NoError(t, err)
+	require.Equal(t, entry.ID, id)
+
+	require.NoError(t, bundle.Client.MemoryEntry.DeleteOneID(entry.ID).Exec(ctx))
+
+	_, err = matchID("Renamed")
+	require.ErrorIs(t, err, sql.ErrNoRows, "deleted entry must no longer match")
+}
