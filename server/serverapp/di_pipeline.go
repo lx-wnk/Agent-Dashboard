@@ -149,13 +149,16 @@ func provideOrchestrator(
 		InjectMemory:          memRetriever.Retrieve,
 		MemoryBudget:          memoryPushBudgetChars,
 		RecordMemoryInjection: memRepo.RecordInjection,
-		// AuthorizeMemory gates the push behind the same memory.Authorize
-		// capability check every human-facing memory route already uses
-		// (mcp/tools/memory.go, api/memory/handler.go). The push reads
-		// across the whole scope rather than one space, so it authorizes
-		// with the empty wildcard value, same as memory_search.
+		// AuthorizeMemory gates the push behind the same memory.Gate check
+		// every human-facing memory route already uses (mcp/tools/memory.go,
+		// api/memory/handler.go), but with no Asker: nobody is watching a
+		// stage spawn, so an ask decision here must deny rather than stall
+		// the pipeline. The push reads across the whole scope rather than
+		// one space, so it authorizes with the empty wildcard value, same as
+		// memory_search.
 		AuthorizeMemory: func(ctx context.Context, scope repo.Scope) error {
-			return memory.Authorize(ctx, capabilityRepo, grantRepo, grantUsageRepo, repo.CapabilityMemoryRead, "", scope)
+			gate := memory.Gate{Capabilities: capabilityRepo, Grants: grantRepo, GrantUsage: grantUsageRepo}
+			return gate.Authorize(ctx, repo.CapabilityMemoryRead, "", scope)
 		},
 		// BuildTaskPayload is called inside applyTransitionWrites, bound to the
 		// active transaction, so the returned snapshot reflects the just-applied

@@ -72,6 +72,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/scanner"
 	"github.com/lx-wnk/agent-dashboard/server/internal/scheduler"
 	"github.com/lx-wnk/agent-dashboard/server/internal/secretbox"
+	"github.com/lx-wnk/agent-dashboard/server/internal/serverask"
 	"github.com/lx-wnk/agent-dashboard/server/internal/services"
 	"github.com/lx-wnk/agent-dashboard/server/internal/settings"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
@@ -531,7 +532,17 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	// handler's create core, so it must be built after taskHandler. nil when no DB.
 	sched, schedulesHandler := provideScheduler(entClient, taskHandler, taskBroadcaster)
 
-	mcpHandler := provideMCPHandler(entClient, orch, sched, taskBroadcaster, projectBroadcaster, refineRunner, memRepo, memRetriever, grantUsageRepo)
+	// The only two callers that may block a live request on a human decision:
+	// the memory MCP tools below (an agent is waiting on the tool response)
+	// and the HTTP memory handler further down (a browser request has a
+	// human on the other end). The pipeline's memory push (di_pipeline.go)
+	// and the obsidian vault indexer build their own memory.Gate with no
+	// Asker instead of sharing this one — nothing is waiting on either, so
+	// an unanswerable ask must deny rather than stall a spawn or a
+	// background index run.
+	memAsker := serverask.New(nil) // onChange (pushing pending asks to SSE) is the next unit's job.
+
+	mcpHandler := provideMCPHandler(entClient, orch, sched, taskBroadcaster, projectBroadcaster, refineRunner, memRepo, memRetriever, grantUsageRepo, memAsker)
 
 	var histImporter *histsvc.Importer
 	var historyHandler *apihistory.Handler
@@ -547,7 +558,12 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	// its own capability/grant repos, matching provideMCPHandler's wiring.
 	var memoryHandler *apimemory.Handler
 	if entClient != nil {
-		memoryHandler = apimemory.NewHandler(memRepo, memRetriever, repo.NewCapabilityRepo(entClient), repo.NewGrantRepo(entClient), grantUsageRepo)
+		memoryHandler = apimemory.NewHandler(memRepo, memRetriever, memory.Gate{
+			Capabilities: repo.NewCapabilityRepo(entClient),
+			Grants:       repo.NewGrantRepo(entClient),
+			GrantUsage:   grantUsageRepo,
+			Asker:        memAsker,
+		})
 	}
 
 	// Eval / drift-detection subsystem. The onDrift callback is the only outward

@@ -126,9 +126,11 @@ func buildBypassRouter(t *testing.T) http.Handler {
 		MemoryHandler: apimemory.NewHandler(
 			repo.NewMemoryRepo(c, bundle.WriteClient),
 			memory.NewRetriever(rawDB, repo.NewMemoryRepo(c, bundle.WriteClient)),
-			repo.NewCapabilityRepo(c),
-			repo.NewGrantRepo(c),
-			repo.NewGrantUsageRepo(c, bundle.WriteClient),
+			memory.Gate{
+				Capabilities: repo.NewCapabilityRepo(c),
+				Grants:       repo.NewGrantRepo(c),
+				GrantUsage:   repo.NewGrantUsageRepo(c, bundle.WriteClient),
+			},
 		),
 		RefineHandler: refineapi.NewHandler(refineapi.Deps{
 			Turns:     repo.NewRefinementTurnRepo(c),

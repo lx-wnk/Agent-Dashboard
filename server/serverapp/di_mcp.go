@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/capability"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	mcp "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
@@ -25,6 +26,7 @@ func provideMCPHandler(
 	memRepo repo.MemoryRepo,
 	memRetriever *memory.Retriever,
 	grantUsageRepo repo.GrantUsageRepo,
+	memAsker capability.Asker,
 ) http.Handler {
 	if client == nil || orch == nil {
 		return nil
@@ -114,11 +116,14 @@ func provideMCPHandler(
 	})
 	mcptools.RegisterCoordTools(registry, mcptools.CoordDeps{Scratch: scratchRepo, Locks: lockRepo})
 	mcptools.RegisterMemoryTools(registry, mcptools.MemoryDeps{
-		Repo:         memRepo,
-		Retriever:    memRetriever,
-		Capabilities: repo.NewCapabilityRepo(client),
-		Grants:       repo.NewGrantRepo(client),
-		GrantUsage:   grantUsageRepo,
+		Repo:      memRepo,
+		Retriever: memRetriever,
+		Gate: memory.Gate{
+			Capabilities: repo.NewCapabilityRepo(client),
+			Grants:       repo.NewGrantRepo(client),
+			GrantUsage:   grantUsageRepo,
+			Asker:        memAsker,
+		},
 	})
 	return mcp.MCPHandler(registry)
 }
