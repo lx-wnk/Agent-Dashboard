@@ -264,6 +264,7 @@ func TestAgentStageHandler_MemoryBlockInNativeUserPromptNotSystemPrompt(t *testi
 		StageRun:          &ent.StageRun{Stage: "implementation", ID: "sr-native-1"},
 		RecordAudit:       func(string, map[string]any) {},
 		RequestPermission: func(string, string, string) *ent.PermissionRequest { return nil },
+		AuthorizeMemory:   func(_ context.Context, _ repo.Scope) error { return nil },
 		InjectMemory: func(_ context.Context, _ memory.Query) ([]memory.Entry, error) {
 			return []memory.Entry{{ID: "mem-1", Summary: memorySummary}}, nil
 		},
@@ -311,6 +312,7 @@ func TestAgentStageHandler_MemoryBlockInAdapterUserPromptNotSystemPrompt(t *test
 		ResolveSpawner: func(context.Context, string, string) (*ent.Spawner, error) {
 			return &ent.Spawner{AdapterType: "custom", Command: scriptPath}, nil
 		},
+		AuthorizeMemory: func(_ context.Context, _ repo.Scope) error { return nil },
 		InjectMemory: func(_ context.Context, _ memory.Query) ([]memory.Entry, error) {
 			return []memory.Entry{{ID: "mem-2", Summary: memorySummary}}, nil
 		},
@@ -347,6 +349,7 @@ func TestAgentStageHandler_MemoryRetrievalErrorDoesNotBlockSpawn(t *testing.T) {
 		StageRun:          &ent.StageRun{Stage: "implementation", ID: "sr-err-1"},
 		RecordAudit:       func(string, map[string]any) {},
 		RequestPermission: func(string, string, string) *ent.PermissionRequest { return nil },
+		AuthorizeMemory:   func(_ context.Context, _ repo.Scope) error { return nil },
 		InjectMemory: func(_ context.Context, _ memory.Query) ([]memory.Entry, error) {
 			return nil, errors.New("fts index unavailable")
 		},
@@ -381,6 +384,7 @@ func TestAgentStageHandler_ZeroMemoryBudgetDisablesInjection(t *testing.T) {
 		StageRun:          &ent.StageRun{Stage: "implementation", ID: "sr-zero-1"},
 		RecordAudit:       func(string, map[string]any) {},
 		RequestPermission: func(string, string, string) *ent.PermissionRequest { return nil },
+		AuthorizeMemory:   func(_ context.Context, _ repo.Scope) error { return nil },
 		InjectMemory: func(_ context.Context, _ memory.Query) ([]memory.Entry, error) {
 			retrieveCalled = true
 			return []memory.Entry{{ID: "mem-3", Summary: "should never be reached"}}, nil

@@ -234,10 +234,11 @@ func buildStageUserPrompt(ctx *StageContext, bundle PromptBundle, feedback strin
 // injectMemoryBlock retrieves a budgeted slice of memory for the stage's
 // task and packs it into ctx.MemoryBudget characters. Memory being
 // unavailable must never block a spawn: a nil InjectMemory or a budget that
-// cannot fit even one entry (<= 0) disables the push outright, and a
-// retrieval error degrades to no block rather than failing the stage.
+// cannot fit even one entry (<= 0) disables the push outright, an
+// authorization denial or a retrieval error degrades to no block rather than
+// failing the stage.
 func injectMemoryBlock(ctx *StageContext) string {
-	if ctx.InjectMemory == nil || ctx.MemoryBudget <= 0 {
+	if ctx.InjectMemory == nil || ctx.AuthorizeMemory == nil || ctx.MemoryBudget <= 0 {
 		return ""
 	}
 
@@ -245,6 +246,22 @@ func injectMemoryBlock(ctx *StageContext) string {
 	if ctx.Task.Cwd != "" {
 		scope = repo.ProjectScope(ctx.Task.Cwd)
 	}
+
+	// The automatic push is otherwise the one memory read in the system
+	// with no capability gate: every human-facing route (MCP tools, HTTP
+	// API) already calls memory.Authorize before reading. Gate this one the
+	// same way, and degrade to no block on denial rather than failing the
+	// spawn.
+	//
+	// An unwired gate means no memory, not ungated memory — the same way an
+	// unwired InjectMemory above means no memory. A caller that wants the
+	// push wires both; a test that wants it wires a permissive authorizer
+	// explicitly rather than relying on nil to skip the check.
+	if err := ctx.AuthorizeMemory(ctx.Ctx, scope); err != nil {
+		ctx.RecordAudit(ctx.StageRun.Stage+"_memory_denied", map[string]any{"error": err.Error()})
+		return ""
+	}
+
 	queryText := ctx.Task.Title
 	if ctx.Task.Description != nil {
 		queryText += " " + *ctx.Task.Description

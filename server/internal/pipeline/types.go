@@ -157,6 +157,14 @@ type StageContext struct {
 	// this stage run. Nil skips recording: it is best-effort bookkeeping and
 	// must not fail a spawn.
 	RecordMemoryInjection func(ctx context.Context, in repo.RecordInjectionInput) (*ent.MemoryInjection, error)
+
+	// AuthorizeMemory gates the automatic memory push behind the same
+	// memory.Authorize capability check every human-facing memory route
+	// (MCP tools, HTTP API) already goes through — the push is otherwise the
+	// one memory read in the system with no capability gate. Nil disables
+	// the push the same way a nil InjectMemory does; a denial degrades to no
+	// memory block rather than failing the spawn (see injectMemoryBlock).
+	AuthorizeMemory func(ctx context.Context, scope repo.Scope) error
 }
 
 // StageHandler is implemented by each pipeline stage.
@@ -310,6 +318,13 @@ type OrchestratorOptions struct {
 	InjectMemory          memory.InjectorFunc
 	MemoryBudget          int
 	RecordMemoryInjection func(ctx context.Context, in repo.RecordInjectionInput) (*ent.MemoryInjection, error)
+
+	// AuthorizeMemory is forwarded verbatim onto every StageContext this
+	// orchestrator builds — see the matching StageContext field for what it
+	// gates. Production wires a closure over repo.CapabilityRepo/GrantRepo
+	// calling memory.Authorize at DI time (serverapp/di_pipeline.go); nil
+	// disables the push the same way a nil InjectMemory does.
+	AuthorizeMemory func(ctx context.Context, scope repo.Scope) error
 }
 
 // StageFailedInfo carries failure metadata to the OnStageFailed callback.
