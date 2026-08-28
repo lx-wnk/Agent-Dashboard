@@ -17,11 +17,10 @@ var effortSupportingAdapterTypes = map[string]struct{}{
 
 // ValidEffortLevels are the values the claude CLI's --effort flag actually
 // accepts, verified against `claude --help` (v2.1.248): "Effort level for
-// the current session (low, medium, high, xhigh, max)". This is wider than
-// the three-option dropdown in src/utils/models.ts (EFFORT_OPTIONS), which
-// is a deliberate UI simplification — a value set directly through the API
-// outside that shortlist (e.g. "xhigh") is still a real CLI level and must
-// not be treated as unrecognized here.
+// the current session (low, medium, high, xhigh, max)". EFFORT_OPTIONS in
+// src/utils/models.ts is hand-kept in parity with this set — the Vue client
+// cannot import Go. They must stay equal: a shorter list there renders a
+// value set through the API as unrecognised even though the CLI accepts it.
 var ValidEffortLevels = map[string]struct{}{
 	"low":    {},
 	"medium": {},
@@ -46,6 +45,12 @@ func IsValidEffortLevel(v string) bool {
 // dropped — the same treatment a provider without a skill format gets from
 // the materializer. An absent effort key is not an error: effort is "" and
 // supported still reflects the adapter type.
+//
+// No production caller yet, deliberately. The spawn path reads the effort off
+// the spawner it has already resolved rather than resolving a second time, so
+// what this adds over that is the SOURCE — which spawner in the task, project,
+// default chain supplied the value. That is what a "resolved effort, and where
+// it came from" display needs, and no such surface exists yet.
 func ResolveEffort(ctx context.Context, r SpawnerResolver, taskID, stage string) (effort string, source SpawnerSource, supported bool, err error) {
 	sp, src, err := r.Resolve(ctx, taskID, stage)
 	if err != nil {
