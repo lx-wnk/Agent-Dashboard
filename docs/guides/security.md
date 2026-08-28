@@ -127,7 +127,7 @@ makes that a decision instead of a silent default, through `Config.TLSMode`:
 | Mode | What it does | When `NewClient` refuses it |
 |---|---|---|
 | `verify` | Normal certificate verification against the system trust store. | Never — but only works if you have separately installed and trusted the vault's certificate. |
-| `pinned` (default) | Trust-on-first-use: the first certificate seen is trusted and its SHA-256 fingerprint kept in memory; any later connection presenting a different fingerprint is refused. | Never at construction. The fingerprint is in-memory only and lost on restart — a fresh boot re-trusts whatever certificate answers first. |
+| `pinned` | Trust-on-first-use: the first certificate seen is trusted and its SHA-256 fingerprint kept in memory; any later connection presenting a different fingerprint is refused. | Never at construction. The fingerprint is in-memory only and lost on restart — a fresh boot re-trusts whatever certificate answers first. |
 | `insecure-loopback` | Skips certificate verification outright. | Unless the configured host actually resolves to loopback. That is the one case a network attacker cannot be the party presenting the certificate, which is what makes skipping verification tolerable here and nowhere else. |
 
 Independent of `TLSMode`, the client resolves its configured host to a
