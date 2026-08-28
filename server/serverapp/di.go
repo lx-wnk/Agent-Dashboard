@@ -17,7 +17,9 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"time"
 
+	sdk "github.com/lx-wnk/agent-dashboard/sdk"
 	"github.com/lx-wnk/agent-dashboard/server/internal/agentbroadcast"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/adapters"
@@ -47,6 +49,7 @@ import (
 	apivisualizations "github.com/lx-wnk/agent-dashboard/server/internal/api/visualizations"
 	apiwp "github.com/lx-wnk/agent-dashboard/server/internal/api/wphandler"
 	"github.com/lx-wnk/agent-dashboard/server/internal/apps/obsidian"
+	"github.com/lx-wnk/agent-dashboard/server/internal/askgate"
 	authpkg "github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/capability"
 	"github.com/lx-wnk/agent-dashboard/server/internal/checkpoint"
@@ -119,17 +122,18 @@ func (noopSettingsRepo) ListAll(context.Context) (map[string]string, error) {
 // set even when an error is also returned (e.g. plugin registry already
 // loaded) — callers must invoke it whenever it is non-nil, regardless of err.
 type ServerComponents struct {
-	API          *api.Server
-	Broadcaster  *sse.Broadcaster
-	Merger       *merger.Merger
-	Orchestrator *pipeline.PipelineOrchestrator
-	Scheduler    *scheduler.Scheduler
-	HistImporter *histsvc.Importer
-	Baseline     agentbroadcast.BaselineProvider
-	Enricher     merger.Enricher
-	Eval         *eval.Service
-	Settings     *settings.Service
-	Cleanup      func()
+	API                 *api.Server
+	Broadcaster         *sse.Broadcaster
+	Merger              *merger.Merger
+	Orchestrator        *pipeline.PipelineOrchestrator
+	Scheduler           *scheduler.Scheduler
+	HistImporter        *histsvc.Importer
+	Baseline            agentbroadcast.BaselineProvider
+	Enricher            merger.Enricher
+	CapabilityDecisions agentbroadcast.CapabilityDecisionProvider
+	Eval                *eval.Service
+	Settings            *settings.Service
+	Cleanup             func()
 }
 
 // ln is the address already bound by Listen, or nil to let the HTTP server
@@ -540,9 +544,23 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	// Asker instead of sharing this one — nothing is waiting on either, so
 	// an unanswerable ask must deny rather than stall a spawn or a
 	// background index run.
-	memAsker := serverask.New(nil) // onChange (pushing pending asks to SSE) is the next unit's job.
+	var memAsker *serverask.Asker
+	// Bypass-auth unmounts the route a human would answer through (router.go),
+	// so an asker here would only hold every ask for its full timeout before
+	// denying anyway. The router installs its debounced rescan as the asker's
+	// onChange once it exists, the same split HookEnforcer already uses.
+	if !routerConfig.BypassAuth {
+		memAsker = serverask.New(nil)
+	}
+	askerArg := askerArgFor(memAsker)
+	var capabilityDecisions agentbroadcast.CapabilityDecisionProvider
+	if memAsker != nil {
+		capabilityDecisions = func(context.Context) []sdk.PendingCapabilityDecision {
+			return toPendingCapabilityDecisions(memAsker.Pending())
+		}
+	}
 
-	mcpHandler := provideMCPHandler(entClient, orch, sched, taskBroadcaster, projectBroadcaster, refineRunner, memRepo, memRetriever, grantUsageRepo, memAsker)
+	mcpHandler := provideMCPHandler(entClient, orch, sched, taskBroadcaster, projectBroadcaster, refineRunner, memRepo, memRetriever, grantUsageRepo, askerArg)
 
 	var histImporter *histsvc.Importer
 	var historyHandler *apihistory.Handler
@@ -562,7 +580,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 			Capabilities: repo.NewCapabilityRepo(entClient),
 			Grants:       repo.NewGrantRepo(entClient),
 			GrantUsage:   grantUsageRepo,
-			Asker:        memAsker,
+			Asker:        askerArg,
 		})
 	}
 
@@ -750,6 +768,8 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		Enricher:               agentEnricher,
 		HookStore:              hookStore,
 		HookEnforcer:           hookEnforcer,
+		CapabilityDecisions:    capabilityDecisions,
+		CapabilityAsker:        capabilityAskerFor(memAsker),
 		OAuthProvider:          oauthProvider,
 		UserRepo:               userRepo,
 		ApiKeyRepo:             apiKeyRepo,
@@ -798,17 +818,18 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	router := api.NewRouter(routerDeps)
 	server := provideServer(cfg, settingsSvc, router, ln)
 	return &ServerComponents{
-		API:          server,
-		Broadcaster:  broadcaster,
-		Merger:       agentMerger,
-		Orchestrator: orch,
-		Scheduler:    sched,
-		HistImporter: histImporter,
-		Baseline:     baselineProvider,
-		Enricher:     agentEnricher,
-		Eval:         evalService,
-		Settings:     settingsSvc,
-		Cleanup:      cleanup,
+		API:                 server,
+		Broadcaster:         broadcaster,
+		Merger:              agentMerger,
+		Orchestrator:        orch,
+		Scheduler:           sched,
+		HistImporter:        histImporter,
+		Baseline:            baselineProvider,
+		Enricher:            agentEnricher,
+		CapabilityDecisions: capabilityDecisions,
+		Eval:                evalService,
+		Settings:            settingsSvc,
+		Cleanup:             cleanup,
 	}, nil
 }
 
@@ -832,4 +853,36 @@ func activePluginIDs(pluginRepo repo.PluginRepo) func(context.Context) ([]string
 		}
 		return out, nil
 	}
+}
+
+// askerArgFor avoids assigning a nil *serverask.Asker straight into the interface, which would defeat memory.Gate.Authorize's `Asker == nil` check with a non-nil interface wrapping a nil pointer.
+func askerArgFor(asker *serverask.Asker) capability.Asker {
+	if asker == nil {
+		return nil
+	}
+	return asker
+}
+
+// capabilityAskerFor is askerArgFor for the router's narrower interface, and
+// exists for the same reason: the router tests `deps.CapabilityAsker != nil`.
+func capabilityAskerFor(asker *serverask.Asker) interface{ SetOnChange(func()) } {
+	if asker == nil {
+		return nil
+	}
+	return asker
+}
+
+func toPendingCapabilityDecisions(entries []askgate.Entry[serverask.Pending]) []sdk.PendingCapabilityDecision {
+	out := make([]sdk.PendingCapabilityDecision, len(entries))
+	for i, e := range entries {
+		out[i] = sdk.PendingCapabilityDecision{
+			ID:          e.ID,
+			Capability:  e.Meta.Capability,
+			Value:       e.Meta.Value,
+			Context:     e.Meta.Context,
+			Reason:      e.Meta.Reason,
+			RequestedAt: e.Meta.RequestedAt.UTC().Format(time.RFC3339),
+		}
+	}
+	return out
 }

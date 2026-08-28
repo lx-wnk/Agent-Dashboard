@@ -35,6 +35,24 @@ type broadcastFrame struct {
 	PendingCapabilityDecisions []sdk.PendingCapabilityDecision `json:"pendingCapabilityDecisions"`
 }
 
+// MarshalFrame renders one SSE envelope. Exported because the scan loop is not
+// the only producer — a hook event or a new capability ask pushes a frame
+// between ticks — and a second producer building the envelope by hand drops
+// whichever field it was written before.
+func MarshalFrame(agents []sdk.Agent, decisions []sdk.PendingCapabilityDecision) ([]byte, error) {
+	if agents == nil {
+		agents = []sdk.Agent{}
+	}
+	if decisions == nil {
+		decisions = emptyCapabilityDecisions
+	}
+	return json.Marshal(broadcastFrame{
+		Agents:                     agents,
+		Trend:                      emptyTrend,
+		PendingCapabilityDecisions: decisions,
+	})
+}
+
 // BaselineProvider returns the average per-session cost over the past 7 days
 // in USD, used by the agent health score's cost-spike component. A nil provider
 // (or one that returns 0) disables the cost penalty. It is called once per scan

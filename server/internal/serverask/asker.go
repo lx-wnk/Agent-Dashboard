@@ -86,6 +86,14 @@ func (a *Asker) Pending() []askgate.Entry[Pending] {
 	return a.store.List()
 }
 
+// SetOnChange installs the callback fired whenever the pending set changes.
+// The asker is built in the DI container, before the router that owns the
+// debounced rescan exists, so the callback arrives afterwards — the same
+// split HookEnforcer already uses.
+func (a *Asker) SetOnChange(fn func()) {
+	a.store.SetOnChange(fn)
+}
+
 // ErrInvalidDecision means Resolve was given a decision string that is
 // neither "allow" nor "deny".
 var ErrInvalidDecision = errors.New("serverask: decision must be \"allow\" or \"deny\"")

@@ -131,8 +131,20 @@ func (s *Store[T]) List() []Entry[T] {
 	return out
 }
 
+// SetOnChange installs the callback fired whenever the pending set changes.
+// A store is often built before the thing that wants to observe it exists.
+func (s *Store[T]) SetOnChange(fn func()) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.onChange = fn
+}
+
 func (s *Store[T]) changed() {
-	if s.onChange != nil {
-		s.onChange()
+	s.mu.Lock()
+	fn := s.onChange
+	s.mu.Unlock()
+	// Called outside the lock: a callback that reads this store would deadlock.
+	if fn != nil {
+		fn()
 	}
 }

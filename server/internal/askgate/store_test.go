@@ -151,7 +151,7 @@ func TestOnChangeFiresOnAddAndOnRemoval(t *testing.T) {
 }
 
 func TestConcurrentAskAndResolve(t *testing.T) {
-	s := New[int](2 * time.Second, nil)
+	s := New[int](2*time.Second, nil)
 	const n = 50
 	var wg sync.WaitGroup
 	var delivered, resolved, mismatched atomic.Int64
