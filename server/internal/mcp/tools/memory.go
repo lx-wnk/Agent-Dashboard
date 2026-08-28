@@ -1,0 +1,247 @@
+package tools
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/lx-wnk/agent-dashboard/server/internal/capability"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	mcp "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
+	"github.com/lx-wnk/agent-dashboard/server/internal/memory"
+)
+
+// MemoryDeps holds the dependencies required by the memory MCP tools.
+type MemoryDeps struct {
+	Repo         repo.MemoryRepo
+	Retriever    *memory.Retriever
+	Capabilities repo.CapabilityRepo
+	Grants       repo.GrantRepo
+}
+
+// RegisterMemoryTools registers the 2 memory MCP tools into the given registry.
+func RegisterMemoryTools(registry mcp.ToolRegistry, d MemoryDeps) {
+	registerMemorySearch(registry, d)
+	registerMemoryWrite(registry, d)
+}
+
+var memoryScopeEnum = []string{string(repo.ScopeGlobal), string(repo.ScopeProject), string(repo.ScopeApplication)}
+
+// parseMemoryScope builds a repo.Scope from the tool's "scope"/"scopeRef"
+// arguments, defaulting to global. An unrecognised scope kind, or a missing
+// ref for a non-global scope, fails closed rather than silently resolving to
+// some other scope's spaces.
+func parseMemoryScope(args map[string]any) (repo.Scope, error) {
+	kind := mcp.OptionalString(args, "scope")
+	if kind == "" {
+		kind = string(repo.ScopeGlobal)
+	}
+	ref := mcp.OptionalString(args, "scopeRef")
+	switch repo.ScopeKind(kind) {
+	case repo.ScopeGlobal:
+		return repo.GlobalScope(), nil
+	case repo.ScopeProject:
+		if ref == "" {
+			return repo.Scope{}, mcp.Fail(`scopeRef is required when scope is "project"`)
+		}
+		return repo.ProjectScope(ref), nil
+	case repo.ScopeApplication:
+		if ref == "" {
+			return repo.Scope{}, mcp.Fail(`scopeRef is required when scope is "application"`)
+		}
+		return repo.ApplicationScope(ref), nil
+	default:
+		return repo.Scope{}, mcp.Fail(fmt.Sprintf("scope must be one of %v", memoryScopeEnum))
+	}
+}
+
+// memoryContexts builds the capability-context chain for a request scoped to
+// scope: the scope's own context plus global, the level every grant chain
+// falls back to. This lets a project- or application-scoped grant win on
+// specificity while a global grant still backs up a scope that has none of
+// its own — the same union visibleSpaceScopes (retrieve.go) already applies
+// to which spaces are visible, mirrored here for which grants apply.
+func memoryContexts(scope repo.Scope) []capability.Context {
+	scope = scope.Normalize()
+	if scope.IsGlobal() {
+		return []capability.Context{{Kind: string(repo.ScopeGlobal)}}
+	}
+	return []capability.Context{
+		{Kind: string(scope.Kind), Ref: scope.Ref},
+		{Kind: string(repo.ScopeGlobal)},
+	}
+}
+
+// authorizeMemory resolves and enforces a capability.Decide request for
+// capName against value in scope's context chain. The MCP scope on
+// ToolScopeMap only authorises the caller's key to reach the transport; this
+// is the second, independent layer that authorises the action itself. A
+// capability catalogue lookup miss resolves to a zero-value CapabilityView
+// (empty Class), which capability.Decide's defaultEffect sends to deny —
+// the fail-closed behaviour SeedCapabilities exists to make the normal case.
+func authorizeMemory(ctx context.Context, d MemoryDeps, capName, value string, scope repo.Scope) error {
+	var capView capability.CapabilityView
+	if row, err := d.Capabilities.Get(ctx, capName); err == nil {
+		capView = capability.CapabilityView{Name: row.Name, Class: row.Class, EnforceableBy: row.EnforceableBy}
+	}
+
+	grantRows, err := d.Grants.ListForCapability(ctx, capName)
+	if err != nil {
+		return fmt.Errorf("list grants for %s: %w", capName, err)
+	}
+	grants := make([]capability.GrantView, len(grantRows))
+	for i, g := range grantRows {
+		grants[i] = capability.GrantView{
+			ID:                 g.ID,
+			Capability:         g.CapabilityName,
+			ContextKind:        g.ContextKind,
+			ContextRef:         g.ContextRef,
+			Pattern:            g.Pattern,
+			Mode:               g.Mode,
+			LimitCount:         g.LimitCount,
+			LimitWindowSeconds: g.LimitWindowSeconds,
+			ExpiresAt:          g.ExpiresAt,
+			RevokedAt:          g.RevokedAt,
+		}
+	}
+
+	req := capability.Request{Capability: capName, Value: value, Contexts: memoryContexts(scope)}
+	decision := capability.Decide(req, grants, capView)
+	// GrantView{} / 0: no rate limit is tracked for memory grants today, the
+	// same no-limit shape enforcer_server_test.go exercises for every
+	// non-rate-limited caller.
+	return capability.ServerEnforcer{}.Enforce(ctx, decision, capability.GrantView{}, 0)
+}
+
+func registerMemorySearch(registry mcp.ToolRegistry, d MemoryDeps) {
+	registry.Register(&mcp.ToolDef{
+		Name: "memory_search",
+		Description: "Search the system memory store for entries relevant to a query, ranked by " +
+			"lexical match, scope specificity, recency, confidence and kind.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"query":    map[string]any{"type": "string", "description": "Text to search for"},
+				"scope":    map[string]any{"type": "string", "enum": memoryScopeEnum, "description": "Visibility scope to search within (default global)"},
+				"scopeRef": map[string]any{"type": "string", "description": "Scope reference (project path or application id); required unless scope is global"},
+				"limit":    map[string]any{"type": "number", "description": "Max results to return (default 10, max 50)"},
+			},
+			"required": []string{"query"},
+		},
+		Handler: func(ctx context.Context, args map[string]any) (*mcp.ToolResult, error) {
+			query, err := mcp.StringArg(args, "query")
+			if err != nil {
+				return nil, err
+			}
+			scope, err := parseMemoryScope(args)
+			if err != nil {
+				return nil, err
+			}
+			// Read access is granted per scope, not per space — a search
+			// fans out across every space visible in scope, so there is no
+			// single space identity to match a grant pattern against. The
+			// empty value is capability.Match's documented wildcard.
+			if err := authorizeMemory(ctx, d, repo.CapabilityMemoryRead, "", scope); err != nil {
+				return nil, mcp.Fail("memory_search: " + err.Error())
+			}
+
+			limit := 0
+			if f, ok := mcp.OptionalFloat64(args, "limit"); ok {
+				limit = int(f)
+			}
+			entries, err := d.Retriever.Retrieve(ctx, memory.Query{Text: query, Scope: scope, Limit: limit})
+			if err != nil {
+				return nil, mcp.Fail("memory_search: " + err.Error())
+			}
+			return mcp.OK(map[string]any{"entries": entries})
+		},
+	})
+}
+
+func registerMemoryWrite(registry mcp.ToolRegistry, d MemoryDeps) {
+	registry.Register(&mcp.ToolDef{
+		Name:        "memory_write",
+		Description: "Write a new entry into an existing system memory space.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"spaceSlug":  map[string]any{"type": "string", "description": "Slug of the memory space to write into"},
+				"scope":      map[string]any{"type": "string", "enum": memoryScopeEnum, "description": "Scope the space lives in (default global)"},
+				"scopeRef":   map[string]any{"type": "string", "description": "Scope reference (project path or application id); required unless scope is global"},
+				"summary":    map[string]any{"type": "string", "description": "Short text pushed into a spawn's prompt"},
+				"content":    map[string]any{"type": "string", "description": "Full text retrievable on demand"},
+				"kind":       map[string]any{"type": "string", "enum": []string{"fact", "preference", "lesson", "entity", "pointer"}},
+				"sourceKind": map[string]any{"type": "string", "enum": []string{"agent", "user", "application", "import"}},
+				"sourceRef":  map[string]any{"type": "string", "description": "Origin identifier: stage-run id, application id, file path"},
+				"confidence": map[string]any{"type": "number", "description": "Confidence 0..1 (default 1)"},
+			},
+			"required": []string{"spaceSlug", "summary", "content", "kind", "sourceKind"},
+		},
+		Handler: func(ctx context.Context, args map[string]any) (*mcp.ToolResult, error) {
+			spaceSlug, err := mcp.StringArg(args, "spaceSlug")
+			if err != nil {
+				return nil, err
+			}
+			summary, err := mcp.StringArg(args, "summary")
+			if err != nil {
+				return nil, err
+			}
+			content, err := mcp.StringArg(args, "content")
+			if err != nil {
+				return nil, err
+			}
+			kind, err := mcp.StringArg(args, "kind")
+			if err != nil {
+				return nil, err
+			}
+			sourceKind, err := mcp.StringArg(args, "sourceKind")
+			if err != nil {
+				return nil, err
+			}
+			scope, err := parseMemoryScope(args)
+			if err != nil {
+				return nil, err
+			}
+
+			// The space must already exist — memory_write never creates one
+			// on the fly. Auto-creating here would let any caller with the
+			// MCP transport scope invent an arbitrary space identity, which
+			// no grant could have been written against in advance.
+			space, err := d.Repo.GetSpace(ctx, scope, spaceSlug)
+			if err != nil {
+				return nil, mcp.Fail("memory_write: unknown space " + spaceSlug + ": " + err.Error())
+			}
+
+			if err := authorizeMemory(ctx, d, repo.CapabilityMemoryWrite, spaceSlug, scope); err != nil {
+				return nil, mcp.Fail("memory_write: " + err.Error())
+			}
+
+			cleanSummary, cleanContent, err := memory.SanitizeForStore(summary, content)
+			if err != nil {
+				return nil, mcp.Fail("memory_write: " + err.Error())
+			}
+
+			confidence := 1.0
+			if f, ok := mcp.OptionalFloat64(args, "confidence"); ok {
+				confidence = f
+			}
+			var sourceRef *string
+			if s := mcp.OptionalString(args, "sourceRef"); s != "" {
+				sourceRef = &s
+			}
+
+			entry, err := d.Repo.CreateEntry(ctx, repo.CreateEntryInput{
+				SpaceID:    space.ID,
+				Summary:    cleanSummary,
+				Content:    cleanContent,
+				Kind:       kind,
+				SourceKind: sourceKind,
+				SourceRef:  sourceRef,
+				Confidence: confidence,
+			})
+			if err != nil {
+				return nil, mcp.Fail("memory_write: " + err.Error())
+			}
+			return mcp.OK(entry)
+		},
+	})
+}

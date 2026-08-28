@@ -47,14 +47,18 @@ var ToolScopeMap = map[string]string{
 	// keys:manage
 	"list_api_keys": "keys:manage", "create_api_key": "keys:manage",
 	"revoke_api_key": "keys:manage",
+	// memory:read / memory:write
+	"memory_search": "memory:read", "memory_write": "memory:write",
 }
 
 var scopeImplies = map[string][]string{
 	"tasks:read":       {},
 	"tasks:write":      {"tasks:read"},
 	"agent:coord":      {},
+	"memory:read":      {},
+	"memory:write":     {"memory:read"},
 	"pipeline:control": {"tasks:read", "agent:coord"},
-	"keys:manage":      {"tasks:read", "tasks:write", "pipeline:control", "agent:coord"},
+	"keys:manage":      {"tasks:read", "tasks:write", "pipeline:control", "agent:coord", "memory:read", "memory:write"},
 }
 
 // ResolveScopes expands scopes with their implied scopes.
