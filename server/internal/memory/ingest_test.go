@@ -75,3 +75,24 @@ func TestSanitizeForStoreEntirelySecretStillNonEmpty(t *testing.T) {
 		t.Errorf("expected a redaction marker, got %q", content)
 	}
 }
+
+func TestSanitizeForStoreContentKeepsLineStructure(t *testing.T) {
+	multiline := "step 1: do this\nstep 2: do that\n\nfunc example() {\n\treturn nil\n}"
+	_, content, err := memory.SanitizeForStore("summary", multiline)
+	if err != nil {
+		t.Fatalf("sanitize: %v", err)
+	}
+	if content != multiline {
+		t.Errorf("content lost its line structure: got %q, want %q", content, multiline)
+	}
+}
+
+func TestSanitizeForStoreSummaryStaysSingleLine(t *testing.T) {
+	summary, _, err := memory.SanitizeForStore("line one\nline two", "content")
+	if err != nil {
+		t.Fatalf("sanitize: %v", err)
+	}
+	if strings.Contains(summary, "\n") {
+		t.Errorf("summary must stay single-line — it cannot forge a prompt section boundary, got %q", summary)
+	}
+}
