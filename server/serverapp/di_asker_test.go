@@ -1,8 +1,13 @@
 package serverapp
 
 import (
+	"context"
+	"errors"
 	"testing"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/capability"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/memory"
 	"github.com/lx-wnk/agent-dashboard/server/internal/serverask"
 )
@@ -30,12 +35,44 @@ func TestAskerHelpersReturnGenuinelyNilInterfaces(t *testing.T) {
 	}
 }
 
-// TestGateBuiltLikeBypassAuthDeniesRatherThanPanics exercises the combination
-// the helper above protects: the Gate DI builds when no asker is wired must
-// answer an ask decision, not crash on one.
+// TestGateBuiltLikeBypassAuthDeniesRatherThanPanics runs the combination the
+// helper above protects: an ask decision against the Gate DI builds when no
+// asker is wired must return, not crash.
+//
+// An earlier version of this test only re-asserted that the interface was nil
+// — the same thing the test above already checks — so it proved neither
+// "denies" nor "rather than panics". Reaching Authorize is the point.
 func TestGateBuiltLikeBypassAuthDeniesRatherThanPanics(t *testing.T) {
-	gate := memory.Gate{Asker: askerArgFor(nil)}
-	if gate.Asker != nil {
-		t.Fatal("Gate.Asker is non-nil with no asker wired — Authorize would dereference it")
+	bundle, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer func() { _ = bundle.Client.Close() }()
+	ctx := context.Background()
+
+	capabilities := repo.NewCapabilityRepo(bundle.Client)
+	if repo.SeedCapabilities(ctx, capabilities) == 0 {
+		t.Fatal("seeded no capabilities — the gate would deny for the wrong reason")
+	}
+	grants := repo.NewGrantRepo(bundle.Client)
+	if _, err := grants.Create(ctx, repo.CreateGrantInput{
+		CapabilityName: repo.CapabilityMemoryRead,
+		Context:        repo.GrantContextFor(repo.GrantContextGlobal, ""),
+		Mode:           repo.GrantModeAsk,
+		GrantedBy:      "test",
+	}); err != nil {
+		t.Fatalf("create ask grant: %v", err)
+	}
+
+	gate := memory.Gate{
+		Capabilities: capabilities,
+		Grants:       grants,
+		GrantUsage:   repo.NewGrantUsageRepo(bundle.Client, bundle.WriteClient),
+		Asker:        askerArgFor(nil),
+	}
+
+	err = gate.Authorize(ctx, repo.CapabilityMemoryRead, "", repo.GlobalScope())
+	if !errors.Is(err, capability.ErrAskRequired) {
+		t.Fatalf("Authorize = %v, want ErrAskRequired — an ask with no asker must deny, not panic", err)
 	}
 }

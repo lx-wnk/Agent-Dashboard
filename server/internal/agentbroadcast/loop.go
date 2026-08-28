@@ -143,12 +143,7 @@ func Run(ctx context.Context, opts RunOptions) {
 				continue
 			}
 
-			frame := broadcastFrame{
-				Agents:                     agents,
-				Trend:                      emptyTrend,
-				PendingCapabilityDecisions: capabilityDecisionsOrEmpty(ctx, opts.CapabilityDecisions),
-			}
-			data, err := json.Marshal(frame)
+			data, err := MarshalFrame(agents, capabilityDecisionsOrEmpty(ctx, opts.CapabilityDecisions))
 			if err != nil {
 				slog.Error("agent marshal failed", "err", err)
 				continue
