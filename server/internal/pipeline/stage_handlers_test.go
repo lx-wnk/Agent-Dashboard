@@ -397,3 +397,98 @@ func TestAgentStageHandler_ZeroMemoryBudgetDisablesInjection(t *testing.T) {
 	require.Equal(t, "test", captured.Prompt)
 	require.False(t, retrieveCalled, "a non-positive budget disables injection before retrieval is even attempted")
 }
+
+// TestAgentStageHandler_EffortFromAdapterConfigReachesSpawnArgs verifies the
+// per-stage reasoning-effort setting travels from the resolved spawner's
+// adapter_config through SpawnAgentOptions into the actual claude CLI args.
+func TestAgentStageHandler_EffortFromAdapterConfigReachesSpawnArgs(t *testing.T) {
+	var captured pipeline.SpawnAgentOptions
+	spawnFn := func(opts pipeline.SpawnAgentOptions) (pipeline.SpawnResult, error) {
+		captured = opts
+		return pipeline.SpawnResult{PID: 1}, nil
+	}
+	handler := pipeline.NewAgentStageHandlerForTest("implementation", spawnFn)
+
+	ctx := &pipeline.StageContext{
+		Ctx:               context.Background(),
+		Task:              &ent.Task{Title: "t", Cwd: "/tmp/effort-a"},
+		StageRun:          &ent.StageRun{Stage: "implementation", ID: "sr-effort-1"},
+		RecordAudit:       func(string, map[string]any) {},
+		RequestPermission: func(string, string, string) *ent.PermissionRequest { return nil },
+		ResolveSpawner: func(context.Context, string, string) (*ent.Spawner, error) {
+			return &ent.Spawner{AdapterType: "claude", AdapterConfig: map[string]string{"effort": "high"}}, nil
+		},
+	}
+
+	_, err := handler.Execute(ctx)
+	require.NoError(t, err)
+	require.Equal(t, "high", captured.Effort)
+	require.Contains(t, pipeline.BuildSpawnArgs(captured), "--effort")
+}
+
+// TestAgentStageHandler_UnrecognizedEffortOmitted is the fail-closed half of
+// the same decision: a stored value outside the CLI's known levels must not
+// be guessed into a flag the CLI would reject — the spawn proceeds without
+// --effort entirely.
+func TestAgentStageHandler_UnrecognizedEffortOmitted(t *testing.T) {
+	var captured pipeline.SpawnAgentOptions
+	spawnFn := func(opts pipeline.SpawnAgentOptions) (pipeline.SpawnResult, error) {
+		captured = opts
+		return pipeline.SpawnResult{PID: 1}, nil
+	}
+	handler := pipeline.NewAgentStageHandlerForTest("implementation", spawnFn)
+
+	ctx := &pipeline.StageContext{
+		Ctx:               context.Background(),
+		Task:              &ent.Task{Title: "t", Cwd: "/tmp/effort-b"},
+		StageRun:          &ent.StageRun{Stage: "implementation", ID: "sr-effort-2"},
+		RecordAudit:       func(string, map[string]any) {},
+		RequestPermission: func(string, string, string) *ent.PermissionRequest { return nil },
+		ResolveSpawner: func(context.Context, string, string) (*ent.Spawner, error) {
+			return &ent.Spawner{AdapterType: "claude", AdapterConfig: map[string]string{"effort": "ultra-mega"}}, nil
+		},
+	}
+
+	_, err := handler.Execute(ctx)
+	require.NoError(t, err)
+	require.Empty(t, captured.Effort, "an unrecognised effort value must never be forwarded")
+	require.NotContains(t, pipeline.BuildSpawnArgs(captured), "--effort")
+}
+
+// TestAgentStageHandler_UnsupportedAdapterEffortNeverForwarded proves effort
+// never reaches a non-claude adapter, even when adapter_config carries a
+// value — LLMSpawnArgs has no effort field, so this is enforced structurally,
+// but the test pins the observable behaviour at the wire.
+func TestAgentStageHandler_UnsupportedAdapterEffortNeverForwarded(t *testing.T) {
+	dir := t.TempDir()
+	captureFile := filepath.Join(dir, "capture.json")
+	scriptPath := filepath.Join(dir, "fake-adapter.sh")
+	script := "#!/bin/sh\ncat > " + captureFile + "\necho '{}'\n"
+	require.NoError(t, os.WriteFile(scriptPath, []byte(script), 0o755))
+
+	handler := pipeline.NewAgentStageHandlerForTest("implementation", func(pipeline.SpawnAgentOptions) (pipeline.SpawnResult, error) {
+		t.Fatal("native spawnFn must not be called on the adapter path")
+		return pipeline.SpawnResult{}, nil
+	})
+
+	ctx := &pipeline.StageContext{
+		Ctx:               context.Background(),
+		Task:              &ent.Task{Title: "t", Cwd: "/tmp/effort-c"},
+		StageRun:          &ent.StageRun{Stage: "implementation", ID: "sr-effort-3"},
+		RecordAudit:       func(string, map[string]any) {},
+		RequestPermission: func(string, string, string) *ent.PermissionRequest { return nil },
+		ResolveSpawner: func(context.Context, string, string) (*ent.Spawner, error) {
+			return &ent.Spawner{AdapterType: "custom", Command: scriptPath, AdapterConfig: map[string]string{"effort": "high"}}, nil
+		},
+	}
+
+	_, err := handler.Execute(ctx)
+	require.NoError(t, err)
+
+	raw, err := os.ReadFile(captureFile)
+	require.NoError(t, err, "the adapter must have been invoked with args on stdin")
+	var sent map[string]any
+	require.NoError(t, json.Unmarshal(raw, &sent))
+	_, hasEffort := sent["effort"]
+	require.False(t, hasEffort, "unsupported adapter must not receive the effort argument at all")
+}
