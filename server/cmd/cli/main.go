@@ -53,6 +53,7 @@ authenticate against POST /api/mcp.`,
 		newConfigCmd(&cfg),
 		newSettingsCmd(),
 		newPluginsCmd(),
+		newGrantsCmd(),
 	)
 
 	if err := root.Execute(); err != nil {

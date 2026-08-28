@@ -1,0 +1,162 @@
+package main
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	"github.com/lx-wnk/agent-dashboard/server/internal/memory"
+)
+
+func TestParseGrantScope(t *testing.T) {
+	cases := []struct {
+		name    string
+		in      string
+		want    repo.GrantContext
+		wantErr bool
+	}{
+		{name: "bare global", in: "global", want: repo.GrantContext{Kind: "global", Ref: ""}},
+		{name: "project with path ref", in: "project:/home/x", want: repo.GrantContext{Kind: "project", Ref: "/home/x"}},
+		{name: "task ref containing a colon splits on first only", in: "task:a:b", want: repo.GrantContext{Kind: "task", Ref: "a:b"}},
+		{name: "unknown kind rejected", in: "nope:x", wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := parseGrantScope(tc.in)
+			if tc.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestParseGrantScope_UnknownKind_ErrorNamesValidKinds(t *testing.T) {
+	_, err := parseGrantScope("nope:x")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "global")
+}
+
+// A non-empty ref on the global context is not rejected by parseGrantScope
+// (the kind alone is valid) — GrantRepo.Create is the layer that rejects it.
+func TestAddGrant_GlobalScopeWithRef_RejectedByRepoCreate(t *testing.T) {
+	store, err := openDBStore(t.TempDir() + "/test.db")
+	require.NoError(t, err)
+	defer store.Close()
+	ctx := context.Background()
+
+	gctx, err := parseGrantScope("global:x")
+	require.NoError(t, err)
+	assert.Equal(t, "global", gctx.Kind)
+	assert.Equal(t, "x", gctx.Ref)
+
+	_, err = addGrant(ctx, store, repo.CapabilityMemoryRead, grantAddOpts{Scope: "global:x", Mode: repo.GrantModeAllow})
+	require.Error(t, err)
+}
+
+func TestAddGrant_RejectsUnknownCapability(t *testing.T) {
+	store, err := openDBStore(t.TempDir() + "/test.db")
+	require.NoError(t, err)
+	defer store.Close()
+	ctx := context.Background()
+
+	_, err = addGrant(ctx, store, "not.a.real.capability", grantAddOpts{Scope: "global", Mode: repo.GrantModeAllow})
+	require.Error(t, err)
+
+	rows, err := store.grants.List(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, rows)
+}
+
+func TestAddGrant_SucceedsForSeededCapability(t *testing.T) {
+	store, err := openDBStore(t.TempDir() + "/test.db")
+	require.NoError(t, err)
+	defer store.Close()
+	ctx := context.Background()
+
+	g, err := addGrant(ctx, store, repo.CapabilityMemoryRead, grantAddOpts{
+		Scope:   "global",
+		Mode:    repo.GrantModeAllow,
+		Pattern: "",
+	})
+	require.NoError(t, err)
+
+	rows, err := store.grants.List(ctx)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, g.ID, rows[0].ID)
+	assert.Equal(t, repo.CapabilityMemoryRead, rows[0].CapabilityName)
+	assert.Equal(t, repo.GrantModeAllow, rows[0].Mode)
+	assert.Equal(t, "global", rows[0].ContextKind)
+	assert.Equal(t, "", rows[0].ContextRef)
+	assert.Equal(t, "", rows[0].Pattern)
+}
+
+func TestAddGrant_ExpiresIn(t *testing.T) {
+	store, err := openDBStore(t.TempDir() + "/test.db")
+	require.NoError(t, err)
+	defer store.Close()
+	ctx := context.Background()
+
+	before := time.Now()
+	g, err := addGrant(ctx, store, repo.CapabilityMemoryRead, grantAddOpts{
+		Scope:     "global",
+		Mode:      repo.GrantModeAllow,
+		ExpiresIn: "1h",
+	})
+	require.NoError(t, err)
+	after := time.Now()
+
+	require.NotNil(t, g.ExpiresAt)
+	assert.True(t, g.ExpiresAt.After(before.Add(59*time.Minute)))
+	assert.True(t, g.ExpiresAt.Before(after.Add(61*time.Minute)))
+}
+
+func TestRevokeGrant_TombstonesNotDeletes(t *testing.T) {
+	store, err := openDBStore(t.TempDir() + "/test.db")
+	require.NoError(t, err)
+	defer store.Close()
+	ctx := context.Background()
+
+	g, err := addGrant(ctx, store, repo.CapabilityMemoryRead, grantAddOpts{Scope: "global", Mode: repo.GrantModeAllow})
+	require.NoError(t, err)
+
+	require.NoError(t, store.grants.Revoke(ctx, g.ID, "cli:tester"))
+
+	rows, err := store.grants.List(ctx)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.NotNil(t, rows[0].RevokedAt)
+	assert.Equal(t, "cli:tester", rows[0].RevokedBy)
+}
+
+// TestGrantCLI_OpensTheAuthorizeGate is the acceptance criterion for this
+// unit: memory.Authorize denies with no grant present, and a grant created
+// through the CLI's own add helper makes the identical call succeed.
+func TestGrantCLI_OpensTheAuthorizeGate(t *testing.T) {
+	store, err := openDBStore(t.TempDir() + "/test.db")
+	require.NoError(t, err)
+	defer store.Close()
+	ctx := context.Background()
+
+	require.NotZero(t, repo.SeedCapabilities(ctx, store.caps))
+
+	err = memory.Authorize(ctx, store.caps, store.grants, store.grantUsage, repo.CapabilityMemoryRead, "", repo.GlobalScope())
+	require.Error(t, err, "no grant exists yet — the gate must deny")
+
+	_, err = addGrant(ctx, store, repo.CapabilityMemoryRead, grantAddOpts{
+		Scope:   "global",
+		Mode:    repo.GrantModeAllow,
+		Pattern: "",
+	})
+	require.NoError(t, err)
+
+	err = memory.Authorize(ctx, store.caps, store.grants, store.grantUsage, repo.CapabilityMemoryRead, "", repo.GlobalScope())
+	assert.NoError(t, err, "the grant just created must be the one Authorize matches")
+}
