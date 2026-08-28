@@ -132,9 +132,13 @@ func IndexNotes(
 		summary := firstLine(body, summaryMaxRunes)
 		cleanSummary, cleanContent, err := memory.SanitizeForStore(summary, notePath)
 		if err != nil {
-			// A note whose derived content is empty after sanitizing must
-			// not become a silent successful index.
-			return indexed, fmt.Errorf("obsidian.IndexNotes: sanitize %s: %w", notePath, err)
+			// An empty note (or one that sanitizes to empty) is ordinary
+			// vault content, not invalid input worth aborting the whole run
+			// over — every note after it in iteration order would otherwise
+			// never be reached. Skip it; indexed already counts only what
+			// was actually written, so the return value stays honest
+			// without silently claiming this one succeeded.
+			continue
 		}
 
 		sourceRef := notePath

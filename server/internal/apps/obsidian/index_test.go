@@ -307,6 +307,47 @@ func TestIndexRequiresObsidianReadGrant(t *testing.T) {
 	}
 }
 
+func TestEmptyNoteIsSkippedNotAborted(t *testing.T) {
+	mem, caps, grants, grantUsage, ctx := newIndexTestDeps(t)
+	grantMemoryWrite(t, ctx, grants)
+	grantObsidianSearch(t, ctx, grants)
+	grantObsidianRead(t, ctx, grants)
+	spaceID := *createTestSpace(t, ctx, mem)
+
+	ts, _ := newFakeVault(map[string]string{
+		"root/a.md": "first note",
+		"root/b.md": "", // empty — must not abort indexing of a.md/c.md
+		"root/c.md": "third note",
+	})
+	defer ts.Close()
+	client := newTestClient(t, ts, "root")
+
+	count, err := obsidian.IndexNotes(ctx, client, mem, caps, grants, grantUsage, spaceID)
+	if err != nil {
+		t.Fatalf("IndexNotes: want the empty note skipped rather than aborting the run, got error: %v", err)
+	}
+	if count != 2 {
+		t.Fatalf("IndexNotes: want 2 indexed (a.md and c.md, b.md skipped), got %d", count)
+	}
+
+	entries, err := mem.ListValid(ctx, spaceID, time.Now())
+	if err != nil {
+		t.Fatalf("ListValid: %v", err)
+	}
+	seen := make(map[string]bool, len(entries))
+	for _, e := range entries {
+		if e.SourceRef != nil {
+			seen[*e.SourceRef] = true
+		}
+	}
+	if !seen["a.md"] || !seen["c.md"] {
+		t.Fatalf("ListValid: want both a.md and c.md indexed, got %+v", entries)
+	}
+	if seen["b.md"] {
+		t.Fatal("ListValid: the empty note must not produce an entry")
+	}
+}
+
 func TestTransientReadFailureDoesNotExpireStalePointer(t *testing.T) {
 	mem, caps, grants, grantUsage, ctx := newIndexTestDeps(t)
 	grantMemoryWrite(t, ctx, grants)
