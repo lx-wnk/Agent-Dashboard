@@ -376,17 +376,25 @@ func (b *HookEnforcer) hold(ctx context.Context, p preToolPayload) (string, bool
 	}
 
 	b.mu.Lock()
-	if !b.mayHoldLocked(p.SessionID, p.CWD) || b.holdsFor(p.SessionID) >= maxHoldsPerSession {
+	if !b.mayHoldLocked(p.SessionID, p.CWD) || b.holdsForLocked(p.SessionID) >= maxHoldsPerSession {
 		b.mu.Unlock()
 		return "", false
 	}
 	// A held call supersedes an older terminal notice for the same session: the
 	// decision is ours again.
 	delete(b.notices, p.SessionID)
-	b.mu.Unlock()
-
+	// The count check above and this registration must be atomic w.r.t. each
+	// other, or concurrent holds for one session all read the same stale count
+	// and all register past the cap — so both stay under b.mu, and the notice
+	// delete lands together with the registration instead of a moment ahead of
+	// it. Wait is called only after b.mu is released: it blocks, and must never
+	// do so while holding a lock another goroutine needs.
 	b.store.SetHoldFor(b.holdFor)
-	decision, ok := b.store.Ask(ctx, id, meta)
+	holdFor, ch := b.store.Register(id, meta)
+	b.mu.Unlock()
+	b.changed()
+
+	decision, ok := b.store.Wait(ctx, id, holdFor, ch)
 	if !ok && ctx.Err() == nil {
 		// Claude Code draws its own prompt for this exact call next; the
 		// Notification that follows is attributed to it.
@@ -483,10 +491,11 @@ func (b *HookEnforcer) mayHoldLocked(sessionID, cwd string) bool {
 	return a.cwd == "" || cwd == "" || a.cwd == cwd
 }
 
-// holdsFor counts requests currently held for sessionID. It reads the store's
-// own snapshot rather than a field of b, so — unlike mayHoldLocked — it does
-// not require b.mu to be held.
-func (b *HookEnforcer) holdsFor(sessionID string) int {
+// holdsForLocked counts requests currently held for sessionID. It reads the
+// store's own snapshot rather than a field of b, but the count is only valid
+// as an admission check if the caller holds b.mu across it and whatever
+// registration follows — see hold.
+func (b *HookEnforcer) holdsForLocked(sessionID string) int {
 	n := 0
 	for _, e := range b.store.List() {
 		if e.Meta.sessionID == sessionID {

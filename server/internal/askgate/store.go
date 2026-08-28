@@ -68,29 +68,43 @@ func (s *Store[T]) SetHoldFor(d time.Duration) {
 	s.mu.Unlock()
 }
 
-// Ask registers id and meta as pending and blocks until Resolve delivers a
-// decision, the hold times out, or ctx ends.
+// Register adds id/meta to the pending set and returns the handle Wait needs
+// to block for its decision. It captures the store's current HoldFor at
+// registration time, exactly as Ask always has.
 //
-// ok is false for every way of getting no decision — timeout or ctx.Done —
-// and callers map that outcome to their own fallback; this package has none.
+// Splitting registration out of Ask lets a caller make it atomic with some
+// state of its own — HookEnforcer's per-session cap does exactly that,
+// calling Register while still holding its own lock and calling Wait only
+// after releasing it, since Wait blocks and must never run under a lock
+// another goroutine needs.
 //
-// Ask panics if id is already pending: overwriting it would let the first
-// caller's cleanup delete the second caller's entry out from under it, which
-// starves the second Ask to its own timeout with no error anywhere. Callers
-// are expected to generate unique ids (both callers today use uuid.New()), so
-// a collision is a caller bug, not a runtime condition to handle.
-func (s *Store[T]) Ask(ctx context.Context, id string, meta T) (decision string, ok bool) {
-	ch := make(chan string, 1)
+// Register panics if id is already pending: overwriting it would let the
+// first caller's cleanup delete the second caller's entry out from under it,
+// which starves the second wait to its own timeout with no error anywhere.
+// Callers are expected to generate unique ids (both callers today use
+// uuid.New()), so a collision is a caller bug, not a runtime condition to
+// handle.
+func (s *Store[T]) Register(id string, meta T) (holdFor time.Duration, ch chan string) {
 	s.mu.Lock()
 	if _, exists := s.pending[id]; exists {
 		s.mu.Unlock()
-		panic("askgate: Ask called with an id already pending: " + id)
+		panic("askgate: Register called with an id already pending: " + id)
 	}
-	holdFor := s.holdFor
+	holdFor = s.holdFor
+	ch = make(chan string, 1)
 	s.pending[id] = &held[T]{meta: meta, ch: ch}
 	s.mu.Unlock()
-	s.changed()
+	return holdFor, ch
+}
 
+// Wait blocks for id's decision on the handle Register returned, until
+// Resolve delivers one, holdFor elapses, or ctx ends — then cleans up the
+// pending entry regardless of which. See Ask for callers with no reason to
+// keep registration and waiting apart.
+//
+// ok is false for every way of getting no decision — timeout or ctx.Done —
+// and callers map that outcome to their own fallback; this package has none.
+func (s *Store[T]) Wait(ctx context.Context, id string, holdFor time.Duration, ch chan string) (decision string, ok bool) {
 	defer func() {
 		s.mu.Lock()
 		delete(s.pending, id)
@@ -106,6 +120,15 @@ func (s *Store[T]) Ask(ctx context.Context, id string, meta T) (decision string,
 	case <-ctx.Done():
 		return s.lapseOrStolen(id, ch)
 	}
+}
+
+// Ask registers id and meta as pending and blocks until Resolve delivers a
+// decision, the hold times out, or ctx ends. It is Register immediately
+// followed by Wait, for callers with no reason to keep the two apart.
+func (s *Store[T]) Ask(ctx context.Context, id string, meta T) (decision string, ok bool) {
+	holdFor, ch := s.Register(id, meta)
+	s.changed()
+	return s.Wait(ctx, id, holdFor, ch)
 }
 
 // lapseOrStolen resolves the ambiguity a timeout or ctx.Done leaves open: if
