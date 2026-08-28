@@ -25,6 +25,7 @@ type fakeVault struct {
 	mu    sync.Mutex
 	notes map[string]string
 	calls int
+	reads []string // root-relative paths every /vault/ GET actually requested, in order
 }
 
 func newFakeVault(notes map[string]string) (*httptest.Server, *fakeVault) {
@@ -50,6 +51,7 @@ func newFakeVault(notes map[string]string) (*httptest.Server, *fakeVault) {
 		defer fv.mu.Unlock()
 		fv.calls++
 		path := strings.TrimPrefix(r.URL.Path, "/vault/")
+		fv.reads = append(fv.reads, path)
 		content, ok := fv.notes[path]
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
@@ -71,6 +73,17 @@ func (fv *fakeVault) callCount() int {
 	fv.mu.Lock()
 	defer fv.mu.Unlock()
 	return fv.calls
+}
+
+func (fv *fakeVault) wasRead(path string) bool {
+	fv.mu.Lock()
+	defer fv.mu.Unlock()
+	for _, p := range fv.reads {
+		if p == path {
+			return true
+		}
+	}
+	return false
 }
 
 func newTestClient(t *testing.T, ts *httptest.Server, vaultRoot string) *obsidian.Client {
@@ -400,4 +413,39 @@ func TestTransientReadFailureDoesNotExpireStalePointer(t *testing.T) {
 		}
 	}
 	t.Fatal("pointer was expired on a transient read failure (500), not a confirmed 404")
+}
+
+func TestSearchResultOutsideVaultRootIsNotReadOrIndexed(t *testing.T) {
+	mem, caps, grants, grantUsage, ctx := newIndexTestDeps(t)
+	grantMemoryWrite(t, ctx, grants)
+	grantObsidianSearch(t, ctx, grants)
+	grantObsidianRead(t, ctx, grants)
+	spaceID := *createTestSpace(t, ctx, mem)
+
+	ts, fv := newFakeVault(map[string]string{
+		"root/inside.md":       "inside content",
+		"elsewhere/outside.md": "outside content — must never be read or indexed",
+	})
+	defer ts.Close()
+	client := newTestClient(t, ts, "root")
+
+	count, err := obsidian.IndexNotes(ctx, client, mem, caps, grants, grantUsage, spaceID)
+	if err != nil {
+		t.Fatalf("IndexNotes: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("IndexNotes: want 1 indexed (only the in-root note), got %d", count)
+	}
+
+	entries, err := mem.ListValid(ctx, spaceID, time.Now())
+	if err != nil {
+		t.Fatalf("ListValid: %v", err)
+	}
+	if len(entries) != 1 || entries[0].SourceRef == nil || *entries[0].SourceRef != "inside.md" {
+		t.Fatalf("ListValid: want exactly the in-root note indexed, got %+v", entries)
+	}
+
+	if fv.wasRead("elsewhere/outside.md") {
+		t.Fatal("a search result outside VaultRoot was read — pathUnderRoot confinement did not hold")
+	}
 }
