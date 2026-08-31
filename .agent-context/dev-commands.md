@@ -10,7 +10,7 @@ task build         # Compile binary → bin/agent-dashboard
 task test          # Run all tests (sdk + server, race detector)
 task lint          # golangci-lint (sdk + server)
 task generate      # Regenerate ent schemas + tygo TS types (no DI codegen — DI is hand-written in cmd/serve/di.go)
-task fmt           # gofmt all Go code
+task fmt           # format all Go code (same formatter task lint checks)
 task vuln          # govulncheck
 ```
 
