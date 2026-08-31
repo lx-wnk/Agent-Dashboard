@@ -64,20 +64,6 @@ func (_c *TaskPermissionCreate) SetNillableGranted(v *bool) *TaskPermissionCreat
 	return _c
 }
 
-// SetPreApproved sets the "pre_approved" field.
-func (_c *TaskPermissionCreate) SetPreApproved(v bool) *TaskPermissionCreate {
-	_c.mutation.SetPreApproved(v)
-	return _c
-}
-
-// SetNillablePreApproved sets the "pre_approved" field if the given value is not nil.
-func (_c *TaskPermissionCreate) SetNillablePreApproved(v *bool) *TaskPermissionCreate {
-	if v != nil {
-		_c.SetPreApproved(*v)
-	}
-	return _c
-}
-
 // SetManualOverride sets the "manual_override" field.
 func (_c *TaskPermissionCreate) SetManualOverride(v bool) *TaskPermissionCreate {
 	_c.mutation.SetManualOverride(v)
@@ -198,10 +184,6 @@ func (_c *TaskPermissionCreate) defaults() {
 		v := taskpermission.DefaultGranted
 		_c.mutation.SetGranted(v)
 	}
-	if _, ok := _c.mutation.PreApproved(); !ok {
-		v := taskpermission.DefaultPreApproved
-		_c.mutation.SetPreApproved(v)
-	}
 	if _, ok := _c.mutation.ManualOverride(); !ok {
 		v := taskpermission.DefaultManualOverride
 		_c.mutation.SetManualOverride(v)
@@ -222,9 +204,6 @@ func (_c *TaskPermissionCreate) check() error {
 	}
 	if _, ok := _c.mutation.Granted(); !ok {
 		return &ValidationError{Name: "granted", err: errors.New(`ent: missing required field "TaskPermission.granted"`)}
-	}
-	if _, ok := _c.mutation.PreApproved(); !ok {
-		return &ValidationError{Name: "pre_approved", err: errors.New(`ent: missing required field "TaskPermission.pre_approved"`)}
 	}
 	if _, ok := _c.mutation.ManualOverride(); !ok {
 		return &ValidationError{Name: "manual_override", err: errors.New(`ent: missing required field "TaskPermission.manual_override"`)}
@@ -282,10 +261,6 @@ func (_c *TaskPermissionCreate) createSpec() (*TaskPermission, *sqlgraph.CreateS
 	if value, ok := _c.mutation.Granted(); ok {
 		_spec.SetField(taskpermission.FieldGranted, field.TypeBool, value)
 		_node.Granted = value
-	}
-	if value, ok := _c.mutation.PreApproved(); ok {
-		_spec.SetField(taskpermission.FieldPreApproved, field.TypeBool, value)
-		_node.PreApproved = value
 	}
 	if value, ok := _c.mutation.ManualOverride(); ok {
 		_spec.SetField(taskpermission.FieldManualOverride, field.TypeBool, value)
@@ -415,18 +390,6 @@ func (u *TaskPermissionUpsert) SetGranted(v bool) *TaskPermissionUpsert {
 // UpdateGranted sets the "granted" field to the value that was provided on create.
 func (u *TaskPermissionUpsert) UpdateGranted() *TaskPermissionUpsert {
 	u.SetExcluded(taskpermission.FieldGranted)
-	return u
-}
-
-// SetPreApproved sets the "pre_approved" field.
-func (u *TaskPermissionUpsert) SetPreApproved(v bool) *TaskPermissionUpsert {
-	u.Set(taskpermission.FieldPreApproved, v)
-	return u
-}
-
-// UpdatePreApproved sets the "pre_approved" field to the value that was provided on create.
-func (u *TaskPermissionUpsert) UpdatePreApproved() *TaskPermissionUpsert {
-	u.SetExcluded(taskpermission.FieldPreApproved)
 	return u
 }
 
@@ -605,20 +568,6 @@ func (u *TaskPermissionUpsertOne) SetGranted(v bool) *TaskPermissionUpsertOne {
 func (u *TaskPermissionUpsertOne) UpdateGranted() *TaskPermissionUpsertOne {
 	return u.Update(func(s *TaskPermissionUpsert) {
 		s.UpdateGranted()
-	})
-}
-
-// SetPreApproved sets the "pre_approved" field.
-func (u *TaskPermissionUpsertOne) SetPreApproved(v bool) *TaskPermissionUpsertOne {
-	return u.Update(func(s *TaskPermissionUpsert) {
-		s.SetPreApproved(v)
-	})
-}
-
-// UpdatePreApproved sets the "pre_approved" field to the value that was provided on create.
-func (u *TaskPermissionUpsertOne) UpdatePreApproved() *TaskPermissionUpsertOne {
-	return u.Update(func(s *TaskPermissionUpsert) {
-		s.UpdatePreApproved()
 	})
 }
 
@@ -977,20 +926,6 @@ func (u *TaskPermissionUpsertBulk) SetGranted(v bool) *TaskPermissionUpsertBulk 
 func (u *TaskPermissionUpsertBulk) UpdateGranted() *TaskPermissionUpsertBulk {
 	return u.Update(func(s *TaskPermissionUpsert) {
 		s.UpdateGranted()
-	})
-}
-
-// SetPreApproved sets the "pre_approved" field.
-func (u *TaskPermissionUpsertBulk) SetPreApproved(v bool) *TaskPermissionUpsertBulk {
-	return u.Update(func(s *TaskPermissionUpsert) {
-		s.SetPreApproved(v)
-	})
-}
-
-// UpdatePreApproved sets the "pre_approved" field to the value that was provided on create.
-func (u *TaskPermissionUpsertBulk) UpdatePreApproved() *TaskPermissionUpsertBulk {
-	return u.Update(func(s *TaskPermissionUpsert) {
-		s.UpdatePreApproved()
 	})
 }
 

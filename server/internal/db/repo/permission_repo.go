@@ -61,7 +61,6 @@ type CreateTaskPermissionInput struct {
 	Tool           string
 	Pattern        *string
 	Granted        bool
-	PreApproved    bool
 	ManualOverride bool
 	ExpiresAt      *time.Time
 	// DecidedBy identifies who approved this grant. An empty value is treated
@@ -89,7 +88,6 @@ func (r *entPermissionRepo) CreateTaskPermission(ctx context.Context, in CreateT
 		SetTaskID(in.TaskID).
 		SetTool(in.Tool).
 		SetGranted(in.Granted).
-		SetPreApproved(in.PreApproved).
 		SetManualOverride(in.ManualOverride)
 	if in.Pattern != nil {
 		q = q.SetPattern(*in.Pattern)
@@ -128,7 +126,6 @@ func (r *entPermissionRepo) BulkGrantPermissions(ctx context.Context, taskID str
 			Tool:           e.Tool,
 			Pattern:        e.Pattern,
 			Granted:        true,
-			PreApproved:    true,
 			ManualOverride: e.ManualOverride,
 			ExpiresAt:      e.ExpiresAt,
 			DecidedBy:      e.DecidedBy,

@@ -69,7 +69,6 @@ async function submitGrant(): Promise<void> {
       <div v-for="p in permissions" :key="p.id" class="flex gap-2.5 px-2.5 py-1.5 text-xs border-b border-line">
         <span class="font-semibold text-fg min-w-[80px]">{{ p.tool }}</span>
         <span v-if="p.pattern" class="font-mono text-fg-mute flex-1">{{ p.pattern }}</span>
-        <span class="text-[10px] text-fg-mute uppercase">{{ p.preApproved ? 'pre-approved' : 'runtime' }}</span>
         <span class="text-[10px] text-fg-mute">{{ p.decidedBy }}</span>
       </div>
     </div>

@@ -22,8 +22,6 @@ const (
 	FieldPattern = "pattern"
 	// FieldGranted holds the string denoting the granted field in the database.
 	FieldGranted = "granted"
-	// FieldPreApproved holds the string denoting the pre_approved field in the database.
-	FieldPreApproved = "pre_approved"
 	// FieldManualOverride holds the string denoting the manual_override field in the database.
 	FieldManualOverride = "manual_override"
 	// FieldDecidedBy holds the string denoting the decided_by field in the database.
@@ -54,7 +52,6 @@ var Columns = []string{
 	FieldTool,
 	FieldPattern,
 	FieldGranted,
-	FieldPreApproved,
 	FieldManualOverride,
 	FieldDecidedBy,
 	FieldRequestedAt,
@@ -75,8 +72,6 @@ func ValidColumn(column string) bool {
 var (
 	// DefaultGranted holds the default value on creation for the "granted" field.
 	DefaultGranted bool
-	// DefaultPreApproved holds the default value on creation for the "pre_approved" field.
-	DefaultPreApproved bool
 	// DefaultManualOverride holds the default value on creation for the "manual_override" field.
 	DefaultManualOverride bool
 	// DefaultRequestedAt holds the default value on creation for the "requested_at" field.
@@ -109,11 +104,6 @@ func ByPattern(opts ...sql.OrderTermOption) OrderOption {
 // ByGranted orders the results by the granted field.
 func ByGranted(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldGranted, opts...).ToFunc()
-}
-
-// ByPreApproved orders the results by the pre_approved field.
-func ByPreApproved(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldPreApproved, opts...).ToFunc()
 }
 
 // ByManualOverride orders the results by the manual_override field.

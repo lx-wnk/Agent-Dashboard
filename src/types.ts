@@ -249,7 +249,6 @@ export interface TaskPermission {
   tool: string
   pattern: string | null
   granted: boolean
-  preApproved: boolean
   requestedAt: string
   decidedAt: string | null
   decidedBy: 'user' | 'auto' | null

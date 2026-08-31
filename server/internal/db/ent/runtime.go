@@ -623,16 +623,12 @@ func init() {
 	taskpermissionDescGranted := taskpermissionFields[4].Descriptor()
 	// taskpermission.DefaultGranted holds the default value on creation for the granted field.
 	taskpermission.DefaultGranted = taskpermissionDescGranted.Default.(bool)
-	// taskpermissionDescPreApproved is the schema descriptor for pre_approved field.
-	taskpermissionDescPreApproved := taskpermissionFields[5].Descriptor()
-	// taskpermission.DefaultPreApproved holds the default value on creation for the pre_approved field.
-	taskpermission.DefaultPreApproved = taskpermissionDescPreApproved.Default.(bool)
 	// taskpermissionDescManualOverride is the schema descriptor for manual_override field.
-	taskpermissionDescManualOverride := taskpermissionFields[6].Descriptor()
+	taskpermissionDescManualOverride := taskpermissionFields[5].Descriptor()
 	// taskpermission.DefaultManualOverride holds the default value on creation for the manual_override field.
 	taskpermission.DefaultManualOverride = taskpermissionDescManualOverride.Default.(bool)
 	// taskpermissionDescRequestedAt is the schema descriptor for requested_at field.
-	taskpermissionDescRequestedAt := taskpermissionFields[8].Descriptor()
+	taskpermissionDescRequestedAt := taskpermissionFields[7].Descriptor()
 	// taskpermission.DefaultRequestedAt holds the default value on creation for the requested_at field.
 	taskpermission.DefaultRequestedAt = taskpermissionDescRequestedAt.Default.(func() time.Time)
 	taskscheduleFields := schema.TaskSchedule{}.Fields()

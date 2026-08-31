@@ -26,8 +26,6 @@ type TaskPermission struct {
 	Pattern *string `json:"pattern,omitempty"`
 	// Granted holds the value of the "granted" field.
 	Granted bool `json:"granted,omitempty"`
-	// PreApproved holds the value of the "pre_approved" field.
-	PreApproved bool `json:"pre_approved,omitempty"`
 	// ManualOverride holds the value of the "manual_override" field.
 	ManualOverride bool `json:"manual_override,omitempty"`
 	// DecidedBy holds the value of the "decided_by" field.
@@ -69,7 +67,7 @@ func (*TaskPermission) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case taskpermission.FieldGranted, taskpermission.FieldPreApproved, taskpermission.FieldManualOverride:
+		case taskpermission.FieldGranted, taskpermission.FieldManualOverride:
 			values[i] = new(sql.NullBool)
 		case taskpermission.FieldID, taskpermission.FieldTaskID, taskpermission.FieldTool, taskpermission.FieldPattern, taskpermission.FieldDecidedBy:
 			values[i] = new(sql.NullString)
@@ -120,12 +118,6 @@ func (_m *TaskPermission) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field granted", values[i])
 			} else if value.Valid {
 				_m.Granted = value.Bool
-			}
-		case taskpermission.FieldPreApproved:
-			if value, ok := values[i].(*sql.NullBool); !ok {
-				return fmt.Errorf("unexpected type %T for field pre_approved", values[i])
-			} else if value.Valid {
-				_m.PreApproved = value.Bool
 			}
 		case taskpermission.FieldManualOverride:
 			if value, ok := values[i].(*sql.NullBool); !ok {
@@ -214,9 +206,6 @@ func (_m *TaskPermission) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("granted=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Granted))
-	builder.WriteString(", ")
-	builder.WriteString("pre_approved=")
-	builder.WriteString(fmt.Sprintf("%v", _m.PreApproved))
 	builder.WriteString(", ")
 	builder.WriteString("manual_override=")
 	builder.WriteString(fmt.Sprintf("%v", _m.ManualOverride))
