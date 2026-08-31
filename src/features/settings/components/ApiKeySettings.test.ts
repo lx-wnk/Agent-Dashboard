@@ -9,6 +9,7 @@ import ApiKeySettings from '@/features/settings/components/ApiKeySettings.vue'
 const NAV_LABELS = [
   'Appearance',
   'API Keys',
+  'Grants',
   'Permissions',
   'Analytics',
   'System Prompts',
