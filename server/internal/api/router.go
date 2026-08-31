@@ -27,6 +27,7 @@ import (
 	coordapi "github.com/lx-wnk/agent-dashboard/server/internal/api/coord"
 	apicost "github.com/lx-wnk/agent-dashboard/server/internal/api/cost"
 	apieval "github.com/lx-wnk/agent-dashboard/server/internal/api/eval"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/grants"
 	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/hooks"
 	apimemory "github.com/lx-wnk/agent-dashboard/server/internal/api/memory"
@@ -185,6 +186,7 @@ type RouterDeps struct {
 	ChannelReply           *agents.ChannelReplyHandler
 	ChannelStageOutput     *agents.ChannelStageOutputHandler
 	PermissionPresetRepo   repo.PermissionPresetRepo
+	GrantsHandler          *grants.Handler
 	PluginRegistry         *plugin.Registry
 	PluginLifecycleHandler *apiplugins.LifecycleHandler
 	AuditEventRepo         repo.AuditEventRepo
@@ -391,6 +393,13 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 		if deps.PresetsHandler != nil {
 			deps.PresetsHandler.Mount(r)
+		}
+
+		// Grants change what agents are permitted to do, so this endpoint stays
+		// session-authenticated like every other write path in this group — never
+		// mounted in the hook/MCP bearer-token bypass group.
+		if deps.GrantsHandler != nil {
+			deps.GrantsHandler.Mount(r)
 		}
 
 		if deps.SystemPromptsHandler != nil {
