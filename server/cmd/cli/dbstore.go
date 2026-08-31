@@ -13,8 +13,11 @@ import (
 // dbStore opens the dashboard SQLite file directly (no HTTP), so settings can
 // be changed while the server is down — the lockout-safe escape hatch.
 type dbStore struct {
-	client *ent.Client
-	repo   repo.AppSettingRepo
+	client     *ent.Client
+	repo       repo.AppSettingRepo
+	grants     repo.GrantRepo
+	grantUsage repo.GrantUsageRepo
+	caps       repo.CapabilityRepo
 }
 
 // openDBStore opens (and migrates) the dashboard DB at path.
@@ -23,7 +26,13 @@ func openDBStore(path string) (*dbStore, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &dbStore{client: bundle.Client, repo: repo.NewAppSettingRepo(bundle.Client)}, nil
+	return &dbStore{
+		client:     bundle.Client,
+		repo:       repo.NewAppSettingRepo(bundle.Client),
+		grants:     repo.NewGrantRepo(bundle.Client),
+		grantUsage: repo.NewGrantUsageRepo(bundle.Client, bundle.WriteClient),
+		caps:       repo.NewCapabilityRepo(bundle.Client),
+	}, nil
 }
 
 func (s *dbStore) Close() error { return s.client.Close() }

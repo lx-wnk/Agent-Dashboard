@@ -75,9 +75,83 @@ able to give up on purpose:
 
 | Enforcement point | What it covers |
 |---|---|
-| **Server** (`ServerEnforcer`) | The only point with complete coverage once a call site invokes it — nothing routes around it, and it cannot time out into an implicit allow. It is implemented and tested (`server/internal/capability/enforcer_server.go`) and now has a real production caller: every `/api/memory/*` request, both memory MCP tools (`memory_search`, `memory_write`), and the task pipeline's automatic memory push into a stage's spawn prompt go through it via `internal/memory.Authorize`. **No `Asker` is wired to it.** An `ask` decision therefore fails closed to a denial (`ErrAskRequired`) rather than prompting a human — "ask" and "deny" are indistinguishable from a memory caller's point of view today. There is also no grant-management surface: nothing outside a test calls `GrantRepo.Create`, so nobody can turn a `memory.read`/`memory.write` request into an "allow" through any HTTP route, CLI command, or settings page. The two gaps together mean every memory call is denied on a fresh install, with no user-facing fix short of inserting a `grants` row by hand. |
+| **Server** (`ServerEnforcer`) | The only point with complete coverage once a call site invokes it — nothing routes around it, and it cannot time out into an implicit allow. It is implemented and tested (`server/internal/capability/enforcer_server.go`) and now has a real production caller: every `/api/memory/*` request, both memory MCP tools (`memory_search`, `memory_write`), and the task pipeline's automatic memory push into a stage's spawn prompt go through it via `internal/memory.Authorize`. **No `Asker` is wired to it.** An `ask` decision therefore fails closed to a denial (`ErrAskRequired`) rather than prompting a human — "ask" and "deny" are indistinguishable from a memory caller's point of view today, and this holds regardless of how a grant was created. The `dashboard grants` CLI (below) can now turn a `memory.read`/`memory.write` request into an "allow", closing the "nobody can create a grant" half of the old gap — but there is still no HTTP route or settings page that does, and a fresh install still denies every memory call by default until you run it. |
 | **Spawn** (`SpawnEnforcer`) | Complete for every agent the dashboard's task pipeline spawns itself: each granted `TaskPermission` is resolved through the Decider and rendered into that process's `--allowedTools` list (`server/internal/pipeline/spawner.go`). It cannot ask — the file is written before the process starts — so an `ask` decision is simply omitted, and the agent falls back to its own permission prompt for that call. |
 | **Hook** (`HookEnforcer`) | The only point that can reach a session you started by hand, because it rides Claude Code's own `PreToolUse` hook instead of a start-time handshake. **It fails open on a timeout, by design** — see below. |
+
+### Creating and revoking grants
+
+The `dashboard grants` CLI is the only user-facing grant-management surface
+today — no HTTP route or settings page creates a `grants` row (the boot
+backfill migration writes rows too, but nobody invokes it by hand). It opens
+the SQLite database directly, the same way `dashboard settings` and
+`dashboard plugins` do, so it also works while the server is down.
+
+```bash
+dashboard grants add memory.read --pattern '*' --scope global --mode allow
+dashboard grants list --capability memory.read
+```
+
+`add`, `list`, `revoke`, and `capabilities` are the four subcommands —
+`capabilities` lists the grantable names, `list` lists existing grants
+(newest first, optionally filtered by capability, with an `ENFORCEMENT`
+column saying whether anything reads that capability's grants and a
+`GRANTED-BY` column saying who created each one), and `revoke <id>`
+tombstones a grant (`revoked_at`/`revoked_by` set) rather than deleting it,
+so the audit trail survives. `revoke` refuses a grant that is already
+revoked, so a second call can never overwrite who revoked it first.
+
+`--pattern` is required on `add`: pass `--pattern '*'` to cover every value,
+or a specific pattern (a prefix pattern ends in `*`, e.g. `'git status*'`).
+`*` is stored literally and behaves exactly like the empty wildcard the
+schema already uses, because the matcher routes a trailing `*` through a
+prefix test with an empty prefix — the requirement exists so the widest grant
+the system can express has to be asked for out loud, not arrived at by
+accepting three defaults.
+
+Two further inputs are rejected rather than stored inert: `--expires-in` must
+be a positive duration (a zero or negative one used to create a grant that
+was already expired), and a non-`global` `--scope` must carry a ref —
+`--scope project:/home/me/app`, not bare `--scope project`. A scope with an
+empty ref can never match anything, because the caller's context chain
+collapses an empty ref to `global` and the Decider's scope test is an exact
+match on kind *and* ref.
+
+`add` also warns on stderr when nothing reads the grant it just wrote. The
+`grants` table has exactly one production reader — `internal/memory.Authorize`
+via the server enforcer — so a grant for a capability that is not enforceable
+at the **server** point (which is every Claude Code tool name, `Bash`
+included) is recorded and read by nobody. The grant is still created and the
+exit code is unchanged; the warning only says it will take effect once a
+reader exists.
+
+#### Specificity is resolved before mode
+
+**A narrower grant wins outright, whatever its mode.** `capability.Decide`
+ranks matching grants by context specificity first (agent session → task →
+routine → application → project → global) and the most specific level with
+*any* matching grant decides on its own; `deny` beats `allow` beats `ask`
+only among grants at that same level. A broader grant never gets a vote once
+a narrower one matches.
+
+So these two grants do **not** compose the way they read:
+
+```bash
+dashboard grants add memory.read --pattern '*' --scope global --mode deny
+dashboard grants add memory.read --pattern '*' --scope project:/home/me/app --mode allow
+```
+
+Inside `/home/me/app` the request is **allowed**. The global `deny` is not a
+safety net over the project `allow` — it only applies where no project-,
+application-, task-, routine-, or session-level grant matches. To close a
+capability off in one project, revoke the project-level grant; a global deny
+cannot do it. (Pinned by "a global deny does NOT overrule a task allow" in
+`server/internal/capability/decide_test.go`.)
+
+`--mode` accepts `ask` and stores it without complaint, but **the server
+enforcer has no `Asker` wired to it** (see the table above), so an `ask`
+grant resolves to a denial there just like an unset one. `allow` is the only
+mode that actually opens the gate at the server point today.
 
 ### The hook point's three outcomes
 

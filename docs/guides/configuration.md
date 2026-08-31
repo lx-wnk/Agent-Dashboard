@@ -115,6 +115,21 @@ dashboard settings set auth.mode none
 
 Provider enablement is **not** a `dashboard settings` key — it lives in the `provider_setting` table and is edited through the Providers panel.
 
+### Grants CLI
+
+The `dashboard grants` CLI also operates directly on the SQLite database — no HTTP, no auth gate, no running server required. It is the only user-facing way to create or revoke a capability grant today — the boot backfill migration also inserts `grants` rows, but it does so in raw SQL (`server/internal/db/client.go`, `granted_by = "migration:legacy"`) and bypasses `GrantRepo.Create`'s validation entirely; there is still no HTTP route and no settings page. See [Security](security.md#creating-and-revoking-grants) for what a grant does, why specificity beats mode, and the `ask`-mode limitation.
+
+```bash
+dashboard grants add <capability> --pattern '*' [--scope kind:ref] [--mode allow|deny|ask]  # create a grant
+dashboard grants list [--capability <name>] [--json]                                       # list grants, newest first
+dashboard grants revoke <id>                                                               # tombstone a grant
+dashboard grants capabilities                                                              # list grantable capability names
+```
+
+`--pattern` is required on `add`: `'*'` covers every value, `'git status*'` is a prefix pattern. A non-`global` `--scope` must carry a ref (`project:/home/me/app`, not bare `project`), and `--expires-in` must be a positive duration — both are rejected at write time rather than stored as a grant that can never apply. `revoke` refuses an already-revoked grant. `add` still writes the grant when no enforcement point reads that capability, but says so on stderr; `list`'s `ENFORCEMENT` column shows the same per row.
+
+Database resolution uses the same `--db` flag / `DASHBOARD_DB_PATH` / default path as the settings CLI.
+
 ### Plugin CLI / lockout recovery
 
 The `dashboard plugins` CLI also operates directly on the SQLite database — no HTTP, no auth gate, no running server required.
