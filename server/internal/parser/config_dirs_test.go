@@ -9,21 +9,42 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/parser"
 )
 
-// TestAllAgentConfigDirs_MissingDirs verifies that config directories absent
-// from disk are silently skipped: every returned path must exist, and a
-// non-existent CODEX_HOME must not produce a Codex entry.
-func TestAllAgentConfigDirs_MissingDirs(t *testing.T) {
-	missing := filepath.Join(t.TempDir(), "does-not-exist")
-	t.Setenv("CODEX_HOME", missing)
+// TestAllAgentConfigDirs_DefaultAlwaysVariantsOnlyWhenPresent pins the two
+// halves of the discovery contract apart.
+//
+// The configured dirs (CLAUDE_CONFIG_DIR, ~/.claude) are returned whether or
+// not they exist on disk: serverapp/di.go snapshots this list once at boot into
+// claudesettings.NewReader, so a ~/.claude created after the server started
+// would otherwise never be searched for deny rules. Consumers stat lazily.
+//
+// The optional variants (~/.claude-personal, …) are guesses, not configuration,
+// and are only returned when they hold a projects/ dir.
+func TestAllAgentConfigDirs_DefaultAlwaysVariantsOnlyWhenPresent(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	t.Setenv("DASHBOARD_CLAUDE_CONFIG_DIRS", "")
 
-	dirs := parser.AllAgentConfigDirs()
-	for _, d := range dirs {
-		info, err := os.Stat(d.Path)
-		if err != nil || !info.IsDir() {
-			t.Errorf("AllAgentConfigDirs returned non-existent path %q (provider %s)", d.Path, d.Provider)
+	present := filepath.Join(home, ".claude-personal")
+	if err := os.MkdirAll(filepath.Join(present, "projects"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	var got []string
+	for _, d := range parser.AllAgentConfigDirs() {
+		if d.Provider != sdk.ProviderClaude {
+			t.Errorf("unexpected provider %s for %q — this path is Claude-only", d.Provider, d.Path)
 		}
-		if d.Provider == sdk.ProviderCodex && d.Path == missing {
-			t.Errorf("non-existent CODEX_HOME %q must not be returned", missing)
+		got = append(got, d.Path)
+	}
+
+	want := []string{filepath.Join(home, ".claude"), present}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("got %v, want %v", got, want)
 		}
 	}
 }
