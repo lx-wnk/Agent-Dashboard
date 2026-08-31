@@ -506,6 +506,12 @@ func TestHeldPatternIsSanitized(t *testing.T) {
 	if *held[0].Pattern == "" {
 		t.Fatal("sanitizing removed the whole command")
 	}
+	// The bidi override is stripped, not cut for length: ForDisplayCapped only
+	// counts runes dropped past the cap, so a command well under it must report
+	// no elision even though characters were removed from it.
+	if held[0].PatternElided != 0 {
+		t.Fatalf("patternElided = %d for a command under the cap", held[0].PatternElided)
+	}
 }
 
 // A cut must land on a rune boundary; the byte slice this replaced could split a
@@ -513,10 +519,11 @@ func TestHeldPatternIsSanitized(t *testing.T) {
 func TestHeldPatternCutsOnARuneBoundary(t *testing.T) {
 	h := newBridgeHandler(t)
 	h.permissions.holdFor = 3 * time.Second
+	command := "x" + strings.Repeat("€", 2000)
 	body := map[string]any{
 		"session_id": "s1",
 		"tool_name":  "Bash",
-		"tool_input": map[string]string{"command": "x" + strings.Repeat("€", 2000)},
+		"tool_input": map[string]string{"command": command},
 	}
 	go func() {
 		_ = post(t, h.PermissionRequest, "/api/hooks/permission", body, true)
@@ -530,6 +537,34 @@ func TestHeldPatternCutsOnARuneBoundary(t *testing.T) {
 	}
 	if n := utf8.RuneCountInString(got); n != maxPatternRunes {
 		t.Fatalf("kept %d runes, want the %d-rune cap", n, maxPatternRunes)
+	}
+	// The card cannot tell its own truncation from an agent's trailing "…"
+	// unless the cut count travels as its own field.
+	if want := utf8.RuneCountInString(command) - maxPatternRunes; held[0].PatternElided != want {
+		t.Fatalf("patternElided = %d, want %d", held[0].PatternElided, want)
+	}
+}
+
+// A pattern within the cap is carried verbatim and reports no elision, which
+// omitempty then drops from the wire -- there is nothing to admit to.
+func TestHeldPatternWithinCapHasNoElision(t *testing.T) {
+	h := newBridgeHandler(t)
+	h.permissions.holdFor = 3 * time.Second
+	go func() {
+		_ = post(t, h.PermissionRequest, "/api/hooks/permission", preToolBody("s1", "Bash", "ls -la"), true)
+	}()
+	waitForPendingID(t, h, "s1")
+
+	held, _, _, _ := h.permissions.StateForSession("s1")
+	if held[0].PatternElided != 0 {
+		t.Fatalf("patternElided = %d for a pattern within the cap", held[0].PatternElided)
+	}
+	raw, err := json.Marshal(held[0])
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(string(raw), "patternElided") {
+		t.Fatalf("a zero patternElided was not dropped from the wire: %s", raw)
 	}
 }
 
@@ -566,6 +601,35 @@ func TestHeldCallCarriesTheDenyRuleThatForbidsIt(t *testing.T) {
 	}
 	if *pending[0].DeniedBy != "Bash(rm:*)" {
 		t.Fatalf("deniedBy = %q, want the rule verbatim so the card can name it", *pending[0].DeniedBy)
+	}
+	if pending[0].DeniedByElided != 0 {
+		t.Fatalf("deniedByElided = %d for a rule within the cap", pending[0].DeniedByElided)
+	}
+}
+
+// A deny rule longer than the cap is truncated too, and the count must travel
+// with it: even though this display offers no Allow, the human still reads it
+// to understand why the call was refused.
+func TestDeniedByRuleLongerThanCapIsElided(t *testing.T) {
+	h := newBridgeHandler(t)
+	h.permissions.holdFor = 3 * time.Second
+	prefix := strings.Repeat("a", 500)
+	rule := "Bash(" + prefix + ":*)"
+	withDenyRules(t, h, rule)
+	go func() {
+		_ = post(t, h.PermissionRequest, "/api/hooks/permission", preToolBody("s1", "Bash", prefix+" -rf /"), true)
+	}()
+	waitForPendingID(t, h, "s1")
+
+	pending, _ := pendingOf(t, h, "s1")
+	if pending[0].DeniedBy == nil {
+		t.Fatal("no rule reported for a call the long-prefix rule forbids")
+	}
+	if n := utf8.RuneCountInString(*pending[0].DeniedBy); n != maxPatternRunes {
+		t.Fatalf("deniedBy kept %d runes, want the %d-rune cap", n, maxPatternRunes)
+	}
+	if want := utf8.RuneCountInString(rule) - maxPatternRunes; pending[0].DeniedByElided != want {
+		t.Fatalf("deniedByElided = %d, want %d", pending[0].DeniedByElided, want)
 	}
 }
 

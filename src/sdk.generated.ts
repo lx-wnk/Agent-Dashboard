@@ -232,6 +232,12 @@ export interface PendingPermission {
   tool: string
   pattern?: string
   /**
+   * PatternElided carries Pattern's cut count as its own field, mirroring
+   * RecentTool.Elided, so a truncated Pattern cannot forge its own "…" next
+   * to the Allow button.
+   */
+  patternElided?: number /* int */
+  /**
    * DeniedBy is the user's own permissions.deny rule forbidding this call,
    * verbatim, or nil when no rule covers it. A hook "allow" short-circuits
    * Claude Code's own evaluation, so a dashboard approval would otherwise
@@ -239,6 +245,10 @@ export interface PendingPermission {
    * Allow when this is set; the server refuses one regardless.
    */
   deniedBy?: string
+  /**
+   * DeniedByElided mirrors PatternElided, for DeniedBy.
+   */
+  deniedByElided?: number /* int */
   reason?: string
   requestedAt: string
 }

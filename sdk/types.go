@@ -220,14 +220,20 @@ type PendingPermission struct {
 	ID      string  `json:"id"`
 	Tool    string  `json:"tool"`
 	Pattern *string `json:"pattern"`
+	// PatternElided carries Pattern's cut count as its own field, mirroring
+	// RecentTool.Elided, so a truncated Pattern cannot forge its own "…" next
+	// to the Allow button.
+	PatternElided int `json:"patternElided,omitempty"`
 	// DeniedBy is the user's own permissions.deny rule forbidding this call,
 	// verbatim, or nil when no rule covers it. A hook "allow" short-circuits
 	// Claude Code's own evaluation, so a dashboard approval would otherwise
 	// release a restriction the user believes is absolute. The client offers no
 	// Allow when this is set; the server refuses one regardless.
-	DeniedBy    *string `json:"deniedBy,omitempty"`
-	Reason      *string `json:"reason"`
-	RequestedAt string  `json:"requestedAt"`
+	DeniedBy *string `json:"deniedBy,omitempty"`
+	// DeniedByElided mirrors PatternElided, for DeniedBy.
+	DeniedByElided int     `json:"deniedByElided,omitempty"`
+	Reason         *string `json:"reason"`
+	RequestedAt    string  `json:"requestedAt"`
 }
 
 // PendingCapabilityDecision is a capability decision waiting for a human at a
