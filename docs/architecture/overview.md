@@ -4,7 +4,7 @@ A real-time monitoring and control dashboard for locally running Claude Code age
 
 ## Stack
 
-- **Backend:** Go 1.26 — chi router, [ent](https://entgo.io/) ORM, `modernc.org/sqlite` (pure-Go, no cgo), cobra CLI. Dependency injection is hand-written in `server/cmd/serve/di.go`.
+- **Backend:** Go 1.26 — chi router, [ent](https://entgo.io/) ORM, `modernc.org/sqlite` (pure-Go, no cgo), cobra CLI. Dependency injection is hand-written in `server/serverapp/di.go`.
 - **Frontend:** Vue 3 + TypeScript SPA — Vite, Tailwind CSS, pnpm.
 - **Workspace:** a Go workspace (`go.work`) with two modules — `./sdk` and `./server`. Build is driven by [Task](https://taskfile.dev) (`Taskfile.yml`); hot-reload by [air](https://github.com/air-verse/air).
 
@@ -35,13 +35,18 @@ A real-time monitoring and control dashboard for locally running Claude Code age
 | `api/` | chi router, HTTP handlers grouped by domain |
 | `pipeline/` | state machine, orchestrator, stage handlers, completion detector, agent spawner |
 | `db/` | ent ORM schemas + repositories |
-| `mcp/` | stateless StreamableHTTP MCP server (19 tools, 4 scopes) |
+| `mcp/` | stateless StreamableHTTP MCP server (43 tools, 7 scopes) |
 | `auth/` | JWT helpers + GitHub OAuth |
 | `scanner/` | ps/lsof process scanner |
 | `parser/` | JSONL session parser |
 | `merger/` | agent data merger + cost estimation (`MODEL_PRICING`) |
 | `sse/` | SSE broadcaster |
 | `channel/` | channel discovery + proxy to per-agent MCP stdio server |
+| `capability/` | Permission/grant resolution, decision engine for grantable capabilities (tool, reach, resource, spend classes) |
+| `memory/` | System memory store (spaces, entries, retrieval) with capability-gated access and ranked search |
+| `askgate/` | Permission-prompt hold-and-answer bridge; shared with PreToolUse hook asker |
+| `serverask/` | Server-enforcer asker implementation for capability decisions, surfaces unanswered asks to dashboard |
+| `api/capabilities/` | HTTP endpoints for capability-grant CRUD, query, decision responses |
 | `refine/` | refinement chat repo + spawner |
 | `history/` | cost-history importer service |
 | `eval/` | passive drift detection over `stage_run` (leaf: `db/repo`, `db/ent`, `sdk`, `config`, `parser` only — never `pipeline`/`notifications`/`sse`/routes). See [ADR-0008](adr/0008-eval-drift-detection-leaf.md) |
