@@ -41,6 +41,7 @@ echo "Optional:"
 check claude   0 "Claude Code — required at runtime to monitor live agents"
 check tygo     0 "task setup  (needed for 'task generate')"
 check govulncheck 0 "task setup  (needed for 'task vuln')"
+check go-licenses 0 "task setup  (needed for 'task licenses')"
 
 echo
 if [ "$missing" -eq 0 ]; then
