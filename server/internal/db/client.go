@@ -7,13 +7,20 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
 	_ "modernc.org/sqlite"
 
+	"github.com/google/uuid"
+
+	"github.com/lx-wnk/agent-dashboard/server/internal/capability"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/grant"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/task"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/taskpermission"
 )
 
 // WriteClient marks an *ent.Client as opened onto the connection pool wired
@@ -173,7 +180,7 @@ func Open(path string) (*DBBundle, error) {
 	// capability gate's grant table starts from the legacy permission tables it
 	// is replacing rather than empty. Idempotent — must run after ent
 	// auto-migrate (task_permissions, permission_presets, and grants all exist).
-	if err := migrateBackfillGrants(sqlDB); err != nil {
+	if err := migrateBackfillGrants(context.Background(), client); err != nil {
 		_ = client.Close()
 		return nil, fmt.Errorf("db: backfill grants: %w", err)
 	}
@@ -446,6 +453,61 @@ func migrateCopyAuditLogsToAuditEvents(db *sql.DB) error {
 	return nil
 }
 
+// Legacy backfill constants. They mirror repo's GrantContext*/GrantMode*
+// vocabulary, which package db cannot import: db/repo imports db back.
+// insertLegacyGrant validates them through capability, the package that
+// owns the vocabulary, so a divergence fails here rather than writing a row
+// Decide would drop.
+const (
+	legacyGrantContextTask    = "task"
+	legacyGrantContextProject = "project"
+	legacyGrantMode           = "allow"
+	legacyGrantedBy           = "migration:legacy"
+	legacyGrantNodeID         = "local"
+)
+
+// legacyGrant is one candidate row reduced to the grant columns it maps to.
+type legacyGrant struct {
+	capabilityName string
+	contextKind    string
+	contextRef     string
+	pattern        string
+	expiresAt      *time.Time
+}
+
+// insertLegacyGrant writes one backfilled grant, refusing what
+// capability.Decide would silently drop: an unparseable pattern, an unknown
+// context kind or mode, or a missing context ref. The checks are the ones
+// repo.GrantRepo.Create applies — package db cannot call it without an
+// import cycle, so the rules come from capability, which owns them, rather
+// than from a second copy of the list.
+func insertLegacyGrant(ctx context.Context, client *ent.Client, in legacyGrant) error {
+	if _, err := capability.ParsePattern(in.pattern); err != nil {
+		return fmt.Errorf("invalid pattern %q: %w", in.pattern, err)
+	}
+	if !capability.IsValidMode(legacyGrantMode) {
+		return fmt.Errorf("invalid mode %q (valid: %s)", legacyGrantMode, strings.Join(capability.Modes(), ", "))
+	}
+	if !capability.IsValidContextKind(in.contextKind) {
+		return fmt.Errorf("invalid context kind %q (valid: %s)", in.contextKind, strings.Join(capability.ContextKinds(), ", "))
+	}
+	if in.contextRef == "" {
+		return fmt.Errorf("context ref is required for context kind %q", in.contextKind)
+	}
+	_, err := client.Grant.Create().
+		SetID(uuid.New().String()).
+		SetCapabilityName(in.capabilityName).
+		SetContextKind(in.contextKind).
+		SetContextRef(in.contextRef).
+		SetPattern(in.pattern).
+		SetMode(legacyGrantMode).
+		SetNillableExpiresAt(in.expiresAt).
+		SetGrantedBy(legacyGrantedBy).
+		SetNodeID(legacyGrantNodeID).
+		Save(ctx)
+	return err
+}
+
 // migrateBackfillGrants converts existing task_permissions and
 // permission_presets rows into grants, so the capability gate's grant table
 // starts from the legacy permission tables it is replacing instead of empty.
@@ -464,87 +526,93 @@ func migrateCopyAuditLogsToAuditEvents(db *sql.DB) error {
 // from a bug; the marker says "unknown because it predates identity" out
 // loud.
 //
-// Idempotent via a NOT EXISTS guard on the grant's identifying columns
+// Every candidate row goes through insertLegacyGrant rather than a bulk
+// INSERT ... SELECT, so a row that cannot become a working grant (an
+// unparseable pattern, an empty context ref) is skipped and logged instead
+// of written as a grant capability.Decide can never match. One bad legacy row must not
+// abort the migration — the server still needs to boot — so a Create error
+// is a slog.Warn and a continue, never a returned error.
+//
+// Idempotent via an existence check on the grant's identifying columns
 // (capability_name, context_kind, context_ref, pattern), mirroring
 // migrateCopyAuditLogsToAuditEvents above. Must run after ent auto-migrate,
 // once task_permissions, permission_presets, and grants all exist.
-func migrateBackfillGrants(db *sql.DB) error {
-	var pendingPerms int
-	if err := db.QueryRow(`
-		SELECT COUNT(*) FROM task_permissions tp
-		WHERE tp.granted = 1
-		  AND NOT EXISTS (
-			SELECT 1 FROM grants g
-			WHERE g.capability_name = tp.tool
-			  AND g.context_kind = 'task'
-			  AND g.context_ref = tp.task_id
-			  AND g.pattern = COALESCE(tp.pattern, '')
-		  )
-	`).Scan(&pendingPerms); err != nil {
-		return fmt.Errorf("count pending task_permission backfill: %w", err)
+func migrateBackfillGrants(ctx context.Context, client *ent.Client) error {
+	permRows, err := client.TaskPermission.Query().Where(taskpermission.GrantedEQ(true)).All(ctx)
+	if err != nil {
+		return fmt.Errorf("query granted task_permissions for backfill: %w", err)
 	}
-	if pendingPerms > 0 {
-		if _, err := db.Exec(`
-			INSERT INTO grants (
-				id, created_at, updated_at, capability_name, context_kind, context_ref,
-				pattern, mode, limit_count, limit_window_seconds, expires_at,
-				granted_by, granted_at, revoked_at, revoked_by, reason, node_id
-			)
-			SELECT
-				lower(hex(randomblob(16))), datetime('now'), datetime('now'), tp.tool, 'task', tp.task_id,
-				COALESCE(tp.pattern, ''), 'allow', 0, 0, tp.expires_at,
-				'migration:legacy', datetime('now'), NULL, '', '', 'local'
-			FROM task_permissions tp
-			WHERE tp.granted = 1
-			  AND NOT EXISTS (
-				SELECT 1 FROM grants g
-				WHERE g.capability_name = tp.tool
-				  AND g.context_kind = 'task'
-				  AND g.context_ref = tp.task_id
-				  AND g.pattern = COALESCE(tp.pattern, '')
-			  )
-		`); err != nil {
-			return fmt.Errorf("backfill grants from task_permissions: %w", err)
+	backfilledPerms := 0
+	for _, tp := range permRows {
+		pattern := ""
+		if tp.Pattern != nil {
+			pattern = *tp.Pattern
 		}
-		slog.Warn("migration: backfilled grants from task_permissions", "count", pendingPerms)
+		exists, err := client.Grant.Query().Where(
+			grant.CapabilityNameEQ(tp.Tool),
+			grant.ContextKindEQ(legacyGrantContextTask),
+			grant.ContextRefEQ(tp.TaskID),
+			grant.PatternEQ(pattern),
+		).Exist(ctx)
+		if err != nil {
+			return fmt.Errorf("check existing grant for task_permission %q: %w", tp.ID, err)
+		}
+		if exists {
+			continue
+		}
+		if err := insertLegacyGrant(ctx, client, legacyGrant{
+			capabilityName: tp.Tool,
+			contextKind:    legacyGrantContextTask,
+			contextRef:     tp.TaskID,
+			pattern:        pattern,
+			expiresAt:      tp.ExpiresAt,
+		}); err != nil {
+			slog.Warn("migration: skipping task_permission row that cannot become a valid grant",
+				"task_permission_id", tp.ID, "task_id", tp.TaskID, "tool", tp.Tool, "pattern", pattern, "error", err)
+			continue
+		}
+		backfilledPerms++
+	}
+	if backfilledPerms > 0 {
+		slog.Warn("migration: backfilled grants from task_permissions", "count", backfilledPerms)
 	}
 
-	var pendingPresets int
-	if err := db.QueryRow(`
-		SELECT COUNT(*) FROM permission_presets pp
-		WHERE NOT EXISTS (
-			SELECT 1 FROM grants g
-			WHERE g.capability_name = pp.tool
-			  AND g.context_kind = 'project'
-			  AND g.context_ref = pp.project_cwd
-			  AND g.pattern = COALESCE(pp.pattern, '')
-		)
-	`).Scan(&pendingPresets); err != nil {
-		return fmt.Errorf("count pending permission_preset backfill: %w", err)
+	presetRows, err := client.PermissionPreset.Query().All(ctx)
+	if err != nil {
+		return fmt.Errorf("query permission_presets for backfill: %w", err)
 	}
-	if pendingPresets > 0 {
-		if _, err := db.Exec(`
-			INSERT INTO grants (
-				id, created_at, updated_at, capability_name, context_kind, context_ref,
-				pattern, mode, limit_count, limit_window_seconds, expires_at,
-				granted_by, granted_at, revoked_at, revoked_by, reason, node_id
-			)
-			SELECT
-				lower(hex(randomblob(16))), datetime('now'), datetime('now'), pp.tool, 'project', pp.project_cwd,
-				COALESCE(pp.pattern, ''), 'allow', 0, 0, NULL,
-				'migration:legacy', datetime('now'), NULL, '', '', 'local'
-			FROM permission_presets pp
-			WHERE NOT EXISTS (
-				SELECT 1 FROM grants g
-				WHERE g.capability_name = pp.tool
-				  AND g.context_kind = 'project'
-				  AND g.context_ref = pp.project_cwd
-				  AND g.pattern = COALESCE(pp.pattern, '')
-			)
-		`); err != nil {
-			return fmt.Errorf("backfill grants from permission_presets: %w", err)
+	backfilledPresets := 0
+	for _, pp := range presetRows {
+		pattern := ""
+		if pp.Pattern != nil {
+			pattern = *pp.Pattern
 		}
-		slog.Warn("migration: backfilled grants from permission_presets", "count", pendingPresets)
+		exists, err := client.Grant.Query().Where(
+			grant.CapabilityNameEQ(pp.Tool),
+			grant.ContextKindEQ(legacyGrantContextProject),
+			grant.ContextRefEQ(pp.ProjectCwd),
+			grant.PatternEQ(pattern),
+		).Exist(ctx)
+		if err != nil {
+			return fmt.Errorf("check existing grant for permission_preset %q: %w", pp.ID, err)
+		}
+		if exists {
+			continue
+		}
+		if err := insertLegacyGrant(ctx, client, legacyGrant{
+			capabilityName: pp.Tool,
+			contextKind:    legacyGrantContextProject,
+			contextRef:     pp.ProjectCwd,
+			pattern:        pattern,
+		}); err != nil {
+			slog.Warn("migration: skipping permission_preset row that cannot become a valid grant",
+				"permission_preset_id", pp.ID, "project_cwd", pp.ProjectCwd, "tool", pp.Tool, "pattern", pattern, "error", err)
+			continue
+		}
+		backfilledPresets++
+	}
+	if backfilledPresets > 0 {
+		slog.Warn("migration: backfilled grants from permission_presets", "count", backfilledPresets)
 	}
 
 	return nil
