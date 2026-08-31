@@ -130,6 +130,17 @@ notarization steps are documented in [docs/desktop-distribution.md](docs/desktop
 | launchd | `KeepAlive` in the plist |
 | Wrapper loop | `while true; do ./bin/agent-dashboard serve; done` |
 
+## Locked out?
+
+A bad `auth.mode` or a broken `auth_provider` plugin can lock you out of the UI. The CLI edits the SQLite database directly, so it works even while the server is down:
+
+```bash
+agent-dashboard settings set auth.mode none   # reset auth, then restart the server
+agent-dashboard grants add memory.read --pattern '*' --scope global --mode allow
+```
+
+See [Configuration](docs/guides/configuration.md) for the full settings/grants/plugins CLI reference.
+
 ## Documentation
 
 | Topic | |

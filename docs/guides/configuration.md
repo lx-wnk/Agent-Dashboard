@@ -3,7 +3,7 @@
 Configuration comes from two places:
 
 1. **Bootstrap configuration** — host, port, secrets, and filesystem paths the server needs before it can read its own database. These live in environment variables (or a JSON config file). A documented template lives in [`.env.dist`](../../.env.dist).
-2. **Runtime settings** — operational config (auth mode, rate limits, scan intervals, plugin/provider enablement, …) stored in the database `app_setting` table. Edit these in the **Settings UI** or with the `dashboard settings` CLI. They are **no longer read from the environment** — a still-set env var for a moved key is ignored and logs a warning on boot.
+2. **Runtime settings** — operational config (auth mode, rate limits, scan intervals, plugin/provider enablement, …) stored in the database `app_setting` table. Edit these in the **Settings UI** or with the `agent-dashboard settings` CLI. They are **no longer read from the environment** — a still-set env var for a moved key is ignored and logs a warning on boot.
 
 ```bash
 cp .env.dist .env
@@ -58,9 +58,9 @@ The orchestrator injects these into spawned stage agents; you rarely set them yo
 | `DASHBOARD_STAGE_RUN_ID` | Stage-run ID injected into stage agents |
 | `DASHBOARD_TASK_ID` | Task ID injected into stage agents |
 
-## Runtime settings (Settings UI or `dashboard settings` CLI)
+## Runtime settings (Settings UI or `agent-dashboard settings` CLI)
 
-These keys live in the database `app_setting` table — the single source of truth is `server/internal/settings/registry.go`. Edit them in the **Settings** UI (the generic **Server** panel, plus the **Plugins** and **Providers** panels) or with the `dashboard settings` CLI.
+These keys live in the database `app_setting` table — the single source of truth is `server/internal/settings/registry.go`. Edit them in the **Settings** UI (the generic **Server** panel, plus the **Plugins** and **Providers** panels) or with the `agent-dashboard settings` CLI.
 
 > The matching `DASHBOARD_*` environment variables that used to set these are **no longer read**. If one is still set, it is ignored and the server logs a warning on boot.
 
@@ -95,12 +95,12 @@ These keys live in the database `app_setting` table — the single source of tru
 
 ### CLI / lockout recovery
 
-The `dashboard settings` CLI edits the SQLite database **directly**, so it works even while the server is down — the recovery path when a setting (e.g. an auth mode that requires a plugin you can no longer load) locks you out of the UI.
+The `agent-dashboard settings` CLI edits the SQLite database **directly**, so it works even while the server is down — the recovery path when a setting (e.g. an auth mode that requires a plugin you can no longer load) locks you out of the UI.
 
 ```bash
-dashboard settings list            # all keys with effective values, type, and apply mode
-dashboard settings get <key>       # one value (falls back to the registry default)
-dashboard settings set <key> <value>
+agent-dashboard settings list            # all keys with effective values, type, and apply mode
+agent-dashboard settings get <key>       # one value (falls back to the registry default)
+agent-dashboard settings set <key> <value>
 ```
 
 Database resolution order: `--db <path>` flag → `DASHBOARD_DB_PATH` → default `~/.claude/dashboard-tasks.db`.
@@ -109,21 +109,21 @@ Database resolution order: `--db <path>` flag → `DASHBOARD_DB_PATH` → defaul
 
 ```bash
 # Locked out of a 'plugin' auth mode whose plugin won't load? Reset to no-auth:
-dashboard settings set auth.mode none
+agent-dashboard settings set auth.mode none
 # Then restart the server (auth.mode is restart-apply).
 ```
 
-Provider enablement is **not** a `dashboard settings` key — it lives in the `provider_setting` table and is edited through the Providers panel.
+Provider enablement is **not** an `agent-dashboard settings` key — it lives in the `provider_setting` table and is edited through the Providers panel.
 
 ### Grants CLI
 
-The `dashboard grants` CLI also operates directly on the SQLite database — no HTTP, no auth gate, no running server required. It is the only user-facing way to create or revoke a capability grant today — the boot backfill migration also inserts `grants` rows, but it does so in raw SQL (`server/internal/db/client.go`, `granted_by = "migration:legacy"`) and bypasses `GrantRepo.Create`'s validation entirely; there is still no HTTP route and no settings page. See [Security](security.md#creating-and-revoking-grants) for what a grant does, why specificity beats mode, and the `ask`-mode limitation.
+The `agent-dashboard grants` CLI also operates directly on the SQLite database — no HTTP, no auth gate, no running server required. It is the only user-facing way to create or revoke a capability grant today — the boot backfill migration also inserts `grants` rows, but it does so in raw SQL (`server/internal/db/client.go`, `granted_by = "migration:legacy"`) and bypasses `GrantRepo.Create`'s validation entirely; there is still no HTTP route and no settings page. See [Security](security.md#creating-and-revoking-grants) for what a grant does, why specificity beats mode, and the `ask`-mode limitation.
 
 ```bash
-dashboard grants add <capability> --pattern '*' [--scope kind:ref] [--mode allow|deny|ask]  # create a grant
-dashboard grants list [--capability <name>] [--json]                                       # list grants, newest first
-dashboard grants revoke <id>                                                               # tombstone a grant
-dashboard grants capabilities                                                              # list grantable capability names
+agent-dashboard grants add <capability> --pattern '*' [--scope kind:ref] [--mode allow|deny|ask]  # create a grant
+agent-dashboard grants list [--capability <name>] [--json]                                       # list grants, newest first
+agent-dashboard grants revoke <id>                                                               # tombstone a grant
+agent-dashboard grants capabilities                                                              # list grantable capability names
 ```
 
 `--pattern` is required on `add`: `'*'` covers every value, `'git status*'` is a prefix pattern. A non-`global` `--scope` must carry a ref (`project:/home/me/app`, not bare `project`), and `--expires-in` must be a positive duration — both are rejected at write time rather than stored as a grant that can never apply. `revoke` refuses an already-revoked grant. `add` still writes the grant when no enforcement point reads that capability, but says so on stderr; `list`'s `ENFORCEMENT` column shows the same per row.
@@ -132,12 +132,12 @@ Database resolution uses the same `--db` flag / `DASHBOARD_DB_PATH` / default pa
 
 ### Plugin CLI / lockout recovery
 
-The `dashboard plugins` CLI also operates directly on the SQLite database — no HTTP, no auth gate, no running server required.
+The `agent-dashboard plugins` CLI also operates directly on the SQLite database — no HTTP, no auth gate, no running server required.
 
 ```bash
-dashboard plugins list              # list all discovered plugins with active state
-dashboard plugins disable <id>      # set active=false
-dashboard plugins enable <id>       # set active=true
+agent-dashboard plugins list              # list all discovered plugins with active state
+agent-dashboard plugins disable <id>      # set active=false
+agent-dashboard plugins enable <id>       # set active=true
 ```
 
 Database resolution uses the same `--db` flag / `DASHBOARD_DB_PATH` / default path as the settings CLI.
@@ -145,7 +145,7 @@ Database resolution uses the same `--db` flag / `DASHBOARD_DB_PATH` / default pa
 Use `disable` to recover when a broken `auth_provider` plugin prevents the server from booting:
 
 ```bash
-dashboard plugins disable my-auth-plugin
+agent-dashboard plugins disable my-auth-plugin
 # Then restart — the change applies on next boot.
 ```
 
@@ -312,6 +312,6 @@ Binding to a non-loopback address is gated by the `DASHBOARD_REMOTES_ENABLED` bo
 
 Passive drift detection measures agent execution quality over time per `(spawner, model, stage)` from the data the pipeline already persists in `stage_run`, and flags degradation against a rolling baseline. No agents are spawned — it only reads existing rows.
 
-Its tuning knobs are runtime settings (`eval.scanIntervalMs`, `eval.windowHours`, `eval.minSamples`, `eval.rateDropPP`, `eval.stddevK`) — see the [Runtime settings](#runtime-settings-settings-ui-or-dashboard-settings-cli) table.
+Its tuning knobs are runtime settings (`eval.scanIntervalMs`, `eval.windowHours`, `eval.minSamples`, `eval.rateDropPP`, `eval.stddevK`) — see the [Runtime settings](#runtime-settings-settings-ui-or-agent-dashboard-settings-cli) table.
 
 > Drift is detected by comparing the recent window against the immediately preceding baseline window. Because the baseline is built from prior metric snapshots, no alerts fire until roughly `2 × eval.windowHours` of history exists — this cold-start gap is expected. Alerts surface at `GET /api/eval/drift` and in the dashboard's Eval view.

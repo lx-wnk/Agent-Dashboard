@@ -378,7 +378,7 @@ plugin's DB state.
 broken, disable auth from the CLI without a running server:
 
 ```bash
-dashboard settings set auth.mode none
+agent-dashboard settings set auth.mode none
 ```
 
 This writes directly to the database and takes effect on next boot.
