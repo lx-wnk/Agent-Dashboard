@@ -118,7 +118,7 @@ func (f *fakeTaskRepo) CountActiveBySourceBranch(_ context.Context, _, _ string)
 
 func authToken(t *testing.T) string {
 	t.Helper()
-	tok, err := auth.SignJWT(auth.JWTPayload{Sub: "user-1", Login: "tester", IsAdmin: false}, testJWTSecret, 3600)
+	tok, err := auth.SignJWT(auth.JWTPayload{Sub: "user-1", Login: "tester"}, testJWTSecret, 3600)
 	if err != nil {
 		t.Fatalf("SignJWT: %v", err)
 	}

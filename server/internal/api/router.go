@@ -339,10 +339,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 		if deps.SettingsHandler != nil {
 			deps.SettingsHandler.MountRead(r)
-			r.Group(func(r chi.Router) {
-				r.Use(authpkg.RequireAdminOrBypass(deps.Config.BypassAuth))
-				deps.SettingsHandler.MountWrite(r)
-			})
+			deps.SettingsHandler.MountWrite(r)
 		}
 
 		if deps.OnboardingHandler != nil {
@@ -358,14 +355,14 @@ func NewRouter(deps RouterDeps) http.Handler {
 			r.Get("/api/projects/stream", projectsHandler.Stream)
 		}
 
-		// Spawners — JWT + admin-or-bypass: spawner CRUD lets the operator define
-		// arbitrary processes, so it is RCE-equivalent and must be admin-only.
+		// Spawners — JWT only. Spawner CRUD lets the caller define arbitrary
+		// processes, so it is RCE-equivalent; the admin gate that used to guard it
+		// was never grantable (nothing set is_admin), so it rejected every
+		// authenticated user and passed everything through in bypass mode. The
+		// protection now rests on authentication and the loopback bind.
 		if deps.SpawnerRepo != nil {
-			r.Group(func(r chi.Router) {
-				r.Use(authpkg.RequireAdminOrBypass(deps.Config.BypassAuth))
-				spawnersHandler := spawners.NewHandler(deps.SpawnerRepo, deps.SpawnerBroadcaster)
-				spawnersHandler.Mount(r)
-			})
+			spawnersHandler := spawners.NewHandler(deps.SpawnerRepo, deps.SpawnerBroadcaster)
+			spawnersHandler.Mount(r)
 			// Read-only live stream — JWT-protected but not admin-gated.
 			streamHandler := spawners.NewHandler(deps.SpawnerRepo, deps.SpawnerBroadcaster)
 			r.Get("/api/spawners/stream", streamHandler.Stream)
@@ -403,10 +400,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 		}
 
 		if deps.SystemPromptsHandler != nil {
-			r.Group(func(r chi.Router) {
-				r.Use(authpkg.RequireAdminOrBypass(deps.Config.BypassAuth))
-				deps.SystemPromptsHandler.Mount(r)
-			})
+			deps.SystemPromptsHandler.Mount(r)
 		}
 
 		if deps.PromptTemplatesHandler != nil {
@@ -550,15 +544,12 @@ func NewRouter(deps RouterDeps) http.Handler {
 		}
 
 		// SP1 lifecycle + settings endpoints under the clean /api/plugins namespace.
-		// The read-only list is needed by non-admin users for slot discovery, so it
-		// stays in the JWT group; write actions (install/activate/deactivate/
-		// uninstall/settings) are operator actions and stay admin-gated.
+		// The read-only list is needed for slot discovery; write actions
+		// (install/activate/deactivate/uninstall/settings) are operator actions and
+		// are protected by authentication alone since the admin gate was removed.
 		if deps.PluginLifecycleHandler != nil {
 			deps.PluginLifecycleHandler.MountList(r)
-			r.Group(func(r chi.Router) {
-				r.Use(authpkg.RequireAdminOrBypass(deps.Config.BypassAuth))
-				deps.PluginLifecycleHandler.Mount(r)
-			})
+			deps.PluginLifecycleHandler.Mount(r)
 		}
 		// Live route/ui-extension dispatch. One catch-all resolves the registry per
 		// request: chi freezes routes after serve (chi #480), so enable/disable
@@ -569,10 +560,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 			r.Handle("/api/plugins/{id}/proxy/*", plugin.NewDispatcher(deps.PluginRegistry))
 		}
 		if deps.AdminHandler != nil {
-			r.Group(func(r chi.Router) {
-				r.Use(authpkg.RequireAdminOrBypass(deps.Config.BypassAuth))
-				deps.AdminHandler.Mount(r)
-			})
+			deps.AdminHandler.Mount(r)
 		}
 	})
 

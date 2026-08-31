@@ -20,7 +20,7 @@ func computeTestHMAC(data, secret string) []byte {
 
 func TestSignAndVerifyJWT(t *testing.T) {
 	secret := "test-secret-32chars-long-minimum!"
-	payload := auth.JWTPayload{Sub: "12345", Login: "testuser", IsAdmin: false}
+	payload := auth.JWTPayload{Sub: "12345", Login: "testuser"}
 
 	token, err := auth.SignJWT(payload, secret, 3600)
 	require.NoError(t, err)

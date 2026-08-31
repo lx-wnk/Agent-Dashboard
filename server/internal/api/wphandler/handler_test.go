@@ -20,7 +20,7 @@ const testJWTSecret = "wphandler-test-secret"
 
 func withAdminAuth(t *testing.T, r *http.Request) *http.Request {
 	t.Helper()
-	token, err := auth.SignJWT(auth.JWTPayload{Sub: "user-1", Login: "admin", IsAdmin: true}, testJWTSecret, 3600)
+	token, err := auth.SignJWT(auth.JWTPayload{Sub: "user-1", Login: "admin"}, testJWTSecret, 3600)
 	if err != nil {
 		t.Fatalf("sign jwt: %v", err)
 	}

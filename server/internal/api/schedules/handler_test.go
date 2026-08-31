@@ -25,6 +25,7 @@ func newServer(t *testing.T) *httptest.Server {
 		repo.NewTaskScheduleRepo(bundle.Client),
 		scheduler.NewNLCron(nil),
 		nil,
+		true,
 	)
 	r := chi.NewRouter()
 	h.Mount(r)

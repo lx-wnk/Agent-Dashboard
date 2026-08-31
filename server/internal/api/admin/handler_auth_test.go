@@ -14,22 +14,24 @@ import (
 
 const testAdminJWTSecret = "test-sp8-admin-secret"
 
-// TestRestart_NonAdminUserGets403 verifies the security property that the restart
-// endpoint must enforce: non-admin authenticated users receive 403. The router
-// wraps AdminHandler.Mount with RequireAdminOrBypass (same pattern as spawners and
-// system-prompts). This test builds that exact chi group to document the contract.
-func TestRestart_NonAdminUserGets403(t *testing.T) {
-	h := admin.New(fakeValidator{}, "reexec", func() { t.Fatal("must not trigger") })
+// TestRestart_AnyAuthenticatedUserIsAccepted pins what protects the restart
+// endpoint now that the admin gate is gone: authentication, and nothing else.
+//
+// This assertion used to be its inverse — a non-admin got 403. That contract
+// was never real: no code path ever set is_admin, so the gate rejected every
+// authenticated user and admitted the endpoint to nobody, while passing
+// everything through in bypass mode. Removing it turned "nobody" into "any
+// authenticated caller", which is what this test now states out loud.
+func TestRestart_AnyAuthenticatedUserIsAccepted(t *testing.T) {
+	triggered := make(chan struct{}, 1)
+	h := admin.New(fakeValidator{}, "reexec", func() { triggered <- struct{}{} })
 
 	r := chi.NewRouter()
 	r.Use(auth.RequireAuth(testAdminJWTSecret))
-	r.Group(func(r chi.Router) {
-		r.Use(auth.RequireAdminOrBypass(false)) // not bypass mode
-		h.Mount(r)
-	})
+	h.Mount(r)
 
 	token, err := auth.SignJWT(
-		auth.JWTPayload{Sub: "u2", Login: "viewer", IsAdmin: false},
+		auth.JWTPayload{Sub: "u2", Login: "viewer"},
 		testAdminJWTSecret, 3600,
 	)
 	require.NoError(t, err)
@@ -38,18 +40,36 @@ func TestRestart_NonAdminUserGets403(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
-	require.Equal(t, http.StatusForbidden, rec.Code)
+	require.Equal(t, http.StatusAccepted, rec.Code)
+	select {
+	case <-triggered:
+	default:
+		t.Fatal("trigger must fire for an authenticated caller")
+	}
 }
 
+// TestRestart_UnauthenticatedIsRejected is the assertion that still carries the
+// security weight: with auth enabled, no token means no restart.
+func TestRestart_UnauthenticatedIsRejected(t *testing.T) {
+	h := admin.New(fakeValidator{}, "reexec", func() { t.Fatal("must not trigger") })
+
+	r := chi.NewRouter()
+	r.Use(auth.RequireAuth(testAdminJWTSecret))
+	h.Mount(r)
+
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/admin/restart", nil))
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
+// TestRestart_BypassModeAllowsAnyRequest documents the loopback single-user
+// mode, where no JWT middleware is mounted at all.
 func TestRestart_BypassModeAllowsAnyRequest(t *testing.T) {
 	triggered := make(chan struct{}, 1)
 	h := admin.New(fakeValidator{}, "reexec", func() { triggered <- struct{}{} })
 
 	r := chi.NewRouter()
-	r.Group(func(r chi.Router) {
-		r.Use(auth.RequireAdminOrBypass(true)) // bypass = local single-user mode
-		h.Mount(r)
-	})
+	h.Mount(r)
 
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/admin/restart", nil))

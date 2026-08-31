@@ -9,7 +9,6 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
-	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
@@ -68,14 +67,12 @@ func NewHandler(p repo.ProjectRepo, f repo.ProjectFolderRepo, tasks TaskProjectO
 
 // canSetSetupCommand reports whether the request may write the per-project
 // setup_command. That command runs an arbitrary server-side `sh -c` after
-// worktree creation (RCE-equivalent), so it is gated to admins — mirroring the
-// admin-only spawner CRUD. Bypass mode (loopback single-user) passes through.
-func (h *Handler) canSetSetupCommand(r *http.Request) bool {
-	if h.bypassAuth {
-		return true
-	}
-	payload, ok := auth.PayloadFromContext(r.Context())
-	return ok && payload.IsAdmin
+// worktree creation (RCE-equivalent), so only loopback single-user mode may set
+// it: there the implicit user already controls the machine the command runs on.
+// Under JWT auth no caller may set it — the role that used to permit this was
+// never grantable, so gating on it admitted nobody.
+func (h *Handler) canSetSetupCommand(_ *http.Request) bool {
+	return h.bypassAuth
 }
 
 // emit broadcasts a typed project event. No-op when broadcaster is nil.

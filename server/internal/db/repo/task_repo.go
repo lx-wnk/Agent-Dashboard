@@ -19,7 +19,9 @@ type TaskRepo interface {
 	Update(ctx context.Context, id string, input UpdateTaskInput) (*ent.Task, error)
 	RerankBetween(ctx context.Context, id, beforeID, afterID string) (*ent.Task, error)
 	Delete(ctx context.Context, id string) error
-	ListForUser(ctx context.Context, userID string, isAdmin bool) ([]*ent.Task, error)
+	// ListForUser returns userID's tasks, or every task when unscoped is set —
+	// the loopback single-user mode, where there is one implicit user.
+	ListForUser(ctx context.Context, userID string, unscoped bool) ([]*ent.Task, error)
 	ListPickable(ctx context.Context) ([]*ent.Task, error)
 	ListByStage(ctx context.Context, stage string) ([]*ent.Task, error)
 	// ListByIDs returns all tasks matching the given IDs in a single query.
@@ -304,9 +306,9 @@ func (r *entTaskRepo) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-func (r *entTaskRepo) ListForUser(ctx context.Context, userID string, isAdmin bool) ([]*ent.Task, error) {
+func (r *entTaskRepo) ListForUser(ctx context.Context, userID string, unscoped bool) ([]*ent.Task, error) {
 	q := r.client.Task.Query().Order(task.ByCreatedAt())
-	if !isAdmin {
+	if !unscoped {
 		q = q.Where(task.UserID(userID))
 	}
 	tasks, err := q.All(ctx)

@@ -47,15 +47,19 @@ type Handler struct {
 	searchRepo rawrepo.SearchRepo
 	merger     *merger.Merger
 	enricher   merger.Enricher
+	bypassAuth bool
 }
 
 // NewHandler creates a new Handler backed by the given SearchRepo. The merger is
-// the shared roster builder used for the admin agent-search branch. The enricher
+// the shared roster builder used for the agent-search branch. The enricher
 // (may be nil) is the same pipeline-task crossing applied by the router's
-// GetAgents accessor — passing it here keeps admin agent search results
-// enriched consistently with /api/agents and the SSE stream.
-func NewHandler(searchRepo rawrepo.SearchRepo, m *merger.Merger, enricher merger.Enricher) *Handler {
-	return &Handler{searchRepo: searchRepo, merger: m, enricher: enricher}
+// GetAgents accessor — passing it here keeps agent search results enriched
+// consistently with /api/agents and the SSE stream.
+//
+// bypassAuth is the loopback single-user mode: there is one implicit user, so
+// results are not scoped to a user id and the agent roster is searchable.
+func NewHandler(searchRepo rawrepo.SearchRepo, m *merger.Merger, enricher merger.Enricher, bypassAuth bool) *Handler {
+	return &Handler{searchRepo: searchRepo, merger: m, enricher: enricher, bypassAuth: bypassAuth}
 }
 
 // Search handles GET /api/search?q=...&type=...&limit=...
@@ -104,13 +108,13 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if searchType == "tasks" || searchType == "all" {
-		tasks, err := h.searchTasks(r, q, payload.Sub, payload.IsAdmin, limit)
+		tasks, err := h.searchTasks(r, q, payload.Sub, h.bypassAuth, limit)
 		if err == nil {
 			resp.Tasks = tasks
 		}
 	}
 
-	if (searchType == "agents" || searchType == "all") && payload.IsAdmin {
+	if (searchType == "agents" || searchType == "all") && h.bypassAuth {
 		agents, err := h.merger.GetAgents(r.Context(), merger.GetAgentsOpts{Enricher: h.enricher})
 		if err == nil {
 			resp.Agents = filterAgents(agents, q, limit)

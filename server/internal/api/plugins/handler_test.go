@@ -21,7 +21,7 @@ const testJWTSecret = "test-secret-plugins"
 // withAuth adds a valid JWT session cookie so auth.RequireAuth passes.
 func withAuth(t *testing.T, r *http.Request) *http.Request {
 	t.Helper()
-	token, err := auth.SignJWT(auth.JWTPayload{Sub: "user-1", Login: "testuser", IsAdmin: true}, testJWTSecret, 3600)
+	token, err := auth.SignJWT(auth.JWTPayload{Sub: "user-1", Login: "testuser"}, testJWTSecret, 3600)
 	if err != nil {
 		t.Fatalf("sign jwt: %v", err)
 	}
@@ -102,7 +102,7 @@ func TestLifecycleList_NonAdminJWTAllowed(t *testing.T) {
 	r.Use(auth.RequireAuth(testJWTSecret))
 	h.MountList(r)
 
-	nonAdminToken, err := auth.SignJWT(auth.JWTPayload{Sub: "u2", Login: "reader", IsAdmin: false}, testJWTSecret, 3600)
+	nonAdminToken, err := auth.SignJWT(auth.JWTPayload{Sub: "u2", Login: "reader"}, testJWTSecret, 3600)
 	if err != nil {
 		t.Fatalf("sign jwt: %v", err)
 	}

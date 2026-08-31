@@ -3,11 +3,9 @@ import { readonly, ref } from 'vue'
 export interface DashboardUser {
   id: string
   login: string
-  isAdmin: boolean
 }
 
 const user = ref<DashboardUser | null>(null)
-const isAdmin = ref(true) // default true for standalone
 const authEnabled = ref(false)
 const loaded = ref(false)
 
@@ -35,9 +33,8 @@ async function loadUser(): Promise<void> {
       clearTimeout(retryTimer)
       retryTimer = null
     }
-    const data = await res.json() as { user: DashboardUser | null, isAdmin: boolean, authEnabled: boolean }
+    const data = await res.json() as { user: DashboardUser | null, authEnabled: boolean }
     user.value = data.user
-    isAdmin.value = data.isAdmin
     authEnabled.value = data.authEnabled
   }
   catch {
@@ -51,7 +48,6 @@ async function loadUser(): Promise<void> {
 export function useUser() {
   return {
     user: readonly(user),
-    isAdmin: readonly(isAdmin),
     authEnabled: readonly(authEnabled),
     loaded: readonly(loaded),
     loadUser,
