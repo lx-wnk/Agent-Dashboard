@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
@@ -851,13 +852,97 @@ func (h *Handler) listStageRuns(w http.ResponseWriter, r *http.Request) error {
 	return jsonReply(w, http.StatusOK, runs)
 }
 
+// auditEntryResponse is the API response shape for a single audit event.
+// The ent entity's own JSON tags are snake_case and name the storage columns
+// (ts, metadata), which is not the client contract in src/types.ts.
+type auditEntryResponse struct {
+	ID        string         `json:"id"`
+	TaskID    *string        `json:"taskId"`
+	UserID    *string        `json:"userId"`
+	Actor     string         `json:"actor"`
+	Action    string         `json:"action"`
+	Target    string         `json:"target"`
+	Timestamp string         `json:"timestamp"`
+	Details   map[string]any `json:"details"`
+}
+
+func toAuditEntryResponse(e *ent.AuditEvent) auditEntryResponse {
+	return auditEntryResponse{
+		ID:        e.ID,
+		TaskID:    e.TaskID,
+		UserID:    e.UserID,
+		Actor:     auditActor(e),
+		Action:    e.Action,
+		Target:    e.Target,
+		Timestamp: e.Ts.Format(time.RFC3339),
+		Details:   e.Metadata,
+	}
+}
+
+// auditActor derives the actor the client renders. Audit events store no actor
+// column: writers either tag it in the metadata or leave a user id behind, and
+// everything else is a system write.
+func auditActor(e *ent.AuditEvent) string {
+	if a, ok := e.Metadata["actor"].(string); ok && a != "" {
+		return a
+	}
+	if e.UserID != nil {
+		return "user"
+	}
+	return "system"
+}
+
+func toAuditEntryResponses(events []*ent.AuditEvent) []auditEntryResponse {
+	resp := make([]auditEntryResponse, len(events))
+	for i, e := range events {
+		resp[i] = toAuditEntryResponse(e)
+	}
+	return resp
+}
+
 func (h *Handler) listAudit(w http.ResponseWriter, r *http.Request) error {
 	id := chi.URLParam(r, "id")
 	logs, err := h.auditRepo.ListForTask(r.Context(), id)
 	if err != nil {
 		return fmt.Errorf("tasks.listAudit: %w", err)
 	}
-	return jsonReply(w, http.StatusOK, logs)
+	return jsonReply(w, http.StatusOK, toAuditEntryResponses(logs))
+}
+
+// taskPermissionResponse is the API response shape for a stored task permission.
+// The ent entity's own JSON tags are snake_case and carry omitempty, which drops
+// a false granted or an unset timestamp from the payload instead of sending it.
+type taskPermissionResponse struct {
+	ID          string  `json:"id"`
+	TaskID      string  `json:"taskId"`
+	Tool        string  `json:"tool"`
+	Pattern     *string `json:"pattern"`
+	Granted     bool    `json:"granted"`
+	DecidedBy   *string `json:"decidedBy"`
+	RequestedAt string  `json:"requestedAt"`
+	DecidedAt   *string `json:"decidedAt"`
+	ExpiresAt   *string `json:"expiresAt"`
+}
+
+func toTaskPermissionResponse(p *ent.TaskPermission) taskPermissionResponse {
+	resp := taskPermissionResponse{
+		ID:          p.ID,
+		TaskID:      p.TaskID,
+		Tool:        p.Tool,
+		Pattern:     p.Pattern,
+		Granted:     p.Granted,
+		DecidedBy:   p.DecidedBy,
+		RequestedAt: p.RequestedAt.Format(time.RFC3339),
+	}
+	if p.DecidedAt != nil {
+		s := p.DecidedAt.Format(time.RFC3339)
+		resp.DecidedAt = &s
+	}
+	if p.ExpiresAt != nil {
+		s := p.ExpiresAt.Format(time.RFC3339)
+		resp.ExpiresAt = &s
+	}
+	return resp
 }
 
 func (h *Handler) listPermissions(w http.ResponseWriter, r *http.Request) error {
@@ -866,7 +951,11 @@ func (h *Handler) listPermissions(w http.ResponseWriter, r *http.Request) error 
 	if err != nil {
 		return fmt.Errorf("tasks.listPermissions: %w", err)
 	}
-	return jsonReply(w, http.StatusOK, perms)
+	resp := make([]taskPermissionResponse, len(perms))
+	for i, p := range perms {
+		resp[i] = toTaskPermissionResponse(p)
+	}
+	return jsonReply(w, http.StatusOK, resp)
 }
 
 // decidedByFromRequest resolves the authenticated caller's identity for the
@@ -904,7 +993,7 @@ func (h *Handler) grantPermission(w http.ResponseWriter, r *http.Request) error 
 	if err != nil {
 		return fmt.Errorf("tasks.grantPermission: %w", err)
 	}
-	return jsonReply(w, http.StatusCreated, perm)
+	return jsonReply(w, http.StatusCreated, toTaskPermissionResponse(perm))
 }
 
 func (h *Handler) revokePermission(w http.ResponseWriter, r *http.Request) error {

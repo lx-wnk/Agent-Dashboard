@@ -33,10 +33,7 @@ func (h *Handler) listGlobalAudit(w http.ResponseWriter, r *http.Request) error 
 	if err != nil {
 		return fmt.Errorf("global_audit.list: %w", err)
 	}
-	if logs == nil {
-		logs = nil
-	}
-	return jsonReply(w, http.StatusOK, logs)
+	return jsonReply(w, http.StatusOK, toAuditEntryResponses(logs))
 }
 
 // getWebhookHMAC handles GET /api/settings/webhook-hmac.

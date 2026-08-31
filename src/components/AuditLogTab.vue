@@ -14,7 +14,7 @@ const entries = ref<AuditEntry[]>([])
 const loading = ref(false)
 const expandedId = ref<string | null>(null)
 
-const ACTOR_COLORS: Record<AuditEntry['actor'], string> = {
+const ACTOR_COLORS: Record<string, string> = {
   user: 'bg-info-soft text-info-text',
   agent: 'bg-success-soft text-success-text',
   orchestrator: 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400',
