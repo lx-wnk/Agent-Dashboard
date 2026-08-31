@@ -1,8 +1,18 @@
-import type { PendingPermission, PendingToolUse } from '@/sdk.generated'
+import type { PermissionItem } from '@/composables/usePendingPermissions'
+import type { PendingCapabilityDecision, PendingPermission, PendingToolUse } from '@/sdk.generated'
 import type { Agent } from '@/types'
-import { mount } from '@vue/test-utils'
-import { describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { toast } from '@/composables/useToast'
 import AgentTriageBand from './AgentTriageBand.vue'
+
+vi.mock('@/composables/useToast', () => ({
+  toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
+}))
+
+afterEach(() => {
+  vi.clearAllMocks()
+})
 
 function makeAgent(overrides: Partial<Agent>): Agent {
   return {
@@ -377,5 +387,293 @@ describe('agentTriageBand permission bridge', () => {
 
     expect(live.text()).toContain('npm publish')
     expect(live.text()).toContain('git push --force')
+  })
+})
+
+describe('agentTriageBand capability decisions', () => {
+  function capabilityDecision(o: Partial<PendingCapabilityDecision> = {}): PendingCapabilityDecision {
+    return {
+      id: 'cap-1',
+      capability: 'network.egress',
+      value: 'api.stripe.com',
+      context: 'project:demo',
+      reason: 'Outbound call to a new host',
+      requestedAt: new Date().toISOString(),
+      ...o,
+    }
+  }
+
+  function mountWithDecisions(decisions: PendingCapabilityDecision[]) {
+    return mount(AgentTriageBand, {
+      props: { agents: [], permissionItems: [], capabilityDecisions: decisions },
+    })
+  }
+
+  it('renders the capability, value and context of a decision', () => {
+    const wrapper = mountWithDecisions([capabilityDecision()])
+    expect(wrapper.text()).toContain('network.egress')
+    expect(wrapper.text()).toContain('api.stripe.com')
+    expect(wrapper.text()).toContain('project:demo')
+  })
+
+  it('renders "Everything" instead of a blank when value is empty', () => {
+    const wrapper = mountWithDecisions([capabilityDecision({ value: '' })])
+    expect(wrapper.text()).toContain('Everything')
+  })
+
+  it('posts allow for the decision id when Allow is clicked', async () => {
+    const calls: { url: string, body: unknown }[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
+      calls.push({ url, body: JSON.parse(String(init.body)) })
+      return { ok: true, status: 200 } as Response
+    }))
+
+    const wrapper = mountWithDecisions([capabilityDecision({ id: 'cap-42' })])
+    await wrapper.get('[data-testid="capability-decision-allow"]').trigger('click')
+
+    expect(calls).toEqual([{ url: '/api/capabilities/decisions/respond', body: { id: 'cap-42', decision: 'allow' } }])
+    vi.unstubAllGlobals()
+  })
+
+  it('posts deny for the decision id when Deny is clicked', async () => {
+    const calls: { url: string, body: unknown }[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
+      calls.push({ url, body: JSON.parse(String(init.body)) })
+      return { ok: true, status: 200 } as Response
+    }))
+
+    const wrapper = mountWithDecisions([capabilityDecision({ id: 'cap-43' })])
+    await wrapper.get('[data-testid="capability-decision-deny"]').trigger('click')
+
+    expect(calls).toEqual([{ url: '/api/capabilities/decisions/respond', body: { id: 'cap-43', decision: 'deny' } }])
+    vi.unstubAllGlobals()
+  })
+
+  it('disables both buttons for a decision while its resolve is in flight', async () => {
+    let resolveFetch: (() => void) | null = null
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((resolve) => {
+      resolveFetch = () => resolve({ ok: true, status: 200 } as Response)
+    })))
+
+    const wrapper = mountWithDecisions([capabilityDecision({ id: 'cap-44' })])
+    const allow = wrapper.get('[data-testid="capability-decision-allow"]')
+    const deny = wrapper.get('[data-testid="capability-decision-deny"]')
+    await allow.trigger('click')
+
+    expect(allow.attributes('disabled')).toBeDefined()
+    expect(deny.attributes('disabled')).toBeDefined()
+
+    resolveFetch!()
+    await flushPromises()
+    vi.unstubAllGlobals()
+  })
+
+  it('renders no capability cards for an empty list and leaves permission cards intact', () => {
+    const item: PermissionItem = {
+      taskId: 'task-1',
+      projectName: 'demo',
+      title: 'Ship it',
+      requests: [{
+        id: 'req-1',
+        stageRunId: 'run-1',
+        tool: 'Bash',
+        pattern: 'npm publish',
+        reason: null,
+        requestedAt: new Date().toISOString(),
+        resolvedAt: null,
+        outcome: null,
+      }],
+    }
+    const wrapper = mount(AgentTriageBand, {
+      props: { agents: [], permissionItems: [item], capabilityDecisions: [] },
+    })
+    expect(wrapper.find('[data-testid="capability-decision-card"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('Ship it')
+  })
+
+  // ValueElided/ContextElided carry the cut count as their own field so a
+  // truncated value cannot pass as complete.
+  it('renders a visible truncation marker for an elided value', () => {
+    const wrapper = mountWithDecisions([capabilityDecision({ value: 'api.stripe.co', valueElided: 42 })])
+    const marker = wrapper.get('[data-testid="capability-value-elided"]')
+    expect(marker.text()).toBe('…')
+    expect(marker.attributes('title')).toContain('42')
+  })
+
+  it('renders a visible truncation marker for an elided context', () => {
+    const wrapper = mountWithDecisions([capabilityDecision({ context: 'project:dem', contextElided: 3 })])
+    expect(wrapper.get('[data-testid="capability-context-elided"]').text()).toBe('…')
+  })
+
+  it('renders no truncation marker when nothing was cut', () => {
+    const wrapper = mountWithDecisions([capabilityDecision()])
+    expect(wrapper.find('[data-testid="capability-value-elided"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="capability-context-elided"]').exists()).toBe(false)
+  })
+})
+
+describe('agentTriageBand capability decision resolve outcomes', () => {
+  function capabilityDecision(o: Partial<PendingCapabilityDecision> = {}): PendingCapabilityDecision {
+    return {
+      id: 'cap-1',
+      capability: 'network.egress',
+      value: 'api.stripe.com',
+      context: 'project:demo',
+      reason: 'Outbound call to a new host',
+      requestedAt: new Date().toISOString(),
+      ...o,
+    }
+  }
+
+  function mountWithDecisions(decisions: PendingCapabilityDecision[]) {
+    return mount(AgentTriageBand, {
+      props: { agents: [], permissionItems: [], capabilityDecisions: decisions },
+    })
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  // F-1: the template used to fire-and-forget resolveCapability with no await
+  // and no catch, so a click that actually failed looked pixel-identical to
+  // one that worked. Each outcome must now produce its own, distinct toast.
+  it('toasts success when the click applies before the ask self-denies', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200 }) as Response))
+    const wrapper = mountWithDecisions([capabilityDecision({ id: 'cap-a' })])
+
+    await wrapper.get('[data-testid="capability-decision-allow"]').trigger('click')
+    await flushPromises()
+
+    expect(toast.success).toHaveBeenCalledTimes(1)
+    expect(toast.info).not.toHaveBeenCalled()
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+
+  it('toasts a distinct "too late" notice when the ask already lapsed (404)', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 404 }) as Response))
+    const wrapper = mountWithDecisions([capabilityDecision({ id: 'cap-b' })])
+
+    await wrapper.get('[data-testid="capability-decision-allow"]').trigger('click')
+    await flushPromises()
+
+    expect(toast.info).toHaveBeenCalledTimes(1)
+    expect(toast.success).not.toHaveBeenCalled()
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+
+  it('toasts an error, distinct from success and "too late", on a real failure', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: false,
+      status: 500,
+      json: async () => ({ error: 'boom' }),
+    }) as unknown as Response))
+    const wrapper = mountWithDecisions([capabilityDecision({ id: 'cap-c' })])
+
+    await wrapper.get('[data-testid="capability-decision-deny"]').trigger('click')
+    await flushPromises()
+
+    expect(toast.error).toHaveBeenCalledTimes(1)
+    expect(toast.success).not.toHaveBeenCalled()
+    expect(toast.info).not.toHaveBeenCalled()
+  })
+})
+
+describe('agentTriageBand capability cards vs. the bulk collapse', () => {
+  function capabilityDecision(o: Partial<PendingCapabilityDecision> = {}): PendingCapabilityDecision {
+    return {
+      id: 'cap-1',
+      capability: 'network.egress',
+      value: 'api.stripe.com',
+      context: 'project:demo',
+      reason: 'Outbound call to a new host',
+      requestedAt: new Date().toISOString(),
+      ...o,
+    }
+  }
+
+  // F-4: hasBulk (>=2 task permission requests) used to default the whole
+  // card list — capability cards included — behind "Review individually".
+  // A capability ask self-denies in 25s; it must stay reachable regardless.
+  it('keeps a capability card reachable while two task permission requests trigger the bulk collapse', () => {
+    const item: PermissionItem = {
+      taskId: 'task-1',
+      projectName: 'demo',
+      title: 'Ship it',
+      requests: [
+        { id: 'req-1', stageRunId: 'run-1', tool: 'Bash', pattern: 'npm publish', reason: null, requestedAt: new Date().toISOString(), resolvedAt: null, outcome: null },
+        { id: 'req-2', stageRunId: 'run-1', tool: 'Read', pattern: '/etc/passwd', reason: null, requestedAt: new Date().toISOString(), resolvedAt: null, outcome: null },
+      ],
+    }
+    const wrapper = mount(AgentTriageBand, {
+      props: { agents: [], permissionItems: [item], capabilityDecisions: [capabilityDecision({ id: 'cap-reachable' })] },
+    })
+
+    // The task-permission card is the one the collapse hides...
+    expect(wrapper.text()).not.toContain('Ship it')
+    // ...but the capability ask's own Allow/Deny stay on screen and enabled.
+    expect(wrapper.get('[data-testid="capability-decision-allow"]').attributes('disabled')).toBeUndefined()
+    expect(wrapper.get('[data-testid="capability-decision-deny"]').attributes('disabled')).toBeUndefined()
+  })
+})
+
+describe('agentTriageBand capability card focus and announcement', () => {
+  function capabilityDecision(o: Partial<PendingCapabilityDecision> = {}): PendingCapabilityDecision {
+    return {
+      id: 'cap-1',
+      capability: 'network.egress',
+      value: 'api.stripe.com',
+      context: 'project:demo',
+      reason: 'Outbound call to a new host',
+      requestedAt: new Date().toISOString(),
+      ...o,
+    }
+  }
+
+  // F-2 (WCAG 2.4.3): a capability card has no held-permission list to shrink
+  // — the whole card unmounts the moment the ask is gone, so there is no
+  // "same card" left to look inside. Focus must land somewhere sane, never
+  // on <body>.
+  it('moves focus off <body> when a focused capability card disappears', async () => {
+    const wrapper = mount(AgentTriageBand, {
+      props: {
+        agents: [],
+        permissionItems: [],
+        capabilityDecisions: [
+          capabilityDecision({ id: 'cap-gone' }),
+          capabilityDecision({ id: 'cap-stays', capability: 'fs.write' }),
+        ],
+      },
+      attachTo: document.body,
+    })
+    const allowButtons = wrapper.findAll('[data-testid="capability-decision-allow"]')
+    ;(allowButtons[0].element as HTMLElement).focus()
+    expect(document.activeElement).toBe(allowButtons[0].element)
+
+    await wrapper.setProps({
+      capabilityDecisions: [capabilityDecision({ id: 'cap-stays', capability: 'fs.write' })],
+    })
+    await wrapper.vm.$nextTick()
+    await wrapper.vm.$nextTick()
+
+    expect(document.activeElement).not.toBe(document.body)
+    wrapper.unmount()
+  })
+
+  // F-3: a new capability ask gets 25 seconds and, without this, no notice
+  // for a screen-reader user away from the card.
+  it('announces a newly appearing capability ask', async () => {
+    const wrapper = mount(AgentTriageBand, {
+      props: { agents: [], permissionItems: [], capabilityDecisions: [] },
+    })
+    const live = wrapper.get('[data-testid="triage-live-announcement"]')
+    expect(live.text()).toBe('')
+
+    await wrapper.setProps({
+      capabilityDecisions: [capabilityDecision({ id: 'cap-new', capability: 'network.egress', value: 'api.stripe.com' })],
+    })
+
+    expect(live.text()).toContain('network.egress')
+    expect(live.text()).toContain('api.stripe.com')
   })
 })

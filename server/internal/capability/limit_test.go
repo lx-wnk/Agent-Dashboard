@@ -41,7 +41,7 @@ func TestServerEnforcerLimitExhaustedAsks(t *testing.T) {
 	g := capability.GrantView{ID: "g1", LimitCount: 3, LimitWindowSeconds: 3600}
 	d := capability.Decision{Effect: capability.EffectAllow, GrantID: "g1"}
 
-	err := e.Enforce(context.Background(), d, g, 3)
+	err := e.Enforce(context.Background(), capability.Request{}, d, g, 3)
 	if err != nil {
 		t.Fatalf("an asker that grants must let the call through: %v", err)
 	}
@@ -58,7 +58,7 @@ func TestServerEnforcerLimitExhaustedReasonNamesTheLimit(t *testing.T) {
 	g := capability.GrantView{ID: "g1", LimitCount: 3, LimitWindowSeconds: 3600}
 	d := capability.Decision{Effect: capability.EffectAllow, GrantID: "g1"}
 
-	err := e.Enforce(context.Background(), d, g, 3)
+	err := e.Enforce(context.Background(), capability.Request{}, d, g, 3)
 	if !errors.Is(err, capability.ErrDenied) {
 		t.Fatalf("Enforce = %v, want it to wrap ErrDenied when the asker refuses", err)
 	}
@@ -77,7 +77,7 @@ func TestServerEnforcerLimitWithinBoundsAllowsWithoutAsking(t *testing.T) {
 	g := capability.GrantView{ID: "g1", LimitCount: 3, LimitWindowSeconds: 3600}
 	d := capability.Decision{Effect: capability.EffectAllow, GrantID: "g1"}
 
-	if err := e.Enforce(context.Background(), d, g, 2); err != nil {
+	if err := e.Enforce(context.Background(), capability.Request{}, d, g, 2); err != nil {
 		t.Fatalf("allow under the limit must pass: %v", err)
 	}
 	if asker.called {
@@ -93,7 +93,7 @@ func TestServerEnforcerLimitUnlimitedNeverAsks(t *testing.T) {
 	g := capability.GrantView{ID: "g1", LimitCount: 0, LimitWindowSeconds: 3600}
 	d := capability.Decision{Effect: capability.EffectAllow, GrantID: "g1"}
 
-	if err := e.Enforce(context.Background(), d, g, 999999); err != nil {
+	if err := e.Enforce(context.Background(), capability.Request{}, d, g, 999999); err != nil {
 		t.Fatalf("an unlimited grant must pass regardless of usage: %v", err)
 	}
 	if asker.called {
@@ -110,7 +110,7 @@ func TestServerEnforcerLimitIgnoredForNonAllow(t *testing.T) {
 	g := capability.GrantView{ID: "g1", LimitCount: 3, LimitWindowSeconds: 3600}
 	d := capability.Decision{Effect: capability.EffectDeny, GrantID: "g1", Reason: "denied elsewhere"}
 
-	err := e.Enforce(context.Background(), d, g, 999)
+	err := e.Enforce(context.Background(), capability.Request{}, d, g, 999)
 	if !errors.Is(err, capability.ErrDenied) {
 		t.Fatalf("Enforce = %v, want it to wrap ErrDenied for a deny decision", err)
 	}

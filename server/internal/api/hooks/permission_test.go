@@ -8,7 +8,9 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 	"unicode/utf8"
@@ -371,6 +373,47 @@ func TestConcurrentHoldsAreCapped(t *testing.T) {
 	if held, _, _, _ := h.permissions.StateForSession("s1"); len(held) > maxHoldsPerSession {
 		t.Fatalf("held %d requests, cap is %d", len(held), maxHoldsPerSession)
 	}
+}
+
+// TestConcurrentHoldsNeverExceedTheCapUnderContention fires far more than the
+// cap through hold() itself, released from one shared gate so they all reach
+// the count-check at the same instant instead of trickling in through the
+// HTTP layer, and polls throughout the race window instead of only after the
+// batch settles (see TestConcurrentHoldsAreCapped above): the old
+// check-then-register split let every request in a burst read the same stale
+// count and all register before any of them became visible to a poll that
+// started late.
+func TestConcurrentHoldsNeverExceedTheCapUnderContention(t *testing.T) {
+	h := newBridgeHandler(t)
+	// Short enough that -count=N stays fast: the race, when it happens, shows
+	// up within microseconds of the burst below, not near the end of the hold.
+	h.permissions.holdFor = 200 * time.Millisecond
+
+	const attempts = maxHoldsPerSession * 25
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(attempts)
+	for i := range attempts {
+		go func(i int) {
+			defer wg.Done()
+			<-start
+			_, _ = h.permissions.hold(context.Background(), preToolPayload{
+				SessionID: "s1",
+				ToolName:  "Bash",
+				ToolUseID: "t" + strconv.Itoa(i),
+				CWD:       testCWD,
+			})
+		}(i)
+	}
+	close(start)
+
+	deadline := time.Now().Add(150 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if held, _, _, _ := h.permissions.StateForSession("s1"); len(held) > maxHoldsPerSession {
+			t.Fatalf("held %d requests while the cap is %d", len(held), maxHoldsPerSession)
+		}
+	}
+	wg.Wait()
 }
 
 // RequestedAt has second precision, so a batch of parallel calls would sort

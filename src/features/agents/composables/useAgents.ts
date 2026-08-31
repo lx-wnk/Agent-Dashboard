@@ -1,3 +1,4 @@
+import type { PendingCapabilityDecision } from '@/sdk.generated'
 import type { Agent } from '@/types'
 import { computed, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { startNowTicking } from '@/composables/useNow'
@@ -19,6 +20,7 @@ export interface TrendPoint {
 const TREND_RETENTION_MS = 10 * 60 * 1000
 
 const agents = shallowRef<Agent[]>([])
+const pendingCapabilityDecisions = shallowRef<PendingCapabilityDecision[]>([])
 const costTrend = ref<TrendPoint[]>([])
 const selectedAgent = ref<Agent | null>(null)
 const isLoading = ref(true)
@@ -28,8 +30,17 @@ const debouncedQuery = ref('')
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
-function handleAgentData(data: Agent[], _trend?: TrendPoint[]) {
+// Sentinel for "this caller cannot know the current pending-decisions set"
+// (the plain GET /api/agents poll response has no such field at all) — kept
+// distinct from an SSE frame that carries the field and just says "empty",
+// so a future caller can't collapse "none" and "unknown" back into one `?? []`.
+const DECISIONS_UNKNOWN = 'unknown' as const
+type DecisionsUpdate = PendingCapabilityDecision[] | typeof DECISIONS_UNKNOWN
+
+function handleAgentData(data: Agent[], _trend: TrendPoint[] | undefined, decisions: DecisionsUpdate) {
   agents.value = data
+  if (decisions !== DECISIONS_UNKNOWN)
+    pendingCapabilityDecisions.value = decisions
 
   // Build the cost trend client-side: the backend streams an empty trend, but
   // every frame carries the running agents, so we sample total cost/tokens here.
@@ -60,7 +71,7 @@ async function fetchAgents() {
     const res = await fetch('/api/agents')
     if (!res.ok)
       throw new Error(`HTTP ${res.status}`)
-    handleAgentData(await res.json())
+    handleAgentData(await res.json(), undefined, DECISIONS_UNKNOWN)
   }
   catch (e) {
     error.value = errorMessage(e)
@@ -68,12 +79,13 @@ async function fetchAgents() {
   }
 }
 
-// SSE frame carries { agents, trend }; handleAgentData rebuilds the cost trend
-// client-side so the streamed trend is intentionally ignored.
+// SSE frame carries { agents, trend, pendingCapabilityDecisions }; handleAgentData rebuilds
+// the cost trend client-side so the streamed trend is intentionally ignored, but
+// pendingCapabilityDecisions is authoritative server state and is passed through as-is.
 function handleSseMessage(data: string) {
   try {
     const payload = JSON.parse(data)
-    handleAgentData(payload.agents, payload.trend)
+    handleAgentData(payload.agents, payload.trend, payload.pendingCapabilityDecisions ?? [])
   }
   catch { /* ignore parse errors */ }
 }
@@ -178,6 +190,7 @@ export function useAgents(options?: { autoStart?: boolean }) {
 
   return {
     agents,
+    pendingCapabilityDecisions,
     costTrend,
     filteredAgents,
     attentionAgents,

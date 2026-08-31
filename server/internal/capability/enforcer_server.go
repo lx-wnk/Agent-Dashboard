@@ -14,9 +14,11 @@ var (
 	ErrAskRequired = errors.New("capability requires approval but no asker is configured")
 )
 
-// Asker routes an ask-effect decision to whoever answers it.
+// Asker routes an ask-effect decision to whoever answers it. It receives the
+// request as well as the decision: Decision alone names no capability and no
+// value, so an asker given only the decision cannot say what is being approved.
 type Asker interface {
-	Ask(ctx context.Context, d Decision) (bool, error)
+	Ask(ctx context.Context, req Request, d Decision) (bool, error)
 }
 
 // ServerEnforcer intercepts in-process application calls. It is the only
@@ -49,7 +51,7 @@ func (ServerEnforcer) Point() string { return EnforcerServer }
 // two points are each incomplete in their own way — the hook fails open on
 // timeout, the spawn point is static and cannot ask — so this one enforces
 // every decision handed to it regardless of where else it is enforceable.
-func (e ServerEnforcer) Enforce(ctx context.Context, d Decision, g GrantView, usedInWindow int) error {
+func (e ServerEnforcer) Enforce(ctx context.Context, req Request, d Decision, g GrantView, usedInWindow int) error {
 	if d.Effect == EffectAllow && !WithinLimit(g, usedInWindow) {
 		d = Decision{
 			Effect:      EffectAsk,
@@ -70,7 +72,7 @@ func (e ServerEnforcer) Enforce(ctx context.Context, d Decision, g GrantView, us
 			// worse than one that is absent.
 			return fmt.Errorf("%w: %s", ErrAskRequired, d.Reason)
 		}
-		ok, err := e.Asker.Ask(ctx, d)
+		ok, err := e.Asker.Ask(ctx, req, d)
 		if err != nil {
 			return fmt.Errorf("capability ask: %w", err)
 		}

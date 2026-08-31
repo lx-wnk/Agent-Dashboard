@@ -285,3 +285,51 @@ func TestDecideCapabilityMismatchNeverResolves(t *testing.T) {
 		t.Errorf("Effect = %v, want ask (the class default) — the pattern match alone must not be enough", got.Effect)
 	}
 }
+
+func TestMostSpecific(t *testing.T) {
+	cases := []struct {
+		name   string
+		in     []capability.Context
+		want   capability.Context
+		wantOK bool
+		why    string
+	}{
+		{
+			name:   "narrowest wins regardless of slice order",
+			in:     []capability.Context{{Kind: "global"}, {Kind: "task", Ref: "t1"}, {Kind: "project", Ref: "/p"}},
+			want:   capability.Context{Kind: "task", Ref: "t1"},
+			wantOK: true,
+			why:    "Contexts' order is documented as not load-bearing; the ranking must decide",
+		},
+		{
+			name:   "an unrecognised kind is skipped, not treated as least specific",
+			in:     []capability.Context{{Kind: "nope", Ref: "x"}, {Kind: "global"}},
+			want:   capability.Context{Kind: "global"},
+			wantOK: true,
+			why:    "Decide drops an unknown kind entirely; naming one here would label a level Decide never honours",
+		},
+		{
+			name:   "only unrecognised kinds reports not-ok",
+			in:     []capability.Context{{Kind: "nope"}, {Kind: "alsonope"}},
+			wantOK: false,
+			why:    "there is no level to name",
+		},
+		{
+			name:   "empty input reports not-ok",
+			in:     nil,
+			wantOK: false,
+			why:    "same reason, without the typo",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := capability.MostSpecific(tc.in)
+			if ok != tc.wantOK {
+				t.Fatalf("ok = %v, want %v — %s", ok, tc.wantOK, tc.why)
+			}
+			if ok && got != tc.want {
+				t.Errorf("MostSpecific = %+v, want %+v — %s", got, tc.want, tc.why)
+			}
+		})
+	}
+}

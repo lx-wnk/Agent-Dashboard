@@ -32,7 +32,8 @@ func newMux(t *testing.T) (*chi.Mux, *ent.Client, repo.MemoryRepo, repo.GrantRep
 	capRepo := repo.NewCapabilityRepo(bundle.Client)
 	grantRepo := repo.NewGrantRepo(bundle.Client)
 	grantUsageRepo := repo.NewGrantUsageRepo(bundle.Client, bundle.WriteClient)
-	h := apimemory.NewHandler(memRepo, memory.NewRetriever(bundle.DB, memRepo), capRepo, grantRepo, grantUsageRepo)
+	gate := memory.Gate{Capabilities: capRepo, Grants: grantRepo, GrantUsage: grantUsageRepo}
+	h := apimemory.NewHandler(memRepo, memory.NewRetriever(bundle.DB, memRepo), gate)
 
 	mux := chi.NewRouter()
 	h.Mount(mux)

@@ -3,7 +3,6 @@ package api
 import (
 	"compress/gzip"
 	"context"
-	"encoding/json"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -16,12 +15,14 @@ import (
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/lx-wnk/agent-dashboard/sdk"
 	"github.com/lx-wnk/agent-dashboard/server/frontend"
+	"github.com/lx-wnk/agent-dashboard/server/internal/agentbroadcast"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/adapters"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/admin"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/agents"
 	apianalytics "github.com/lx-wnk/agent-dashboard/server/internal/api/analytics"
 	apikeyhandler "github.com/lx-wnk/agent-dashboard/server/internal/api/apikeys"
 	apiauth "github.com/lx-wnk/agent-dashboard/server/internal/api/auth"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/capabilities"
 	apiconfig "github.com/lx-wnk/agent-dashboard/server/internal/api/config"
 	coordapi "github.com/lx-wnk/agent-dashboard/server/internal/api/coord"
 	apicost "github.com/lx-wnk/agent-dashboard/server/internal/api/cost"
@@ -127,7 +128,21 @@ type RouterDeps struct {
 	// instance and is constructed before this router. May be nil, in which case
 	// this router builds an unobserved one so the endpoints still answer — no
 	// agent is annotated, because nothing else holds a reference to it.
-	HookEnforcer      *hooks.HookEnforcer
+	HookEnforcer *hooks.HookEnforcer
+	// CapabilityDecisions supplies the server-point asks currently waiting for
+	// a human. A rescan pushes a whole frame, so omitting it would clear the
+	// list in every connected client on the next hook event. Nil when no asker
+	// is wired (auth mode none).
+	CapabilityDecisions agentbroadcast.CapabilityDecisionProvider
+	// CapabilityAsker is notified of this router's rescan so a new ask reaches
+	// clients without waiting for the next scan tick, and resolves a human's
+	// decision on one. Declared as the two methods used rather than
+	// *serverask.Asker: the router needs nothing else from it, and a nil
+	// interface here simply means no asker was wired.
+	CapabilityAsker interface {
+		SetOnChange(func())
+		Resolve(id, decision string) error
+	}
 	OAuthProvider     authpkg.OAuthProvider
 	UserRepo          repo.UserRepo
 	ApiKeyRepo        repo.ApiKeyRepo
@@ -221,7 +236,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	if debounceMs <= 0 {
 		debounceMs = 100
 	}
-	rescan := newDebouncedRescan(serverCtx, deps.AgentBroadcaster, debounceMs, getAgents)
+	rescan := newDebouncedRescan(serverCtx, deps.AgentBroadcaster, debounceMs, getAgents, deps.CapabilityDecisions)
 	hookEnforcer := deps.HookEnforcer
 	if hookEnforcer == nil {
 		hookEnforcer = hooks.NewHookEnforcer(nil)
@@ -230,6 +245,9 @@ func NewRouter(deps RouterDeps) http.Handler {
 	// this router's call. A held or resolved permission then reaches connected
 	// clients without waiting for the next scan tick.
 	hookEnforcer.SetOnChange(rescan)
+	if deps.CapabilityAsker != nil {
+		deps.CapabilityAsker.SetOnChange(rescan)
+	}
 	hooksHandler := hooks.New(deps.Config.HooksSecret, deps.HookStore, rescan, hookEnforcer)
 	hooksHandler.SetSessionCWD(newSessionCWDLookup(getAgents))
 	r.Post("/api/hooks/event", hooksHandler.Event)
@@ -514,6 +532,12 @@ func NewRouter(deps RouterDeps) http.Handler {
 			r.Post("/api/hooks/permission/respond", hooksHandler.PermissionRespond)
 			r.Post("/api/hooks/permission/arm", hooksHandler.PermissionArm)
 		}
+		// Nil under DASHBOARD_AUTH=none, same as CapabilityDecisions above: with
+		// JWT off there is no human on the other end of this endpoint, only any
+		// local process, so it would offer a decision nothing can meaningfully make.
+		if deps.CapabilityAsker != nil {
+			r.Post("/api/capabilities/decisions/respond", capabilities.New(deps.CapabilityAsker).Respond)
+		}
 
 		// SP1 lifecycle + settings endpoints under the clean /api/plugins namespace.
 		// The read-only list is needed by non-admin users for slot discovery, so it
@@ -685,7 +709,7 @@ func newSessionCWDLookup(getAgents func(context.Context) ([]sdk.Agent, error)) h
 	}
 }
 
-func newDebouncedRescan(ctx context.Context, broadcaster *sse.Broadcaster, debounceMs int, getAgents func(context.Context) ([]sdk.Agent, error)) hooks.OnEventFn {
+func newDebouncedRescan(ctx context.Context, broadcaster *sse.Broadcaster, debounceMs int, getAgents func(context.Context) ([]sdk.Agent, error), decisions agentbroadcast.CapabilityDecisionProvider) hooks.OnEventFn {
 	var mu sync.Mutex
 	var timer *time.Timer
 	delay := time.Duration(debounceMs) * time.Millisecond
@@ -706,7 +730,11 @@ func newDebouncedRescan(ctx context.Context, broadcaster *sse.Broadcaster, debou
 				slog.Warn("hooks: debounced rescan failed", "err", err)
 				return
 			}
-			data, err := json.Marshal(map[string]any{"agents": agents, "trend": []any{}})
+			var pending []sdk.PendingCapabilityDecision
+			if decisions != nil {
+				pending = decisions(ctx)
+			}
+			data, err := agentbroadcast.MarshalFrame(agents, pending)
 			if err != nil {
 				slog.Warn("hooks: marshal failed", "err", err)
 				return

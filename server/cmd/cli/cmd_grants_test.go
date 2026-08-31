@@ -142,7 +142,7 @@ func TestRevokeGrant_TombstonesNotDeletes(t *testing.T) {
 }
 
 // TestGrantCLI_OpensTheAuthorizeGate is the acceptance criterion for this
-// unit: memory.Authorize denies with no grant present, and a grant created
+// unit: memory.Gate.Authorize denies with no grant present, and a grant created
 // through the CLI's own add helper makes the identical call succeed.
 func TestGrantCLI_OpensTheAuthorizeGate(t *testing.T) {
 	store, err := openDBStore(t.TempDir() + "/test.db")
@@ -152,7 +152,7 @@ func TestGrantCLI_OpensTheAuthorizeGate(t *testing.T) {
 
 	require.NotZero(t, repo.SeedCapabilities(ctx, store.caps))
 
-	err = memory.Authorize(ctx, store.caps, store.grants, store.grantUsage, repo.CapabilityMemoryRead, "", repo.GlobalScope())
+	err = memory.Gate{Capabilities: store.caps, Grants: store.grants, GrantUsage: store.grantUsage}.Authorize(ctx, repo.CapabilityMemoryRead, "", repo.GlobalScope())
 	require.Error(t, err, "no grant exists yet — the gate must deny")
 
 	_, err = addGrant(ctx, store, repo.CapabilityMemoryRead, grantAddOpts{
@@ -163,7 +163,7 @@ func TestGrantCLI_OpensTheAuthorizeGate(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = memory.Authorize(ctx, store.caps, store.grants, store.grantUsage, repo.CapabilityMemoryRead, "", repo.GlobalScope())
+	err = memory.Gate{Capabilities: store.caps, Grants: store.grants, GrantUsage: store.grantUsage}.Authorize(ctx, repo.CapabilityMemoryRead, "", repo.GlobalScope())
 	assert.NoError(t, err, "the grant just created must be the one Authorize matches")
 }
 
@@ -245,7 +245,7 @@ func TestGrantCLI_WildcardPatternOpensTheAuthorizeGate(t *testing.T) {
 
 	require.NotZero(t, repo.SeedCapabilities(ctx, store.caps))
 
-	err = memory.Authorize(ctx, store.caps, store.grants, store.grantUsage, repo.CapabilityMemoryRead, "some/value", repo.GlobalScope())
+	err = memory.Gate{Capabilities: store.caps, Grants: store.grants, GrantUsage: store.grantUsage}.Authorize(ctx, repo.CapabilityMemoryRead, "some/value", repo.GlobalScope())
 	require.Error(t, err, "no grant exists yet — the gate must deny")
 
 	_, err = addGrant(ctx, store, repo.CapabilityMemoryRead, grantAddOpts{
@@ -256,7 +256,7 @@ func TestGrantCLI_WildcardPatternOpensTheAuthorizeGate(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = memory.Authorize(ctx, store.caps, store.grants, store.grantUsage, repo.CapabilityMemoryRead, "some/value", repo.GlobalScope())
+	err = memory.Gate{Capabilities: store.caps, Grants: store.grants, GrantUsage: store.grantUsage}.Authorize(ctx, repo.CapabilityMemoryRead, "some/value", repo.GlobalScope())
 	assert.NoError(t, err, "a literal '*' pattern must match just like the empty-string wildcard")
 }
 

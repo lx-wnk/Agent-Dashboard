@@ -243,6 +243,25 @@ export interface PendingPermission {
   requestedAt: string
 }
 /**
+ * PendingCapabilityDecision is a capability decision waiting for a human at a
+ * server enforcement point; unlike PendingPermission it names a capability
+ * and scope, not a tool, and belongs to no Claude Code session.
+ */
+export interface PendingCapabilityDecision {
+  id: string
+  capability: string
+  value: string
+  /**
+   * ValueElided/ContextElided carry the cut count as their own field, mirroring
+   * RecentTool.Elided, so a truncated Value/Context cannot forge its own "…".
+   */
+  valueElided?: number /* int */
+  context: string
+  contextElided?: number /* int */
+  reason: string
+  requestedAt: string
+}
+/**
  * RecentTool is one entry of the recent-tool trail. Detail is the tool's own
  * human-readable argument -- a Bash command, an Edit/Write path -- and is
  * agent-authored text on its way to a UI: never interpolate it into a shell

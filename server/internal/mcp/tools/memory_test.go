@@ -51,14 +51,18 @@ func newMemoryDepsForTest(t *testing.T) (MemoryDeps, repo.GrantRepo, repo.Capabi
 	t.Cleanup(func() { _ = bundle.Client.Close() })
 
 	memRepo := repo.NewMemoryRepo(bundle.Client, bundle.WriteClient)
+	grants := repo.NewGrantRepo(bundle.Client)
+	capabilities := repo.NewCapabilityRepo(bundle.Client)
 	deps := MemoryDeps{
-		Repo:         memRepo,
-		Retriever:    memory.NewRetriever(bundle.DB, memRepo),
-		Capabilities: repo.NewCapabilityRepo(bundle.Client),
-		Grants:       repo.NewGrantRepo(bundle.Client),
-		GrantUsage:   repo.NewGrantUsageRepo(bundle.Client, bundle.WriteClient),
+		Repo:      memRepo,
+		Retriever: memory.NewRetriever(bundle.DB, memRepo),
+		Gate: memory.Gate{
+			Capabilities: capabilities,
+			Grants:       grants,
+			GrantUsage:   repo.NewGrantUsageRepo(bundle.Client, bundle.WriteClient),
+		},
 	}
-	return deps, deps.Grants, deps.Capabilities, context.Background()
+	return deps, grants, capabilities, context.Background()
 }
 
 // mustAllowMemoryGrant creates a global-context allow grant for capName,

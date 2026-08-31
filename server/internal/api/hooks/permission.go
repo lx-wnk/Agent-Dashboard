@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lx-wnk/agent-dashboard/sdk"
+	"github.com/lx-wnk/agent-dashboard/server/internal/askgate"
 	"github.com/lx-wnk/agent-dashboard/server/internal/capability"
 	"github.com/lx-wnk/agent-dashboard/server/internal/claudesettings"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sanitize"
@@ -60,8 +61,9 @@ const (
 	maxPatternRunes = 400
 )
 
-// permissionRequest is one PreToolUse call held open while a human decides.
-type permissionRequest struct {
+// heldPermission is the metadata askgate.Store carries for one PreToolUse
+// call held open while a human decides.
+type heldPermission struct {
 	perm      sdk.PendingPermission
 	sessionID string
 	toolUseID string
@@ -69,7 +71,6 @@ type permissionRequest struct {
 	// two calls from the same batch would otherwise sort arbitrarily and the
 	// card could answer a different request than the one it rendered.
 	seq uint64
-	ch  chan string // receives "allow" or "deny"
 }
 
 // armedSession is one session someone asked the dashboard to intercept.
@@ -120,31 +121,33 @@ type lapse struct {
 //     no longer answerable from here — it is evidence that someone must go look.
 type HookEnforcer struct {
 	mu      sync.Mutex
-	pending map[string]*permissionRequest // request id -> held call
-	notices map[string]permissionNotice   // session id -> terminal is asking
-	lapsed  map[string]lapse              // session id -> last hold that timed out
+	notices map[string]permissionNotice // session id -> terminal is asking
+	lapsed  map[string]lapse            // session id -> last hold that timed out
 	// armed holds the sessions whose prompts the dashboard should intercept.
 	// PreToolUse fires before Claude Code decides whether to prompt at all, so
 	// it carries no signal that a decision is pending -- holding every call
 	// would stall every session on the machine. A session is held only after
 	// someone asked for it.
 	armed map[string]armedSession
-	// seq orders holds within a session; see permissionRequest.seq.
-	seq      atomic.Uint64
-	nowFn    func() time.Time
+	// seq orders holds within a session; see heldPermission.seq.
+	seq   atomic.Uint64
+	nowFn func() time.Time
+	// holdFor is forwarded to store before every hold: askgate.Store owns the
+	// actual wait, but tests reach in and mutate this field directly, so it
+	// must stay the field of record rather than a snapshot store captured once.
 	holdFor  time.Duration
 	noticeFn func() // called when the pending set changes, to nudge a rescan
 	// deny reads the permission rules the user configured for Claude Code
 	// itself. A held call those rules forbid is offered without an Allow.
-	deny *claudesettings.Reader
+	deny  *claudesettings.Reader
+	store *askgate.Store[heldPermission]
 }
 
 // NewHookEnforcer builds a hook enforcer. onChange may be nil; when set it is
 // called whenever the pending set changes so the caller can push a fresh
 // snapshot to connected clients instead of waiting for the next scan tick.
 func NewHookEnforcer(onChange func()) *HookEnforcer {
-	return &HookEnforcer{
-		pending:  map[string]*permissionRequest{},
+	b := &HookEnforcer{
 		notices:  map[string]permissionNotice{},
 		lapsed:   map[string]lapse{},
 		armed:    map[string]armedSession{},
@@ -152,6 +155,8 @@ func NewHookEnforcer(onChange func()) *HookEnforcer {
 		holdFor:  permissionHoldTimeout,
 		noticeFn: onChange,
 	}
+	b.store = askgate.New[heldPermission](b.holdFor, b.changed)
+	return b
 }
 
 // Point identifies this enforcement point.
@@ -356,7 +361,7 @@ func (b *HookEnforcer) hold(ctx context.Context, p preToolPayload) (string, bool
 	seq := b.seq.Add(1)
 	id := uuid.New().String()
 	raw := argumentOf(p)
-	entry := &permissionRequest{
+	meta := heldPermission{
 		perm: sdk.PendingPermission{
 			ID:          id,
 			Tool:        p.ToolName,
@@ -368,7 +373,6 @@ func (b *HookEnforcer) hold(ctx context.Context, p preToolPayload) (string, bool
 		sessionID: p.SessionID,
 		toolUseID: p.ToolUseID,
 		seq:       seq,
-		ch:        make(chan string, 1),
 	}
 
 	b.mu.Lock()
@@ -376,31 +380,27 @@ func (b *HookEnforcer) hold(ctx context.Context, p preToolPayload) (string, bool
 		b.mu.Unlock()
 		return "", false
 	}
-	b.pending[id] = entry
 	// A held call supersedes an older terminal notice for the same session: the
 	// decision is ours again.
 	delete(b.notices, p.SessionID)
+	// The count check above and this registration must be atomic w.r.t. each
+	// other, or concurrent holds for one session all read the same stale count
+	// and all register past the cap — so both stay under b.mu, and the notice
+	// delete lands together with the registration instead of a moment ahead of
+	// it. Wait is called only after b.mu is released: it blocks, and must never
+	// do so while holding a lock another goroutine needs.
+	b.store.SetHoldFor(b.holdFor)
+	holdFor, ch := b.store.Register(id, meta)
 	b.mu.Unlock()
 	b.changed()
 
-	defer func() {
-		b.mu.Lock()
-		delete(b.pending, id)
-		b.mu.Unlock()
-		b.changed()
-	}()
-
-	select {
-	case decision := <-entry.ch:
-		return decision, true
-	case <-time.After(b.holdFor):
+	decision, ok := b.store.Wait(ctx, id, holdFor, ch)
+	if !ok && ctx.Err() == nil {
 		// Claude Code draws its own prompt for this exact call next; the
 		// Notification that follows is attributed to it.
 		b.noteLapse(p.SessionID, p.ToolUseID)
-		return "", false
-	case <-ctx.Done():
-		return "", false
 	}
+	return decision, ok
 }
 
 func (b *HookEnforcer) noteLapse(sessionID, toolUseID string) {
@@ -419,28 +419,22 @@ var errNotPending = errors.New("this request is no longer waiting for a decision
 // evaluation that would otherwise apply the rule.
 var errDeniedByRule = errors.New("your own permission rules deny this call")
 
-// resolve delivers a decision to a held call. Look-up, removal and send happen
-// in one critical section: releasing the lock before the send let a hold time
-// out in the gap, so the send landed in an orphaned buffer while the caller was
-// told the decision had been delivered.
+// resolve delivers a decision to a held call. The deniedBy veto and the
+// store's own look-up/removal run as one critical section (see
+// askgate.Store.Resolve): a hold that lapses in that same window must not
+// see a decision delivered out from under it.
 func (b *HookEnforcer) resolve(id, decision string) error {
-	b.mu.Lock()
-	entry, ok := b.pending[id]
-	if ok && decision == "allow" && entry.perm.DeniedBy != nil {
-		b.mu.Unlock()
-		// Left pending on purpose: Deny is still a valid answer for it.
-		return errDeniedByRule
-	}
-	if ok {
-		delete(b.pending, id)
-	}
-	b.mu.Unlock()
-	if !ok {
+	err := b.store.Resolve(id, func(meta heldPermission) (string, error) {
+		if decision == "allow" && meta.perm.DeniedBy != nil {
+			// Left pending on purpose: Deny is still a valid answer for it.
+			return "", errDeniedByRule
+		}
+		return decision, nil
+	})
+	if errors.Is(err, askgate.ErrNotPending) {
 		return errNotPending
 	}
-	// Cap-1 buffer, sole sender, entry now unreachable to any other resolver.
-	entry.ch <- decision
-	return nil
+	return err
 }
 
 // deniedBy names the first configured rule forbidding this call, or nil.
@@ -497,10 +491,14 @@ func (b *HookEnforcer) mayHoldLocked(sessionID, cwd string) bool {
 	return a.cwd == "" || cwd == "" || a.cwd == cwd
 }
 
+// holdsForLocked counts requests currently held for sessionID. It reads the
+// store's own snapshot rather than a field of b, but the count is only valid
+// as an admission check if the caller holds b.mu across it and whatever
+// registration follows — see hold.
 func (b *HookEnforcer) holdsForLocked(sessionID string) int {
 	n := 0
-	for _, e := range b.pending {
-		if e.sessionID == sessionID {
+	for _, e := range b.store.List() {
+		if e.Meta.sessionID == sessionID {
 			n++
 		}
 	}
@@ -540,9 +538,9 @@ func (b *HookEnforcer) StateForSession(sessionID string) (held []sdk.PendingPerm
 		seq  uint64
 	}
 	var hs []ordered
-	for _, e := range b.pending {
-		if e.sessionID == sessionID {
-			hs = append(hs, ordered{perm: e.perm, seq: e.seq})
+	for _, e := range b.store.List() {
+		if e.Meta.sessionID == sessionID {
+			hs = append(hs, ordered{perm: e.Meta.perm, seq: e.Meta.seq})
 		}
 	}
 	// By arrival, not by RequestedAt: that has second precision, so a batch of

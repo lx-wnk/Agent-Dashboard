@@ -13,6 +13,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/apps/obsidian"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	"github.com/lx-wnk/agent-dashboard/server/internal/memory"
 )
 
 // fakeVault is a minimal stand-in for Obsidian's Local REST API: a mutable
@@ -167,7 +168,7 @@ func TestIndexWritesPointersNotBodies(t *testing.T) {
 	defer ts.Close()
 	client := newTestClient(t, ts, "root")
 
-	count, err := obsidian.IndexNotes(ctx, client, mem, caps, grants, grantUsage, spaceID)
+	count, err := obsidian.IndexNotes(ctx, client, mem, memory.Gate{Capabilities: caps, Grants: grants, GrantUsage: grantUsage}, spaceID)
 	if err != nil {
 		t.Fatalf("IndexNotes: %v", err)
 	}
@@ -206,7 +207,7 @@ func TestIndexRequiresMemoryWriteGrant(t *testing.T) {
 	defer ts.Close()
 	client := newTestClient(t, ts, "root")
 
-	count, err := obsidian.IndexNotes(ctx, client, mem, caps, grants, grantUsage, spaceID)
+	count, err := obsidian.IndexNotes(ctx, client, mem, memory.Gate{Capabilities: caps, Grants: grants, GrantUsage: grantUsage}, spaceID)
 	if err == nil {
 		t.Fatal("IndexNotes: want error with no memory.write grant, got nil")
 	}
@@ -239,7 +240,7 @@ func TestStalePointerIsMarkedInvalidNotDeleted(t *testing.T) {
 	defer ts.Close()
 	client := newTestClient(t, ts, "root")
 
-	if _, err := obsidian.IndexNotes(ctx, client, mem, caps, grants, grantUsage, spaceID); err != nil {
+	if _, err := obsidian.IndexNotes(ctx, client, mem, memory.Gate{Capabilities: caps, Grants: grants, GrantUsage: grantUsage}, spaceID); err != nil {
 		t.Fatalf("first IndexNotes: %v", err)
 	}
 	entries, err := mem.ListValid(ctx, spaceID, time.Now())
@@ -251,7 +252,7 @@ func TestStalePointerIsMarkedInvalidNotDeleted(t *testing.T) {
 	// The note is deleted from the vault between index and the next access.
 	fv.remove("root/a.md")
 
-	if _, err := obsidian.IndexNotes(ctx, client, mem, caps, grants, grantUsage, spaceID); err != nil {
+	if _, err := obsidian.IndexNotes(ctx, client, mem, memory.Gate{Capabilities: caps, Grants: grants, GrantUsage: grantUsage}, spaceID); err != nil {
 		t.Fatalf("second IndexNotes: %v", err)
 	}
 
@@ -285,7 +286,7 @@ func TestIndexRequiresObsidianSearchGrant(t *testing.T) {
 	defer ts.Close()
 	client := newTestClient(t, ts, "root")
 
-	count, err := obsidian.IndexNotes(ctx, client, mem, caps, grants, grantUsage, spaceID)
+	count, err := obsidian.IndexNotes(ctx, client, mem, memory.Gate{Capabilities: caps, Grants: grants, GrantUsage: grantUsage}, spaceID)
 	if err == nil {
 		t.Fatal("IndexNotes: want error with no obsidian.search grant, got nil")
 	}
@@ -308,7 +309,7 @@ func TestIndexRequiresObsidianReadGrant(t *testing.T) {
 	defer ts.Close()
 	client := newTestClient(t, ts, "root")
 
-	count, err := obsidian.IndexNotes(ctx, client, mem, caps, grants, grantUsage, spaceID)
+	count, err := obsidian.IndexNotes(ctx, client, mem, memory.Gate{Capabilities: caps, Grants: grants, GrantUsage: grantUsage}, spaceID)
 	if err == nil {
 		t.Fatal("IndexNotes: want error with no obsidian.read grant, got nil")
 	}
@@ -335,7 +336,7 @@ func TestEmptyNoteIsSkippedNotAborted(t *testing.T) {
 	defer ts.Close()
 	client := newTestClient(t, ts, "root")
 
-	count, err := obsidian.IndexNotes(ctx, client, mem, caps, grants, grantUsage, spaceID)
+	count, err := obsidian.IndexNotes(ctx, client, mem, memory.Gate{Capabilities: caps, Grants: grants, GrantUsage: grantUsage}, spaceID)
 	if err != nil {
 		t.Fatalf("IndexNotes: want the empty note skipped rather than aborting the run, got error: %v", err)
 	}
@@ -370,7 +371,7 @@ func TestTransientReadFailureDoesNotExpireStalePointer(t *testing.T) {
 
 	ts, _ := newFakeVault(map[string]string{"root/a.md": "hello"})
 	client := newTestClient(t, ts, "root")
-	if _, err := obsidian.IndexNotes(ctx, client, mem, caps, grants, grantUsage, spaceID); err != nil {
+	if _, err := obsidian.IndexNotes(ctx, client, mem, memory.Gate{Capabilities: caps, Grants: grants, GrantUsage: grantUsage}, spaceID); err != nil {
 		t.Fatalf("first IndexNotes: %v", err)
 	}
 	ts.Close()
@@ -399,7 +400,7 @@ func TestTransientReadFailureDoesNotExpireStalePointer(t *testing.T) {
 	defer ts2.Close()
 	client2 := newTestClient(t, ts2, "root")
 
-	if _, err := obsidian.IndexNotes(ctx, client2, mem, caps, grants, grantUsage, spaceID); err != nil {
+	if _, err := obsidian.IndexNotes(ctx, client2, mem, memory.Gate{Capabilities: caps, Grants: grants, GrantUsage: grantUsage}, spaceID); err != nil {
 		t.Fatalf("second IndexNotes: %v", err)
 	}
 
@@ -429,7 +430,7 @@ func TestSearchResultOutsideVaultRootIsNotReadOrIndexed(t *testing.T) {
 	defer ts.Close()
 	client := newTestClient(t, ts, "root")
 
-	count, err := obsidian.IndexNotes(ctx, client, mem, caps, grants, grantUsage, spaceID)
+	count, err := obsidian.IndexNotes(ctx, client, mem, memory.Gate{Capabilities: caps, Grants: grants, GrantUsage: grantUsage}, spaceID)
 	if err != nil {
 		t.Fatalf("IndexNotes: %v", err)
 	}

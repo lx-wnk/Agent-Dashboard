@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import type { PermissionItem } from '@/composables/usePendingPermissions'
+import type { PendingCapabilityDecision } from '@/sdk.generated'
 import type { Agent, PendingPermission, PermissionRequest } from '@/types'
 import type { AnswerIntent } from '@/utils/answerKeys'
 import { computed, nextTick, ref, watch } from 'vue'
 import ConfirmCard from '@/components/ConfirmCard.vue'
 import QuestionCard from '@/components/QuestionCard.vue'
 import AppButton from '@/components/ui/AppButton.vue'
+import { useCapabilityDecisions } from '@/composables/useCapabilityDecisions'
 import { useNow } from '@/composables/useNow'
 import { usePermissionResolve } from '@/composables/usePermissionResolve'
 import { toast } from '@/composables/useToast'
@@ -17,6 +19,7 @@ import { friendlyProjectName } from '@/utils/friendlyProjectName'
 const props = defineProps<{
   agents: Agent[]
   permissionItems: PermissionItem[]
+  capabilityDecisions?: PendingCapabilityDecision[]
   focusedSessionId?: string | null
 }>()
 const emit = defineEmits<{
@@ -29,6 +32,20 @@ const emit = defineEmits<{
 const { getIdentity } = useAgentIdentity()
 const { nowMs } = useNow()
 const { resolveAgent } = usePermissionResolve()
+const { resolvingIds: resolvingCapabilityIds, resolve: resolveCapability } = useCapabilityDecisions()
+
+const capabilityDecisions = computed(() => props.capabilityDecisions ?? [])
+
+function capabilityValueLabel(decision: PendingCapabilityDecision): string {
+  return decision.value || 'Everything'
+}
+
+// ValueElided/ContextElided are rune-cut counts, not booleans: 0 and undefined
+// both mean "not cut" so the "…" marker (and the WCAG-friendly title behind
+// it) never renders for whole, untouched values.
+function elidedTitle(count: number | undefined): string | undefined {
+  return count ? `${count} character${count === 1 ? '' : 's'} cut off` : undefined
+}
 
 // Tone → Tailwind border + text classes
 const toneBorderClass: Record<string, string> = {
@@ -104,9 +121,12 @@ const breakdown = computed(() => {
     if (att && att.kind !== 'permission')
       counts[att.kind] = (counts[att.kind] ?? 0) + 1
   }
+  if (capabilityDecisions.value.length > 0)
+    counts.capability = capabilityDecisions.value.length
   const PARTS: [string, string, string][] = [
     ['question', 'question', 'questions'],
     ['permission', 'permission request', 'permission requests'],
+    ['capability', 'capability ask', 'capability asks'],
     ['error', 'failed run', 'failed runs'],
     ['stalled', 'stalled', 'stalled'],
   ]
@@ -116,7 +136,7 @@ const breakdown = computed(() => {
     .join(' · ')
 })
 
-const totalCount = computed(() => props.permissionItems.length + visibleAgentCards.value.length)
+const totalCount = computed(() => props.permissionItems.length + visibleAgentCards.value.length + capabilityDecisions.value.length)
 
 const isClear = computed(() => totalCount.value === 0 && props.permissionItems.length === 0)
 
@@ -319,6 +339,27 @@ async function decidePermission(agent: Agent, request: PendingPermission, decisi
   }
 }
 
+// A capability ask self-denies on the server after 25s; the SSE tick that
+// refreshes every 3s means a click can land after that deadline. The call
+// still returns one of three outcomes — applied, already-resolved (the ask
+// died first), or a real failure — and each must read differently, the same
+// vocabulary decidePermission uses above for the equivalent bridge race.
+async function handleCapabilityDecision(decision: PendingCapabilityDecision, choice: 'allow' | 'deny') {
+  const result = await resolveCapability(decision.id, choice)
+  const label = `${decision.capability} for ${capabilityValueLabel(decision)}`
+  switch (result.outcome) {
+    case 'applied':
+      toast.success(choice === 'allow' ? `Allowed ${label}` : `Denied ${label}`)
+      break
+    case 'already-resolved':
+      toast.info('Too late — that ask already expired or was answered elsewhere')
+      break
+    case 'error':
+      toast.error(`Could not answer the ask: ${result.message}`)
+      break
+  }
+}
+
 const arming = ref<Record<string, boolean>>({})
 async function setArmed(agent: Agent, armed: boolean) {
   arming.value[agent.sessionId] = true
@@ -388,10 +429,29 @@ async function answerQuestion(agent: Agent, intent: AnswerIntent) {
   }
 }
 
+// Keyed on sessionId for agent cards and on decision id for capability cards
+// — the two id spaces don't collide, and one map is what "extend, don't
+// parallel" means here.
 const cardRefs = ref<Record<string, HTMLElement | null>>({})
 
-function setCardRef(sessionId: string, el: HTMLElement | null) {
-  cardRefs.value[sessionId] = el
+function setCardRef(key: string, el: HTMLElement | null) {
+  cardRefs.value[key] = el
+}
+
+// Always-mounted regardless of the collapse toggle (capability cards render
+// outside it), so it is the fallback focus root once a card has unmounted
+// entirely and there is no "same card" left to look inside.
+const cardsContainerRef = ref<HTMLElement | null>(null)
+const headingRef = ref<HTMLElement | null>(null)
+
+function focusFallback(preferred: HTMLElement | null | undefined) {
+  const target = preferred?.querySelector<HTMLButtonElement>('button:not(:disabled)')
+    ?? cardsContainerRef.value?.querySelector<HTMLButtonElement>('button:not(:disabled)')
+  if (target) {
+    target.focus()
+    return
+  }
+  headingRef.value?.focus()
 }
 
 // The bridge's Allow/Deny row and the terminal-fallback control sit in
@@ -413,39 +473,78 @@ watch(() => props.agents, (agents, oldAgents) => {
   if (pendingRefocus.size) {
     nextTick(() => {
       for (const sessionId of pendingRefocus)
-        cardRefs.value[sessionId]?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus()
+        focusFallback(cardRefs.value[sessionId])
       pendingRefocus.clear()
     })
   }
 })
 
-// Targeted announcement for net-new bridge requests only — aria-live on the
-// whole section would re-fire on every ~3s tick as unrelated fields (uptime,
-// token counts) churn. Keyed on sessionId+request id, never on object
-// identity: agents (and their heldPermissions) are fresh objects each tick.
-// ponytail: announcedRequestIds never evicts; bounded by requests seen in this
-// tab's lifetime, cleared on reload.
+// A capability decision carries no held-permission list to shrink — the
+// whole card unmounts the moment the ask is gone (applied, denied, or
+// self-denied at the 25s deadline), taking any focused Allow/Deny with it.
+// There is no "same card" left to look inside, so this always falls straight
+// through to focusFallback's container/heading fallback.
+const pendingCapabilityRefocus = new Set<string>()
+
+watch(() => capabilityDecisions.value, (decisions, oldDecisions) => {
+  for (const old of oldDecisions ?? []) {
+    const stillPending = decisions.some(d => d.id === old.id)
+    if (!stillPending && cardRefs.value[old.id]?.contains(document.activeElement))
+      pendingCapabilityRefocus.add(old.id)
+  }
+  if (pendingCapabilityRefocus.size) {
+    nextTick(() => {
+      for (const id of pendingCapabilityRefocus)
+        focusFallback(cardRefs.value[id])
+      pendingCapabilityRefocus.clear()
+    })
+  }
+})
+
+// Targeted announcement for net-new bridge requests and capability asks only
+// — aria-live on the whole section would re-fire on every ~3s tick as
+// unrelated fields (uptime, token counts) churn. Keyed on sessionId+request
+// id (or "capability:"+id), never on object identity: both arrive as fresh
+// objects each tick. One watch across both sources, not two independent
+// ones, so a tick that changes both doesn't have the later assignment erase
+// the earlier one.
+// ponytail: announcedRequestIds never evicts; bounded by requests seen in
+// this tab's lifetime, cleared on reload.
 const announcedRequestIds = new Set<string>()
 const liveAnnouncement = ref('')
 
-watch(() => props.agents, (agents) => {
-  const fresh: string[] = []
+watch([() => props.agents, () => capabilityDecisions.value], ([agents, decisions]) => {
+  const freshPermissions: string[] = []
   for (const agent of agents) {
     for (const req of agent.heldPermissions ?? []) {
       const key = `${agent.sessionId}:${req.id}`
       if (announcedRequestIds.has(key))
         continue
       announcedRequestIds.add(key)
-      fresh.push(`${friendlyProjectName(agent.projectName)}: ${permissionLabel(req)}`)
+      freshPermissions.push(`${friendlyProjectName(agent.projectName)}: ${permissionLabel(req)}`)
     }
   }
-  if (!fresh.length)
-    return
+  const freshCapabilities: string[] = []
+  for (const decision of decisions) {
+    const key = `capability:${decision.id}`
+    if (announcedRequestIds.has(key))
+      continue
+    announcedRequestIds.add(key)
+    freshCapabilities.push(`${decision.capability} for ${capabilityValueLabel(decision)}`)
+  }
+  const parts: string[] = []
   // The bridge holds a whole batch of tool calls at once, and overwriting the
   // string per item announced only the last of them.
-  liveAnnouncement.value = fresh.length === 1
-    ? `Permission needed for ${fresh[0]}`
-    : `${fresh.length} permissions needed — ${fresh.join('; ')}`
+  if (freshPermissions.length === 1)
+    parts.push(`Permission needed for ${freshPermissions[0]}`)
+  else if (freshPermissions.length > 1)
+    parts.push(`${freshPermissions.length} permissions needed — ${freshPermissions.join('; ')}`)
+  if (freshCapabilities.length === 1)
+    parts.push(`Capability ask: ${freshCapabilities[0]}`)
+  else if (freshCapabilities.length > 1)
+    parts.push(`${freshCapabilities.length} capability asks — ${freshCapabilities.join('; ')}`)
+  if (parts.length)
+    liveAnnouncement.value = parts.join(' · ')
 }, { immediate: true })
 
 watch(() => props.focusedSessionId, (id) => {
@@ -483,7 +582,7 @@ watch(() => props.focusedSessionId, (id) => {
     <template v-else>
       <!-- Header row -->
       <div class="flex items-center gap-2 px-0.5 pb-2 flex-wrap">
-        <h2 class="text-[10px] font-bold uppercase tracking-wider text-fg-mute m-0">
+        <h2 ref="headingRef" tabindex="-1" class="text-[10px] font-bold uppercase tracking-wider text-fg-mute m-0 focus:outline-none">
           Needs you
         </h2>
         <span
@@ -588,247 +687,316 @@ watch(() => props.focusedSessionId, (id) => {
         {{ cardsVisible ? 'Hide individual requests' : `Review individually (${permissionItems.length + visibleAgentCards.length})` }}
       </button>
 
-      <div v-if="cardsVisible" class="flex flex-wrap gap-2.5">
+      <!-- Not gated behind v-if="cardsVisible": capability cards live outside the
+           collapse below, so this wrapper stays mounted whichever way the toggle
+           sits, and is the fallback focus root once a capability card unmounts
+           with nothing "inside the same card" left to refocus into. -->
+      <div ref="cardsContainerRef" class="flex flex-wrap gap-2.5">
         <!-- Task permission cards -->
-        <div
-          v-for="item in permissionItems"
-          :key="item.taskId"
-          class="min-w-[280px] flex-1 basis-[280px] max-w-[420px] rounded-lg bg-card border border-l-[3px] border-warning-dot border-l-warning-dot p-3 flex flex-col gap-2"
-        >
-          <div class="flex items-center gap-2 min-w-0">
-            <span class="font-semibold text-[13px] text-fg truncate">{{ item.projectName }}</span>
-            <span class="text-[11px] text-fg-faint truncate ml-1">{{ item.title }}</span>
-            <span class="ml-auto text-[10px] font-bold uppercase tracking-wide shrink-0 text-warning-text">Needs permission</span>
-          </div>
-
-          <ul class="m-0 p-0 list-none flex flex-col gap-1">
-            <li
-              v-for="req in item.requests"
-              :key="req.id"
-              class="flex flex-col gap-0.5"
-            >
-              <span class="font-mono text-[12px] text-fg bg-app border border-line rounded px-2.5 py-1 leading-snug">
-                {{ permissionLabel(req) }}
-                <span
-                  v-if="req.outsideSafeList"
-                  class="font-sans text-[10px] text-danger-text ml-1"
-                  title="Outside the server's safe allow-list"
-                >⚠</span>
-              </span>
-              <span v-if="req.reason" class="text-[11px] text-fg-faint px-0.5">{{ req.reason }}</span>
-            </li>
-          </ul>
-
-          <div class="flex items-center gap-2 flex-wrap">
-            <AppButton
-              variant="success"
-              size="sm"
-              :aria-label="`Approve all permissions for ${item.title}`"
-              @click="handleApproveTask(item.taskId, item.requests.map(r => r.id))"
-            >
-              Approve
-            </AppButton>
-            <AppButton
-              variant="danger"
-              size="sm"
-              :aria-label="`Deny all permissions for ${item.title}`"
-              @click="handleDenyTask(item.taskId, item.requests.map(r => r.id))"
-            >
-              Deny
-            </AppButton>
-            <label class="flex items-center gap-1 cursor-pointer select-none text-[11px] text-fg-faint ml-auto">
-              <input
-                v-model="rememberPerTask[item.taskId]"
-                type="checkbox"
-                class="accent-success"
-                :aria-label="`Don't ask again for ${item.projectName}`"
-              >
-              <span class="font-mono">Don't ask again for {{ item.projectName }}</span>
-            </label>
-          </div>
-        </div>
-
-        <!-- Agent attention cards (error, stalled, free-agent pendingToolUse) -->
-        <div
-          v-for="agent in visibleAgentCards"
-          :key="agent.sessionId"
-          :ref="(el) => setCardRef(agent.sessionId, el as HTMLElement | null)"
-          class="min-w-[280px] flex-1 basis-[280px] max-w-[420px] rounded-lg bg-card border border-l-[3px] p-3 flex flex-col gap-2 transition-shadow"
-          :class="[
-            toneBorderClass[agentAttentionMap.get(agent.sessionId)?.att?.tone ?? 'warning'],
-            toneLeftClass[agentAttentionMap.get(agent.sessionId)?.att?.tone ?? 'warning'],
-            agent.sessionId === focusedSessionId ? 'ring-2 ring-accent shadow-md' : '',
-          ]"
-        >
-          <div class="flex items-center gap-2 min-w-0">
-            <span aria-hidden="true" class="text-[15px] shrink-0">{{ getIdentity(agent.projectPath).emoji }}</span>
-            <span class="font-semibold text-[13px] text-fg truncate">{{ friendlyProjectName(agent.projectName) }}</span>
-            <span class="font-mono text-[11px] text-fg-faint shrink-0">{{ shortModel(agent.model ?? null) }}</span>
-            <span
-              class="ml-auto text-[10px] font-bold uppercase tracking-wide shrink-0"
-              :class="toneLabelClass[agentAttentionMap.get(agent.sessionId)?.att?.tone ?? 'warning']"
-            >{{ agentAttentionMap.get(agent.sessionId)?.att?.label }}</span>
-          </div>
-
-          <!-- Answerable question, detected directly in the session's terminal buffer -->
-          <template v-if="agent.pendingQuestion">
-            <div :class="answeringQuestion[agent.sessionId] ? 'opacity-60 pointer-events-none' : ''">
-              <QuestionCard
-                :detected-question="agent.pendingQuestion"
-                @answer="(intent) => answerQuestion(agent, intent)"
-              />
+        <template v-if="cardsVisible">
+          <div
+            v-for="item in permissionItems"
+            :key="item.taskId"
+            class="min-w-[280px] flex-1 basis-[280px] max-w-[420px] rounded-lg bg-card border border-l-[3px] border-warning-dot border-l-warning-dot p-3 flex flex-col gap-2"
+          >
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="font-semibold text-[13px] text-fg truncate">{{ item.projectName }}</span>
+              <span class="text-[11px] text-fg-faint truncate ml-1">{{ item.title }}</span>
+              <span class="ml-auto text-[10px] font-bold uppercase tracking-wide shrink-0 text-warning-text">Needs permission</span>
             </div>
-          </template>
 
-          <!-- Review/submit screen closing out a multi-question flow -->
-          <template v-else-if="agent.pendingConfirm">
-            <div :class="answeringQuestion[agent.sessionId] ? 'opacity-60 pointer-events-none' : ''">
-              <ConfirmCard
-                :detected-confirm="agent.pendingConfirm"
-                @answer="(intent) => answerQuestion(agent, intent)"
-              />
-            </div>
-          </template>
-
-          <!-- Orchestrated agent with pending permissions (not covered by task items) -->
-          <template v-else-if="agent.pipelineTaskId && agent.pendingPermissions?.length">
-            <ul class="m-0 p-0 list-none flex flex-col gap-1" :aria-label="`Pending permissions for ${agent.projectName}`">
+            <ul class="m-0 p-0 list-none flex flex-col gap-1">
               <li
-                v-for="p in agent.pendingPermissions"
-                :key="p.id"
+                v-for="req in item.requests"
+                :key="req.id"
                 class="flex flex-col gap-0.5"
               >
-                <span class="font-mono text-[12px] text-fg bg-app border border-line rounded px-2.5 py-1 leading-snug">{{ permissionLabel(p) }}</span>
-                <span v-if="p.reason" class="text-[11px] text-fg-faint px-0.5">{{ p.reason }}</span>
+                <span class="font-mono text-[12px] text-fg bg-app border border-line rounded px-2.5 py-1 leading-snug">
+                  {{ permissionLabel(req) }}
+                  <span
+                    v-if="req.outsideSafeList"
+                    class="font-sans text-[10px] text-danger-text ml-1"
+                    title="Outside the server's safe allow-list"
+                  >⚠</span>
+                </span>
+                <span v-if="req.reason" class="text-[11px] text-fg-faint px-0.5">{{ req.reason }}</span>
               </li>
             </ul>
-          </template>
 
-          <template v-else>
-            <div class="font-mono text-[12px] text-fg-mute bg-app border border-line rounded px-2.5 py-1.5 leading-snug break-words">
-              {{ blockedDetail(agent) }}
-            </div>
-          </template>
-
-          <div class="flex items-center gap-2 flex-wrap">
-            <span class="text-[11px] text-fg-faint">{{ formatRelativeActivity(secondsSince(agent.lastActivity, nowMs)) }}</span>
-
-            <template v-if="!agent.pendingQuestion && !agent.pendingConfirm && agent.pipelineTaskId && agent.pendingPermissions?.length">
+            <div class="flex items-center gap-2 flex-wrap">
               <AppButton
                 variant="success"
                 size="sm"
-                :disabled="agentResolving[agent.sessionId]"
-                :aria-label="`Approve permissions for ${agent.projectName}`"
-                @click="handleResolveAgent(agent, 'granted')"
+                :aria-label="`Approve all permissions for ${item.title}`"
+                @click="handleApproveTask(item.taskId, item.requests.map(r => r.id))"
               >
                 Approve
               </AppButton>
               <AppButton
                 variant="danger"
                 size="sm"
-                :disabled="agentResolving[agent.sessionId]"
-                :aria-label="`Deny permissions for ${agent.projectName}`"
-                @click="handleResolveAgent(agent, 'denied')"
+                :aria-label="`Deny all permissions for ${item.title}`"
+                @click="handleDenyTask(item.taskId, item.requests.map(r => r.id))"
               >
                 Deny
               </AppButton>
               <label class="flex items-center gap-1 cursor-pointer select-none text-[11px] text-fg-faint ml-auto">
                 <input
-                  v-model="rememberPerAgent[agent.sessionId]"
+                  v-model="rememberPerTask[item.taskId]"
                   type="checkbox"
                   class="accent-success"
-                  :aria-label="`Don't ask again for ${agent.projectName}`"
+                  :aria-label="`Don't ask again for ${item.projectName}`"
                 >
-                <span class="font-mono">{{ friendlyProjectName(agent.projectName) }}</span>
+                <span class="font-mono">Don't ask again for {{ item.projectName }}</span>
               </label>
-            </template>
-
-            <!-- One row per held call. The bridge can hold several at once when
-                 the agent batches tool calls, and answering only the first left
-                 the rest to lapse with nothing on screen to say so. -->
-            <div v-if="heldRequests(agent).length" class="ml-auto flex flex-col gap-1 items-stretch">
-              <div
-                v-for="request in heldRequests(agent)"
-                :key="request.id"
-                class="flex items-center gap-2 justify-end"
-              >
-                <span class="text-[11px] font-mono text-fg-mute truncate max-w-[22rem]">{{ permissionLabel(request) }}</span>
-                <!-- No Allow when the user's own permissions.deny covers the
-                     call: a hook "allow" short-circuits the evaluation that
-                     would otherwise apply the rule, so one click here would
-                     release a restriction the user believes is absolute. -->
-                <span
-                  v-if="request.deniedBy"
-                  class="text-[11px] text-fg-mute"
-                  data-testid="permission-denied-by-rule"
-                >Denied by your rule <span class="font-mono">{{ request.deniedBy }}</span></span>
-                <AppButton
-                  v-else
-                  variant="success"
-                  size="sm"
-                  :disabled="deciding[request.id]"
-                  :aria-busy="deciding[request.id] ? 'true' : undefined"
-                  :aria-label="`Allow ${permissionLabel(request)} once for ${friendlyProjectName(agent.projectName)} — the run continues immediately`"
-                  data-testid="permission-decide-allow"
-                  @click="decidePermission(agent, request, 'allow')"
-                >
-                  Allow
-                </AppButton>
-                <AppButton
-                  variant="outline"
-                  size="sm"
-                  :disabled="deciding[request.id]"
-                  :aria-busy="deciding[request.id] ? 'true' : undefined"
-                  :aria-label="`Deny ${permissionLabel(request)} for ${friendlyProjectName(agent.projectName)} — the session is told no and carries on`"
-                  data-testid="permission-decide-deny"
-                  @click="decidePermission(agent, request, 'deny')"
-                >
-                  Deny
-                </AppButton>
-              </div>
             </div>
+          </div>
+        </template>
 
-            <!-- The prompt already reached the terminal, so it cannot be
-                 answered here — but arming catches the next one. -->
-            <AppButton
-              v-if="agent.awaitingTerminalPermission && !agent.permissionBridgeArmed && !heldRequests(agent).length"
-              variant="outline"
-              size="sm"
-              class="ml-auto"
-              :disabled="arming[agent.sessionId]"
-              :aria-busy="arming[agent.sessionId] ? 'true' : undefined"
-              aria-label="Answer this session's next permission prompt here instead of in its terminal"
-              data-testid="permission-arm"
-              @click="setArmed(agent, true)"
-            >
-              Intercept next
-            </AppButton>
+        <!-- Capability decision cards: a server enforcement point is asking a
+             human to allow or deny a capability, not a Claude Code session.
+             Always rendered, never behind the "Review individually" collapse:
+             a capability ask self-denies 25s after it opens, so hiding its
+             only Allow/Deny behind an extra click for the whole of that
+             window is losing the decision by default, not deferring it. -->
+        <div
+          v-for="decision in capabilityDecisions"
+          :key="decision.id"
+          :ref="(el) => setCardRef(decision.id, el as HTMLElement | null)"
+          data-testid="capability-decision-card"
+          class="min-w-[280px] flex-1 basis-[280px] max-w-[420px] rounded-lg bg-card border border-l-[3px] border-warning-dot border-l-warning-dot p-3 flex flex-col gap-2"
+        >
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="font-semibold text-[13px] text-fg truncate">{{ decision.capability }}</span>
+            <span class="ml-auto text-[10px] font-bold uppercase tracking-wide shrink-0 text-warning-text">Needs decision</span>
+          </div>
 
-            <!-- Free agent: allow the paused tool for future runs -->
+          <span class="font-mono text-[12px] text-fg bg-app border border-line rounded px-2.5 py-1 leading-snug">
+            {{ capabilityValueLabel(decision) }}<span
+              v-if="decision.valueElided"
+              class="text-fg-faint"
+              data-testid="capability-value-elided"
+              :title="elidedTitle(decision.valueElided)"
+            >…</span>
+          </span>
+          <span class="text-[11px] text-fg-faint px-0.5">
+            Scope: {{ decision.context }}<span
+              v-if="decision.contextElided"
+              data-testid="capability-context-elided"
+              :title="elidedTitle(decision.contextElided)"
+            >…</span>
+          </span>
+          <span v-if="decision.reason" class="text-[11px] text-fg-faint px-0.5">{{ decision.reason }}</span>
+
+          <div class="flex items-center gap-2 flex-wrap">
             <AppButton
-              v-if="!heldRequests(agent).length && agentAttentionMap.get(agent.sessionId)?.grantableToolUse && !(agent.pipelineTaskId && agent.pendingPermissions?.length)"
               variant="success"
               size="sm"
-              class="ml-auto"
-              :disabled="allowing[agent.sessionId]"
-              :title="`Allow ${blockedDetail(agent)} for this project going forward. The paused run still needs your reply in its terminal.`"
-              :aria-label="`Allow ${agent.pendingToolUse?.tool} for ${friendlyProjectName(agent.projectName)} going forward`"
-              @click="allowTool(agent)"
+              :disabled="resolvingCapabilityIds[decision.id]"
+              :aria-busy="resolvingCapabilityIds[decision.id] ? 'true' : undefined"
+              :aria-label="`Allow ${decision.capability} for ${capabilityValueLabel(decision)}`"
+              data-testid="capability-decision-allow"
+              @click="handleCapabilityDecision(decision, 'allow')"
             >
-              Allow {{ agent.pendingToolUse?.tool }}
+              Allow
             </AppButton>
-
             <AppButton
-              variant="outline"
+              variant="danger"
               size="sm"
-              :class="!(agent.pipelineTaskId && agent.pendingPermissions?.length) && !agentAttentionMap.get(agent.sessionId)?.grantableToolUse ? 'ml-auto' : ''"
-              :aria-label="`Open details for ${agent.projectName}`"
-              @click="emit('select', agent)"
+              :disabled="resolvingCapabilityIds[decision.id]"
+              :aria-busy="resolvingCapabilityIds[decision.id] ? 'true' : undefined"
+              :aria-label="`Deny ${decision.capability} for ${capabilityValueLabel(decision)}`"
+              data-testid="capability-decision-deny"
+              @click="handleCapabilityDecision(decision, 'deny')"
             >
-              Open ↗
+              Deny
             </AppButton>
           </div>
         </div>
+
+        <!-- Agent attention cards (error, stalled, free-agent pendingToolUse) -->
+        <template v-if="cardsVisible">
+          <div
+            v-for="agent in visibleAgentCards"
+            :key="agent.sessionId"
+            :ref="(el) => setCardRef(agent.sessionId, el as HTMLElement | null)"
+            class="min-w-[280px] flex-1 basis-[280px] max-w-[420px] rounded-lg bg-card border border-l-[3px] p-3 flex flex-col gap-2 transition-shadow"
+            :class="[
+              toneBorderClass[agentAttentionMap.get(agent.sessionId)?.att?.tone ?? 'warning'],
+              toneLeftClass[agentAttentionMap.get(agent.sessionId)?.att?.tone ?? 'warning'],
+              agent.sessionId === focusedSessionId ? 'ring-2 ring-accent shadow-md' : '',
+            ]"
+          >
+            <div class="flex items-center gap-2 min-w-0">
+              <span aria-hidden="true" class="text-[15px] shrink-0">{{ getIdentity(agent.projectPath).emoji }}</span>
+              <span class="font-semibold text-[13px] text-fg truncate">{{ friendlyProjectName(agent.projectName) }}</span>
+              <span class="font-mono text-[11px] text-fg-faint shrink-0">{{ shortModel(agent.model ?? null) }}</span>
+              <span
+                class="ml-auto text-[10px] font-bold uppercase tracking-wide shrink-0"
+                :class="toneLabelClass[agentAttentionMap.get(agent.sessionId)?.att?.tone ?? 'warning']"
+              >{{ agentAttentionMap.get(agent.sessionId)?.att?.label }}</span>
+            </div>
+
+            <!-- Answerable question, detected directly in the session's terminal buffer -->
+            <template v-if="agent.pendingQuestion">
+              <div :class="answeringQuestion[agent.sessionId] ? 'opacity-60 pointer-events-none' : ''">
+                <QuestionCard
+                  :detected-question="agent.pendingQuestion"
+                  @answer="(intent) => answerQuestion(agent, intent)"
+                />
+              </div>
+            </template>
+
+            <!-- Review/submit screen closing out a multi-question flow -->
+            <template v-else-if="agent.pendingConfirm">
+              <div :class="answeringQuestion[agent.sessionId] ? 'opacity-60 pointer-events-none' : ''">
+                <ConfirmCard
+                  :detected-confirm="agent.pendingConfirm"
+                  @answer="(intent) => answerQuestion(agent, intent)"
+                />
+              </div>
+            </template>
+
+            <!-- Orchestrated agent with pending permissions (not covered by task items) -->
+            <template v-else-if="agent.pipelineTaskId && agent.pendingPermissions?.length">
+              <ul class="m-0 p-0 list-none flex flex-col gap-1" :aria-label="`Pending permissions for ${agent.projectName}`">
+                <li
+                  v-for="p in agent.pendingPermissions"
+                  :key="p.id"
+                  class="flex flex-col gap-0.5"
+                >
+                  <span class="font-mono text-[12px] text-fg bg-app border border-line rounded px-2.5 py-1 leading-snug">{{ permissionLabel(p) }}</span>
+                  <span v-if="p.reason" class="text-[11px] text-fg-faint px-0.5">{{ p.reason }}</span>
+                </li>
+              </ul>
+            </template>
+
+            <template v-else>
+              <div class="font-mono text-[12px] text-fg-mute bg-app border border-line rounded px-2.5 py-1.5 leading-snug break-words">
+                {{ blockedDetail(agent) }}
+              </div>
+            </template>
+
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="text-[11px] text-fg-faint">{{ formatRelativeActivity(secondsSince(agent.lastActivity, nowMs)) }}</span>
+
+              <template v-if="!agent.pendingQuestion && !agent.pendingConfirm && agent.pipelineTaskId && agent.pendingPermissions?.length">
+                <AppButton
+                  variant="success"
+                  size="sm"
+                  :disabled="agentResolving[agent.sessionId]"
+                  :aria-label="`Approve permissions for ${agent.projectName}`"
+                  @click="handleResolveAgent(agent, 'granted')"
+                >
+                  Approve
+                </AppButton>
+                <AppButton
+                  variant="danger"
+                  size="sm"
+                  :disabled="agentResolving[agent.sessionId]"
+                  :aria-label="`Deny permissions for ${agent.projectName}`"
+                  @click="handleResolveAgent(agent, 'denied')"
+                >
+                  Deny
+                </AppButton>
+                <label class="flex items-center gap-1 cursor-pointer select-none text-[11px] text-fg-faint ml-auto">
+                  <input
+                    v-model="rememberPerAgent[agent.sessionId]"
+                    type="checkbox"
+                    class="accent-success"
+                    :aria-label="`Don't ask again for ${agent.projectName}`"
+                  >
+                  <span class="font-mono">{{ friendlyProjectName(agent.projectName) }}</span>
+                </label>
+              </template>
+
+              <!-- One row per held call. The bridge can hold several at once when
+                 the agent batches tool calls, and answering only the first left
+                 the rest to lapse with nothing on screen to say so. -->
+              <div v-if="heldRequests(agent).length" class="ml-auto flex flex-col gap-1 items-stretch">
+                <div
+                  v-for="request in heldRequests(agent)"
+                  :key="request.id"
+                  class="flex items-center gap-2 justify-end"
+                >
+                  <span class="text-[11px] font-mono text-fg-mute truncate max-w-[22rem]">{{ permissionLabel(request) }}</span>
+                  <!-- No Allow when the user's own permissions.deny covers the
+                     call: a hook "allow" short-circuits the evaluation that
+                     would otherwise apply the rule, so one click here would
+                     release a restriction the user believes is absolute. -->
+                  <span
+                    v-if="request.deniedBy"
+                    class="text-[11px] text-fg-mute"
+                    data-testid="permission-denied-by-rule"
+                  >Denied by your rule <span class="font-mono">{{ request.deniedBy }}</span></span>
+                  <AppButton
+                    v-else
+                    variant="success"
+                    size="sm"
+                    :disabled="deciding[request.id]"
+                    :aria-busy="deciding[request.id] ? 'true' : undefined"
+                    :aria-label="`Allow ${permissionLabel(request)} once for ${friendlyProjectName(agent.projectName)} — the run continues immediately`"
+                    data-testid="permission-decide-allow"
+                    @click="decidePermission(agent, request, 'allow')"
+                  >
+                    Allow
+                  </AppButton>
+                  <AppButton
+                    variant="outline"
+                    size="sm"
+                    :disabled="deciding[request.id]"
+                    :aria-busy="deciding[request.id] ? 'true' : undefined"
+                    :aria-label="`Deny ${permissionLabel(request)} for ${friendlyProjectName(agent.projectName)} — the session is told no and carries on`"
+                    data-testid="permission-decide-deny"
+                    @click="decidePermission(agent, request, 'deny')"
+                  >
+                    Deny
+                  </AppButton>
+                </div>
+              </div>
+
+              <!-- The prompt already reached the terminal, so it cannot be
+                 answered here — but arming catches the next one. -->
+              <AppButton
+                v-if="agent.awaitingTerminalPermission && !agent.permissionBridgeArmed && !heldRequests(agent).length"
+                variant="outline"
+                size="sm"
+                class="ml-auto"
+                :disabled="arming[agent.sessionId]"
+                :aria-busy="arming[agent.sessionId] ? 'true' : undefined"
+                aria-label="Answer this session's next permission prompt here instead of in its terminal"
+                data-testid="permission-arm"
+                @click="setArmed(agent, true)"
+              >
+                Intercept next
+              </AppButton>
+
+              <!-- Free agent: allow the paused tool for future runs -->
+              <AppButton
+                v-if="!heldRequests(agent).length && agentAttentionMap.get(agent.sessionId)?.grantableToolUse && !(agent.pipelineTaskId && agent.pendingPermissions?.length)"
+                variant="success"
+                size="sm"
+                class="ml-auto"
+                :disabled="allowing[agent.sessionId]"
+                :title="`Allow ${blockedDetail(agent)} for this project going forward. The paused run still needs your reply in its terminal.`"
+                :aria-label="`Allow ${agent.pendingToolUse?.tool} for ${friendlyProjectName(agent.projectName)} going forward`"
+                @click="allowTool(agent)"
+              >
+                Allow {{ agent.pendingToolUse?.tool }}
+              </AppButton>
+
+              <AppButton
+                variant="outline"
+                size="sm"
+                :class="!(agent.pipelineTaskId && agent.pendingPermissions?.length) && !agentAttentionMap.get(agent.sessionId)?.grantableToolUse ? 'ml-auto' : ''"
+                :aria-label="`Open details for ${agent.projectName}`"
+                @click="emit('select', agent)"
+              >
+                Open ↗
+              </AppButton>
+            </div>
+          </div>
+        </template>
       </div>
     </template>
   </section>
