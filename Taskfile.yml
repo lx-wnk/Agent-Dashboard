@@ -15,6 +15,15 @@ vars:
   # trusting the peer on the port is our Vite, not a squatter.
   DESKTOP_DEV_NONCE:
     sh: head -c 16 /dev/urandom | xxd -p | tr -d '\n'
+  # Stamped into every artifact that can be asked what it is: the server binary,
+  # the desktop shell, and wails.json's productVersion. One definition so a
+  # build cannot report a different version than its sibling built beside it.
+  VERSION:
+    sh: git describe --tags --always --dirty 2>/dev/null || echo dev
+  # Read from .go-version, the same file CI feeds to setup-go, so the pin lives
+  # in exactly one place.
+  GO_TOOLCHAIN:
+    sh: printf 'go%s' "$(cat .go-version)"
 
 tasks:
   default:
@@ -70,11 +79,21 @@ tasks:
 
   setup:
     desc: Install the dev toolchain (air, golangci-lint, tygo, govulncheck) + frontend deps
+    # Build these tools with the toolchain CI uses, not whatever Go is on PATH.
+    # golangci-lint's formatter is compiled into its binary, so a tool built with
+    # a newer Go reformats files CI considers correct — `task fmt` then produces
+    # the diff `task lint` rejects. Verified: the same golangci-lint version
+    # built under go1.26.6 and under go1.27 disagree on comment alignment.
+    # CI gets this for free via setup-go's go-version-file.
+    env:
+      GOTOOLCHAIN: '{{.GO_TOOLCHAIN}}'
     cmds:
       - go install github.com/air-verse/air@latest
       - go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.6
       - go install github.com/gzuidhof/tygo@latest
-      - go install golang.org/x/vuln/cmd/govulncheck@latest
+      # Pinned to what CI installs (.github/workflows/ci.yml): a govulncheck
+      # that differs from CI's can neither reproduce nor rule out its result.
+      - go install golang.org/x/vuln/cmd/govulncheck@v1.4.0
       - pnpm install
       - echo "✓ setup complete — run 'task doctor' to verify, then 'task dev'"
 
@@ -93,9 +112,6 @@ tasks:
     desc: Build server binary (embeds whatever is currently in server/frontend/dist)
     dir: server
     cmd: go build -ldflags "-X main.version={{.VERSION}}" -o ../bin/agent-dashboard ./cmd/serve/...
-    vars:
-      VERSION:
-        sh: git describe --tags --always --dirty 2>/dev/null || echo dev
 
   build:all:
     desc: Build frontend and embed it into a self-contained server binary
@@ -132,9 +148,6 @@ tasks:
       # The version is stamped here too: a desktop window that cannot name its
       # own build is indistinguishable from a stale one (see /api/system/health).
       - cd desktop && CGO_ENABLED=1 go build -tags production -ldflags "-X github.com/lx-wnk/agent-dashboard/server/internal/version.Version={{.VERSION}} -extldflags '-framework UniformTypeIdentifiers'" -o ../bin/agent-dashboard-desktop .
-    vars:
-      VERSION:
-        sh: git describe --tags --always --dirty 2>/dev/null || echo dev
 
   desktop:run:
     desc: Build and launch the macOS desktop shell for a smoke test
@@ -150,10 +163,14 @@ tasks:
       - defer: git checkout -- desktop/wails.json
       - task: build:frontend
       # wails has no CLI flag for productVersion — it only reads desktop/wails.json —
-      # so stamp the real git version in before the build and restore it via defer:
-      # above (runs even on failure), keeping the working tree clean.
+      # so stamp the version in before the build and restore it via defer: above
+      # (runs even on failure), keeping the working tree clean. Same {{.VERSION}}
+      # the ldflags below use: the bundle's Info.plist and the binary it wraps
+      # must not be able to report different versions.
+      # Block scalar: the pattern contains ": ", which YAML would otherwise read
+      # as a mapping.
       - |
-        VERSION="$(git describe --tags --always --dirty)"; sed -i '' "s/\"productVersion\": \"[^\"]*\"/\"productVersion\": \"${VERSION}\"/" desktop/wails.json
+        sed -i '' "s/\"productVersion\": \"[^\"]*\"/\"productVersion\": \"{{.VERSION}}\"/" desktop/wails.json
       # Same production tag + UniformTypeIdentifiers ldflag as build:desktop, driven
       # through `wails build` so it also renders desktop/wails.json + Info.plist into
       # a real .app bundle instead of a bare Mach-O binary.
@@ -161,9 +178,6 @@ tasks:
       - mkdir -p bin
       - rm -rf "bin/Agent Dashboard.app"
       - cp -R "desktop/build/bin/Agent Dashboard.app" bin/
-    vars:
-      VERSION:
-        sh: git describe --tags --always --dirty 2>/dev/null || echo dev
 
   desktop:dmg:
     desc: Package bin/Agent Dashboard.app into an unsigned bin/Agent Dashboard.dmg (via hdiutil, no external tool needed)
@@ -175,6 +189,9 @@ tasks:
 
   test:
     desc: Run all tests (all modules)
+    # Same toolchain CI runs, so a local pass means what a CI pass means.
+    env:
+      GOTOOLCHAIN: '{{.GO_TOOLCHAIN}}'
     cmds:
       - cd sdk && go test -race ./...
       - cd server && go test -race ./...
@@ -186,13 +203,15 @@ tasks:
       - go test -race -coverprofile=coverage.out ./...
       - go tool cover -func=coverage.out | tail -1
 
-  test:watch:
-    desc: Watch mode tests (server module)
-    dir: server
-    cmd: go test -race ./... -count=1
-
   lint:
     desc: Run golangci-lint and the formatter check (all modules)
+    # Pinned for a different reason than setup's: there the toolchain that BUILT
+    # golangci-lint decides how it formats; here the toolchain it RUNS under
+    # decides what its typechecker can read. A newer Go on PATH writes export
+    # data the linter cannot decode, and every package then reports phantom
+    # "undefined" errors — 967 of them on this repo, none real.
+    env:
+      GOTOOLCHAIN: '{{.GO_TOOLCHAIN}}'
     cmds:
       # `run` reports only some formatting violations; `fmt --diff` reports all
       # of them and exits non-zero on any diff.
@@ -208,6 +227,8 @@ tasks:
 
   vuln:
     desc: Run govulncheck
+    env:
+      GOTOOLCHAIN: '{{.GO_TOOLCHAIN}}'
     cmds:
       - cd sdk && govulncheck ./...
       - cd server && govulncheck ./...
@@ -220,8 +241,14 @@ tasks:
     desc: Run pnpm audit on frontend dependencies (fails on high or critical vulnerabilities)
     cmd: pnpm audit --audit-level=high
 
-  # wire task removed — DI is hand-written in server/cmd/serve/di.go (no google/wire codegen)
-
   fmt:
-    desc: Format all Go code
-    cmd: gofmt -w sdk/ server/ plugins/
+    desc: Format all Go code (same formatter lint checks)
+    # golangci-lint, not bare gofmt: gofmt follows whatever Go is on PATH, while
+    # lint and CI both check golangci-lint's formatter under the .go-version
+    # toolchain. A newer local Go made `task fmt` rewrite a file `task lint`
+    # considered correct, so running the project's own format command could
+    # produce the diff CI rejects.
+    cmds:
+      - cd sdk && golangci-lint fmt ./...
+      - cd server && golangci-lint fmt ./...
+      - for d in plugins/*/; do [ -d "$d" ] || continue; (cd "$d" && GOWORK=off golangci-lint fmt ./...) || exit 1; done
