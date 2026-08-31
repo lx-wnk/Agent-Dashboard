@@ -20,7 +20,7 @@ Go modules. Entrypoint: `server/cmd/serve/main.go` (cobra CLI, delegates composi
 | `api/auth/` | GitHub OAuth flow, JWT session cookies |
 | `api/apikeys/` | API key CRUD endpoints |
 | `api/hooks/` | Debounced rescan hook endpoint |
-| `api/memory/` | Claude memory file read/write |
+| `api/memory/` | System memory store API (spaces, entries, injections, search) with capability-gated HTTP endpoints |
 | `api/presets/` | Permission preset CRUD |
 | `api/refine/` | Refinement chat SSE stream |
 | `api/remotes/` | Remote dashboard registration + SSRF-guarded proxy |
@@ -35,13 +35,17 @@ Go modules. Entrypoint: `server/cmd/serve/main.go` (cobra CLI, delegates composi
 | `llmadapter/` | Leaf: pluggable-spawner transport (`LLMSpawner`/`StreamingLLMSpawner`, `NewLLMSpawnerFromSpawner`, `AvailableAdapters`, Ollama/OpenAI/custom adapters). Deps: `db/ent` only. Extracted from `pipeline/` per ADR-0005 |
 | `worktree/` | Leaf: git-worktree primitives (`Runner` with `Output`/`Combined` + 15s timeout, `DefaultRoot`, `PathFor`, `CreateBranch`, `DefaultRootDirName`/`BranchPrefix`). Deps: stdlib only. Consumed by `pipeline/` (lifecycle), `services/` (inspection), `config/` (default root) per ADR-0006 |
 | `db/` | ent ORM schemas + repos (tasks, stage_runs, users, api_keys, presets, remotes, refine, cost_history, web_push subscriptions) |
-| `mcp/` | Stateless StreamableHTTP MCP server — 19 tools, 4 scope tiers |
+| `mcp/` | Stateless StreamableHTTP MCP server — 43 tools, 7 scopes (tasks:read, tasks:write, agent:coord, pipeline:control, memory:read, memory:write, keys:manage) |
 | `auth/` | JWT helpers, GitHub OAuth client |
 | `scanner/` | ps/lsof process scanner |
 | `parser/` | JSONL session parser (tail-reads 32KB) |
 | `merger/` | Agent data merger + cost estimation (`MODEL_PRICING`) |
 | `sse/` | SSE broadcaster (agents + tasks) |
 | `channel/` | Channel discovery + proxy to per-agent MCP stdio server |
+| `capability/` | Permission/grant resolution, decision engine for grantable capabilities across spawn/server/hook enforcement points |
+| `memory/` | System memory store (spaces, entries, retrieval engine) with capability gates and ranked FTS5 search |
+| `askgate/` | Permission-prompt hold-and-answer bridge, shared with PreToolUse hook asker pattern |
+| `serverask/` | Server-enforcer asker implementation; surfaces unanswered capability asks to dashboard for human decision |
 | `channelconfig/` | Builds dashboard-channel MCP config for spawned agents |
 | `refine/` | Refinement chat repo + spawner |
 | `history/` | Cost history importer service |

@@ -21,9 +21,11 @@ Scopes are hierarchical — a higher scope implies all lower ones.
 | `tasks:write` | Create, update, delete tasks; create projects (implies `tasks:read`) |
 | `agent:coord` | Scratchpads, lease locks, and port waits shared between agents |
 | `pipeline:control` | Progress, approve, cancel, retry tasks; manage permissions; refine and plan gates (implies `tasks:read` and `agent:coord`) |
+| `memory:read` | Search and read entries from the system memory store |
+| `memory:write` | Write entries to the system memory store |
 | `keys:manage` | Full access including API key management |
 
-## Tools (41)
+## Tools (43)
 
 **`tasks:read`** — `list_tasks`, `get_task`, `list_stage_runs`, `list_audit`, `list_permission_requests`, `list_projects`, `list_spawners`, `list_schedules`
 
@@ -32,6 +34,10 @@ Scopes are hierarchical — a higher scope implies all lower ones.
 **`agent:coord`** — `write_scratchpad`, `read_scratchpad`, `list_scratchpad`, `acquire_lock`, `release_lock`, `wait_for_port`
 
 **`pipeline:control`** — `advance_task`, `hold_task`, `resume_task`, `progress_task`, `cancel_task`, `retry_task`, `grant_permission`, `resolve_permission_request`, `approve_all_pending`, `get_refine_status`, `approve_spec`, `refine_task`, `inject_concept`, `approve_plan`, `reject_plan`, `get_plan_status`
+
+**`memory:read`** — `memory_search`
+
+**`memory:write`** — `memory_write`
 
 **`keys:manage`** — `list_api_keys`, `create_api_key`, `revoke_api_key`
 
