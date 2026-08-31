@@ -245,7 +245,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) error {
 		return apierr.NewAppError(http.StatusBadRequest, validation.ProjectDescriptionLengthMessage)
 	}
 	if !ValidateSlug(body.Slug) {
-		return apierr.NewAppError(http.StatusBadRequest, "slug must match ^[a-z0-9][a-z0-9-]{0,63}$")
+		return apierr.NewAppError(http.StatusBadRequest, validation.SlugPatternMessage)
 	}
 	if body.Color != nil && *body.Color != "" && !ValidateColor(*body.Color) {
 		return apierr.NewAppError(http.StatusBadRequest, "color must be #rgb or #rrggbb hex")
@@ -308,7 +308,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) error {
 		return apierr.NewAppError(http.StatusBadRequest, validation.ProjectNameLengthMessage)
 	}
 	if body.Slug != nil && !ValidateSlug(*body.Slug) {
-		return apierr.NewAppError(http.StatusBadRequest, "slug must match ^[a-z0-9][a-z0-9-]{0,63}$")
+		return apierr.NewAppError(http.StatusBadRequest, validation.SlugPatternMessage)
 	}
 	if len(body.SetupCommand) != 0 && !h.canSetSetupCommand(r) {
 		return apierr.NewAppError(http.StatusForbidden, "setupCommand requires admin privileges")

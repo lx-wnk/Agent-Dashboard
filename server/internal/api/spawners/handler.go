@@ -13,6 +13,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/services"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
+	"github.com/lx-wnk/agent-dashboard/server/internal/validation"
 )
 
 // Handler exposes admin-only CRUD endpoints for spawners.
@@ -165,7 +166,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) error {
 		return apierr.NewAppError(http.StatusBadRequest, "name is required")
 	}
 	if !ValidateSlug(body.Slug) {
-		return apierr.NewAppError(http.StatusBadRequest, "slug must match ^[a-z0-9][a-z0-9-]{0,63}$")
+		return apierr.NewAppError(http.StatusBadRequest, validation.SlugPatternMessage)
 	}
 	if ok, reason := services.ValidateSpawnerCommand(body.Command); !ok {
 		return apierr.NewAppError(http.StatusBadRequest, reason)
@@ -250,7 +251,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) error {
 		return apierr.NewAppError(http.StatusForbidden, "cannot change the slug of a built-in spawner")
 	}
 	if body.Slug != nil && !ValidateSlug(*body.Slug) {
-		return apierr.NewAppError(http.StatusBadRequest, "slug must match ^[a-z0-9][a-z0-9-]{0,63}$")
+		return apierr.NewAppError(http.StatusBadRequest, validation.SlugPatternMessage)
 	}
 	if body.Command != nil {
 		if ok, reason := services.ValidateSpawnerCommand(*body.Command); !ok {
