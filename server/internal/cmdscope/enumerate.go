@@ -7,7 +7,43 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"unicode/utf8"
+
+	"github.com/lx-wnk/agent-dashboard/server/internal/sanitize"
 )
+
+// maxArgumentHintRunes caps the argument template a command or skill file may
+// contribute. Real hints are a handful of bracketed tokens; the cap exists
+// because the file may come from an installed plugin, and the menu renders the
+// hint in the same style as the dashboard's own usage templates.
+const maxArgumentHintRunes = 120
+
+// sanitizeArgumentHint normalises a frontmatter-supplied argument hint for
+// display. Command and skill files are read from the plugin cache as well as
+// from user and project directories, so this is where third-party content
+// crosses into the API. sanitize.ForDisplayCapped does not check UTF-8
+// validity — invalid bytes decode to U+FFFD and would otherwise be kept as
+// ordinary runes — so an explicit ValidString guard drops such a hint
+// entirely, matching the old behaviour. maxArgumentHintRunes bounds what the
+// menu renders, ellipsis included, so a truncated hint gives back one rune
+// to make room for it — kept outside the sanitized text at the call site,
+// per ForDisplayCapped's contract: a marker inside the text is one the text
+// can forge.
+func sanitizeArgumentHint(v string) string {
+	if !utf8.ValidString(v) {
+		return ""
+	}
+	cleaned, dropped := sanitize.ForDisplayCapped(v, maxArgumentHintRunes)
+	if dropped > 0 {
+		runes := []rune(cleaned)
+		// ForDisplayCapped can report dropped > 0 while keeping fewer than
+		// maxArgumentHintRunes-1 runes (e.g. a mostly-bidi-override input),
+		// so the slice bound is the shorter of the two.
+		limit := min(len(runes), maxArgumentHintRunes-1)
+		cleaned = string(runes[:limit]) + "…"
+	}
+	return cleaned
+}
 
 // SlashCommand is one slash command available within a Scope.
 type SlashCommand struct {
