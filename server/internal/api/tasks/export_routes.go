@@ -14,7 +14,7 @@ import (
 
 func (h *Handler) exportTasks(w http.ResponseWriter, r *http.Request) error {
 	payload, _ := auth.PayloadFromContext(r.Context())
-	tasks, err := h.taskRepo.ListForUser(r.Context(), payload.Sub, payload.IsAdmin)
+	tasks, err := h.taskRepo.ListForUser(r.Context(), payload.Sub, h.bypassAuth)
 	if err != nil {
 		return fmt.Errorf("export: list tasks: %w", err)
 	}

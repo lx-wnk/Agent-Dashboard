@@ -123,7 +123,7 @@ func buildBypassRouter(t *testing.T) http.Handler {
 		PresetsHandler:       presets.NewHandler(repo.NewPermissionPresetRepo(c)),
 		SystemPromptsHandler: systemprompts.NewHandler(repo.NewSystemPromptRepo(c)),
 		GrantsHandler:        grants.NewHandler(repo.NewGrantRepo(c), repo.NewCapabilityRepo(c)),
-		SearchHandler:        search.NewHandler(rawrepo.NewSearchRepo(rawDB), merger.New(), nil),
+		SearchHandler:        search.NewHandler(rawrepo.NewSearchRepo(rawDB), merger.New(), nil, true),
 		HistoryHandler:       apihistory.NewHandler(histsvc.NewImporter(repo.NewAgentCostTrendRepo(c))),
 		MemoryHandler: apimemory.NewHandler(
 			repo.NewMemoryRepo(c, bundle.WriteClient),

@@ -38,11 +38,14 @@ type Handler struct {
 	repo       repo.TaskScheduleRepo
 	translator Translator
 	runner     Runner
+	bypassAuth bool
 }
 
 // NewHandler builds the schedules handler. runner may be nil (run-now disabled).
-func NewHandler(r repo.TaskScheduleRepo, t Translator, runner Runner) *Handler {
-	return &Handler{repo: r, translator: t, runner: runner}
+// bypassAuth is the loopback single-user mode, in which the listing is not
+// scoped to a user id because there is only one implicit user.
+func NewHandler(r repo.TaskScheduleRepo, t Translator, runner Runner, bypassAuth bool) *Handler {
+	return &Handler{repo: r, translator: t, runner: runner, bypassAuth: bypassAuth}
 }
 
 // Mount registers the schedule routes on r (already inside the JWT group).
@@ -64,7 +67,7 @@ func jsonReply(w http.ResponseWriter, status int, v any) error {
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) error {
 	payload, _ := auth.PayloadFromContext(r.Context())
-	rows, err := h.repo.ListForUser(r.Context(), payload.Sub, payload.IsAdmin)
+	rows, err := h.repo.ListForUser(r.Context(), payload.Sub, h.bypassAuth)
 	if err != nil {
 		return fmt.Errorf("schedules.list: %w", err)
 	}

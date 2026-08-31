@@ -95,7 +95,7 @@ func TestTaskRepo_Update_MetadataClear(t *testing.T) {
 	require.Nil(t, updated.Metadata)
 }
 
-func TestTaskRepo_ListForUser_AdminSeesAll(t *testing.T) {
+func TestTaskRepo_ListForUser_UnscopedSeesAll(t *testing.T) {
 	client := openDB(t)
 	r := repo.NewTaskRepo(client)
 	ctx := context.Background()
@@ -117,13 +117,13 @@ func TestTaskRepo_ListForUser_AdminSeesAll(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Non-admin: only own tasks.
+	// Scoped: only own tasks.
 	own, err := r.ListForUser(ctx, uid1, false)
 	require.NoError(t, err)
 	require.Len(t, own, 1)
 	require.Equal(t, "task-u1", own[0].Slug)
 
-	// Admin: all tasks.
+	// Unscoped (loopback single-user mode): all tasks.
 	all, err := r.ListForUser(ctx, uid1, true)
 	require.NoError(t, err)
 	require.Len(t, all, 2)

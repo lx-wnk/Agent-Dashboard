@@ -21,7 +21,7 @@ const testJWTSecret = "search-test-secret"
 // withAdminAuth signs a JWT as an admin and attaches it as a cookie.
 func withAdminAuth(t *testing.T, r *http.Request) *http.Request {
 	t.Helper()
-	token, err := auth.SignJWT(auth.JWTPayload{Sub: "user-1", Login: "admin", IsAdmin: true}, testJWTSecret, 3600)
+	token, err := auth.SignJWT(auth.JWTPayload{Sub: "user-1", Login: "admin"}, testJWTSecret, 3600)
 	if err != nil {
 		t.Fatalf("sign jwt: %v", err)
 	}
@@ -38,7 +38,7 @@ func newTestRouter(t *testing.T) (*chi.Mux, *db.DBBundle) {
 	}
 	t.Cleanup(func() { _ = bundle.Close() })
 
-	h := search.NewHandler(rawrepo.NewSearchRepo(bundle.DB), merger.New(), nil)
+	h := search.NewHandler(rawrepo.NewSearchRepo(bundle.DB), merger.New(), nil, false)
 
 	r := chi.NewRouter()
 	r.Use(auth.RequireAuth(testJWTSecret))
@@ -169,13 +169,13 @@ func TestSearch_TaskVisibility_NonAdmin(t *testing.T) {
 		t.Fatalf("insert bob task: %v", err)
 	}
 
-	h := search.NewHandler(rawrepo.NewSearchRepo(bundle.DB), merger.New(), nil)
+	h := search.NewHandler(rawrepo.NewSearchRepo(bundle.DB), merger.New(), nil, false)
 	ro := chi.NewRouter()
 	ro.Use(auth.RequireAuth(testJWTSecret))
 	ro.Get("/api/search", apierr.ErrorMiddleware(h.Search))
 
 	// Sign a non-admin token for alice.
-	token, err := auth.SignJWT(auth.JWTPayload{Sub: "user-alice", Login: "alice", IsAdmin: false}, testJWTSecret, 3600)
+	token, err := auth.SignJWT(auth.JWTPayload{Sub: "user-alice", Login: "alice"}, testJWTSecret, 3600)
 	if err != nil {
 		t.Fatalf("sign jwt: %v", err)
 	}
@@ -215,21 +215,24 @@ func TestSearch_TaskVisibility_NonAdmin(t *testing.T) {
 	}
 }
 
-// TestSearch_TypeAgents_NonAdmin verifies non-admin always gets empty agents.
-func TestSearch_TypeAgents_NonAdmin(t *testing.T) {
+// TestSearch_TypeAgents_UnderJWT verifies the agent roster stays out of search
+// results whenever the dashboard is not in loopback single-user mode. The
+// branch used to be gated on the admin role; it now follows the deployment
+// mode, because that role was never grantable to anyone.
+func TestSearch_TypeAgents_UnderJWT(t *testing.T) {
 	bundle, err := db.Open(":memory:")
 	if err != nil {
 		t.Fatalf("db.Open: %v", err)
 	}
 	t.Cleanup(func() { _ = bundle.Close() })
 
-	h := search.NewHandler(rawrepo.NewSearchRepo(bundle.DB), merger.New(), nil)
+	h := search.NewHandler(rawrepo.NewSearchRepo(bundle.DB), merger.New(), nil, false)
 	ro := chi.NewRouter()
 	ro.Use(auth.RequireAuth(testJWTSecret))
 	ro.Get("/api/search", apierr.ErrorMiddleware(h.Search))
 
 	// Sign a non-admin token.
-	token, _ := auth.SignJWT(auth.JWTPayload{Sub: "user-2", Login: "regular", IsAdmin: false}, testJWTSecret, 3600)
+	token, _ := auth.SignJWT(auth.JWTPayload{Sub: "user-2", Login: "regular"}, testJWTSecret, 3600)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/search?q=test&type=agents", nil)
 	req.AddCookie(&http.Cookie{Name: "auth_token", Value: token})
@@ -246,6 +249,6 @@ func TestSearch_TypeAgents_NonAdmin(t *testing.T) {
 		t.Fatalf("decode: %v", err)
 	}
 	if len(resp.Agents) != 0 {
-		t.Errorf("non-admin should get empty agents, got %d", len(resp.Agents))
+		t.Errorf("JWT mode should get empty agents, got %d", len(resp.Agents))
 	}
 }

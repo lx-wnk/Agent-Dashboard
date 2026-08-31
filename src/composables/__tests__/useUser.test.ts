@@ -17,14 +17,13 @@ describe('useUser', () => {
   it('loads the current user on success', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve({ user: { id: 'u1', login: 'alex', isAdmin: true }, isAdmin: true, authEnabled: true }),
+      json: () => Promise.resolve({ user: { id: 'u1', login: 'alex' }, authEnabled: true }),
     }))
 
-    const { user, isAdmin, authEnabled, loaded, loadUser } = useUserMod.useUser()
+    const { user, authEnabled, loaded, loadUser } = useUserMod.useUser()
     await loadUser()
 
-    expect(user.value).toEqual({ id: 'u1', login: 'alex', isAdmin: true })
-    expect(isAdmin.value).toBe(true)
+    expect(user.value).toEqual({ id: 'u1', login: 'alex' })
     expect(authEnabled.value).toBe(true)
     expect(loaded.value).toBe(true)
   })
@@ -62,7 +61,7 @@ describe('useUser', () => {
   it('clears a pending retry once a subsequent load succeeds', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({ ok: false, status: 503 })
-      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ user: null, isAdmin: true, authEnabled: false }) })
+      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ user: null, authEnabled: false }) })
     vi.stubGlobal('fetch', fetchMock)
 
     const { loadUser } = useUserMod.useUser()

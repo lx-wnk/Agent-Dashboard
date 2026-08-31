@@ -531,11 +531,11 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	if bundle != nil {
 		rawDB = bundle.DB
 	}
-	taskHandler := provideTaskHandler(entClient, rawDB, orch, taskBroadcaster, refineReaderArg, settingsSvc.Bool("git.allowPull"), checkpointSvc)
+	taskHandler := provideTaskHandler(entClient, rawDB, orch, taskBroadcaster, refineReaderArg, settingsSvc.Bool("git.allowPull"), routerConfig.BypassAuth, checkpointSvc)
 
 	// Scheduler: recurring task firing engine + its REST handler. Reuses the task
 	// handler's create core, so it must be built after taskHandler. nil when no DB.
-	sched, schedulesHandler := provideScheduler(entClient, taskHandler, taskBroadcaster)
+	sched, schedulesHandler := provideScheduler(entClient, taskHandler, taskBroadcaster, routerConfig.BypassAuth)
 
 	// The only two callers that may block a live request on a human decision:
 	// the memory MCP tools below (an agent is waiting on the tool response)
@@ -705,7 +705,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	// results carry the same pipeline-task and hook-event annotations as /api/agents.
 	var searchHandler *search.Handler
 	if bundle != nil {
-		searchHandler = search.NewHandler(rawrepo.NewSearchRepo(bundle.DB), agentMerger, agentEnricher)
+		searchHandler = search.NewHandler(rawrepo.NewSearchRepo(bundle.DB), agentMerger, agentEnricher, routerConfig.BypassAuth)
 	}
 
 	var costHandler *apicost.Handler

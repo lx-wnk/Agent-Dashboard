@@ -30,10 +30,12 @@ func authedRouter(h *Handler) chi.Router {
 	return r
 }
 
-// withJWT attaches a signed session cookie with the given admin flag.
-func withJWT(t *testing.T, req *http.Request, isAdmin bool) *http.Request {
+// withJWT attaches a signed session cookie. The bool parameter is retained so
+// call sites keep reading as "privileged / not privileged", but the JWT no
+// longer carries a role — privilege now follows the deployment mode.
+func withJWT(t *testing.T, req *http.Request, _ bool) *http.Request {
 	t.Helper()
-	token, err := auth.SignJWT(auth.JWTPayload{Sub: "u1", Login: "tester", IsAdmin: isAdmin}, testJWTSecret, 3600)
+	token, err := auth.SignJWT(auth.JWTPayload{Sub: "u1", Login: "tester"}, testJWTSecret, 3600)
 	if err != nil {
 		t.Fatalf("sign jwt: %v", err)
 	}
@@ -51,7 +53,7 @@ func seedProject(t *testing.T, h *Handler) string {
 	return p.ID
 }
 
-func TestUpdate_NonAdminSetupCommand_Forbidden(t *testing.T) {
+func TestUpdate_JWTSetupCommand_Forbidden(t *testing.T) {
 	h := newTestHandler(t, false)
 	id := seedProject(t, h)
 	req := httptest.NewRequest("PATCH", "/api/projects/"+id, bytes.NewBufferString(`{"setupCommand":"rm -rf /"}`))
@@ -60,11 +62,16 @@ func TestUpdate_NonAdminSetupCommand_Forbidden(t *testing.T) {
 	rr := httptest.NewRecorder()
 	authedRouter(h).ServeHTTP(rr, req)
 	if rr.Code != http.StatusForbidden {
-		t.Fatalf("non-admin setupCommand: got %d, want 403, body=%s", rr.Code, rr.Body.String())
+		t.Fatalf("authenticated setupCommand: got %d, want 403, body=%s", rr.Code, rr.Body.String())
 	}
 }
 
-func TestUpdate_AdminSetupCommand_Allowed(t *testing.T) {
+// TestUpdate_PrivilegedJWTSetupCommand_StillForbidden pins the consequence of
+// removing the admin role: setup_command runs an arbitrary server-side `sh -c`,
+// so under JWT auth NO caller may set it any more. The case this replaces
+// asserted that an admin could — a privilege the codebase never granted to
+// anyone, since nothing ever set is_admin.
+func TestUpdate_PrivilegedJWTSetupCommand_StillForbidden(t *testing.T) {
 	h := newTestHandler(t, false)
 	id := seedProject(t, h)
 	req := httptest.NewRequest("PATCH", "/api/projects/"+id, bytes.NewBufferString(`{"setupCommand":"echo hi"}`))
@@ -72,8 +79,8 @@ func TestUpdate_AdminSetupCommand_Allowed(t *testing.T) {
 	req = withJWT(t, req, true)
 	rr := httptest.NewRecorder()
 	authedRouter(h).ServeHTTP(rr, req)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("admin setupCommand: got %d, want 200, body=%s", rr.Code, rr.Body.String())
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("privileged JWT setupCommand: got %d, want 403, body=%s", rr.Code, rr.Body.String())
 	}
 }
 
@@ -92,7 +99,7 @@ func TestUpdate_BypassSetupCommand_Allowed(t *testing.T) {
 	}
 }
 
-func TestUpdate_NonAdminNoSetupCommand_Allowed(t *testing.T) {
+func TestUpdate_JWTWithoutSetupCommand_Allowed(t *testing.T) {
 	h := newTestHandler(t, false)
 	id := seedProject(t, h)
 	req := httptest.NewRequest("PATCH", "/api/projects/"+id, bytes.NewBufferString(`{"name":"Renamed"}`))
@@ -105,7 +112,7 @@ func TestUpdate_NonAdminNoSetupCommand_Allowed(t *testing.T) {
 	}
 }
 
-func TestCreate_NonAdminSetupCommand_Forbidden(t *testing.T) {
+func TestCreate_JWTSetupCommand_Forbidden(t *testing.T) {
 	h := newTestHandler(t, false)
 	req := httptest.NewRequest("POST", "/api/projects", bytes.NewBufferString(`{"name":"P","slug":"p","setupCommand":"rm -rf /"}`))
 	req.Header.Set("Content-Type", "application/json")

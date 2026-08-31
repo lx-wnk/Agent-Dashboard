@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
 	serverauth "github.com/lx-wnk/agent-dashboard/server/internal/auth"
@@ -51,12 +50,8 @@ func (h *Handler) issueSession(ctx context.Context, w http.ResponseWriter, info 
 	}
 
 	tokenPayload := serverauth.JWTPayload{
-		Sub:     user.ID,
-		Login:   user.ProviderLogin,
-		IsAdmin: user.IsAdmin,
-	}
-	if user.IsAdmin {
-		tokenPayload.AdminGrantedAt = time.Now().Unix()
+		Sub:   user.ID,
+		Login: user.ProviderLogin,
 	}
 	jwtToken, err := serverauth.SignJWT(tokenPayload, h.deps.JWTSecret, 86400)
 	if err != nil {
@@ -324,11 +319,9 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) error {
 	w.Header().Set("Content-Type", "application/json")
 	return json.NewEncoder(w).Encode(map[string]any{
 		"user": map[string]any{
-			"id":      user.ID,
-			"login":   user.ProviderLogin,
-			"isAdmin": user.IsAdmin,
+			"id":    user.ID,
+			"login": user.ProviderLogin,
 		},
-		"isAdmin":     user.IsAdmin,
 		"authEnabled": true,
 	})
 }

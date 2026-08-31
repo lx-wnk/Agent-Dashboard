@@ -27,7 +27,7 @@ const testJWTSecret = "test-history-secret"
 // withAuth returns a copy of req with a valid JWT cookie for user "test-user".
 func withAuth(t *testing.T, req *http.Request) *http.Request {
 	t.Helper()
-	token, err := auth.SignJWT(auth.JWTPayload{Sub: "test-user", Login: "tester", IsAdmin: false}, testJWTSecret, 3600)
+	token, err := auth.SignJWT(auth.JWTPayload{Sub: "test-user", Login: "tester"}, testJWTSecret, 3600)
 	require.NoError(t, err)
 	req.AddCookie(&http.Cookie{Name: "auth_token", Value: token})
 	return req

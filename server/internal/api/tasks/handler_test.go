@@ -30,7 +30,7 @@ const testJWTSecret = "test-secret-for-tasks"
 // withAuth adds a valid JWT cookie to the request so RequireAuth passes.
 func withAuth(t *testing.T, r *http.Request) *http.Request {
 	t.Helper()
-	token, err := auth.SignJWT(auth.JWTPayload{Sub: "user-1", Login: "testuser", IsAdmin: true}, testJWTSecret, 3600)
+	token, err := auth.SignJWT(auth.JWTPayload{Sub: "user-1", Login: "testuser"}, testJWTSecret, 3600)
 	if err != nil {
 		t.Fatalf("sign jwt: %v", err)
 	}

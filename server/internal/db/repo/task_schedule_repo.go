@@ -16,7 +16,9 @@ type TaskScheduleRepo interface {
 	GetByID(ctx context.Context, id string) (*ent.TaskSchedule, error)
 	Update(ctx context.Context, id string, in UpdateTaskScheduleInput) (*ent.TaskSchedule, error)
 	Delete(ctx context.Context, id string) error
-	ListForUser(ctx context.Context, userID string, isAdmin bool) ([]*ent.TaskSchedule, error)
+	// ListForUser returns userID's schedules, or every schedule when unscoped
+	// is set — the loopback single-user mode, where there is one implicit user.
+	ListForUser(ctx context.Context, userID string, unscoped bool) ([]*ent.TaskSchedule, error)
 	ListEnabled(ctx context.Context) ([]*ent.TaskSchedule, error)
 	ListDue(ctx context.Context, now time.Time) ([]*ent.TaskSchedule, error)
 	SetEnabled(ctx context.Context, id string, enabled bool) (*ent.TaskSchedule, error)
@@ -218,9 +220,9 @@ func (r *entTaskScheduleRepo) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-func (r *entTaskScheduleRepo) ListForUser(ctx context.Context, userID string, isAdmin bool) ([]*ent.TaskSchedule, error) {
+func (r *entTaskScheduleRepo) ListForUser(ctx context.Context, userID string, unscoped bool) ([]*ent.TaskSchedule, error) {
 	q := r.client.TaskSchedule.Query().Order(ent.Asc(taskschedule.FieldCreatedAt))
-	if !isAdmin {
+	if !unscoped {
 		q = q.Where(taskschedule.UserID(userID))
 	}
 	rows, err := q.All(ctx)

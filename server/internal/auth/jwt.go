@@ -19,14 +19,12 @@ var (
 
 // JWTPayload is the JWT body — matches the TypeScript JwtPayload interface.
 type JWTPayload struct {
-	Sub            string `json:"sub"`   // GitHub numeric user ID
-	Login          string `json:"login"` // GitHub username
-	IsAdmin        bool   `json:"isAdmin"`
-	AdminGrantedAt int64  `json:"aga,omitempty"` // Unix timestamp when admin was granted; set iff IsAdmin==true
-	Exp            int64  `json:"exp"`           // Unix timestamp
-	Iat            int64  `json:"iat,omitempty"` // Issued-at Unix timestamp
-	Iss            string `json:"iss,omitempty"` // Issuer
-	Aud            string `json:"aud,omitempty"` // Audience
+	Sub   string `json:"sub"`           // GitHub numeric user ID
+	Login string `json:"login"`         // GitHub username
+	Exp   int64  `json:"exp"`           // Unix timestamp
+	Iat   int64  `json:"iat,omitempty"` // Issued-at Unix timestamp
+	Iss   string `json:"iss,omitempty"` // Issuer
+	Aud   string `json:"aud,omitempty"` // Audience
 }
 
 // BypassUserID is the canonical Sub/Login for the implicit local admin used
@@ -41,20 +39,13 @@ const BypassUserID = "local"
 // runs when auth is enabled — so handlers may safely substitute this identity
 // instead of returning 403/401.
 func BypassPayload() JWTPayload {
-	return JWTPayload{Sub: BypassUserID, Login: BypassUserID, IsAdmin: true}
+	return JWTPayload{Sub: BypassUserID, Login: BypassUserID}
 }
-
-// adminPrivilegeTTL is the maximum age of the AdminGrantedAt claim before an
-// admin-gated endpoint must force re-login. This bounds the stale-privilege
-// window to 1 hour even when the JWT itself is still valid.
-const adminPrivilegeTTL = int64(3600)
 
 // jwtClaims embeds RegisteredClaims and carries our custom fields.
 type jwtClaims struct {
 	jwt.RegisteredClaims
-	Login          string `json:"login"`
-	IsAdmin        bool   `json:"isAdmin"`
-	AdminGrantedAt int64  `json:"aga,omitempty"`
+	Login string `json:"login"`
 }
 
 // oauthStateClaims is the claims type for short-lived OAuth state tokens.
@@ -90,9 +81,7 @@ func SignJWT(payload JWTPayload, secret string, expiresInSeconds int64) (string,
 			ExpiresAt: jwt.NewNumericDate(now.Add(time.Duration(expiresInSeconds) * time.Second)),
 			IssuedAt:  jwt.NewNumericDate(now),
 		},
-		Login:          payload.Login,
-		IsAdmin:        payload.IsAdmin,
-		AdminGrantedAt: payload.AdminGrantedAt,
+		Login: payload.Login,
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	signed, err := token.SignedString([]byte(secret))
@@ -151,14 +140,12 @@ func VerifyJWT(tokenStr, secret string) (JWTPayload, error) {
 	}
 
 	return JWTPayload{
-		Sub:            claims.Subject,
-		Login:          claims.Login,
-		IsAdmin:        claims.IsAdmin,
-		AdminGrantedAt: claims.AdminGrantedAt,
-		Exp:            exp,
-		Iat:            iat,
-		Iss:            claims.Issuer,
-		Aud:            aud,
+		Sub:   claims.Subject,
+		Login: claims.Login,
+		Exp:   exp,
+		Iat:   iat,
+		Iss:   claims.Issuer,
+		Aud:   aud,
 	}, nil
 }
 

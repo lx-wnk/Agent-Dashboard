@@ -69,6 +69,7 @@ type Handler struct {
 	refineReader      RefineStatusReader
 	checkpointSvc     CheckpointServiceIface
 	allowGitPull      bool
+	bypassAuth        bool
 }
 
 // Deps groups all constructor dependencies.
@@ -99,6 +100,9 @@ type Deps struct {
 	// AllowGitPull permits the git "pull" action; resolved from the git.allowPull
 	// setting at startup (ApplyRestart).
 	AllowGitPull bool
+	// BypassAuth is the loopback single-user mode. Listings are not scoped to a
+	// user id there, because every request is the same implicit user.
+	BypassAuth bool
 }
 
 func NewHandler(deps Deps) *Handler {
@@ -121,6 +125,7 @@ func NewHandler(deps Deps) *Handler {
 		refineReader:      deps.RefineReader,
 		checkpointSvc:     deps.CheckpointSvc,
 		allowGitPull:      deps.AllowGitPull,
+		bypassAuth:        deps.BypassAuth,
 	}
 }
 
@@ -261,7 +266,7 @@ func (h *Handler) broadcastEnrichedEvent(ctx context.Context, eventType string, 
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) error {
 	payload, _ := auth.PayloadFromContext(r.Context())
-	tasks, err := h.taskRepo.ListForUser(r.Context(), payload.Sub, payload.IsAdmin)
+	tasks, err := h.taskRepo.ListForUser(r.Context(), payload.Sub, h.bypassAuth)
 	if err != nil {
 		return fmt.Errorf("tasks.list: %w", err)
 	}
