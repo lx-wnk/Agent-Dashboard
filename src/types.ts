@@ -251,7 +251,8 @@ export interface TaskPermission {
   granted: boolean
   requestedAt: string
   decidedAt: string | null
-  decidedBy: 'user' | 'auto' | null
+  /** Identity of whoever decided the grant (JWT sub or API key id); null = no decision recorded. */
+  decidedBy: string | null
   /** ISO timestamp; null = never expires. */
   expiresAt: string | null
 }
@@ -292,9 +293,12 @@ export interface TaskFeedback {
 
 export interface AuditEntry {
   id: string
-  taskId: string
-  actor: 'user' | 'agent' | 'orchestrator' | 'system'
+  taskId: string | null
+  userId: string | null
+  /** Derived server-side: the metadata actor tag, else 'user' when a user id is present, else 'system'. */
+  actor: string
   action: string
+  target: string
   timestamp: string
   details: Record<string, unknown> | null
 }
