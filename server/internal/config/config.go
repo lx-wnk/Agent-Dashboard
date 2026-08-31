@@ -199,7 +199,7 @@ func warnOnMovedEnvKeys() {
 	}
 	for _, key := range movedKeys {
 		if _, ok := os.LookupEnv(key); ok {
-			slog.Warn("config: env var is no longer read — manage it via the Settings UI or 'dashboard settings set'", "key", key)
+			slog.Warn("config: env var is no longer read — manage it via the Settings UI or 'agent-dashboard settings set'", "key", key)
 		}
 	}
 }

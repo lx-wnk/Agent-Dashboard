@@ -11,6 +11,7 @@ import (
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/channel"
 	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
+	"github.com/lx-wnk/agent-dashboard/server/internal/cli"
 	versionpkg "github.com/lx-wnk/agent-dashboard/server/internal/version"
 	"github.com/lx-wnk/agent-dashboard/server/serverapp"
 )
@@ -82,6 +83,7 @@ func main() {
 	root.AddCommand(ptyhostCmd)
 
 	root.AddCommand(newLiveCmd(), newPtyHostCmd(), newHooksCmd())
+	cli.Register(root)
 
 	root.AddCommand(serve)
 

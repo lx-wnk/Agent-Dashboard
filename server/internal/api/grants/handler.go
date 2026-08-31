@@ -1,7 +1,7 @@
 // Package grants implements the HTTP surface for capability grants:
 // GET/POST /api/grants, DELETE /api/grants/{id}, and GET /api/capabilities
 // (the catalogue a grant's capabilityName must name). It mirrors the
-// `dashboard grants` CLI (cmd/cli/cmd_grants.go) so the dashboard UI can do
+// `agent-dashboard grants` CLI (internal/cli/cmd_grants.go) so the dashboard UI can do
 // over HTTP what an operator can already do at the terminal — every refusal
 // the CLI enforces before writing a grant is re-checked here, because this
 // route is a second, independent door into the same write path.
@@ -56,7 +56,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) error {
 		return fmt.Errorf("grants.list: %w", err)
 	}
 	// ListForCapability orders oldest-first (repo.grant_repo.go); re-sort here
-	// so both query paths answer newest-first, matching `dashboard grants list`
+	// so both query paths answer newest-first, matching `agent-dashboard grants list`
 	// (cmd_grants.go sorts the same way regardless of which repo method it called).
 	sort.Slice(rows, func(i, j int) bool { return rows[i].GrantedAt.After(rows[j].GrantedAt) })
 	if rows == nil {
