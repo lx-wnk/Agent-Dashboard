@@ -297,6 +297,50 @@ describe('agentTriageBand permission bridge', () => {
     expect(wrapper.get('[data-testid="permission-denied-by-rule"]').text()).toContain('Bash(rm:*)')
   })
 
+  // PatternElided mirrors ValueElided/ContextElided on the capability card: a
+  // truncated pattern must read as truncated, not as a complete command.
+  it('renders a visible truncation marker for an elided pattern', () => {
+    const wrapper = mountBand(makeAgent({
+      heldPermissions: [perm({ pattern: 'npm publish --access publ', patternElided: 42 })],
+    }))
+    const marker = wrapper.get('[data-testid="pattern-elided"]')
+    expect(marker.text()).toBe('…')
+    expect(marker.attributes('title')).toContain('42')
+  })
+
+  it('renders no truncation marker when the pattern was not cut', () => {
+    const wrapper = mountBand(makeAgent({ heldPermissions: [perm()] }))
+    expect(wrapper.find('[data-testid="pattern-elided"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('npm publish')
+  })
+
+  // DeniedByElided: the deny-rule text is the reason a human reads to
+  // understand a refusal, so a cut there is as deceptive as a cut pattern.
+  it('renders a visible truncation marker for an elided deny rule', () => {
+    const wrapper = mountBand(makeAgent({
+      heldPermissions: [perm({ deniedBy: 'Bash(rm:*', deniedByElided: 7 })],
+    }))
+    const marker = wrapper.get('[data-testid="denied-by-elided"]')
+    expect(marker.text()).toBe('…')
+    expect(marker.attributes('title')).toContain('7')
+  })
+
+  it('renders no truncation marker when the deny rule was not cut', () => {
+    const wrapper = mountBand(makeAgent({
+      heldPermissions: [perm({ deniedBy: 'Bash(rm:*)' })],
+    }))
+    expect(wrapper.find('[data-testid="denied-by-elided"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="permission-denied-by-rule"]').text()).toContain('Bash(rm:*)')
+  })
+
+  // Splitting the label around the pattern (for the marker) must not leave
+  // stray whitespace behind when the field is absent — the untouched case
+  // renders character for character what a single interpolation produced.
+  it('renders the pattern label byte-identically when nothing was cut', () => {
+    const wrapper = mountBand(makeAgent({ heldPermissions: [perm()] }))
+    expect(wrapper.html()).toContain('>Bash(npm publish)<')
+  })
+
   // Only the covered request loses its Allow: a batch holds several calls and
   // the others are still ordinary decisions.
   it('keeps Allow for the sibling requests no rule covers', () => {

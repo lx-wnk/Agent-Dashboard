@@ -1,0 +1,3 @@
+POST /api/capabilities/decisions/respond
+POST /api/hooks/permission/arm
+POST /api/hooks/permission/respond

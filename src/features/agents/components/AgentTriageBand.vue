@@ -185,6 +185,18 @@ function permissionLabel(p: PendingPermission | PermissionRequest): string {
   return p.pattern ? `${p.tool}(${p.pattern})` : p.tool
 }
 
+// permissionLabel stays a single string for aria-labels, toasts and the live
+// announcement, none of which can carry markup. The two card renderings that
+// show a pattern to a human split it here instead, so the truncation marker
+// can sit at the exact cut point, inside the parens.
+function patternPrefix(p: PendingPermission): string {
+  return p.pattern ? `${p.tool}(${p.pattern}` : p.tool
+}
+
+function patternSuffix(p: PendingPermission): string {
+  return p.pattern ? ')' : ''
+}
+
 // --- Task-driven approve-all bar ---
 const approveAllOpen = ref(false)
 const rememberAll = ref(false)
@@ -865,7 +877,12 @@ watch(() => props.focusedSessionId, (id) => {
                   :key="p.id"
                   class="flex flex-col gap-0.5"
                 >
-                  <span class="font-mono text-[12px] text-fg bg-app border border-line rounded px-2.5 py-1 leading-snug">{{ permissionLabel(p) }}</span>
+                  <span class="font-mono text-[12px] text-fg bg-app border border-line rounded px-2.5 py-1 leading-snug">{{ patternPrefix(p) }}<span
+                    v-if="p.patternElided"
+                    class="text-fg-faint"
+                    data-testid="pattern-elided"
+                    :title="elidedTitle(p.patternElided)"
+                  >…</span>{{ patternSuffix(p) }}</span>
                   <span v-if="p.reason" class="text-[11px] text-fg-faint px-0.5">{{ p.reason }}</span>
                 </li>
               </ul>
@@ -919,7 +936,12 @@ watch(() => props.focusedSessionId, (id) => {
                   :key="request.id"
                   class="flex items-center gap-2 justify-end"
                 >
-                  <span class="text-[11px] font-mono text-fg-mute truncate max-w-[22rem]">{{ permissionLabel(request) }}</span>
+                  <span class="text-[11px] font-mono text-fg-mute truncate max-w-[22rem]">{{ patternPrefix(request) }}<span
+                    v-if="request.patternElided"
+                    class="text-fg-faint"
+                    data-testid="pattern-elided"
+                    :title="elidedTitle(request.patternElided)"
+                  >…</span>{{ patternSuffix(request) }}</span>
                   <!-- No Allow when the user's own permissions.deny covers the
                      call: a hook "allow" short-circuits the evaluation that
                      would otherwise apply the rule, so one click here would
@@ -928,7 +950,12 @@ watch(() => props.focusedSessionId, (id) => {
                     v-if="request.deniedBy"
                     class="text-[11px] text-fg-mute"
                     data-testid="permission-denied-by-rule"
-                  >Denied by your rule <span class="font-mono">{{ request.deniedBy }}</span></span>
+                  >Denied by your rule <span class="font-mono">{{ request.deniedBy }}</span><span
+                    v-if="request.deniedByElided"
+                    class="text-fg-faint"
+                    data-testid="denied-by-elided"
+                    :title="elidedTitle(request.deniedByElided)"
+                  >…</span></span>
                   <AppButton
                     v-else
                     variant="success"

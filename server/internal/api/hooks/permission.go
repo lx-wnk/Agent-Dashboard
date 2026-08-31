@@ -361,14 +361,18 @@ func (b *HookEnforcer) hold(ctx context.Context, p preToolPayload) (string, bool
 	seq := b.seq.Add(1)
 	id := uuid.New().String()
 	raw := argumentOf(p)
+	pattern, patternElided := displayPattern(raw)
+	deniedBy, deniedByElided := b.deniedBy(p, raw)
 	meta := heldPermission{
 		perm: sdk.PendingPermission{
-			ID:          id,
-			Tool:        p.ToolName,
-			Pattern:     displayPattern(raw),
-			DeniedBy:    b.deniedBy(p, raw),
-			Reason:      nil,
-			RequestedAt: b.nowFn().UTC().Format(time.RFC3339),
+			ID:             id,
+			Tool:           p.ToolName,
+			Pattern:        pattern,
+			PatternElided:  patternElided,
+			DeniedBy:       deniedBy,
+			DeniedByElided: deniedByElided,
+			Reason:         nil,
+			RequestedAt:    b.nowFn().UTC().Format(time.RFC3339),
 		},
 		sessionID: p.SessionID,
 		toolUseID: p.ToolUseID,
@@ -442,24 +446,24 @@ func (b *HookEnforcer) resolve(id, decision string) error {
 // The RAW argument is matched, never the display copy: sanitizing collapses
 // whitespace, so "rm  -rf /" would stop matching a `Bash(rm:*)` prefix that the
 // session's own evaluation still applies.
-func (b *HookEnforcer) deniedBy(p preToolPayload, raw string) *string {
+func (b *HookEnforcer) deniedBy(p preToolPayload, raw string) (*string, int) {
 	b.mu.Lock()
 	reader := b.deny
 	b.mu.Unlock()
 	if reader == nil {
-		return nil
+		return nil, 0
 	}
 	rule := claudesettings.FirstMatch(reader.DenyRules(p.CWD), p.ToolName, raw)
 	if rule == nil {
-		return nil
+		return nil, 0
 	}
 	// The rule text is the user's own, from their own settings file — but it is
 	// rendered next to a decision, and the same display contract applies.
-	shown, _ := sanitize.ForDisplayCapped(rule.Raw, maxPatternRunes)
+	shown, elided := sanitize.ForDisplayCapped(rule.Raw, maxPatternRunes)
 	if shown == "" {
-		return nil
+		return nil, 0
 	}
-	return &shown
+	return &shown, elided
 }
 
 // Arm marks a session's prompts as ones the dashboard should intercept, or
@@ -627,17 +631,17 @@ func argumentOf(p preToolPayload) string {
 // anywhere. Leaving it raw put agent-authored text with a possible bidi override
 // straight into the title of the Allow button — the same gap this project
 // closed for the transcript path one layer up.
-func displayPattern(raw string) *string {
+func displayPattern(raw string) (*string, int) {
 	if raw == "" {
-		return nil
+		return nil, 0
 	}
 	// Rune-capped by the sanitizer, not sliced by bytes: a cut through a
 	// multi-byte character yields U+FFFD on the wire.
-	display, _ := sanitize.ForDisplayCapped(raw, maxPatternRunes)
+	display, elided := sanitize.ForDisplayCapped(raw, maxPatternRunes)
 	if display == "" {
-		return nil
+		return nil, 0
 	}
-	return &display
+	return &display, elided
 }
 
 func writeNoDecision(w http.ResponseWriter) {
