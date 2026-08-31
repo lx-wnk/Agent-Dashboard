@@ -316,7 +316,16 @@ func (r *Registry) Cost(p sdk.Provider, usage sdk.TokenUsage, model string, inFi
 	}
 }
 
+// expandHome resolves a leading `~/` against home. It takes home as a parameter
+// rather than calling os.UserHomeDir itself because both callers resolve it once
+// for a whole descriptor loop. An empty home means the caller's lookup failed, in
+// which case the value is returned unexpanded: joining onto "" would yield a path
+// relative to the server's working directory, which isDir would then happily
+// accept as a provider config dir.
 func expandHome(p, home string) string {
+	if home == "" {
+		return p
+	}
 	if strings.HasPrefix(p, "~/") {
 		return filepath.Join(home, p[2:])
 	}
