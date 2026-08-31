@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"os"
@@ -10,6 +10,15 @@ func newConfigCmd(cfg *CLIConfig) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "config",
 		Short: "CLI configuration",
+		Long: `Configure the client subcommands (agents, tasks, pipeline):
+
+  agent-dashboard config set --url http://127.0.0.1:13120
+  agent-dashboard config set --token <jwt>
+
+Authentication: the token must be a JWT issued by the dashboard server.
+The client works when the server runs in loopback bypass mode (no GitHub OAuth
+configured). MCP API keys (mcp_<hex>) do NOT work here — they only authenticate
+against POST /api/mcp.`,
 	}
 
 	showCmd := &cobra.Command{

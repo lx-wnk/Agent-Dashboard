@@ -117,11 +117,6 @@ tasks:
       # task stays cross-platform.
       - task: build:desktop
 
-  build:cli:
-    desc: Build dashboard CLI binary
-    dir: server
-    cmd: go build -o ../bin/dashboard ./cmd/cli/...
-
   build:desktop:
     desc: Build the macOS desktop shell (embeds the SPA; requires macOS + Xcode CLT)
     platforms: [darwin]

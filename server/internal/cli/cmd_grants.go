@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"context"
@@ -160,7 +160,7 @@ func addGrant(ctx context.Context, s *dbStore, capName string, opts grantAddOpts
 
 	if _, err := s.caps.Get(ctx, capName); err != nil {
 		if repo.IsNotFound(err) {
-			return nil, fmt.Errorf("unknown capability %q — run `dashboard grants capabilities` to list valid names", capName)
+			return nil, fmt.Errorf("unknown capability %q — run `agent-dashboard grants capabilities` to list valid names", capName)
 		}
 		return nil, err
 	}
