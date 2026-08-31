@@ -13,6 +13,9 @@ import (
 // styled identically to the dashboard's own usage templates. Everything below
 // pins the trust boundary at the parser, so every API consumer inherits it.
 
+// maxArgumentHintRunes bounds what the menu renders, ellipsis included: a
+// truncated hint gives back one rune so the ellipsis fits inside the cap
+// rather than extending past it.
 func TestArgumentHint_LongValueIsCapped(t *testing.T) {
 	cfg := t.TempDir()
 	writeFile(t, filepath.Join(cfg, "commands", "long.md"),
@@ -20,8 +23,21 @@ func TestArgumentHint_LongValueIsCapped(t *testing.T) {
 
 	got := hintOf(Scope{Supported: true, ConfigDir: cfg}.SlashCommands(), "/long")
 
-	require.LessOrEqual(t, utf8.RuneCountInString(got), maxArgumentHintRunes)
+	require.Equal(t, maxArgumentHintRunes, utf8.RuneCountInString(got))
 	require.True(t, strings.HasSuffix(got, "…"), "a clipped hint must say it was clipped, got %q", got)
+}
+
+// Whitespace collapses (sanitize.ForDisplayCapped, unlike the old per-file
+// stripper, folds runs of whitespace into one space) rather than only
+// trimming the ends — correct for a hint rendered on a single menu line.
+func TestArgumentHint_WhitespaceCollapsed(t *testing.T) {
+	cfg := t.TempDir()
+	writeFile(t, filepath.Join(cfg, "commands", "spaced.md"),
+		"---\ndescription: Spaced\nargument-hint: \"  [base-branch]   [--force]  \"\n---\n")
+
+	got := hintOf(Scope{Supported: true, ConfigDir: cfg}.SlashCommands(), "/spaced")
+
+	require.Equal(t, "[base-branch] [--force]", got)
 }
 
 // Runes, not bytes: a hint of multi-byte characters well under the rune cap
