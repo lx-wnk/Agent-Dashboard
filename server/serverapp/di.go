@@ -867,7 +867,7 @@ func askerArgFor(asker *serverask.Asker) capability.Asker {
 // exists for the same reason: the router tests `deps.CapabilityAsker != nil`.
 func capabilityAskerFor(asker *serverask.Asker) interface {
 	SetOnChange(func())
-	Resolve(id, decision string) error
+	Resolve(id, decision string) (serverask.Pending, error)
 } {
 	if asker == nil {
 		return nil

@@ -114,12 +114,18 @@ func (a *Asker) SetOnChange(fn func()) {
 // neither "allow" nor "deny".
 var ErrInvalidDecision = errors.New("serverask: decision must be \"allow\" or \"deny\"")
 
-// Resolve delivers a decision to the ask named by id.
-func (a *Asker) Resolve(id, decision string) error {
+// Resolve delivers a decision to the ask named by id and returns what was
+// pending under it. The id is a UUID minted per ask and names nothing after
+// the hold is released, so a caller recording the decision has to be handed
+// the metadata here or it has no way to say what was approved.
+func (a *Asker) Resolve(id, decision string) (Pending, error) {
 	if decision != "allow" && decision != "deny" {
-		return ErrInvalidDecision
+		return Pending{}, ErrInvalidDecision
 	}
-	return a.store.Resolve(id, func(Pending) (string, error) {
+	var resolved Pending
+	err := a.store.Resolve(id, func(meta Pending) (string, error) {
+		resolved = meta
 		return decision, nil
 	})
+	return resolved, err
 }

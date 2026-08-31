@@ -15,6 +15,7 @@ import (
 	apiplugins "github.com/lx-wnk/agent-dashboard/server/internal/api/plugins"
 	"github.com/lx-wnk/agent-dashboard/server/internal/merger"
 	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
+	"github.com/lx-wnk/agent-dashboard/server/internal/serverask"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 )
 
@@ -69,8 +70,10 @@ func collectRoutes(t *testing.T) []string {
 // nilness, it is never invoked while building the router.
 type stubCapabilityAsker struct{}
 
-func (stubCapabilityAsker) SetOnChange(func())                {}
-func (stubCapabilityAsker) Resolve(id, decision string) error { return nil }
+func (stubCapabilityAsker) SetOnChange(func()) {}
+func (stubCapabilityAsker) Resolve(id, decision string) (serverask.Pending, error) {
+	return serverask.Pending{}, nil
+}
 
 // buildMinimalRouter builds a router with the smallest RouterDeps able to
 // exercise the routes gated on Config.BypassAuth / CapabilityAsker. Every
@@ -78,7 +81,7 @@ func (stubCapabilityAsker) Resolve(id, decision string) error { return nil }
 // own nil-check in NewRouter and has no bearing on the auth-only gates below.
 func buildMinimalRouter(t *testing.T, bypassAuth bool, asker interface {
 	SetOnChange(func())
-	Resolve(id, decision string) error
+	Resolve(id, decision string) (serverask.Pending, error)
 }) http.Handler {
 	t.Helper()
 	return NewRouter(RouterDeps{

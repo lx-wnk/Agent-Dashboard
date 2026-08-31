@@ -21,6 +21,8 @@ const (
 	AuditActionKeyDelete          = "key_delete"
 	AuditActionLiveInject         = "live_inject"
 	AuditActionLiveInjectRejected = "live_inject_rejected"
+	AuditActionCapabilityAllow    = "capability_allow"
+	AuditActionCapabilityDeny     = "capability_deny"
 )
 
 // AuditEventRepo persists and queries security-relevant audit events.
