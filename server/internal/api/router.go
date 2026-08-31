@@ -56,6 +56,7 @@ import (
 	mcp "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
 	"github.com/lx-wnk/agent-dashboard/server/internal/merger"
 	"github.com/lx-wnk/agent-dashboard/server/internal/plugin"
+	"github.com/lx-wnk/agent-dashboard/server/internal/serverask"
 	"github.com/lx-wnk/agent-dashboard/server/internal/services"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 )
@@ -141,7 +142,7 @@ type RouterDeps struct {
 	// interface here simply means no asker was wired.
 	CapabilityAsker interface {
 		SetOnChange(func())
-		Resolve(id, decision string) error
+		Resolve(id, decision string) (serverask.Pending, error)
 	}
 	OAuthProvider     authpkg.OAuthProvider
 	UserRepo          repo.UserRepo
@@ -536,7 +537,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 		// JWT off there is no human on the other end of this endpoint, only any
 		// local process, so it would offer a decision nothing can meaningfully make.
 		if deps.CapabilityAsker != nil {
-			r.Post("/api/capabilities/decisions/respond", capabilities.New(deps.CapabilityAsker).Respond)
+			r.Post("/api/capabilities/decisions/respond", capabilities.New(deps.CapabilityAsker, deps.AuditEventRepo).Respond)
 		}
 
 		// SP1 lifecycle + settings endpoints under the clean /api/plugins namespace.

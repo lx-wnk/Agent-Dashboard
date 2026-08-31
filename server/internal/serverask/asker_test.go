@@ -42,7 +42,7 @@ func TestAskReturnsTrueAfterResolveAllow(t *testing.T) {
 
 	waitUntil(t, func() bool { return len(a.Pending()) == 1 })
 	id := a.Pending()[0].ID
-	if err := a.Resolve(id, "allow"); err != nil {
+	if _, err := a.Resolve(id, "allow"); err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
 
@@ -68,7 +68,7 @@ func TestAskReturnsFalseAfterResolveDeny(t *testing.T) {
 
 	waitUntil(t, func() bool { return len(a.Pending()) == 1 })
 	id := a.Pending()[0].ID
-	if err := a.Resolve(id, "deny"); err != nil {
+	if _, err := a.Resolve(id, "deny"); err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
 
@@ -137,7 +137,7 @@ func TestPendingShowsWhatIsBeingAskedAndClearsAfter(t *testing.T) {
 			pending.Meta.ValueElided, pending.Meta.ContextElided)
 	}
 
-	if err := a.Resolve(pending.ID, "allow"); err != nil {
+	if _, err := a.Resolve(pending.ID, "allow"); err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
 	<-done
@@ -167,7 +167,7 @@ func TestPendingCapsOversizedValueAndCarriesElisionSignal(t *testing.T) {
 		t.Fatalf("Pending ValueElided = %d, want the nonzero drop count %d", pending.Meta.ValueElided, wantElided)
 	}
 
-	_ = a.Resolve(pending.ID, "deny")
+	_, _ = a.Resolve(pending.ID, "deny")
 }
 
 func TestPendingValueDoesNotCarryControlCharsOrNewlines(t *testing.T) {
@@ -190,7 +190,7 @@ func TestPendingValueDoesNotCarryControlCharsOrNewlines(t *testing.T) {
 		t.Fatalf("Pending Value = %q, control characters and newlines must not survive", pending.Meta.Value)
 	}
 
-	_ = a.Resolve(pending.ID, "deny")
+	_, _ = a.Resolve(pending.ID, "deny")
 }
 
 func TestPendingSanitizesScopeRefInsideContext(t *testing.T) {
@@ -219,12 +219,12 @@ func TestPendingSanitizesScopeRefInsideContext(t *testing.T) {
 		t.Fatalf("Pending Context = %q, must not contain a newline", pending.Meta.Context)
 	}
 
-	_ = a.Resolve(pending.ID, "deny")
+	_, _ = a.Resolve(pending.ID, "deny")
 }
 
 func TestResolveOnUnknownIDFails(t *testing.T) {
 	a := New(nil)
-	err := a.Resolve("nope", "allow")
+	_, err := a.Resolve("nope", "allow")
 	if !errors.Is(err, askgate.ErrNotPending) {
 		t.Fatalf("Resolve(unknown) = %v, want askgate.ErrNotPending", err)
 	}
@@ -240,14 +240,14 @@ func TestResolveRejectsInvalidDecision(t *testing.T) {
 	waitUntil(t, func() bool { return len(a.Pending()) == 1 })
 	id := a.Pending()[0].ID
 
-	if err := a.Resolve(id, "maybe"); !errors.Is(err, ErrInvalidDecision) {
+	if _, err := a.Resolve(id, "maybe"); !errors.Is(err, ErrInvalidDecision) {
 		t.Fatalf("Resolve(%q) = %v, want ErrInvalidDecision", "maybe", err)
 	}
 	if got := a.Pending(); len(got) != 1 {
 		t.Fatalf("Pending after a rejected decision = %+v, want the ask still pending", got)
 	}
 	// Clean up so the test doesn't leak a goroutine blocked on the store.
-	_ = a.Resolve(id, "deny")
+	_, _ = a.Resolve(id, "deny")
 }
 
 func TestOnChangeFiresOnAskAndOnEnd(t *testing.T) {
@@ -292,7 +292,7 @@ func TestConcurrentAskAndResolve(t *testing.T) {
 		deadline := time.Now().Add(3 * time.Second)
 		for resolved < n && time.Now().Before(deadline) {
 			for _, e := range a.Pending() {
-				if err := a.Resolve(e.ID, "allow"); err == nil {
+				if _, err := a.Resolve(e.ID, "allow"); err == nil {
 					resolved++
 				}
 			}
