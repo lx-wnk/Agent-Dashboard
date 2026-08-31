@@ -3,6 +3,7 @@ package memory
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/capability"
@@ -111,7 +112,21 @@ func (g Gate) Authorize(ctx context.Context, capName, value string, scope repo.S
 	if err != nil {
 		return err
 	}
-	return capability.ServerEnforcer{Asker: g.Asker}.Enforce(ctx, req, decision, grantView, usedInWindow)
+	enforceErr := capability.ServerEnforcer{Asker: g.Asker}.Enforce(ctx, req, decision, grantView, usedInWindow)
+	if enforceErr == nil && decision.Effect == capability.EffectAllow && !capability.WithinLimit(grantView, usedInWindow) {
+		// Reaching here means Enforce downgraded this allow to ask because
+		// the grant's limit was exhausted (same condition it applies
+		// internally) and a human then approved it. The limit already did
+		// its job of bounding unattended use; a consciously approved use is
+		// recorded unconditionally so a second exhausted call still asks
+		// again rather than reading as "one below the limit" forever. A
+		// write failure here must not undo the human's already-given
+		// permission, so it is logged, not returned.
+		if recErr := g.GrantUsage.RecordUsage(ctx, grantView.ID); recErr != nil {
+			slog.Error("record human-approved rate-limited usage", "grant_id", grantView.ID, "capability", capName, "error", recErr)
+		}
+	}
+	return enforceErr
 }
 
 // rateLimitUsage recovers the grant that won decision (by Decision.GrantID,

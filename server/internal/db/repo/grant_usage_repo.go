@@ -35,6 +35,13 @@ type GrantUsageRepo interface {
 	// must call RecordIfWithinLimit instead, which alone closes the race
 	// this method cannot.
 	CountSince(ctx context.Context, grantID string, since time.Time) (int, error)
+	// RecordUsage inserts one use of grantID unconditionally, with no limit
+	// check. Only for the human-approved path: once a person has knowingly
+	// overridden an exhausted limit by answering an ask, the limit has
+	// already done its job of bounding unattended use, so this write needs
+	// none of RecordIfWithinLimit's atomic check-and-insert — there is no
+	// concurrent caller to race, only the one human who just answered.
+	RecordUsage(ctx context.Context, grantID string) error
 }
 
 type entGrantUsageRepo struct {
@@ -76,6 +83,19 @@ func (r *entGrantUsageRepo) RecordIfWithinLimit(ctx context.Context, grantID str
 		return false, fmt.Errorf("grant_usage.RecordIfWithinLimit: %w", err)
 	}
 	return permitted, nil
+}
+
+func (r *entGrantUsageRepo) RecordUsage(ctx context.Context, grantID string) error {
+	if grantID == "" {
+		return fmt.Errorf("grant_usage.RecordUsage: grant_id is required")
+	}
+	if err := r.client.GrantUsage.Create().
+		SetID(uuid.New().String()).
+		SetGrantID(grantID).
+		Exec(ctx); err != nil {
+		return fmt.Errorf("grant_usage.RecordUsage: %w", err)
+	}
+	return nil
 }
 
 func (r *entGrantUsageRepo) CountSince(ctx context.Context, grantID string, since time.Time) (int, error) {

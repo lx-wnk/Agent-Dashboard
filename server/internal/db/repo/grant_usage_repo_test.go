@@ -28,6 +28,38 @@ func TestGrantUsageRecordIfWithinLimitRequiresGrantID(t *testing.T) {
 	}
 }
 
+func TestGrantUsageRecordUsageRequiresGrantID(t *testing.T) {
+	r, _, ctx := newGrantUsageRepo(t)
+	if err := r.RecordUsage(ctx, ""); err == nil {
+		t.Fatal("RecordUsage with an empty grant_id must be refused")
+	}
+}
+
+// TestGrantUsageRecordUsageInsertsUnconditionally proves RecordUsage writes
+// a row even past an already-exhausted limit — it is the human-approved
+// override path, not a second limit check.
+func TestGrantUsageRecordUsageInsertsUnconditionally(t *testing.T) {
+	r, _, ctx := newGrantUsageRepo(t)
+	grantID := "g1"
+
+	ok, err := r.RecordIfWithinLimit(ctx, grantID, 1, time.Hour)
+	if err != nil || !ok {
+		t.Fatalf("seed call: want permitted, got ok=%v err=%v", ok, err)
+	}
+	// The grant is now exhausted for a limit of 1; RecordUsage must still record.
+	if err := r.RecordUsage(ctx, grantID); err != nil {
+		t.Fatalf("RecordUsage: %v", err)
+	}
+
+	count, err := r.CountSince(ctx, grantID, time.Now().Add(-time.Hour))
+	if err != nil {
+		t.Fatalf("CountSince: %v", err)
+	}
+	if count != 2 {
+		t.Errorf("CountSince = %d, want 2 (the seeded use plus the unconditional RecordUsage)", count)
+	}
+}
+
 func TestGrantUsageRecordIfWithinLimitPermitsUnderTheLimitAndRecords(t *testing.T) {
 	r, _, ctx := newGrantUsageRepo(t)
 	grantID := "g1"

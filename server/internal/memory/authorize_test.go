@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -83,6 +84,90 @@ func TestAuthorizeUnlimitedGrantNeverTouchesUsage(t *testing.T) {
 		err = gate.Authorize(ctx, repo.CapabilityMemoryRead, "", scope)
 		require.NoError(t, err, "call %d: an unlimited grant must never be rate-limited", i)
 	}
+}
+
+// TestAuthorizeApprovedAskAfterLimitRecordsUsage is the regression test for
+// the "human-approved rate-limited use is never recorded" bug: once a grant
+// is exhausted, Enforce downgrades the allow to ask, and an approving human
+// used to leave no trace at all — the next call would ask again having
+// silently allowed one extra use for free. The approved use must count.
+func TestAuthorizeApprovedAskAfterLimitRecordsUsage(t *testing.T) {
+	asker := &recordingAsker{answer: true}
+	gate, ctx := newAuthorizeGateForTest(t, asker)
+	grant, err := gate.Grants.Create(ctx, repo.CreateGrantInput{
+		CapabilityName:     repo.CapabilityMemoryRead,
+		Context:            repo.GrantContextFor(repo.GrantContextGlobal, ""),
+		Pattern:            "",
+		Mode:               repo.GrantModeAllow,
+		LimitCount:         1,
+		LimitWindowSeconds: 3600,
+		GrantedBy:          "test",
+	})
+	require.NoError(t, err)
+
+	scope := repo.GlobalScope()
+	require.NoError(t, gate.Authorize(ctx, repo.CapabilityMemoryRead, "", scope), "first call must be within the limit")
+	require.False(t, asker.called, "the first, within-limit call must not need a human")
+
+	err = gate.Authorize(ctx, repo.CapabilityMemoryRead, "", scope)
+	require.NoError(t, err, "an approved ask must let the call through")
+	require.True(t, asker.called, "the exhausted second call must have been downgraded to ask")
+
+	count, err := gate.GrantUsage.CountSince(ctx, grant.ID, time.Now().Add(-time.Hour))
+	require.NoError(t, err)
+	require.Equal(t, 2, count, "the within-limit call and the human-approved call must each record exactly one usage row")
+}
+
+// TestAuthorizeDeniedAskAfterLimitRecordsNoUsage proves a human refusal
+// records nothing: only an actually-approved use counts against the grant.
+func TestAuthorizeDeniedAskAfterLimitRecordsNoUsage(t *testing.T) {
+	asker := &recordingAsker{answer: false}
+	gate, ctx := newAuthorizeGateForTest(t, asker)
+	grant, err := gate.Grants.Create(ctx, repo.CreateGrantInput{
+		CapabilityName:     repo.CapabilityMemoryRead,
+		Context:            repo.GrantContextFor(repo.GrantContextGlobal, ""),
+		Pattern:            "",
+		Mode:               repo.GrantModeAllow,
+		LimitCount:         1,
+		LimitWindowSeconds: 3600,
+		GrantedBy:          "test",
+	})
+	require.NoError(t, err)
+
+	scope := repo.GlobalScope()
+	require.NoError(t, gate.Authorize(ctx, repo.CapabilityMemoryRead, "", scope))
+
+	err = gate.Authorize(ctx, repo.CapabilityMemoryRead, "", scope)
+	require.Error(t, err, "a refused ask must still deny the call")
+
+	count, err := gate.GrantUsage.CountSince(ctx, grant.ID, time.Now().Add(-time.Hour))
+	require.NoError(t, err)
+	require.Equal(t, 1, count, "a refused ask must not record a second usage row")
+}
+
+// TestAuthorizeApprovedAskForNonLimitReasonRecordsNoUsage proves the
+// recording is specific to an ask caused by a rate limit: a plain
+// GrantModeAsk grant (no limit at all) that a human approves must not gain a
+// usage row it was never rate-limited by in the first place.
+func TestAuthorizeApprovedAskForNonLimitReasonRecordsNoUsage(t *testing.T) {
+	asker := &recordingAsker{answer: true}
+	gate, ctx := newAuthorizeGateForTest(t, asker)
+	grant, err := gate.Grants.Create(ctx, repo.CreateGrantInput{
+		CapabilityName: repo.CapabilityMemoryRead,
+		Context:        repo.GrantContextFor(repo.GrantContextGlobal, ""),
+		Pattern:        "",
+		Mode:           repo.GrantModeAsk,
+		GrantedBy:      "test",
+	})
+	require.NoError(t, err)
+
+	err = gate.Authorize(ctx, repo.CapabilityMemoryRead, "", repo.GlobalScope())
+	require.NoError(t, err)
+	require.True(t, asker.called)
+
+	count, err := gate.GrantUsage.CountSince(ctx, grant.ID, time.Now().Add(-time.Hour))
+	require.NoError(t, err)
+	require.Equal(t, 0, count, "an ask not caused by a rate limit must never write a usage row")
 }
 
 // recordingAsker mirrors capability_test's recordingAsker (unexported there,
