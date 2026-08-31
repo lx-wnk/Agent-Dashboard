@@ -929,7 +929,6 @@ var (
 		{Name: "tool", Type: field.TypeString},
 		{Name: "pattern", Type: field.TypeString, Nullable: true},
 		{Name: "granted", Type: field.TypeBool, Default: false},
-		{Name: "pre_approved", Type: field.TypeBool, Default: false},
 		{Name: "manual_override", Type: field.TypeBool, Default: false},
 		{Name: "decided_by", Type: field.TypeString, Nullable: true},
 		{Name: "requested_at", Type: field.TypeTime},
@@ -945,7 +944,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "task_permissions_tasks_permissions",
-				Columns:    []*schema.Column{TaskPermissionsColumns[10]},
+				Columns:    []*schema.Column{TaskPermissionsColumns[9]},
 				RefColumns: []*schema.Column{TasksColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
@@ -954,7 +953,7 @@ var (
 			{
 				Name:    "taskpermission_task_id",
 				Unique:  false,
-				Columns: []*schema.Column{TaskPermissionsColumns[10]},
+				Columns: []*schema.Column{TaskPermissionsColumns[9]},
 			},
 		},
 	}

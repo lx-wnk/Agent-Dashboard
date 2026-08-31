@@ -324,7 +324,7 @@ export async function grantTaskPermission(
   const res = await fetch(`/api/tasks/${taskId}/permissions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tool, pattern, granted: true, preApproved: true }),
+    body: JSON.stringify({ tool, pattern, granted: true }),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))

@@ -70,8 +70,8 @@ func TestOpen_DropsBareWebFetchGrants(t *testing.T) {
 
 	// Insert a bare-WebFetch grant (pattern IS NULL) — bypasses Go-layer validation.
 	_, err = bundle1.DB.Exec(
-		`INSERT INTO task_permissions (id, task_id, tool, pattern, granted, pre_approved, requested_at)
-		 VALUES ('p1','t1','WebFetch',NULL,1,0,datetime('now'))`,
+		`INSERT INTO task_permissions (id, task_id, tool, pattern, granted, requested_at)
+		 VALUES ('p1','t1','WebFetch',NULL,1,datetime('now'))`,
 	)
 	require.NoError(t, err)
 
@@ -98,8 +98,8 @@ func TestOpen_DropsBareWebFetchGrants(t *testing.T) {
 
 	// Non-bare WebFetch grants (with a pattern) must survive.
 	_, err = bundle2.DB.Exec(
-		`INSERT INTO task_permissions (id, task_id, tool, pattern, granted, pre_approved, requested_at)
-		 VALUES ('p2','t1','WebFetch','https://docs.example.com*',1,0,datetime('now'))`,
+		`INSERT INTO task_permissions (id, task_id, tool, pattern, granted, requested_at)
+		 VALUES ('p2','t1','WebFetch','https://docs.example.com*',1,datetime('now'))`,
 	)
 	require.NoError(t, err)
 	require.NoError(t, bundle2.Close())
@@ -656,4 +656,73 @@ func TestMemoryFTSRoundTrip(t *testing.T) {
 
 	_, err = matchID("Renamed")
 	require.ErrorIs(t, err, sql.ErrNoRows, "deleted entry must no longer match")
+}
+
+// TestOpen_LegacyPreApprovedColumnSurvives seeds a task_permissions table in
+// the shape it had while the schema still declared pre_approved, then opens it
+// with the current schema. ent's auto-migrate is non-destructive (no
+// WithDropColumn), so the dead column stays behind; because it was generated as
+// NOT NULL DEFAULT (false), inserts that no longer mention it still succeed.
+// A file DB is required — ":memory:" pins a single fresh connection and can
+// never hold a pre-existing table shape.
+func TestOpen_LegacyPreApprovedColumnSurvives(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "preapproved.db")
+
+	raw, err := sql.Open("sqlite", "file:"+path+"?_pragma=foreign_keys(1)")
+	require.NoError(t, err)
+	_, err = raw.Exec("CREATE TABLE `tasks` (`id` text NOT NULL, `slug` text NOT NULL, `title` text NOT NULL, `cwd` text NOT NULL, `current_stage` text NOT NULL DEFAULT ('concept'), `priority` text NOT NULL DEFAULT ('medium'), `max_iterations` integer NOT NULL DEFAULT (20), `stage_timeout_seconds` integer NOT NULL DEFAULT (1800), `silver_bullet` bool NOT NULL DEFAULT (false), `created_at` datetime NOT NULL, `updated_at` datetime NOT NULL, PRIMARY KEY (`id`))")
+	require.NoError(t, err)
+	// Verbatim pre-drop DDL, as emitted by ent while the field still existed.
+	_, err = raw.Exec("CREATE TABLE `task_permissions` (`id` text NOT NULL, `tool` text NOT NULL, `pattern` text NULL, `granted` bool NOT NULL DEFAULT (false), `pre_approved` bool NOT NULL DEFAULT (false), `manual_override` bool NOT NULL DEFAULT (false), `decided_by` text NULL, `requested_at` datetime NOT NULL, `decided_at` datetime NULL, `expires_at` datetime NULL, `task_id` text NOT NULL, PRIMARY KEY (`id`), CONSTRAINT `task_permissions_tasks_permissions` FOREIGN KEY (`task_id`) REFERENCES `tasks` (`id`) ON DELETE CASCADE)")
+	require.NoError(t, err)
+	_, err = raw.Exec("CREATE INDEX `taskpermission_task_id` ON `task_permissions` (`task_id`)")
+	require.NoError(t, err)
+	_, err = raw.Exec(`INSERT INTO tasks (id, slug, title, cwd, created_at, updated_at)
+		VALUES ('t-legacy','legacy','Legacy','',datetime('now'),datetime('now'))`)
+	require.NoError(t, err)
+	_, err = raw.Exec(`INSERT INTO task_permissions (id, task_id, tool, pattern, granted, pre_approved, requested_at)
+		VALUES ('p-legacy','t-legacy','Read','/repo/**',1,1,datetime('now'))`)
+	require.NoError(t, err)
+	require.NoError(t, raw.Close())
+
+	bundle, err := db.Open(path)
+	require.NoError(t, err)
+	defer func() { _ = bundle.Close() }()
+
+	ctx := t.Context()
+	perms := repo.NewPermissionRepo(bundle.Client)
+
+	// Read: the pre-existing row is still readable through the current schema.
+	existing, err := perms.ListTaskPermissions(ctx, "t-legacy")
+	require.NoError(t, err)
+	require.Len(t, existing, 1)
+	require.Equal(t, "Read", existing[0].Tool)
+	require.True(t, existing[0].Granted)
+
+	// Write: a create that never mentions pre_approved must satisfy the
+	// leftover NOT NULL column via its DEFAULT.
+	created, err := perms.CreateTaskPermission(ctx, repo.CreateTaskPermissionInput{
+		TaskID:  "t-legacy",
+		Tool:    "Write",
+		Granted: true,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "Write", created.Tool)
+
+	after, err := perms.ListTaskPermissions(ctx, "t-legacy")
+	require.NoError(t, err)
+	require.Len(t, after, 2)
+
+	// The dead column is deliberately left in place rather than dropped.
+	var leftover int
+	err = bundle.DB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('task_permissions') WHERE name = 'pre_approved'`).Scan(&leftover)
+	require.NoError(t, err)
+	require.Equal(t, 1, leftover, "auto-migrate is non-destructive: the column stays")
+
+	// A second Open over the same file must be a clean no-op.
+	require.NoError(t, bundle.Close())
+	bundle2, err := db.Open(path)
+	require.NoError(t, err)
+	defer func() { _ = bundle2.Close() }()
 }

@@ -76,20 +76,6 @@ func (_u *TaskPermissionUpdate) SetNillableGranted(v *bool) *TaskPermissionUpdat
 	return _u
 }
 
-// SetPreApproved sets the "pre_approved" field.
-func (_u *TaskPermissionUpdate) SetPreApproved(v bool) *TaskPermissionUpdate {
-	_u.mutation.SetPreApproved(v)
-	return _u
-}
-
-// SetNillablePreApproved sets the "pre_approved" field if the given value is not nil.
-func (_u *TaskPermissionUpdate) SetNillablePreApproved(v *bool) *TaskPermissionUpdate {
-	if v != nil {
-		_u.SetPreApproved(*v)
-	}
-	return _u
-}
-
 // SetManualOverride sets the "manual_override" field.
 func (_u *TaskPermissionUpdate) SetManualOverride(v bool) *TaskPermissionUpdate {
 	_u.mutation.SetManualOverride(v)
@@ -242,9 +228,6 @@ func (_u *TaskPermissionUpdate) sqlSave(ctx context.Context) (_node int, err err
 	if value, ok := _u.mutation.Granted(); ok {
 		_spec.SetField(taskpermission.FieldGranted, field.TypeBool, value)
 	}
-	if value, ok := _u.mutation.PreApproved(); ok {
-		_spec.SetField(taskpermission.FieldPreApproved, field.TypeBool, value)
-	}
 	if value, ok := _u.mutation.ManualOverride(); ok {
 		_spec.SetField(taskpermission.FieldManualOverride, field.TypeBool, value)
 	}
@@ -333,20 +316,6 @@ func (_u *TaskPermissionUpdateOne) SetGranted(v bool) *TaskPermissionUpdateOne {
 func (_u *TaskPermissionUpdateOne) SetNillableGranted(v *bool) *TaskPermissionUpdateOne {
 	if v != nil {
 		_u.SetGranted(*v)
-	}
-	return _u
-}
-
-// SetPreApproved sets the "pre_approved" field.
-func (_u *TaskPermissionUpdateOne) SetPreApproved(v bool) *TaskPermissionUpdateOne {
-	_u.mutation.SetPreApproved(v)
-	return _u
-}
-
-// SetNillablePreApproved sets the "pre_approved" field if the given value is not nil.
-func (_u *TaskPermissionUpdateOne) SetNillablePreApproved(v *bool) *TaskPermissionUpdateOne {
-	if v != nil {
-		_u.SetPreApproved(*v)
 	}
 	return _u
 }
@@ -532,9 +501,6 @@ func (_u *TaskPermissionUpdateOne) sqlSave(ctx context.Context) (_node *TaskPerm
 	}
 	if value, ok := _u.mutation.Granted(); ok {
 		_spec.SetField(taskpermission.FieldGranted, field.TypeBool, value)
-	}
-	if value, ok := _u.mutation.PreApproved(); ok {
-		_spec.SetField(taskpermission.FieldPreApproved, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.ManualOverride(); ok {
 		_spec.SetField(taskpermission.FieldManualOverride, field.TypeBool, value)

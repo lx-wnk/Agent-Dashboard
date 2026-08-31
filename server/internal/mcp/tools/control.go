@@ -346,11 +346,10 @@ func registerGrantPermission(registry mcp.ToolRegistry, d ControlDeps) {
 			}
 
 			in := repo.CreateTaskPermissionInput{
-				TaskID:      taskID,
-				Tool:        tool,
-				Granted:     true,
-				PreApproved: true,
-				DecidedBy:   decidedByFromCtx(ctx),
+				TaskID:    taskID,
+				Tool:      tool,
+				Granted:   true,
+				DecidedBy: decidedByFromCtx(ctx),
 			}
 			if p := mcp.OptionalString(args, "pattern"); p != "" {
 				in.Pattern = &p
@@ -407,7 +406,6 @@ func registerResolvePermissionRequest(registry mcp.ToolRegistry, d ControlDeps) 
 						TaskID:         run.TaskID,
 						Tool:           req.Tool,
 						Granted:        true,
-						PreApproved:    false,
 						ManualOverride: false, // agent/MCP path never gets override
 						DecidedBy:      decidedByFromCtx(ctx),
 					}
