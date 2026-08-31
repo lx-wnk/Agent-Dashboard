@@ -229,3 +229,26 @@ func TestRegistry_KnownProviders(t *testing.T) {
 		}
 	}
 }
+
+// TestExpandHome_EmptyHomeLeavesValueUnexpanded pins the failure path of the
+// callers' `home, _ := os.UserHomeDir()`. Joining "~/.codex" onto an empty home
+// yields ".codex", a path relative to the server's working directory, which
+// isDir would accept as a provider config dir.
+func TestExpandHome_EmptyHomeLeavesValueUnexpanded(t *testing.T) {
+	got := expandHome("~/.codex", "")
+	if got != "~/.codex" {
+		t.Fatalf("expandHome with empty home = %q, want it returned unexpanded", got)
+	}
+	if filepath.IsAbs(got) {
+		t.Fatalf("expandHome with empty home produced a usable path %q", got)
+	}
+}
+
+func TestExpandHome_ExpandsAgainstHome(t *testing.T) {
+	if got, want := expandHome("~/.codex", "/home/u"), filepath.Join("/home/u", ".codex"); got != want {
+		t.Fatalf("expandHome = %q, want %q", got, want)
+	}
+	if got := expandHome("/abs/path", "/home/u"); got != "/abs/path" {
+		t.Fatalf("expandHome rewrote an absolute path: %q", got)
+	}
+}
