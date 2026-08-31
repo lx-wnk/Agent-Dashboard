@@ -197,6 +197,11 @@ tasks:
     desc: Run go generate (ent schemas) and tygo TS codegen
     cmds:
       - $(go env GOPATH)/bin/tygo generate --config tygo.yaml
+      # tygo emits semicolons and /* int */ comments that this project's eslint
+      # style rejects — 249 errors, all auto-fixable. Without this the task
+      # leaves a file `pnpm lint` fails on, which is why the SDK types ended up
+      # being hand-maintained instead of generated.
+      - pnpm eslint --fix src/sdk.generated.ts
       - cd server && go generate ./...
       # ent's //go:generate runs `go run -mod=mod`, which writes entc's own
       # dependencies into server/go.sum. Left there they fail the licence job's
