@@ -55,15 +55,8 @@ tasks:
     # start and deleted the tracked server/frontend/dist/.gitkeep that
     # //go:embed all:dist needs to compile in CI. build:desktop and
     # desktop:dist still depend on build:frontend, which is where it belongs.
-    cmds:
-      - task: dev:desktop:run
-
-  dev:desktop:run:
-    internal: true
-    platforms: [darwin]
-    # Vite and wails are both long-running; deps run them concurrently and
-    # this task blocks until both exit, the same pattern `dev` uses for
-    # dev:go + dev:frontend.
+    # Vite and wails are both long-running; deps run them concurrently and this
+    # task blocks until both exit, the same pattern `dev` uses for its two.
     deps: [dev:frontend, dev:desktop:wails]
 
   dev:desktop:wails:
