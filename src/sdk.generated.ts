@@ -236,7 +236,7 @@ export interface PendingPermission {
    * RecentTool.Elided, so a truncated Pattern cannot forge its own "…" next
    * to the Allow button.
    */
-  patternElided?: number /* int */
+  patternElided?: number
   /**
    * DeniedBy is the user's own permissions.deny rule forbidding this call,
    * verbatim, or nil when no rule covers it. A hook "allow" short-circuits
@@ -248,7 +248,7 @@ export interface PendingPermission {
   /**
    * DeniedByElided mirrors PatternElided, for DeniedBy.
    */
-  deniedByElided?: number /* int */
+  deniedByElided?: number
   reason?: string
   requestedAt: string
 }
@@ -265,9 +265,9 @@ export interface PendingCapabilityDecision {
    * ValueElided/ContextElided carry the cut count as their own field, mirroring
    * RecentTool.Elided, so a truncated Value/Context cannot forge its own "…".
    */
-  valueElided?: number /* int */
+  valueElided?: number
   context: string
-  contextElided?: number /* int */
+  contextElided?: number
   reason: string
   requestedAt: string
 }
@@ -276,7 +276,6 @@ export interface PendingCapabilityDecision {
  * human-readable argument -- a Bash command, an Edit/Write path -- and is
  * agent-authored text on its way to a UI: never interpolate it into a shell
  * command, a query or HTML without escaping at the point of use.
- *
  * Elided is how many characters Detail was cut by, 0 when it was not cut. It is
  * a separate field rather than a suffix inside Detail so the payload cannot
  * forge a cut that never happened: the client renders it as its own element.
@@ -284,13 +283,12 @@ export interface PendingCapabilityDecision {
 export interface RecentTool {
   name: string
   detail?: string
-  elided?: number /* int */
+  elided?: number
 }
 /**
  * PendingToolUse is the last assistant tool_use block that has no matching
  * tool_result yet. It indicates the agent is currently executing or blocked on
  * that tool call.
- *
  * Pattern is the command string (Bash), file path (Edit/Write), or empty for
  * other tools. It is the grant identity: a permission preset is matched by
  * exact equality, so it is carried verbatim and must never be normalised.
@@ -305,43 +303,6 @@ export interface PendingToolUse {
   patternDisplay: string
 }
 /**
- * DetectedOption is one numbered choice row of a DetectedQuestion.
- */
-export interface DetectedOption {
-  index: number
-  label: string
-  description?: string
-}
-/**
- * DetectedQuestion is a parsed AskUserQuestion modal detected from a session's
- * terminal buffer. Mirrors src/utils/askQuestionScreen.ts DetectedQuestion.
- */
-export interface DetectedQuestion {
-  header: string
-  question: string
-  multiSelect: boolean
-  options: DetectedOption[]
-  typeSomethingIndex: number
-  chatAboutIndex: number
-}
-/**
- * DetectedConfirm is the AskUserQuestion review/submit screen detected from a
- * session's terminal buffer. Mirrors src/utils/askQuestionScreen.ts
- * DetectedConfirm.
- */
-export interface DetectedConfirm {
-  question: string
-  options: DetectedOption[]
-}
-/**
- * PendingScreen is whichever interactive AskUserQuestion screen is currently
- * open on a session's terminal. At most one field is set.
- */
-export interface PendingScreen {
-  question?: DetectedQuestion
-  confirm?: DetectedConfirm
-}
-/**
  * HookEvent is one lifecycle-hook event recorded for a session when the opt-in
  * hook receiver is installed (POST /api/hooks/event). It adds per-event
  * granularity on top of the process/JSONL scan. Tool and Summary are truncated,
@@ -354,6 +315,69 @@ export interface HookEvent {
   at: string // RFC3339 timestamp the event was received
   summary: string // truncated, secret-safe payload preview
 }
+/**
+ * DetectedOption is a single numbered option row of a parsed AskUserQuestion
+ * modal.
+ */
+export interface DetectedOption {
+  index: number
+  label: string
+  description?: string
+}
+/**
+ * DetectedQuestion is a parsed AskUserQuestion modal, detected from a live
+ * terminal's rendered rows by askq.DetectQuestion.
+ * Invariant (ENFORCED, not merely typical): the real option rows are numbered
+ * contiguously 1..n, and the two UI-injected meta-rows follow immediately, so
+ * TypeSomethingIndex == len(Options)+1 and ChatAboutIndex == TypeSomethingIndex+1.
+ */
+export interface DetectedQuestion {
+  /**
+   * Header is a best-effort title line above the question. Bordered renders
+   * carry a real one; borderless renders leave whatever scrolled above the
+   * modal here (a prompt echo, the welcome box). Not UI-facing.
+   */
+  header: string
+  question: string
+  multiSelect: boolean
+  options: DetectedOption[]
+  typeSomethingIndex: number
+  chatAboutIndex: number
+}
+/**
+ * DetectedConfirm is the AskUserQuestion review/submit screen, detected from a
+ * live terminal's rendered rows by askq.DetectConfirmScreen.
+ * It is the screen a multi-question AskUserQuestion flow lands on after the
+ * last question has been answered ("Ready to submit your answers?" plus a
+ * Submit/Cancel choice). It carries no meta-rows, so it is not a
+ * DetectedQuestion: there is nothing to type and nothing to chat about, only
+ * two numbered options to pick from.
+ */
+export interface DetectedConfirm {
+  question: string
+  options: DetectedOption[]
+}
+/**
+ * PendingScreen is whichever interactive AskUserQuestion screen is currently
+ * open on a session's terminal. At most one field is non-nil; both are nil when
+ * no such screen is open. Probing for both in one round-trip keeps the scan hot
+ * path to a single capture per tick.
+ */
+export interface PendingScreen {
+  question?: DetectedQuestion
+  confirm?: DetectedConfirm
+}
+export const SpawnerSourceTask = 'task'
+export const SpawnerSourceEnv = 'env'
+/**
+ * How an agent's spawner attribution was established: recorded from the pipeline
+ * task the agent runs, or read back from the live process, which is how sessions
+ * started outside the dashboard are placed.
+ * These are untyped consts, so tygo emits no counterpart; the client mirrors
+ * them by hand in src/types.ts (SPAWNER_SOURCE_TASK / SPAWNER_SOURCE_ENV).
+ * Changing a value here means changing it there.
+ */
+export type SpawnerSource = typeof SpawnerSourceTask | typeof SpawnerSourceEnv
 /**
  * Agent is the unified view of a running Claude Code process.
  */
@@ -414,10 +438,24 @@ export interface Agent {
   /**
    * InternalProcess is true when this is Claude Code's own internal
    * daemon/spare-pool machinery (a grandchild of a real session, matched by
-   * scanner.IsInternalProcess), not a session the user can address --
+   * scanner.IsInternalProcess), not a session the user can address —
    * LiveInjectable is meaningless for it and no prompt can be sent to it.
    */
   internalProcess?: boolean
+  /**
+   * PendingQuestion is the AskUserQuestion modal currently detected on this
+   * session's live terminal (render-sourced, via the pty broker's /question
+   * endpoint or a tmux capture-pane snapshot), or nil when no modal is open.
+   * Only ever set on injectable sessions.
+   */
+  pendingQuestion?: DetectedQuestion
+  /**
+   * PendingConfirm is the AskUserQuestion review/submit screen currently
+   * detected on this session's live terminal, or nil. Mutually exclusive with
+   * PendingQuestion: the TUI shows one or the other, never both. Only ever set
+   * on injectable sessions.
+   */
+  pendingConfirm?: DetectedConfirm
   lastOutput?: string
   convergenceAlert: boolean
   convergenceToolName?: string
@@ -472,19 +510,6 @@ export interface Agent {
    */
   terminalPermissionToolUseId?: string
   pendingToolUse?: PendingToolUse
-  /**
-   * PendingQuestion is set when the session's terminal buffer currently shows
-   * a detected AskUserQuestion modal, so the dashboard can answer it directly
-   * (POST /api/agents/{pid}/answer-question) instead of only via the terminal
-   * overlay.
-   */
-  pendingQuestion?: DetectedQuestion
-  /**
-   * PendingConfirm is set when the session's terminal buffer currently shows
-   * the AskUserQuestion review/submit screen. Mutually exclusive with
-   * PendingQuestion: the TUI shows one or the other, never both.
-   */
-  pendingConfirm?: DetectedConfirm
   machine?: string
   lastBtw?: BtwMessage
   /**

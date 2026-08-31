@@ -73,13 +73,14 @@ tasks:
       - cd desktop && $(go env GOPATH)/bin/wails dev -ldflags "-extldflags '-framework UniformTypeIdentifiers'"
 
   setup:
-    desc: Install the dev toolchain (air, golangci-lint, tygo, govulncheck) + frontend deps
+    desc: Install the dev toolchain (air, golangci-lint, tygo, govulncheck, go-licenses) + frontend deps
     cmds:
       - go install github.com/air-verse/air@latest
       - go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.6
       - go install github.com/gzuidhof/tygo@latest
       # Version pinned to CI's (.github/workflows/ci.yml), like golangci-lint above.
       - go install golang.org/x/vuln/cmd/govulncheck@v1.4.0
+      - go install github.com/google/go-licenses/v2@v2.0.1
       - pnpm install
       - echo "✓ setup complete — run 'task doctor' to verify, then 'task dev'"
 
@@ -196,7 +197,16 @@ tasks:
     desc: Run go generate (ent schemas) and tygo TS codegen
     cmds:
       - $(go env GOPATH)/bin/tygo generate --config tygo.yaml
+      # tygo emits semicolons and /* int */ comments that this project's eslint
+      # style rejects — 249 errors, all auto-fixable. Without this the task
+      # leaves a file `pnpm lint` fails on, which is why the SDK types ended up
+      # being hand-maintained instead of generated.
+      - pnpm eslint --fix src/sdk.generated.ts
       - cd server && go generate ./...
+      # ent's //go:generate runs `go run -mod=mod`, which writes entc's own
+      # dependencies into server/go.sum. Left there they fail the licence job's
+      # tidiness pre-flight, in a module nobody knowingly edited.
+      - cd server && go mod tidy
 
   vuln:
     desc: Run govulncheck
