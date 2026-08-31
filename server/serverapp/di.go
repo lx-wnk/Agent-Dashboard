@@ -29,6 +29,7 @@ import (
 	coordapi "github.com/lx-wnk/agent-dashboard/server/internal/api/coord"
 	apicost "github.com/lx-wnk/agent-dashboard/server/internal/api/cost"
 	apieval "github.com/lx-wnk/agent-dashboard/server/internal/api/eval"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/grants"
 	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/hooks"
 	apimemory "github.com/lx-wnk/agent-dashboard/server/internal/api/memory"
@@ -731,6 +732,10 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		permissionPresetRepo = repo.NewPermissionPresetRepo(entClient)
 		presetsHandler = presets.NewHandler(permissionPresetRepo)
 	}
+	var grantsHandler *grants.Handler
+	if entClient != nil {
+		grantsHandler = grants.NewHandler(repo.NewGrantRepo(entClient), repo.NewCapabilityRepo(entClient))
+	}
 	var systemPromptsHandler *systemprompts.Handler
 	if entClient != nil {
 		systemPromptsHandler = systemprompts.NewHandler(systemPromptRepo)
@@ -785,6 +790,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		RemotesHandler:         remotesHandler,
 		PresetsHandler:         presetsHandler,
 		PermissionPresetRepo:   permissionPresetRepo,
+		GrantsHandler:          grantsHandler,
 		SystemPromptsHandler:   systemPromptsHandler,
 		PromptTemplatesHandler: promptTemplatesHandler,
 		AdapterHandler:         adapterHandler,

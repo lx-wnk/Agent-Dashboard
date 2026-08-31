@@ -2,6 +2,7 @@ CONNECT /*
 CONNECT /api/plugins/{id}/proxy/*
 DELETE /*
 DELETE /api/agents/{pid}/channel
+DELETE /api/grants/{id}
 DELETE /api/me
 DELETE /api/memory/entries/{id}
 DELETE /api/plugins/{id}/proxy/*
@@ -29,6 +30,7 @@ GET /api/audit
 GET /api/auth/callback
 GET /api/auth/github
 GET /api/auth/login
+GET /api/capabilities
 GET /api/config
 GET /api/config/commands
 GET /api/config/context-files
@@ -36,6 +38,7 @@ GET /api/config/file
 GET /api/config/memory
 GET /api/config/skills
 GET /api/cost/summary
+GET /api/grants
 GET /api/history/import/status
 GET /api/hooks/pending
 GET /api/me
@@ -111,6 +114,7 @@ POST /api/agents/{pid}/upload-image
 POST /api/analytics/patterns/refresh
 POST /api/auth/logout
 POST /api/auth/session
+POST /api/grants
 POST /api/history/import
 POST /api/hooks/event
 POST /api/hooks/notification

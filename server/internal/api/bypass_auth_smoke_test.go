@@ -14,6 +14,7 @@ import (
 
 	apianalytics "github.com/lx-wnk/agent-dashboard/server/internal/api/analytics"
 	apicost "github.com/lx-wnk/agent-dashboard/server/internal/api/cost"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/grants"
 	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
 	apimemory "github.com/lx-wnk/agent-dashboard/server/internal/api/memory"
 	apiplugins "github.com/lx-wnk/agent-dashboard/server/internal/api/plugins"
@@ -121,6 +122,7 @@ func buildBypassRouter(t *testing.T) http.Handler {
 		RemotesHandler:       remotes.NewHandler(repo.NewRemoteRegistrationRepo(c)),
 		PresetsHandler:       presets.NewHandler(repo.NewPermissionPresetRepo(c)),
 		SystemPromptsHandler: systemprompts.NewHandler(repo.NewSystemPromptRepo(c)),
+		GrantsHandler:        grants.NewHandler(repo.NewGrantRepo(c), repo.NewCapabilityRepo(c)),
 		SearchHandler:        search.NewHandler(rawrepo.NewSearchRepo(rawDB), merger.New(), nil),
 		HistoryHandler:       apihistory.NewHandler(histsvc.NewImporter(repo.NewAgentCostTrendRepo(c))),
 		MemoryHandler: apimemory.NewHandler(
