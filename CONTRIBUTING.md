@@ -59,7 +59,7 @@ Build the SPA **before** the binary — `go:embed` bakes the compiled frontend i
 | `task test` | Run all tests with race detector |
 | `task lint` | Run golangci-lint and the formatter check (sdk, server, every plugin) |
 | `task generate` | Run ent schema + tygo TS code generation |
-| `task fmt` | Format with gofmt (sdk, server, plugins) |
+| `task fmt` | Format with the same formatter `task lint` checks (sdk, server, plugins) |
 
 ### Frontend (Vue)
 
