@@ -469,6 +469,77 @@ func TestBackfillGrantsSkipsUngrantedTaskPermissions(t *testing.T) {
 	require.Equal(t, 0, count, "an ungranted task_permission must not become a grant")
 }
 
+// TestBackfillGrantsSkipsEmptyContextRef proves a legacy permission_preset
+// with an empty project_cwd is skipped rather than written as a grant whose
+// context_ref is "" — such a row parses fine but capability.Decide can never
+// match it against a real "project" context, so it would sit in the grants
+// table forever as dead weight. A sibling preset with a real project_cwd
+// proves the bad row does not abort the rest of the backfill.
+func TestBackfillGrantsSkipsEmptyContextRef(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "test.db")
+	ctx := context.Background()
+
+	bundle1, err := db.Open(dbPath)
+	require.NoError(t, err)
+
+	presets := repo.NewPermissionPresetRepo(bundle1.Client)
+	require.NoError(t, presets.Upsert(ctx, repo.UpsertPresetInput{ProjectCwd: "", Tool: "Read"}))
+	require.NoError(t, presets.Upsert(ctx, repo.UpsertPresetInput{ProjectCwd: "/repo", Tool: "Write"}))
+	require.NoError(t, bundle1.Close())
+
+	bundle2, err := db.Open(dbPath)
+	require.NoError(t, err)
+	defer func() { _ = bundle2.Close() }()
+
+	var count int
+	require.NoError(t, bundle2.DB.QueryRow(`SELECT COUNT(*) FROM grants`).Scan(&count))
+	require.Equal(t, 1, count, "the empty-ref preset must be skipped, the valid one still backfilled")
+
+	var capabilityName string
+	require.NoError(t, bundle2.DB.QueryRow(`SELECT capability_name FROM grants`).Scan(&capabilityName))
+	require.Equal(t, "Write", capabilityName)
+}
+
+// TestBackfillGrantsSkipsUnparseablePattern proves a legacy task_permission
+// whose pattern fails capability.ParsePattern (a "domain:" prefix with no
+// hostname) is skipped rather than written as a grant that can never
+// resolve — a sibling permission with a valid (nil) pattern proves the bad
+// row does not abort the rest of the backfill.
+func TestBackfillGrantsSkipsUnparseablePattern(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "test.db")
+	ctx := context.Background()
+
+	bundle1, err := db.Open(dbPath)
+	require.NoError(t, err)
+	insertBackfillTask(t, bundle1.DB, "t1")
+
+	badPattern := "domain:"
+	perms := repo.NewPermissionRepo(bundle1.Client)
+	_, err = perms.CreateTaskPermission(ctx, repo.CreateTaskPermissionInput{
+		TaskID: "t1", Tool: "Bash", Pattern: &badPattern, Granted: true,
+	})
+	require.NoError(t, err)
+	_, err = perms.CreateTaskPermission(ctx, repo.CreateTaskPermissionInput{
+		TaskID: "t1", Tool: "Read", Granted: true,
+	})
+	require.NoError(t, err)
+	require.NoError(t, bundle1.Close())
+
+	bundle2, err := db.Open(dbPath)
+	require.NoError(t, err)
+	defer func() { _ = bundle2.Close() }()
+
+	var count int
+	require.NoError(t, bundle2.DB.QueryRow(`SELECT COUNT(*) FROM grants`).Scan(&count))
+	require.Equal(t, 1, count, "the unparseable-pattern row must be skipped, the valid one still backfilled")
+
+	var capabilityName string
+	require.NoError(t, bundle2.DB.QueryRow(`SELECT capability_name FROM grants`).Scan(&capabilityName))
+	require.Equal(t, "Read", capabilityName)
+}
+
 // TestOpenTwiceWithMemoryTables proves the memory_entries and
 // memory_injections tables and memory_entries' three indexes survive a second
 // Open on an existing database. An ent index change triggers SQLite's 12-step
