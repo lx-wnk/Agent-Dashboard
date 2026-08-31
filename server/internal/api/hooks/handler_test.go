@@ -295,12 +295,12 @@ func TestPending_WithSecret_ReturnsValidJSON(t *testing.T) {
 	}
 }
 
-// TestWriteToolNames_MatchesHookGate asserts that a known non-write tool is
-// not treated as a write tool by IsWriteTool. permissions.WriteToolNames and
-// IsWriteTool both read the same underlying set (internal/permissions/allowlist.go),
-// so they cannot drift apart from each other by construction — there is
-// nothing left to pin on that axis.
-func TestWriteToolNames_MatchesHookGate(t *testing.T) {
+// TestIsWriteTool_MatchesHookGate asserts that a known non-write tool is
+// not treated as a write tool by IsWriteTool, the same predicate the hook
+// gate in handler.go calls directly against the unexported writeToolNames
+// set (internal/permissions/allowlist.go) — there is no second accessor left
+// to drift apart from it.
+func TestIsWriteTool_MatchesHookGate(t *testing.T) {
 	// A tool that must never be gated.
 	if permissions.IsWriteTool("Bash") {
 		t.Error("IsWriteTool(\"Bash\") = true, want false")

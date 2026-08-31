@@ -6,35 +6,29 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
 )
 
-// TestWriteToolNames_ContainsExpectedEntries is the CQ-01 SSOT sync test.
-// It verifies that WriteToolNames() contains exactly the write-type tools that
-// the edit gate is expected to intercept.  If a new write tool is added to
-// WriteToolNames, this test must be updated — making the set of gated tools
-// explicit and visible in the test suite.
-func TestWriteToolNames_ContainsExpectedEntries(t *testing.T) {
+// TestIsWriteTool_ContainsExpectedEntries is the CQ-01 SSOT sync test.
+// It verifies that IsWriteTool accepts exactly the write-type tools that the
+// edit gate is expected to intercept, and rejects every other known tool. If
+// a new write tool is added to the gate, this test must be updated — making
+// the set of gated tools explicit and visible in the test suite.
+func TestIsWriteTool_ContainsExpectedEntries(t *testing.T) {
 	want := map[string]bool{
 		"Edit":      true,
 		"Write":     true,
 		"MultiEdit": true,
 	}
 
-	names := permissions.WriteToolNames()
-	got := make(map[string]bool, len(names))
-	for _, name := range names {
-		got[name] = true
-	}
-
-	// Verify every expected tool is present.
+	// Verify every expected tool is accepted.
 	for tool := range want {
-		if !got[tool] {
-			t.Errorf("WriteToolNames missing expected write tool %q", tool)
+		if !permissions.IsWriteTool(tool) {
+			t.Errorf("IsWriteTool(%q) = false, want true", tool)
 		}
 	}
 
 	// Verify no extra tools have been silently added.
-	for tool := range got {
-		if !want[tool] {
-			t.Errorf("WriteToolNames contains unexpected tool %q — update this test if intentional", tool)
+	for _, tool := range permissions.GrantableToolNames() {
+		if got, wantVal := permissions.IsWriteTool(tool), want[tool]; got != wantVal {
+			t.Errorf("IsWriteTool(%q) = %v, want %v — update this test if intentional", tool, got, wantVal)
 		}
 	}
 }
@@ -84,41 +78,14 @@ func TestGrantableToolNames_ReturnsCopy(t *testing.T) {
 	}
 }
 
-// TestWriteToolNames_NonWriteToolsAreAbsent verifies that commonly used
-// non-write tools are not erroneously listed in WriteToolNames.
-func TestWriteToolNames_NonWriteToolsAreAbsent(t *testing.T) {
+// TestIsWriteTool_NonWriteToolsAreAbsent verifies that commonly used
+// non-write tools are not erroneously accepted by IsWriteTool.
+func TestIsWriteTool_NonWriteToolsAreAbsent(t *testing.T) {
 	nonWriteTools := []string{"Bash", "Read", "Glob", "Grep", "LS", "WebFetch", "Task", "Agent"}
-	names := permissions.WriteToolNames()
-	got := make(map[string]bool, len(names))
-	for _, name := range names {
-		got[name] = true
-	}
 	for _, tool := range nonWriteTools {
-		if got[tool] {
-			t.Errorf("WriteToolNames must not contain non-write tool %q", tool)
+		if permissions.IsWriteTool(tool) {
+			t.Errorf("IsWriteTool(%q) = true, want false — non-write tool must not be gated", tool)
 		}
-	}
-}
-
-// TestWriteToolNames_Sorted proves the order is stable across calls, matching
-// the contract GrantableToolNames already established for exposing a name list.
-func TestWriteToolNames_Sorted(t *testing.T) {
-	names := permissions.WriteToolNames()
-	for i := 1; i < len(names); i++ {
-		if names[i-1] >= names[i] {
-			t.Errorf("WriteToolNames not sorted: %q before %q", names[i-1], names[i])
-		}
-	}
-}
-
-// TestWriteToolNames_ReturnsCopy proves mutating the returned slice cannot
-// corrupt the source of truth — a repeat call must be unaffected.
-func TestWriteToolNames_ReturnsCopy(t *testing.T) {
-	first := permissions.WriteToolNames()
-	first[0] = "tampered"
-	second := permissions.WriteToolNames()
-	if second[0] == "tampered" {
-		t.Error("WriteToolNames leaked a mutable reference to the source of truth")
 	}
 }
 

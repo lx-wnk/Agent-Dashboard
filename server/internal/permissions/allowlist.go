@@ -275,19 +275,6 @@ var writeToolNames = map[string]bool{
 // be mutated by other packages.
 func IsWriteTool(name string) bool { return writeToolNames[name] }
 
-// WriteToolNames returns the edit-gate write tool set as a sorted copy, in the
-// same shape as GrantableToolNames: it reads the same map IsWriteTool
-// consults, so the list cannot drift from the gate, and callers cannot
-// mutate the source of truth through the returned slice.
-func WriteToolNames() []string {
-	names := make([]string, 0, len(writeToolNames))
-	for name := range writeToolNames {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
-}
-
 // allowedToolNames is the unexported source of truth for grantable tools.
 // All callers must go through IsAllowedTool.
 var allowedToolNames = map[string]bool{
