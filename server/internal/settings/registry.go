@@ -45,9 +45,6 @@ type Definition struct {
 
 // Validate checks raw against the type, enum, and any extra constraint.
 func (d Definition) Validate(raw string) error {
-	if d.Secret && d.Default != "" {
-		return fmt.Errorf("%s: secret settings must not have a Default", d.Key)
-	}
 	switch d.Type {
 	case TypeBool:
 		if _, err := strconv.ParseBool(raw); err != nil {
@@ -141,8 +138,27 @@ var definitions = func() map[string]Definition {
 	for _, d := range list {
 		m[d.Key] = d
 	}
+	if err := validateDefinitions(m); err != nil {
+		panic(err)
+	}
 	return m
 }()
+
+// validateDefinitions checks registry-wide invariants across every
+// definition. A secret definition must not carry a Default: the
+// registry-fallback path in Service.raw would return it in clear before
+// anything was ever stored. Called once at package init (a mis-registered
+// definition is a programming error, not a runtime condition), and exposed
+// separately so the invariant itself is unit-testable without a
+// registration API.
+func validateDefinitions(defs map[string]Definition) error {
+	for _, d := range defs {
+		if d.Secret && d.Default != "" {
+			return fmt.Errorf("settings: %s: secret settings must not have a Default", d.Key)
+		}
+	}
+	return nil
+}
 
 // Lookup returns the definition for key.
 func Lookup(key string) (Definition, bool) { d, ok := definitions[key]; return d, ok }

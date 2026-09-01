@@ -37,3 +37,16 @@ func TestRegistry_DefaultsAndValidation(t *testing.T) {
 	_, ok = Lookup("nope")
 	assert.False(t, ok)
 }
+
+func TestValidateDefinitions_RejectsSecretWithDefault(t *testing.T) {
+	bad := map[string]Definition{
+		"bad.secret": {Key: "bad.secret", Type: TypeString, Secret: true, Default: "leaked"},
+	}
+	err := validateDefinitions(bad)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "bad.secret")
+}
+
+func TestValidateDefinitions_AcceptsTheRegisteredDefinitions(t *testing.T) {
+	require.NoError(t, validateDefinitions(definitions))
+}
