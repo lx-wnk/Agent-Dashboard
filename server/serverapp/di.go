@@ -660,10 +660,18 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 
 	// Resource registry read surface — GET /api/resources. Shares the single
 	// resourceRepo instance hoisted above (same rule as memRepo/memRetriever
-	// just above); read-only, so it needs no Gate.
+	// just above). Read-only, but not ungated: kind=memory_space answers the
+	// same rows GET /api/memory/spaces gates on memory.read, so it is built
+	// with the same Gate memoryHandler gets — asker included, because a human
+	// is waiting on this request too.
 	var resourcesHandler *apiresources.Handler
 	if entClient != nil {
-		resourcesHandler = apiresources.NewHandler(resourceRepo)
+		resourcesHandler = apiresources.NewHandler(resourceRepo, memory.Gate{
+			Capabilities: repo.NewCapabilityRepo(entClient),
+			Grants:       repo.NewGrantRepo(entClient),
+			GrantUsage:   grantUsageRepo,
+			Asker:        askerArg,
+		})
 	}
 
 	// Obsidian manual trigger — POST /api/obsidian/index. Unlike memoryHandler

@@ -27,11 +27,12 @@ import (
 // cannot become a second, unvalidated write path into the same table.
 type Handler struct {
 	resources repo.ResourceRepo
+	gate      mem.Gate
 }
 
 // NewHandler creates a Handler.
-func NewHandler(r repo.ResourceRepo) *Handler {
-	return &Handler{resources: r}
+func NewHandler(r repo.ResourceRepo, gate mem.Gate) *Handler {
+	return &Handler{resources: r, gate: gate}
 }
 
 // Mount registers the resource registry routes on r.
@@ -125,6 +126,23 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) error {
 	scope, err := scopeFromQuery(q)
 	if err != nil {
 		return err
+	}
+
+	// Only memory_space is gated, and deliberately so. Its rows are the
+	// field-for-field same registry rows GET /api/memory/spaces answers, and
+	// that route requires memory.read (memory/handler.go, listSpaces) — so
+	// ungated here this route is simply a way around that gate, and
+	// ?scope=project&scopeRef=<path> additionally confirms which filesystem
+	// paths hold memory spaces, since ListMerged always returns the global
+	// rows and any extra row names the path's own. Same capability, same
+	// empty value, same requested scope as listSpaces, so the two cannot
+	// drift apart again. The other kinds are not gated: application rows are
+	// already public via /api/plugins, and nothing writes routine or skill
+	// yet. Do not "simplify" this into gating everything or nothing.
+	if kind == repo.ResourceKindMemorySpace {
+		if err := h.gate.Authorize(r.Context(), repo.CapabilityMemoryRead, "", scope); err != nil {
+			return apierr.NewAppError(http.StatusForbidden, err.Error())
+		}
 	}
 
 	// ListMerged, not ListForScope: the UI wants the effective set a caller in

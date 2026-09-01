@@ -13,20 +13,47 @@ import (
 	apiresources "github.com/lx-wnk/agent-dashboard/server/internal/api/resources"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	"github.com/lx-wnk/agent-dashboard/server/internal/memory"
 )
 
-// newMux wires an apiresources.Handler against a real in-memory SQLite
-// database and returns the mux plus the repo tests seed fixtures through.
-func newMux(t *testing.T) (*chi.Mux, repo.ResourceRepo, context.Context) {
+// newUngrantedMux wires an apiresources.Handler against a real in-memory
+// SQLite database with the capability catalogue seeded and no grant at all —
+// the state a fresh install is in.
+func newUngrantedMux(t *testing.T) (*chi.Mux, repo.ResourceRepo, repo.GrantRepo, context.Context) {
 	t.Helper()
 	bundle, err := db.Open(":memory:")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = bundle.Client.Close() })
 
+	ctx := context.Background()
+	repo.SeedCapabilities(ctx, repo.NewCapabilityRepo(bundle.Client))
 	resourceRepo := repo.NewResourceRepo(bundle.Client)
+	grantRepo := repo.NewGrantRepo(bundle.Client)
+	gate := memory.Gate{
+		Capabilities: repo.NewCapabilityRepo(bundle.Client),
+		Grants:       grantRepo,
+		GrantUsage:   repo.NewGrantUsageRepo(bundle.Client, bundle.WriteClient),
+	}
 	mux := chi.NewRouter()
-	apiresources.NewHandler(resourceRepo).Mount(mux)
-	return mux, resourceRepo, context.Background()
+	apiresources.NewHandler(resourceRepo, gate).Mount(mux)
+	return mux, resourceRepo, grantRepo, ctx
+}
+
+// newMux is newUngrantedMux plus an allow grant for memory.read at global
+// scope, so the list-behaviour tests below exercise the list rather than the
+// gate. TestList_GatesMemorySpaceButNotApplication owns the ungranted case.
+func newMux(t *testing.T) (*chi.Mux, repo.ResourceRepo, context.Context) {
+	t.Helper()
+	mux, resourceRepo, grants, ctx := newUngrantedMux(t)
+	_, err := grants.Create(ctx, repo.CreateGrantInput{
+		CapabilityName: repo.CapabilityMemoryRead,
+		Context:        repo.GrantContextFor(repo.GrantContextGlobal, ""),
+		Pattern:        "",
+		Mode:           repo.GrantModeAllow,
+		GrantedBy:      "test",
+	})
+	require.NoError(t, err)
+	return mux, resourceRepo, ctx
 }
 
 func get(t *testing.T, mux *chi.Mux, path string) *httptest.ResponseRecorder {
@@ -151,4 +178,31 @@ func TestList_RejectsScopeMissingItsRef(t *testing.T) {
 	w := get(t, mux, "/api/resources?kind=application&scope=project")
 	require.Equal(t, http.StatusBadRequest, w.Code)
 	require.Contains(t, w.Body.String(), "scopeRef is required")
+}
+
+// TestList_GatesMemorySpaceButNotApplication is the asymmetry itself, and both
+// halves are load-bearing. The 403 pins that this route cannot hand out the
+// same registry rows GET /api/memory/spaces refuses to an ungranted caller —
+// including the ?scope=project probe, which would otherwise confirm that a
+// named filesystem path holds memory spaces. The 200 pins that the gate was
+// not simply hung on the whole route: application rows are public via
+// /api/plugins already, so gating them would be a regression, not caution.
+func TestList_GatesMemorySpaceButNotApplication(t *testing.T) {
+	mux, resourceRepo, _, ctx := newUngrantedMux(t)
+	for _, in := range []repo.UpsertResourceInput{
+		{Kind: repo.ResourceKindApplication, Slug: "obsidian", Name: "Obsidian", Scope: repo.GlobalScope()},
+		{Kind: repo.ResourceKindMemorySpace, Slug: "notes", Name: "Notes", Scope: repo.GlobalScope()},
+		{Kind: repo.ResourceKindMemorySpace, Slug: "secrets", Name: "Project secrets", Scope: repo.ProjectScope("/tmp/demo")},
+	} {
+		_, err := resourceRepo.Upsert(ctx, in)
+		require.NoError(t, err)
+	}
+
+	require.Equal(t, http.StatusForbidden, get(t, mux, "/api/resources?kind=memory_space").Code)
+	require.Equal(t, http.StatusForbidden,
+		get(t, mux, "/api/resources?kind=memory_space&scope=project&scopeRef=/tmp/demo").Code)
+
+	w := get(t, mux, "/api/resources?kind=application")
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Len(t, decodeList(t, w), 1)
 }
