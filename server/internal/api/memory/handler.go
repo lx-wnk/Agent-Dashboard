@@ -34,6 +34,142 @@ func NewHandler(r repo.MemoryRepo, retriever *mem.Retriever, gate mem.Gate) *Han
 	return &Handler{repo: r, retriever: retriever, gate: gate}
 }
 
+// The four response shapes below exist because every payload on these routes is
+// an ent entity or an untagged Go struct: ent tags the storage column names in
+// snake_case with omitempty, and memory.Entry carries no json tags at all, so
+// today the search route answers PascalCase Go field names.
+
+// memorySpaceResponse is a memory space — a resource-registry row of kind
+// memory_space.
+type memorySpaceResponse struct {
+	ID        string    `json:"id"`
+	Kind      string    `json:"kind"`
+	Slug      string    `json:"slug"`
+	Name      string    `json:"name"`
+	ScopeKind string    `json:"scopeKind"`
+	ScopeRef  string    `json:"scopeRef"`
+	NodeID    string    `json:"nodeId"`
+	State     string    `json:"state"`
+	Version   string    `json:"version"`
+	Origin    string    `json:"origin"`
+	OriginRef string    `json:"originRef"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+func toMemorySpaceResponse(r *ent.Resource) memorySpaceResponse {
+	return memorySpaceResponse{
+		ID:        r.ID,
+		Kind:      r.Kind,
+		Slug:      r.Slug,
+		Name:      r.Name,
+		ScopeKind: r.ScopeKind,
+		ScopeRef:  r.ScopeRef,
+		NodeID:    r.NodeID,
+		State:     r.State,
+		Version:   r.Version,
+		Origin:    r.Origin,
+		OriginRef: r.OriginRef,
+		CreatedAt: r.CreatedAt,
+		UpdatedAt: r.UpdatedAt,
+	}
+}
+
+// memoryEntryResponse is a stored memory entry, the full row.
+type memoryEntryResponse struct {
+	ID           string     `json:"id"`
+	SpaceID      string     `json:"spaceId"`
+	Summary      string     `json:"summary"`
+	Content      string     `json:"content"`
+	Kind         string     `json:"kind"`
+	SourceKind   string     `json:"sourceKind"`
+	SourceRef    *string    `json:"sourceRef"`
+	Confidence   float64    `json:"confidence"`
+	ValidFrom    time.Time  `json:"validFrom"`
+	ValidUntil   *time.Time `json:"validUntil"`
+	SupersededBy *string    `json:"supersededBy"`
+	UserID       *string    `json:"userId"`
+	CreatedAt    time.Time  `json:"createdAt"`
+	UpdatedAt    time.Time  `json:"updatedAt"`
+}
+
+func toMemoryEntryResponse(e *ent.MemoryEntry) memoryEntryResponse {
+	return memoryEntryResponse{
+		ID:           e.ID,
+		SpaceID:      e.SpaceID,
+		Summary:      e.Summary,
+		Content:      e.Content,
+		Kind:         e.Kind,
+		SourceKind:   e.SourceKind,
+		SourceRef:    e.SourceRef,
+		Confidence:   e.Confidence,
+		ValidFrom:    e.ValidFrom,
+		ValidUntil:   e.ValidUntil,
+		SupersededBy: e.SupersededBy,
+		UserID:       e.UserID,
+		CreatedAt:    e.CreatedAt,
+		UpdatedAt:    e.UpdatedAt,
+	}
+}
+
+// memorySearchHitResponse is a retrieval result. It is a narrower shape than
+// memoryEntryResponse on purpose: mem.Entry is the projection the retriever
+// resolves, and padding it out would invent values it never loaded.
+type memorySearchHitResponse struct {
+	ID         string    `json:"id"`
+	SpaceID    string    `json:"spaceId"`
+	Summary    string    `json:"summary"`
+	Content    string    `json:"content"`
+	Kind       string    `json:"kind"`
+	Confidence float64   `json:"confidence"`
+	CreatedAt  time.Time `json:"createdAt"`
+}
+
+func toMemorySearchHitResponses(entries []mem.Entry) []memorySearchHitResponse {
+	resp := make([]memorySearchHitResponse, len(entries))
+	for i, e := range entries {
+		resp[i] = memorySearchHitResponse{
+			ID:         e.ID,
+			SpaceID:    e.SpaceID,
+			Summary:    e.Summary,
+			Content:    e.Content,
+			Kind:       e.Kind,
+			Confidence: e.Confidence,
+			CreatedAt:  e.CreatedAt,
+		}
+	}
+	return resp
+}
+
+// memoryInjectionResponse is the record of what was pushed into one spawn.
+type memoryInjectionResponse struct {
+	ID             string    `json:"id"`
+	StageRunID     string    `json:"stageRunId"`
+	EntryIDs       []string  `json:"entryIds"`
+	CharBudget     int       `json:"charBudget"`
+	CharsUsed      int       `json:"charsUsed"`
+	CandidateCount int       `json:"candidateCount"`
+	CreatedAt      time.Time `json:"createdAt"`
+	UpdatedAt      time.Time `json:"updatedAt"`
+}
+
+func toMemoryInjectionResponses(injections []*ent.MemoryInjection) []memoryInjectionResponse {
+	resp := make([]memoryInjectionResponse, len(injections))
+	for i, in := range injections {
+		resp[i] = memoryInjectionResponse{
+			ID:             in.ID,
+			StageRunID:     in.StageRunID,
+			EntryIDs:       in.EntryIds,
+			CharBudget:     in.CharBudget,
+			CharsUsed:      in.CharsUsed,
+			CandidateCount: in.CandidateCount,
+			CreatedAt:      in.CreatedAt,
+			UpdatedAt:      in.UpdatedAt,
+		}
+	}
+	return resp
+}
+
 // Mount registers all /api/memory/* routes on r.
 func (h *Handler) Mount(r chi.Router) {
 	r.Get("/api/memory/spaces", apierr.ErrorMiddleware(h.listSpaces))
@@ -81,10 +217,11 @@ func (h *Handler) listSpaces(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	if spaces == nil {
-		spaces = []*ent.Resource{}
+	resp := make([]memorySpaceResponse, len(spaces))
+	for i, s := range spaces {
+		resp[i] = toMemorySpaceResponse(s)
 	}
-	apierr.WriteJSON(w, http.StatusOK, spaces)
+	apierr.WriteJSON(w, http.StatusOK, resp)
 	return nil
 }
 
@@ -119,7 +256,7 @@ func (h *Handler) createSpace(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return apierr.NewAppError(http.StatusBadRequest, err.Error())
 	}
-	apierr.WriteJSON(w, http.StatusCreated, space)
+	apierr.WriteJSON(w, http.StatusCreated, toMemorySpaceResponse(space))
 	return nil
 }
 
@@ -147,7 +284,7 @@ func (h *Handler) searchEntries(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	apierr.WriteJSON(w, http.StatusOK, entries)
+	apierr.WriteJSON(w, http.StatusOK, toMemorySearchHitResponses(entries))
 	return nil
 }
 
@@ -222,7 +359,7 @@ func (h *Handler) createEntry(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return apierr.NewAppError(http.StatusBadRequest, err.Error())
 	}
-	apierr.WriteJSON(w, http.StatusCreated, entry)
+	apierr.WriteJSON(w, http.StatusCreated, toMemoryEntryResponse(entry))
 	return nil
 }
 
@@ -273,7 +410,7 @@ func (h *Handler) supersedeEntry(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	apierr.WriteJSON(w, http.StatusOK, updated)
+	apierr.WriteJSON(w, http.StatusOK, toMemoryEntryResponse(updated))
 	return nil
 }
 
@@ -312,9 +449,6 @@ func (h *Handler) listInjections(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	if injections == nil {
-		injections = []*ent.MemoryInjection{}
-	}
-	apierr.WriteJSON(w, http.StatusOK, injections)
+	apierr.WriteJSON(w, http.StatusOK, toMemoryInjectionResponses(injections))
 	return nil
 }

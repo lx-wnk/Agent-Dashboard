@@ -1,6 +1,7 @@
 package tasks
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -11,16 +12,77 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 )
 
+// taskDependencyResponse is the API response shape for one dependency edge.
+// ent.TaskDependency stores only the two task ids and the two settings, so the
+// titles and the upstream task's current stage are resolved from the referenced
+// tasks — TaskDependenciesTab.vue and DependencyGraph.vue render all three, and
+// dependsOnStage is what the required-stage badge is compared against.
+type taskDependencyResponse struct {
+	ID             string `json:"id"`
+	TaskID         string `json:"taskId"`
+	TaskTitle      string `json:"taskTitle"`
+	DependsOnID    string `json:"dependsOnId"`
+	DependsOnTitle string `json:"dependsOnTitle"`
+	DependsOnStage string `json:"dependsOnStage"`
+	RequiredStage  string `json:"requiredStage"`
+	OnCancelAction string `json:"onCancelAction"`
+}
+
+// toDependencyResponses resolves both endpoints of every edge in one query via
+// TaskRepo.ListByIDs. Eager-loading the edges in DependencyRepo instead would
+// add the joins to pipeline.EvaluateTaskDeps and the orchestrator's downstream
+// sweep, neither of which reads a title.
+//
+// A row whose referenced task no longer resolves answers with empty strings
+// rather than failing the whole listing: the tab already falls back to the id.
+func (h *Handler) toDependencyResponses(ctx context.Context, deps []*ent.TaskDependency) ([]taskDependencyResponse, error) {
+	resp := make([]taskDependencyResponse, 0, len(deps))
+	if len(deps) == 0 {
+		return resp, nil
+	}
+	ids := make([]string, 0, len(deps)*2)
+	for _, d := range deps {
+		ids = append(ids, d.TaskID, d.DependsOnID)
+	}
+	tasks, err := h.taskRepo.ListByIDs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	byID := make(map[string]*ent.Task, len(tasks))
+	for _, t := range tasks {
+		byID[t.ID] = t
+	}
+	for _, d := range deps {
+		row := taskDependencyResponse{
+			ID:             d.ID,
+			TaskID:         d.TaskID,
+			DependsOnID:    d.DependsOnID,
+			RequiredStage:  d.RequiredStage,
+			OnCancelAction: d.OnCancelAction,
+		}
+		if t, ok := byID[d.TaskID]; ok {
+			row.TaskTitle = t.Title
+		}
+		if t, ok := byID[d.DependsOnID]; ok {
+			row.DependsOnTitle = t.Title
+			row.DependsOnStage = t.CurrentStage
+		}
+		resp = append(resp, row)
+	}
+	return resp, nil
+}
+
 func (h *Handler) listDependencies(w http.ResponseWriter, r *http.Request) error {
 	taskID := chi.URLParam(r, "id")
 	deps, err := h.depRepo.ListUpstream(r.Context(), taskID)
 	if err != nil {
 		return fmt.Errorf("dependencies.list: %w", err)
 	}
-	if deps == nil {
-		deps = []*ent.TaskDependency{}
+	resp, err := h.toDependencyResponses(r.Context(), deps)
+	if err != nil {
+		return fmt.Errorf("dependencies.list.resolve: %w", err)
 	}
-	return jsonReply(w, http.StatusOK, deps)
+	return jsonReply(w, http.StatusOK, resp)
 }
 
 func (h *Handler) listDependents(w http.ResponseWriter, r *http.Request) error {
@@ -29,10 +91,11 @@ func (h *Handler) listDependents(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return fmt.Errorf("dependents.list: %w", err)
 	}
-	if deps == nil {
-		deps = []*ent.TaskDependency{}
+	resp, err := h.toDependencyResponses(r.Context(), deps)
+	if err != nil {
+		return fmt.Errorf("dependents.list.resolve: %w", err)
 	}
-	return jsonReply(w, http.StatusOK, deps)
+	return jsonReply(w, http.StatusOK, resp)
 }
 
 func (h *Handler) addDependency(w http.ResponseWriter, r *http.Request) error {
@@ -66,7 +129,11 @@ func (h *Handler) addDependency(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return fmt.Errorf("dependencies.add: %w", err)
 	}
-	return jsonReply(w, http.StatusCreated, dep)
+	resp, err := h.toDependencyResponses(r.Context(), []*ent.TaskDependency{dep})
+	if err != nil {
+		return fmt.Errorf("dependencies.add.resolve: %w", err)
+	}
+	return jsonReply(w, http.StatusCreated, resp[0])
 }
 
 func (h *Handler) removeDependency(w http.ResponseWriter, r *http.Request) error {

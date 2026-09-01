@@ -28,5 +28,5 @@ func (h *Handler) resumeStage(w http.ResponseWriter, r *http.Request) error {
 		return apierr.NewAppError(http.StatusConflict, "task cannot be resumed (terminal or missing)")
 	}
 	h.broadcastEnrichedUpdate(r.Context(), id)
-	return jsonReply(w, http.StatusAccepted, sr)
+	return jsonReply(w, http.StatusAccepted, toStageRunResponse(sr))
 }

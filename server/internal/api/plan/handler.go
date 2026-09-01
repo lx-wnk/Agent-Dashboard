@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/tasks"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 )
 
@@ -51,7 +52,7 @@ func (h *Handler) approve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(task)
+	_ = json.NewEncoder(w).Encode(tasks.ToTaskResponse(task))
 }
 
 // POST /api/plan/{taskId}/reject

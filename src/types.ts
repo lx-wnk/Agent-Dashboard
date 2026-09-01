@@ -133,7 +133,6 @@ export interface TaskDependency {
   dependsOnStage: PipelineStage
   requiredStage: 'done' | 'cancelled'
   onCancelAction: 'cancel' | 'start' | 'on_hold'
-  createdAt: string
 }
 
 export interface PipelineTask {

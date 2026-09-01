@@ -55,14 +55,20 @@ func (h *Handler) exportTasks(w http.ResponseWriter, r *http.Request) error {
 		return nil
 	}
 
-	// JSON export with stage runs embedded.
-	type taskWithRuns struct {
-		*ent.Task
-		StageRuns []*ent.StageRun `json:"stageRuns"`
+	// JSON export with stage runs embedded. TaskResponse is embedded anonymously
+	// so its fields flatten into the row — the same shape the API answers with,
+	// rather than the entity's storage column names, because this file outlives
+	// the session that downloaded it.
+	type taskExportRow struct {
+		TaskResponse
+		StageRuns []stageRunResponse `json:"stageRuns"`
 	}
-	result := make([]taskWithRuns, 0, len(tasks))
+	result := make([]taskExportRow, 0, len(tasks))
 	for _, t := range tasks {
-		result = append(result, taskWithRuns{Task: t, StageRuns: runsByTask[t.ID]})
+		result = append(result, taskExportRow{
+			TaskResponse: ToTaskResponse(t),
+			StageRuns:    toStageRunResponses(runsByTask[t.ID]),
+		})
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Content-Disposition", `attachment; filename="tasks.json"`)

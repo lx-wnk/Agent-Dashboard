@@ -13,9 +13,9 @@ interface SystemPrompt {
   stage: string | null
   content: string
   priority: number
-  created_at: string
-  updated_at: string
-  created_by?: string | null
+  createdAt: string
+  updatedAt: string
+  createdBy: string | null
 }
 
 interface PromptForm {

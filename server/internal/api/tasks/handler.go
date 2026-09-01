@@ -653,7 +653,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) error {
 			})
 		}
 	}
-	return jsonReply(w, http.StatusOK, updated)
+	return jsonReply(w, http.StatusOK, ToTaskResponse(updated))
 }
 
 // parseNullableString decodes a PATCH field that may be absent, JSON null, or
@@ -729,7 +729,13 @@ func (h *Handler) progress(w http.ResponseWriter, r *http.Request) error {
 	}
 	task, _ := h.taskRepo.GetByID(r.Context(), id)
 	h.broadcastEnrichedUpdate(r.Context(), id)
-	return jsonReply(w, http.StatusOK, map[string]any{"task": task, "stageRun": sr})
+	// GetByID's error is deliberately discarded above, so task can be nil; the
+	// payload must then carry null rather than panic in the mapper.
+	var taskView any
+	if task != nil {
+		taskView = ToTaskResponse(task)
+	}
+	return jsonReply(w, http.StatusOK, map[string]any{"task": taskView, "stageRun": toStageRunResponse(sr)})
 }
 
 func (h *Handler) cancel(w http.ResponseWriter, r *http.Request) error {
@@ -748,7 +754,7 @@ func (h *Handler) cancel(w http.ResponseWriter, r *http.Request) error {
 	}
 	h.orchestrator.NotifyTaskTerminated(r.Context(), id, "cancelled")
 	h.broadcastEnrichedUpdate(r.Context(), id)
-	return jsonReply(w, http.StatusOK, updated)
+	return jsonReply(w, http.StatusOK, ToTaskResponse(updated))
 }
 
 func (h *Handler) retry(w http.ResponseWriter, r *http.Request) error {
@@ -774,7 +780,7 @@ func (h *Handler) retry(w http.ResponseWriter, r *http.Request) error {
 		return apierr.NewAppError(http.StatusConflict, "task could not progress")
 	}
 	h.broadcastEnrichedUpdate(r.Context(), id)
-	return jsonReply(w, http.StatusAccepted, sr)
+	return jsonReply(w, http.StatusAccepted, toStageRunResponse(sr))
 }
 
 func (h *Handler) advance(w http.ResponseWriter, r *http.Request) error {
@@ -811,7 +817,7 @@ func (h *Handler) hold(w http.ResponseWriter, r *http.Request) error {
 	}
 	_ = h.auditRepo.RecordTaskAudit(r.Context(), id, nil, "task_held", "task:"+id, map[string]any{"actor": "user", "fromStage": t.CurrentStage})
 	h.broadcastEnrichedUpdate(r.Context(), id)
-	return jsonReply(w, http.StatusOK, updated)
+	return jsonReply(w, http.StatusOK, ToTaskResponse(updated))
 }
 
 func (h *Handler) resume(w http.ResponseWriter, r *http.Request) error {
@@ -840,7 +846,60 @@ func (h *Handler) resume(w http.ResponseWriter, r *http.Request) error {
 	}
 	_ = h.auditRepo.RecordTaskAudit(r.Context(), id, nil, "task_resumed", "task:"+id, map[string]any{"actor": "user", "hadPrompt": body.AdditionalPrompt != ""})
 	h.broadcastEnrichedUpdate(r.Context(), id)
-	return jsonReply(w, http.StatusAccepted, sr)
+	return jsonReply(w, http.StatusAccepted, toStageRunResponse(sr))
+}
+
+// stageRunResponse is the API response shape for one stage run. The ent entity's
+// own JSON tags are the storage column names and carry omitempty, which drops a
+// zero iteration, token count or cost from the payload instead of sending 0, and
+// leaks the empty edges container.
+//
+// retry_count, next_retry_at, pending_user_prompt and created_at are deliberately
+// absent: no client reads them off this route, the first two already reach the
+// browser as EnrichedTask.autoRetryCount/nextRetryAt, and the third is the agent's
+// queued input rather than run history.
+type stageRunResponse struct {
+	ID          string         `json:"id"`
+	TaskID      string         `json:"taskId"`
+	Stage       string         `json:"stage"`
+	SessionID   *string        `json:"sessionId"`
+	SessionName *string        `json:"sessionName"`
+	Pid         *int           `json:"pid"`
+	Status      string         `json:"status"`
+	Iteration   int            `json:"iteration"`
+	Output      map[string]any `json:"output"`
+	TokensUsed  int            `json:"tokensUsed"`
+	CostCents   int            `json:"costCents"`
+	StartedAt   *time.Time     `json:"startedAt"`
+	EndedAt     *time.Time     `json:"endedAt"`
+	LastGrantAt *time.Time     `json:"lastGrantAt"`
+}
+
+func toStageRunResponse(sr *ent.StageRun) stageRunResponse {
+	return stageRunResponse{
+		ID:          sr.ID,
+		TaskID:      sr.TaskID,
+		Stage:       sr.Stage,
+		SessionID:   sr.SessionID,
+		SessionName: sr.SessionName,
+		Pid:         sr.Pid,
+		Status:      sr.Status,
+		Iteration:   sr.Iteration,
+		Output:      sr.Output,
+		TokensUsed:  sr.TokensUsed,
+		CostCents:   sr.CostCents,
+		StartedAt:   sr.StartedAt,
+		EndedAt:     sr.EndedAt,
+		LastGrantAt: sr.LastGrantAt,
+	}
+}
+
+func toStageRunResponses(runs []*ent.StageRun) []stageRunResponse {
+	resp := make([]stageRunResponse, len(runs))
+	for i, sr := range runs {
+		resp[i] = toStageRunResponse(sr)
+	}
+	return resp
 }
 
 func (h *Handler) listStageRuns(w http.ResponseWriter, r *http.Request) error {
@@ -849,7 +908,7 @@ func (h *Handler) listStageRuns(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return fmt.Errorf("tasks.listStageRuns: %w", err)
 	}
-	return jsonReply(w, http.StatusOK, runs)
+	return jsonReply(w, http.StatusOK, toStageRunResponses(runs))
 }
 
 // auditEntryResponse is the API response shape for a single audit event.
@@ -1047,7 +1106,7 @@ func (h *Handler) resolvePermissionRequest(w http.ResponseWriter, r *http.Reques
 		}
 	}
 	h.broadcastEnrichedUpdate(r.Context(), id)
-	return jsonReply(w, http.StatusOK, resolved)
+	return jsonReply(w, http.StatusOK, toPermissionRequestResponse(resolved))
 }
 
 func (h *Handler) stream(w http.ResponseWriter, r *http.Request) {

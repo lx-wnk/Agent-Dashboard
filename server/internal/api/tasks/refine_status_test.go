@@ -54,7 +54,7 @@ func TestApplyRefineStatus_PreservesPendingPermsPrimary(t *testing.T) {
 	h := &Handler{refineReader: stubRefineReader{status: "none"}}
 	awaiting := "awaiting_user"
 	e := &EnrichedTask{
-		CurrentStage:         "implementation",
+		TaskResponse:         TaskResponse{CurrentStage: "implementation"},
 		LatestStageRunStatus: &awaiting,
 		NeedsUser:            true,
 		pendingPermsCount:    3,

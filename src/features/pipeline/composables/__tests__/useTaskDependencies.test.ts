@@ -54,7 +54,6 @@ function makeDependency(overrides: Partial<TaskDependency> = {}): TaskDependency
     dependsOnStage: 'done',
     requiredStage: 'done',
     onCancelAction: 'on_hold',
-    createdAt: '2026-01-01T00:00:00Z',
     ...overrides,
   }
 }

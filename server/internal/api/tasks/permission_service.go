@@ -31,8 +31,8 @@ type ApproveAllPendingDeps struct {
 
 // ApproveAllPendingResult reports what the operation did.
 type ApproveAllPendingResult struct {
-	Approved int
-	Requeued bool
+	Approved int  `json:"approved"`
+	Requeued bool `json:"requeued"`
 }
 
 // ApproveAllPending resolves every pending permission_request for a task as
