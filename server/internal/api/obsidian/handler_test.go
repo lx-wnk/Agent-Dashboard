@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
@@ -122,6 +124,13 @@ func TestIndex_MissingGrantIsForbiddenNotServerError(t *testing.T) {
 	assert.Equal(t, http.StatusForbidden, rec.Code)
 	assert.NotEqual(t, http.StatusInternalServerError, rec.Code)
 	assert.False(t, *called, "the vault must never be contacted before the grant is checked")
+
+	var body struct {
+		Error string `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	assert.Contains(t, body.Error, repo.CapabilityMemoryWrite,
+		"the 403 must name which capability is missing (memory.write, checked first), not just say \"forbidden\"")
 }
 
 // TestIndex_VaultUnconfiguredIsServiceUnavailableNotServerError grants every
@@ -160,4 +169,54 @@ func TestIndex_GrantedRunReturnsIndexedCount(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
 	assert.Equal(t, 1, body.Indexed)
+}
+
+// TestIndex_ConcurrentRunsAreSerialized pins fix-round finding BLOCKING 2:
+// two overlapping POSTs against a one-note vault must not both run
+// IndexNotes to completion — that duplicates every pointer permanently
+// (no unique index on (space_id, source_ref), and the reconciliation loop
+// only ever tracks one id per path, so the extra entry can never be
+// reconciled away). The fake vault's /search/simple/ blocks until released,
+// so the first request can be held mid-flight while the second is fired.
+func TestIndex_ConcurrentRunsAreSerialized(t *testing.T) {
+	mem, gate, spaceID := testDeps(t)
+	grantCapability(t, gate.Grants, repo.CapabilityMemoryWrite)
+	grantCapability(t, gate.Grants, obsidianapp.CapabilitySearch)
+	grantCapability(t, gate.Grants, obsidianapp.CapabilityRead)
+
+	unblock := make(chan struct{})
+	started := make(chan struct{})
+	var startedOnce sync.Once
+	mux := http.NewServeMux()
+	mux.HandleFunc("/search/simple/", func(w http.ResponseWriter, r *http.Request) {
+		startedOnce.Do(func() { close(started) })
+		<-unblock
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]map[string]any{{"filename": "root/a.md", "score": 1}})
+	})
+	mux.HandleFunc("/vault/", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("hello from the vault"))
+	})
+	ts := httptest.NewTLSServer(mux)
+	t.Cleanup(ts.Close)
+	client := newTestClient(t, ts)
+
+	h := apiobsidian.NewHandler(client, mem, gate, spaceID)
+
+	firstDone := make(chan *httptest.ResponseRecorder, 1)
+	go func() { firstDone <- doPost(h) }()
+
+	<-started // the first request is now blocked inside IndexNotes' Search call
+	rec2 := doPost(h)
+
+	close(unblock)
+	rec1 := <-firstDone
+
+	assert.Equal(t, http.StatusOK, rec1.Code)
+	assert.Equal(t, http.StatusConflict, rec2.Code, "a run already in flight must reject a second trigger, not race it")
+
+	entries, err := mem.ListValid(context.Background(), spaceID, time.Now())
+	require.NoError(t, err)
+	assert.Len(t, entries, 1, "two overlapping runs must leave exactly one pointer, not a duplicate")
 }

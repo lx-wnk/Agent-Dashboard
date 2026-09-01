@@ -5,6 +5,7 @@ package obsidian
 import (
 	"errors"
 	"net/http"
+	"sync/atomic"
 
 	"github.com/go-chi/chi/v5"
 
@@ -22,6 +23,20 @@ type Handler struct {
 	mem     repo.MemoryRepo
 	gate    memory.Gate
 	spaceID string
+	// running serializes index runs: IndexNotes reads every existing
+	// pointer before it writes any (index.go's priorPointers map), with no
+	// transaction spanning the two and no unique index on
+	// (space_id, source_ref), so two overlapping runs both see "not
+	// indexed yet" and both write a pointer for the same note — a
+	// permanent duplicate the reconciliation loop can never undo (it only
+	// ever tracks one id per path). Rejecting a second run with 409 while
+	// one is in flight is the fix at this trigger's scope; a DB-level fix
+	// (unique index + transaction) belongs to the apps/obsidian package
+	// this task does not own.
+	// ponytail: a single in-process flag serializes one server's runs;
+	// revisit only if this trigger is ever driven from more than one
+	// server process against the same vault.
+	running atomic.Bool
 }
 
 // NewHandler creates a Handler. client is nil when the vault is unconfigured
@@ -38,7 +53,10 @@ func (h *Handler) Mount(r chi.Router) {
 }
 
 // index runs one obsidianapp.IndexNotes pass and reports how many new
-// pointer entries it created.
+// pointer entries it created. Only one run is allowed in flight at a time
+// (h.running) — a second POST while one is running gets 409, not a race
+// against the first (see h.running's own doc comment for why that race is
+// dangerous: permanent duplicate pointers, not just a wasted request).
 //
 // A human presses the button that reaches this handler, but the run behind
 // it is unattended with respect to capabilities: h.gate is built with no
@@ -55,6 +73,11 @@ func (h *Handler) index(w http.ResponseWriter, r *http.Request) error {
 	if h.client == nil {
 		return apierr.NewAppError(http.StatusServiceUnavailable, "obsidian vault not configured")
 	}
+	if !h.running.CompareAndSwap(false, true) {
+		return apierr.NewAppError(http.StatusConflict, "an obsidian index run is already in progress")
+	}
+	defer h.running.Store(false)
+
 	count, err := obsidianapp.IndexNotes(r.Context(), h.client, h.mem, h.gate, h.spaceID)
 	if err != nil {
 		if errors.Is(err, capability.ErrDenied) || errors.Is(err, capability.ErrAskRequired) {

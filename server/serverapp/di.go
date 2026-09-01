@@ -604,11 +604,11 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	// the memory MCP tools below (an agent is waiting on the tool response)
 	// and the HTTP memory handler further down (a browser request has a
 	// human on the other end). The pipeline's memory push (di_pipeline.go)
-	// builds its own memory.Gate with no Asker instead of sharing this one —
-	// nothing is waiting on it, so an unanswerable ask must deny rather than
-	// stall a spawn. obsidian.IndexNotes takes a memory.Gate as a parameter
-	// instead of building one (see its own doc comment); nothing in this
-	// file constructs or calls it.
+	// and the obsidian trigger's Gate (obsidianHandler, built further down
+	// in this function) both construct their own memory.Gate with no Asker
+	// instead of sharing this one — nothing is waiting on either of them,
+	// so an unanswerable ask must deny rather than stall a spawn or an HTTP
+	// response.
 	var memAsker *serverask.Asker
 	// Bypass-auth unmounts the route a human would answer through (router.go),
 	// so an asker here would only hold every ask for its full timeout before

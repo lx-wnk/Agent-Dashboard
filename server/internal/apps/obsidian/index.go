@@ -64,7 +64,7 @@ func IndexNotes(
 	scope := repo.Scope{Kind: repo.ScopeKind(space.ScopeKind), Ref: space.ScopeRef}.Normalize()
 
 	if err := gate.Authorize(ctx, repo.CapabilityMemoryWrite, space.Slug, scope); err != nil {
-		return 0, fmt.Errorf("obsidian.IndexNotes: %w", err)
+		return 0, fmt.Errorf("obsidian.IndexNotes: %s: %w", repo.CapabilityMemoryWrite, err)
 	}
 
 	now := time.Now()
@@ -80,7 +80,7 @@ func IndexNotes(
 	}
 
 	if err := gate.Authorize(ctx, CapabilitySearch, "", scope); err != nil {
-		return 0, fmt.Errorf("obsidian.IndexNotes: %w", err)
+		return 0, fmt.Errorf("obsidian.IndexNotes: %s: %w", CapabilitySearch, err)
 	}
 	// obsidian.read covers every Client.Read call this function makes below
 	// — both the new-note reads in the main loop and the existence probes
@@ -90,7 +90,7 @@ func IndexNotes(
 	// one note, and nothing in the capability schema expresses a
 	// per-note-path pattern for it to check instead.
 	if err := gate.Authorize(ctx, CapabilityRead, "", scope); err != nil {
-		return 0, fmt.Errorf("obsidian.IndexNotes: %w", err)
+		return 0, fmt.Errorf("obsidian.IndexNotes: %s: %w", CapabilityRead, err)
 	}
 
 	// Client.Search searches the whole vault, not just VaultRoot (see its
