@@ -5,6 +5,7 @@ package systemprompts
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
@@ -23,6 +24,42 @@ func NewHandler(r repo.SystemPromptRepo) *Handler {
 	return &Handler{repo: r}
 }
 
+// systemPromptResponse is the API response shape for one custom system prompt.
+// ent.SystemPrompt's tags carry omitempty, which drops priority 0 — the value
+// the create form submits by default — so the settings table rendered a blank
+// cell and the edit form re-seeded itself from undefined.
+type systemPromptResponse struct {
+	ID        string    `json:"id"`
+	Scope     string    `json:"scope"`
+	Stage     *string   `json:"stage"`
+	Content   string    `json:"content"`
+	Priority  int       `json:"priority"`
+	CreatedBy *string   `json:"createdBy"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+func toSystemPromptResponse(p *ent.SystemPrompt) systemPromptResponse {
+	return systemPromptResponse{
+		ID:        p.ID,
+		Scope:     p.Scope,
+		Stage:     p.Stage,
+		Content:   p.Content,
+		Priority:  p.Priority,
+		CreatedBy: p.CreatedBy,
+		CreatedAt: p.CreatedAt,
+		UpdatedAt: p.UpdatedAt,
+	}
+}
+
+func toSystemPromptResponses(prompts []*ent.SystemPrompt) []systemPromptResponse {
+	resp := make([]systemPromptResponse, len(prompts))
+	for i, p := range prompts {
+		resp[i] = toSystemPromptResponse(p)
+	}
+	return resp
+}
+
 // Mount registers all system-prompt routes on r.
 func (h *Handler) Mount(r chi.Router) {
 	r.Get("/api/settings/system-prompts", apierr.ErrorMiddleware(h.list))
@@ -36,10 +73,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	if prompts == nil {
-		prompts = []*ent.SystemPrompt{}
-	}
-	apierr.WriteJSON(w, http.StatusOK, prompts)
+	apierr.WriteJSON(w, http.StatusOK, toSystemPromptResponses(prompts))
 	return nil
 }
 
@@ -66,7 +100,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	apierr.WriteJSON(w, http.StatusCreated, prompt)
+	apierr.WriteJSON(w, http.StatusCreated, toSystemPromptResponse(prompt))
 	return nil
 }
 
@@ -83,7 +117,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	apierr.WriteJSON(w, http.StatusOK, prompt)
+	apierr.WriteJSON(w, http.StatusOK, toSystemPromptResponse(prompt))
 	return nil
 }
 

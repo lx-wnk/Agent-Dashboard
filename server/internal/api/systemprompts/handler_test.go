@@ -127,3 +127,50 @@ func TestSystemPromptsHandler_Delete_NotFound_Returns404(t *testing.T) {
 	mux.ServeHTTP(w, httptest.NewRequest(http.MethodDelete, "/api/settings/system-prompts/non-existent-id", nil))
 	require.Equal(t, http.StatusNotFound, w.Code)
 }
+
+// TestSystemPromptsHandler_WireFormat asserts the raw key set: priority 0 must
+// be sent as 0 rather than dropped by the entity's omitempty tag, and the
+// timestamps must use the camelCase names the rest of the API answers with.
+func TestSystemPromptsHandler_WireFormat(t *testing.T) {
+	mux := setupHandler(t)
+
+	body, _ := json.Marshal(map[string]any{
+		"content":  "Zero priority prompt.",
+		"scope":    "global",
+		"priority": 0,
+	})
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/settings/system-prompts", bytes.NewReader(body)))
+	require.Equal(t, http.StatusCreated, w.Code)
+
+	var created map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &created))
+	for _, k := range []string{"id", "scope", "stage", "content", "priority", "createdBy", "createdAt", "updatedAt"} {
+		require.Contains(t, created, k, "missing key %q in %v", k, created)
+	}
+	for _, k := range []string{"created_by", "created_at", "updated_at"} {
+		require.NotContains(t, created, k, "unexpected key %q in %v", k, created)
+	}
+	require.Equal(t, float64(0), created["priority"], "priority 0 must be sent, not omitted")
+	require.Nil(t, created["stage"], "an unset stage must be null, not omitted")
+
+	w = httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/settings/system-prompts", nil))
+	require.Equal(t, http.StatusOK, w.Code)
+	var list []map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &list))
+	require.Len(t, list, 1)
+	require.Contains(t, list[0], "priority")
+	require.Equal(t, float64(0), list[0]["priority"])
+	require.NotContains(t, list[0], "created_at")
+
+	put, _ := json.Marshal(map[string]any{"content": "Still zero.", "priority": 0})
+	w = httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest(http.MethodPut, "/api/settings/system-prompts/"+created["id"].(string), bytes.NewReader(put)))
+	require.Equal(t, http.StatusOK, w.Code)
+	var updated map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &updated))
+	require.Equal(t, float64(0), updated["priority"])
+	require.Contains(t, updated, "updatedAt")
+	require.NotContains(t, updated, "updated_at")
+}
