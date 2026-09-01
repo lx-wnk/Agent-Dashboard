@@ -122,6 +122,67 @@ func TestDBStore_SetValidated_EncryptsSecretValue(t *testing.T) {
 	assert.Equal(t, "sk-live-999", got)
 }
 
+// TestDBStore_SetValidated_ClearsSecretOnEmptyValue pins the CLI to the same
+// semantics settings.Service.Set has: an empty value clears the secret
+// instead of encrypting the empty string. The two surfaces must agree, and
+// this one is load-bearing for the boot. Encrypting "" leaves a row that
+// reads back as the mask on every non-decrypting surface — so a user who
+// cleared the key from the CLI (the documented lockout-recovery path, used
+// precisely when the server is down) then sees "********" in Settings →
+// Obsidian, the panel counts the API-key field as filled, the trio guard
+// permits the save, the mask is sent as "leave unchanged", and the next boot
+// fails with "missing required settings: obsidian.apiKey". The panel guard is
+// not bypassed there — it is walked straight through.
+func TestDBStore_SetValidated_ClearsSecretOnEmptyValue(t *testing.T) {
+	isolateMasterKeyPaths(t)
+	store, err := openDBStore(t.TempDir() + "/test.db")
+	require.NoError(t, err)
+	defer store.Close()
+	ctx := context.Background()
+
+	require.NoError(t, store.SetValidated(ctx, "obsidian.apiKey", "sk-live-999"))
+	require.NoError(t, store.SetValidated(ctx, "obsidian.apiKey", ""))
+
+	all, err := store.List(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, all["obsidian.apiKey"], "the ciphertext must be gone, not overwritten with an encrypted empty string")
+
+	box, err := loadSecretBox()
+	require.NoError(t, err)
+	svc := settings.New(settingsRepoAdapter{inner: store.repo}, box)
+	require.NoError(t, svc.Load(ctx))
+
+	// Effective() is the surface the Settings panel reads: a cleared key that
+	// still shows the mask there is what lets the trio save through.
+	assert.Empty(t, svc.Effective()["obsidian.apiKey"], "a cleared secret must read as unset, not as the mask")
+	got, err := svc.Secret(ctx, "obsidian.apiKey")
+	require.NoError(t, err)
+	assert.Empty(t, got, "no stale ciphertext may survive the clear")
+}
+
+// TestDBStore_SetValidated_ClearNeedsNoMasterKey pins the ordering of the
+// clear branch: it runs before loadSecretBox. Removing a secret must not
+// depend on resolving a master key — this is the recovery command, run when
+// the key may be exactly what is unreachable (a different HOME under sudo,
+// a key file lost with the config dir). Without this, the branch could drift
+// below loadSecretBox and the test above would stay green, since by then the
+// key file already exists.
+func TestDBStore_SetValidated_ClearNeedsNoMasterKey(t *testing.T) {
+	keyDir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", keyDir)
+	t.Setenv("HOME", t.TempDir())
+	keyPath := filepath.Join(keyDir, "dashboard-secret.key")
+
+	store, err := openDBStore(t.TempDir() + "/test.db")
+	require.NoError(t, err)
+	defer store.Close()
+
+	require.NoError(t, store.SetValidated(context.Background(), "obsidian.apiKey", ""))
+
+	_, statErr := os.Stat(keyPath)
+	assert.True(t, os.IsNotExist(statErr), "clearing a secret must not generate a master key file")
+}
+
 // TestDBStore_SetValidated_RejectsMaskSentinelForSecret is the BLOCKING fix:
 // Service.Set treats secretbox.MaskedSentinel as "leave unchanged" because it
 // always has the previous ciphertext to fall back to. SetValidated is a raw

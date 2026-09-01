@@ -104,6 +104,15 @@ func (s *dbStore) Set(ctx context.Context, key, value string) error {
 // ErrMaskedValueRejected. If the master key cannot be resolved, the write is
 // refused with ErrNoMasterKey rather than silently falling back to
 // plaintext.
+//
+// An empty value CLEARS a secret, matching settings.Service.Set exactly — the
+// two surfaces write the same shape (empty ciphertext, empty nonce) so a key
+// cleared here reads as unset everywhere, not as the mask. The two must agree
+// or clearing through the CLI leaves a row the Settings panel then counts as
+// a filled field: it would show "********", permit the trio save, and the
+// next boot would fail on the apiKey it was told was there. Clearing runs
+// before loadSecretBox on purpose — removing a secret must not depend on
+// being able to resolve a master key, least of all in the recovery command.
 func (s *dbStore) SetValidated(ctx context.Context, key, value string) error {
 	def, ok := settings.Lookup(key)
 	if !ok {
@@ -117,6 +126,10 @@ func (s *dbStore) SetValidated(ctx context.Context, key, value string) error {
 	}
 	if value == secretbox.MaskedSentinel {
 		return fmt.Errorf("%w: %q", ErrMaskedValueRejected, key)
+	}
+	if value == "" {
+		_, err := s.repo.UpsertSecret(ctx, key, "", "")
+		return err
 	}
 	box, err := loadSecretBox()
 	if err != nil {
