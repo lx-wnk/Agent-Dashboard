@@ -12,15 +12,16 @@ const { byStageRun, loading, denied, error } = useStageInjections(stageRuns)
 
 <template>
   <section class="p-5">
-    <div v-if="denied" data-testid="stage-injection-denied" class="rounded border border-warning-line bg-warning-soft text-warning-text px-3 py-2 text-[11px] mb-2">
-      <strong>Memory pushes are hidden: <code>memory.read</code> is not granted at global scope.</strong>
-      {{ denied }}
-      This route always checks the global context — a project-scoped grant does not cover it. Add an <code>allow</code> grant for <code>memory.read</code> at <strong>global</strong> scope in the Grants panel.
+    <div v-if="denied" data-testid="stage-injection-denied" role="alert" class="rounded border border-warning-line bg-warning-soft text-warning-text px-3 py-2 text-[11px] mb-2">
+      <strong>{{ denied }}</strong>
+      <span class="block mt-0.5">
+        Memory pushes are hidden for every run in this tab. Most likely cause: <code>memory.read</code> is not granted at <strong>global</strong> scope — this route always checks the global context, so a project-scoped grant does not cover it. A rate limit, an unanswered ask, or a failed read of the grant store answers 403 the same way.
+      </span>
     </div>
-    <div v-else-if="error" data-testid="stage-injection-error" class="rounded border border-danger-line bg-danger-soft text-danger-text px-3 py-2 text-[11px] mb-2">
+    <div v-else-if="error" data-testid="stage-injection-error" role="alert" class="rounded border border-danger-line bg-danger-soft text-danger-text px-3 py-2 text-[11px] mb-2">
       {{ error }}
     </div>
-    <div v-else-if="loading" data-testid="stage-injection-loading" class="text-fg-mute text-[11px] mb-2">
+    <div v-else-if="loading" data-testid="stage-injection-loading" role="status" class="text-fg-mute text-[11px] mb-2">
       Checking memory pushes...
     </div>
     <div v-if="stageRuns.length === 0" class="text-fg-mute text-xs text-center py-8">
@@ -46,7 +47,7 @@ const { byStageRun, loading, denied, error } = useStageInjections(stageRuns)
       <div
         v-for="inj in (byStageRun[run.id] ?? [])"
         :key="inj.id"
-        :data-testid="`stage-injection-${run.id}`"
+        :data-testid="`stage-injection-${inj.id}`"
         class="mt-1.5 text-[11px] text-fg-mute flex flex-wrap items-center gap-x-3 gap-y-1"
       >
         <span>memory push: <strong class="text-fg">{{ inj.entryIds.length }} entries</strong></span>

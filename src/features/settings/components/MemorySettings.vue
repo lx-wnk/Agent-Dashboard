@@ -220,22 +220,22 @@ async function handleExpire(id: string) {
         {{ spaceSaving ? 'Creating…' : 'Create space' }}
       </button>
     </div>
-    <div v-if="spaceFailure" data-testid="memory-space-error" class="rounded border border-danger-line bg-danger-soft text-danger-text px-3 py-2 text-xs">
+    <div v-if="spaceFailure" data-testid="memory-space-error" role="alert" class="rounded border border-danger-line bg-danger-soft text-danger-text px-3 py-2 text-xs">
       {{ failureText(spaceFailure) }}
     </div>
 
-    <div v-if="denied" data-testid="memory-denied" class="rounded border border-warning-line bg-warning-soft text-warning-text px-3 py-2 text-xs">
+    <div v-if="denied" data-testid="memory-denied" role="alert" class="rounded border border-warning-line bg-warning-soft text-warning-text px-3 py-2 text-xs">
       <strong>memory.read is not granted here.</strong>
       {{ denied }}
       Open the Grants panel and add an <code>allow</code> grant for <code>memory.read</code> in this context to read memory from the dashboard.
     </div>
-    <div v-else-if="error" data-testid="memory-error" class="rounded border border-danger-line bg-danger-soft text-danger-text px-3 py-2 text-xs">
+    <div v-else-if="error" data-testid="memory-error" role="alert" class="rounded border border-danger-line bg-danger-soft text-danger-text px-3 py-2 text-xs">
       {{ error }}
     </div>
-    <div v-else-if="loading" data-testid="memory-loading" class="text-center py-12 text-fg-mute text-sm">
+    <div v-else-if="loading" data-testid="memory-loading" role="status" class="text-center py-12 text-fg-mute text-sm">
       Loading memory spaces...
     </div>
-    <div v-else-if="held" data-testid="memory-held" class="text-center py-8 text-fg-mute text-sm">
+    <div v-else-if="held" data-testid="memory-held" role="status" class="text-center py-8 text-fg-mute text-sm">
       Enter a scope ref to search.
     </div>
     <div v-else-if="!spaces.length" data-testid="memory-empty" class="text-center py-8 text-fg-mute text-sm">
@@ -320,7 +320,7 @@ async function handleExpire(id: string) {
         {{ entrySaving ? 'Creating…' : 'Create entry' }}
       </button>
     </div>
-    <div v-if="entryFailure" data-testid="memory-entry-error" class="rounded border border-danger-line bg-danger-soft text-danger-text px-3 py-2 text-xs">
+    <div v-if="entryFailure" data-testid="memory-entry-error" role="alert" class="rounded border border-danger-line bg-danger-soft text-danger-text px-3 py-2 text-xs">
       {{ failureText(entryFailure) }}
     </div>
 
@@ -346,7 +346,7 @@ async function handleExpire(id: string) {
         Search
       </button>
     </div>
-    <div v-if="searchError" data-testid="memory-search-error" class="rounded border border-danger-line bg-danger-soft text-danger-text px-3 py-2 text-xs">
+    <div v-if="searchError" data-testid="memory-search-error" role="alert" class="rounded border border-danger-line bg-danger-soft text-danger-text px-3 py-2 text-xs">
       {{ searchError }}
     </div>
 
@@ -396,7 +396,7 @@ async function handleExpire(id: string) {
           Expire
         </button>
       </div>
-      <p v-if="entryActionFailure?.id === e.id" :data-testid="`memory-entry-action-error-${e.id}`" class="text-[11px] text-danger-text mt-1">
+      <p v-if="entryActionFailure?.id === e.id" :data-testid="`memory-entry-action-error-${e.id}`" role="alert" class="text-[11px] text-danger-text mt-1">
         {{ failureText(entryActionFailure) }}
       </p>
     </div>

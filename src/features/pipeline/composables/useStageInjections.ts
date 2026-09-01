@@ -17,10 +17,11 @@ export interface MemoryInjection {
   updatedAt: string
 }
 
-// Used when the route refuses without a message of its own. Names the scope the
-// gate actually checks: listInjections authorizes memory.read at *global* scope
-// unconditionally, so a project-scoped grant does not back this call.
-const DENIED_FALLBACK = 'memory.read is not granted at global scope.'
+// Used when the route refuses without a message of its own. It states only what
+// is known — the read was refused — because handler.go maps every Gate.Authorize
+// error to 403, a missing grant and a rate limit and a grant-store failure
+// alike. The likely cause is named once, by the notice that renders this.
+const DENIED_FALLBACK = 'The memory injections route refused this read (HTTP 403) without giving a reason.'
 
 interface RunResult {
   id: string

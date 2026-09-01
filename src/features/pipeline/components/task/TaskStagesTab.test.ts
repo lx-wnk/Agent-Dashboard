@@ -70,7 +70,7 @@ describe('taskStagesTab — memory injections', () => {
     const wrapper = mountTab([makeRun()])
     await flushPromises()
 
-    const block = wrapper.get('[data-testid="stage-injection-run-1"]')
+    const block = wrapper.get('[data-testid="stage-injection-inj-1"]')
     expect(block.text()).toContain('2 entries')
     expect(block.text()).toContain('1450 / 2000')
     expect(block.text()).toContain('9 candidates')
@@ -98,7 +98,7 @@ describe('taskStagesTab — memory injections', () => {
     const wrapper = mountTab([makeRun()])
     await flushPromises()
 
-    expect(wrapper.find('[data-testid="stage-injection-run-1"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid^="stage-injection-inj"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="stage-injection-denied"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="stage-injection-error"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="stage-injection-loading"]').exists()).toBe(false)
@@ -116,6 +116,99 @@ describe('taskStagesTab — memory injections', () => {
     expect(wrapper.find('[data-testid="stage-injection-error"]').exists()).toBe(false)
   })
 
+  // handler.go answers 403 for every Gate.Authorize error — a missing grant, a
+  // rate limit, an unanswered ask, a failed read of the grant store. Only the
+  // server knows which, so its message leads and the grant explanation is
+  // demoted to a cause the notice merely suspects.
+  it('leads the denial with the server message and demotes the global-scope cause', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'rate limit exceeded for memory.read' }), { status: 403 })))
+
+    const wrapper = mountTab([makeRun()])
+    await flushPromises()
+
+    const notice = wrapper.get('[data-testid="stage-injection-denied"]')
+    expect(notice.get('strong').text()).toBe('rate limit exceeded for memory.read')
+    expect(notice.text().indexOf('rate limit exceeded for memory.read')).toBeLessThan(notice.text().indexOf('Most likely cause'))
+    expect(notice.attributes('role')).toBe('alert')
+  })
+
+  // The fallback exists for a 403 carrying no message of its own; it must not
+  // repeat the cause sentence the notice already prints below it.
+  it('does not state the global-scope cause twice when the refusal carries no message', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 403 })))
+
+    const wrapper = mountTab([makeRun()])
+    await flushPromises()
+
+    const text = wrapper.get('[data-testid="stage-injection-denied"]').text()
+    expect(text).toContain('refused this read (HTTP 403)')
+    expect(text.split('global scope')).toHaveLength(2)
+  })
+
+  // A denial that outlives the grant which fixed it tells the user the grant
+  // did not work.
+  it('clears the denial once a later batch is allowed through', async () => {
+    const fetchMock = vi.fn(async (_url: string) => new Response(JSON.stringify({ error: 'capability memory.read denied' }), { status: 403 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const runs = ref([makeRun()])
+    const wrapper = mountTab(runs)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="stage-injection-denied"]').exists()).toBe(true)
+
+    fetchMock.mockImplementation(async () => new Response(JSON.stringify([makeInjection()]), { status: 200 }))
+    runs.value = [makeRun()]
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="stage-injection-denied"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="stage-injection-inj-1"]').exists()).toBe(true)
+  })
+
+  // Same reasoning for the error banner: an outage that has ended must not keep
+  // reporting itself over a batch that succeeded.
+  it('clears the error once a later batch succeeds', async () => {
+    const fetchMock = vi.fn(async (_url: string) => new Response('boom', { status: 500 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const runs = ref([makeRun()])
+    const wrapper = mountTab(runs)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="stage-injection-error"]').exists()).toBe(true)
+
+    fetchMock.mockImplementation(async () => new Response(JSON.stringify([makeInjection()]), { status: 200 }))
+    runs.value = [makeRun()]
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="stage-injection-error"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="stage-injection-inj-1"]').exists()).toBe(true)
+  })
+
+  // A resumed or requeued run is spawned again on the same row and gains a
+  // second injection (RecordInjection creates, never upserts), so a testid
+  // keyed on the run would put two elements behind one selector.
+  it('addresses each injection of a re-spawned run separately', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify([
+      makeInjection(),
+      makeInjection({ id: 'inj-2', entryIds: ['e3'], charsUsed: 300, candidateCount: 4 }),
+    ]), { status: 200 })))
+
+    const wrapper = mountTab([makeRun()])
+    await flushPromises()
+
+    expect(wrapper.findAll('[data-testid="stage-injection-inj-1"]')).toHaveLength(1)
+    expect(wrapper.get('[data-testid="stage-injection-inj-2"]').text()).toContain('1 entries')
+  })
+
+  // No run means no request was issued, so "checking" would be a lie — and the
+  // first paint happens before any response could arrive.
+  it('does not claim to be checking when there is no stage run to ask about', () => {
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})))
+
+    const wrapper = mountTab([])
+
+    expect(wrapper.find('[data-testid="stage-injection-loading"]').exists()).toBe(false)
+  })
+
   // A refused read and a broken one have different fixes; folding the 500 into
   // the denial notice would send the user to the Grants panel over an outage.
   it('reports a transport failure as an error, not as a denial', async () => {
@@ -126,7 +219,7 @@ describe('taskStagesTab — memory injections', () => {
 
     expect(wrapper.get('[data-testid="stage-injection-error"]').text()).toContain('500')
     expect(wrapper.find('[data-testid="stage-injection-denied"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="stage-injection-run-1"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid^="stage-injection-inj"]').exists()).toBe(false)
   })
 
   // Absence is rendered as nothing, so the in-flight window must not look like
@@ -166,7 +259,7 @@ describe('taskStagesTab — memory injections', () => {
     resolvers[0]([])
     await flushPromises()
 
-    expect(wrapper.find('[data-testid="stage-injection-run-2"]').exists()).toBe(true)
-    expect(wrapper.get('[data-testid="stage-injection-run-1"]').text()).toContain('2 entries')
+    expect(wrapper.find('[data-testid="stage-injection-inj-2"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="stage-injection-inj-1"]').text()).toContain('2 entries')
   })
 })

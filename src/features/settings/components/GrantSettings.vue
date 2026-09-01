@@ -198,7 +198,7 @@ function isLegacy(grantedBy: string): boolean {
       />
     </div>
 
-    <div v-if="loading" class="text-center py-12 text-fg-mute text-sm">
+    <div v-if="loading" role="status" class="text-center py-12 text-fg-mute text-sm">
       Loading grants...
     </div>
     <div v-else-if="!grants.length && !formVisible" class="text-center py-8 text-fg-mute text-sm">
