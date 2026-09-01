@@ -14,7 +14,7 @@ function withSetup<T>(composable: () => T) {
     },
     template: '<div />',
   })
-  const wrapper = mount(Wrapper)
+  const wrapper = mount(Wrapper, { attachTo: document.body })
   return { result, wrapper }
 }
 
@@ -48,6 +48,18 @@ function initOf(call: number): RequestInit {
 function bodyOf(call: number): unknown {
   return JSON.parse(String(initOf(call).body))
 }
+
+const ENTRY_INPUT = {
+  spaceSlug: 'project-notes',
+  summary: 'Binds to loopback',
+  content: 'The server binds 127.0.0.1 only.',
+  kind: 'fact',
+  sourceKind: 'user',
+  sourceRef: '',
+  confidence: 1,
+} as const
+
+const HIT = { id: 'e1', spaceId: 's1', summary: 'x', content: 'y', kind: 'fact', confidence: 1, createdAt: '2026-01-01T00:00:00Z' }
 
 beforeEach(async () => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(200, [])))
@@ -98,6 +110,70 @@ describe('useMemory', () => {
     expect(urls.some(u => u.includes('scope=global') && !u.includes('scopeRef'))).toBe(true)
   })
 
+  // The exact URLs, in order. `some(u => u.includes(...))` cannot see the two
+  // mutations that matter here, because the mount-time fetch at global scope
+  // already matches both patterns: renaming the `scope` param (mem.ParseScope
+  // answers a missing scope with global data, under a project heading) and
+  // asking for the labels in the current scope instead of GLOBAL_SCOPE (every
+  // global hit then loses its "outside this scope" marker and renders as a
+  // raw uuid).
+  it('sends the exact read URLs: the scope param, the trimmed ref, and a global-only label lookup', async () => {
+    const { result } = withSetup(() => useMemory())
+    await vi.waitUntil(() => !result.loading.value)
+    expect(urlOf(0)).toBe('/api/memory/spaces?scope=global')
+    vi.mocked(globalThis.fetch).mockClear()
+
+    await result.setScope({ scopeKind: 'project', scopeRef: '  /tmp/demo  ' })
+
+    expect(urlOf(0)).toBe('/api/memory/spaces?scope=project&scopeRef=%2Ftmp%2Fdemo')
+    expect(urlOf(1)).toBe('/api/memory/spaces?scope=global')
+  })
+
+  // The label lookup is a second list from a second scope — assigned to
+  // `globalSpaces`, never to `spaces`, whose contract is "exactly this scope".
+  it('keeps the global label lookup out of the spaces table', async () => {
+    const { result } = withSetup(() => useMemory())
+    await vi.waitUntil(() => !result.loading.value)
+    vi.mocked(globalThis.fetch)
+      .mockResolvedValueOnce(jsonResponse(200, [{ id: 'p1', slug: 'project-notes' }]))
+      .mockResolvedValueOnce(jsonResponse(200, [{ id: 'g1', slug: 'shared-notes' }]))
+
+    await result.setScope({ scopeKind: 'project', scopeRef: '/tmp/demo' })
+
+    expect(result.spaces.value.map(s => s.id)).toEqual(['p1'])
+    expect(result.globalSpaces.value.map(s => s.id)).toEqual(['g1'])
+  })
+
+  // A ref of pure whitespace is no ref: mem.ParseScope refuses it, so the
+  // hold must read the same trimmed value the request would have sent.
+  it('holds a scope whose ref is only whitespace', async () => {
+    const { result } = withSetup(() => useMemory())
+    await vi.waitUntil(() => !result.loading.value)
+    const callsAfterMount = vi.mocked(globalThis.fetch).mock.calls.length
+
+    await result.setScope({ scopeKind: 'project', scopeRef: '   ' })
+
+    expect(result.held.value).toBe(true)
+    expect(vi.mocked(globalThis.fetch).mock.calls.length).toBe(callsAfterMount)
+  })
+
+  // Read during setup, before onMounted fires the first request: starting at
+  // false paints "No memory spaces in this scope yet." for one frame, which
+  // asserts an answer nothing has given yet.
+  it('starts out loading, before the first request has even been sent', () => {
+    let initialLoading: boolean | undefined
+    const Wrapper = defineComponent({
+      setup() {
+        initialLoading = useMemory().loading.value
+        return {}
+      },
+      template: '<div />',
+    })
+    mount(Wrapper, { attachTo: document.body })
+
+    expect(initialLoading).toBe(true)
+  })
+
   it('treats a 403 on spaces as a capability denial, not a transport error', async () => {
     vi.mocked(globalThis.fetch).mockResolvedValue(jsonResponse(403, { error: 'capability memory.read denied in scope global' }))
     const { result } = withSetup(() => useMemory())
@@ -117,15 +193,21 @@ describe('useMemory', () => {
     expect(result.denied.value).toBeNull()
   })
 
-  it('treats a 403 on entries as a capability denial', async () => {
+  // The search's denial is its own ref. The panel renders `denied` in place
+  // of the whole spaces table, so a refused search written there blanks a
+  // table that loaded perfectly under the same grant check.
+  it('treats a 403 on entries as a capability denial of the search alone', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(jsonResponse(200, [{ id: 's1', slug: 'project-notes' }]))
     const { result } = withSetup(() => useMemory())
     await vi.waitUntil(() => !result.loading.value)
     vi.mocked(globalThis.fetch).mockResolvedValue(jsonResponse(403, { error: 'capability memory.read denied in scope global' }))
 
     await result.searchEntries()
 
-    expect(result.denied.value).toContain('memory.read')
+    expect(result.searchDenied.value).toContain('memory.read')
     expect(result.entries.value).toEqual([])
+    expect(result.denied.value).toBeNull()
+    expect(result.spaces.value).toHaveLength(1)
   })
 
   // F1: setScope used to leave `entries` untouched, so the previous scope's
@@ -167,7 +249,7 @@ describe('useMemory', () => {
 
     await result.searchEntries()
 
-    expect(fetchUrls().some(u => u.includes('/api/memory/entries?') && u.includes('q=binds'))).toBe(true)
+    expect(urlOf(vi.mocked(globalThis.fetch).mock.calls.length - 1)).toBe('/api/memory/entries?scope=global&q=binds')
   })
 
   // F3: a search failure must not touch the spaces `error` ref.
@@ -348,5 +430,220 @@ describe('useMemory', () => {
       confidence: 1,
     })).rejects.toThrow('scope ref')
     expect(vi.mocked(globalThis.fetch)).not.toHaveBeenCalled()
+  })
+
+  // Global scope has no ref, and the server refuses one — a leftover ref from
+  // the scope the user came from must not travel, in either direction.
+  it('never sends a scopeRef at global scope, however stale the one it holds', async () => {
+    const { result } = withSetup(() => useMemory())
+    await vi.waitUntil(() => !result.loading.value)
+    vi.mocked(globalThis.fetch).mockClear()
+
+    await result.setScope({ scopeKind: 'global', scopeRef: '/left/over' })
+    expect(urlOf(0)).toBe('/api/memory/spaces?scope=global')
+
+    vi.mocked(globalThis.fetch).mockClear()
+    await result.createSpace({ slug: 'a', name: 'A' })
+    expect(bodyOf(0)).toEqual({ slug: 'a', name: 'A', scope: 'global', scopeRef: '' })
+  })
+
+  // capability.Match compares the context ref exactly: a write carrying the
+  // padded ref is refused in the very scope whose reads just succeeded.
+  it('writes with the same trimmed scopeRef it reads with', async () => {
+    const { result } = withSetup(() => useMemory())
+    await vi.waitUntil(() => !result.loading.value)
+    await result.setScope({ scopeKind: 'project', scopeRef: '  /tmp/demo  ' })
+    vi.mocked(globalThis.fetch).mockClear()
+
+    await result.createEntry({ ...ENTRY_INPUT })
+
+    expect(bodyOf(0)).toEqual({ ...ENTRY_INPUT, scope: 'project', scopeRef: '/tmp/demo' })
+  })
+
+  // Without the header the server sees no JSON body and answers 400 — a
+  // failure no assertion on the body itself can see.
+  it('declares a JSON content type on every write that carries a body', async () => {
+    const { result } = withSetup(() => useMemory())
+    await vi.waitUntil(() => !result.loading.value)
+    vi.mocked(globalThis.fetch).mockClear()
+
+    await result.createSpace({ slug: 'a', name: 'A' })
+    expect(initOf(0).headers).toEqual({ 'Content-Type': 'application/json' })
+
+    vi.mocked(globalThis.fetch).mockClear()
+    await result.createEntry({ ...ENTRY_INPUT })
+    expect(initOf(0).headers).toEqual({ 'Content-Type': 'application/json' })
+
+    vi.mocked(globalThis.fetch).mockClear()
+    await result.supersedeEntry('e1', 'e2')
+    expect(initOf(0).headers).toEqual({ 'Content-Type': 'application/json' })
+  })
+
+  // A denial that outlives the grant that fixed it tells the user to go fix
+  // something already fixed; an error that outlives the outage does the same.
+  it('clears a stale denial and a stale error before each spaces fetch', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(jsonResponse(403, { error: 'capability memory.read denied in scope global' }))
+    const { result } = withSetup(() => useMemory())
+    await vi.waitUntil(() => !result.loading.value)
+    expect(result.denied.value).not.toBeNull()
+
+    vi.mocked(globalThis.fetch).mockResolvedValue(jsonResponse(200, []))
+    await result.fetchSpaces()
+    expect(result.denied.value).toBeNull()
+
+    vi.mocked(globalThis.fetch).mockResolvedValue(jsonResponse(500, { error: 'boom' }))
+    await result.fetchSpaces()
+    expect(result.error.value).toBe('boom')
+
+    vi.mocked(globalThis.fetch).mockResolvedValue(jsonResponse(200, []))
+    await result.fetchSpaces()
+    expect(result.error.value).toBeNull()
+  })
+
+  // Rows from the last answer must not survive an answer that never came:
+  // they would render under a denial or an error as if they were current.
+  it('drops the spaces it can no longer vouch for when a refetch is refused or fails', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(jsonResponse(200, [{ id: 's1', slug: 'project-notes' }]))
+    const { result } = withSetup(() => useMemory())
+    await vi.waitUntil(() => !result.loading.value)
+    expect(result.spaces.value).toHaveLength(1)
+
+    vi.mocked(globalThis.fetch).mockResolvedValue(jsonResponse(403, { error: 'capability memory.read denied in scope global' }))
+    await result.fetchSpaces()
+    expect(result.spaces.value).toEqual([])
+
+    vi.mocked(globalThis.fetch).mockResolvedValue(jsonResponse(200, [{ id: 's1', slug: 'project-notes' }]))
+    await result.fetchSpaces()
+    vi.mocked(globalThis.fetch).mockRejectedValue(new Error('network down'))
+    await result.fetchSpaces()
+    expect(result.spaces.value).toEqual([])
+    expect(result.error.value).toContain('network down')
+  })
+
+  // The held branch returns before any request: everything the previous scope
+  // put on screen has to go with it, or it reads as this scope's answer.
+  it('clears the spaces table and both notices when the scope stops being answerable', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(jsonResponse(200, [{ id: 's1', slug: 'project-notes' }]))
+    const { result } = withSetup(() => useMemory())
+    await vi.waitUntil(() => !result.loading.value)
+
+    await result.setScope({ scopeKind: 'project', scopeRef: '' })
+    expect(result.spaces.value).toEqual([])
+    expect(result.loading.value).toBe(false)
+
+    vi.mocked(globalThis.fetch).mockResolvedValue(jsonResponse(403, { error: 'capability memory.read denied in scope global' }))
+    await result.setScope({ scopeKind: 'global', scopeRef: '' })
+    expect(result.denied.value).not.toBeNull()
+    await result.setScope({ scopeKind: 'project', scopeRef: '' })
+    expect(result.denied.value).toBeNull()
+
+    vi.mocked(globalThis.fetch).mockResolvedValue(jsonResponse(500, { error: 'boom' }))
+    await result.setScope({ scopeKind: 'global', scopeRef: '' })
+    expect(result.error.value).toBe('boom')
+    await result.setScope({ scopeKind: 'project', scopeRef: '' })
+    expect(result.error.value).toBeNull()
+  })
+
+  it('clears a stale search denial and a stale search error before each search', async () => {
+    const { result } = withSetup(() => useMemory())
+    await vi.waitUntil(() => !result.loading.value)
+
+    vi.mocked(globalThis.fetch).mockResolvedValue(jsonResponse(403, { error: 'capability memory.read denied in scope global' }))
+    await result.searchEntries()
+    expect(result.searchDenied.value).not.toBeNull()
+
+    vi.mocked(globalThis.fetch).mockResolvedValue(jsonResponse(200, []))
+    await result.searchEntries()
+    expect(result.searchDenied.value).toBeNull()
+
+    vi.mocked(globalThis.fetch).mockResolvedValue(jsonResponse(500, { error: 'search boom' }))
+    await result.searchEntries()
+    expect(result.searchError.value).toBe('search boom')
+
+    vi.mocked(globalThis.fetch).mockResolvedValue(jsonResponse(200, []))
+    await result.searchEntries()
+    expect(result.searchError.value).toBeNull()
+  })
+
+  // `searched` is what licenses the panel to say "found nothing" — a refused
+  // or failed search knows nothing about what matches, so it withdraws it.
+  it('drops the hits and the answer it can no longer vouch for when a search is refused or fails', async () => {
+    const { result } = withSetup(() => useMemory())
+    await vi.waitUntil(() => !result.loading.value)
+    vi.mocked(globalThis.fetch).mockResolvedValue(jsonResponse(200, [HIT]))
+    await result.searchEntries()
+    expect(result.entries.value).toHaveLength(1)
+    expect(result.searched.value).toBe(true)
+
+    vi.mocked(globalThis.fetch).mockResolvedValue(jsonResponse(403, { error: 'capability memory.read denied in scope global' }))
+    await result.searchEntries()
+    expect(result.entries.value).toEqual([])
+    expect(result.searched.value).toBe(false)
+
+    vi.mocked(globalThis.fetch).mockResolvedValue(jsonResponse(200, [HIT]))
+    await result.searchEntries()
+    vi.mocked(globalThis.fetch).mockRejectedValue(new Error('network down'))
+    await result.searchEntries()
+    expect(result.entries.value).toEqual([])
+    expect(result.searched.value).toBe(false)
+  })
+
+  it('clears the hits, the search denial and the answered flag when a search is held', async () => {
+    const { result } = withSetup(() => useMemory())
+    await vi.waitUntil(() => !result.loading.value)
+    vi.mocked(globalThis.fetch).mockResolvedValue(jsonResponse(200, [HIT]))
+    await result.searchEntries()
+    expect(result.entries.value).toHaveLength(1)
+
+    // Driven through the scope ref the composable owns rather than setScope:
+    // setScope clears the hits itself, so it cannot show whether the guard
+    // does too.
+    result.scope.value = { scopeKind: 'project', scopeRef: '' }
+    await result.searchEntries()
+    expect(result.entries.value).toEqual([])
+    expect(result.searched.value).toBe(false)
+
+    result.scope.value = { scopeKind: 'global', scopeRef: '' }
+    vi.mocked(globalThis.fetch).mockResolvedValue(jsonResponse(403, { error: 'capability memory.read denied in scope global' }))
+    await result.searchEntries()
+    expect(result.searchDenied.value).not.toBeNull()
+
+    result.scope.value = { scopeKind: 'project', scopeRef: '' }
+    await result.searchEntries()
+    expect(result.searchDenied.value).toBeNull()
+  })
+
+  // The new scope has not been searched, so nothing may claim it was.
+  it('withdraws the previous scope\'s search answer when the scope changes', async () => {
+    const { result } = withSetup(() => useMemory())
+    await vi.waitUntil(() => !result.loading.value)
+    vi.mocked(globalThis.fetch).mockResolvedValue(jsonResponse(200, [HIT]))
+    await result.searchEntries()
+    expect(result.searched.value).toBe(true)
+
+    await result.setScope({ scopeKind: 'project', scopeRef: '/tmp/demo' })
+
+    expect(result.searched.value).toBe(false)
+    expect(result.searchDenied.value).toBeNull()
+  })
+
+  // "Searching" is its own state: without it an in-flight search and an
+  // answered-empty one are the same empty list.
+  it('reports a search as in flight until it answers', async () => {
+    const { result } = withSetup(() => useMemory())
+    await vi.waitUntil(() => !result.loading.value)
+    let release!: (res: Response) => void
+    vi.mocked(globalThis.fetch).mockReturnValue(new Promise<Response>((resolve) => {
+      release = resolve
+    }))
+
+    const pending = result.searchEntries()
+    expect(result.searching.value).toBe(true)
+
+    release(jsonResponse(200, []))
+    await pending
+
+    expect(result.searching.value).toBe(false)
+    expect(result.searched.value).toBe(true)
   })
 })

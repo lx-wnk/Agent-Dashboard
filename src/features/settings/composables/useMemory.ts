@@ -82,6 +82,13 @@ export interface MemoryScope {
 
 const GLOBAL_SCOPE: MemoryScope = { scopeKind: 'global', scopeRef: '' }
 
+// States only what is known. handler.go's authorize() maps every Gate.Authorize
+// failure to 403 — a missing grant, a rate limit and a failed read of the grant
+// store alike — so neither fallback names a cause. The likely one is named once,
+// by the notice that renders these (cf. useStageInjections' DENIED_FALLBACK).
+const READ_DENIED_FALLBACK = 'The memory route refused this read (HTTP 403) without giving a reason.'
+const WRITE_DENIED_FALLBACK = 'The memory route refused this write (HTTP 403) without giving a reason.'
+
 async function readError(res: Response, fallback: string): Promise<string> {
   const body = await res.json().catch(() => ({ error: fallback })) as { error?: string }
   return body.error || fallback
@@ -115,6 +122,15 @@ export function useMemory() {
   // Held apart from `error`: a 403 means the capability gate refused, which is
   // a configuration state with a known fix, not a failure of the request.
   const denied = ref<string | null>(null)
+  // Own ref from `denied` for the same reason `searchError` is own from
+  // `error`: the panel renders `denied` in place of the spaces table, so a
+  // search refused in a scope whose spaces loaded perfectly would otherwise
+  // blank a table the read grant legitimately filled.
+  const searchDenied = ref<string | null>(null)
+  // In flight, and answered-with-rows. Without both, "searching", "never
+  // asked" and "found nothing" are one identical empty list.
+  const searching = ref(false)
+  const searched = ref(false)
 
   // True while a non-global scope has no ref yet — the request below is
   // deliberately held rather than fired (see the guard in fetchSpaces and
@@ -138,7 +154,7 @@ export function useMemory() {
     try {
       const res = await fetch(`/api/memory/spaces?${scopeParams(scope.value).toString()}`)
       if (res.status === 403) {
-        denied.value = await readError(res, 'memory.read is not granted in this scope')
+        denied.value = await readError(res, READ_DENIED_FALLBACK)
         spaces.value = []
         return
       }
@@ -178,27 +194,37 @@ export function useMemory() {
     if (held.value) {
       entries.value = []
       searchError.value = null
-      denied.value = null
+      searchDenied.value = null
+      searched.value = false
       return
     }
     searchError.value = null
-    denied.value = null
+    searchDenied.value = null
+    searching.value = true
     try {
       const params = scopeParams(scope.value)
       params.set('q', searchText.value)
       const res = await fetch(`/api/memory/entries?${params.toString()}`)
       if (res.status === 403) {
-        denied.value = await readError(res, 'memory.read is not granted in this scope')
+        searchDenied.value = await readError(res, READ_DENIED_FALLBACK)
         entries.value = []
+        searched.value = false
         return
       }
       if (!res.ok)
         throw new Error(await readError(res, `HTTP ${res.status}`))
       entries.value = await res.json()
+      // Only a request that answered with rows licenses "found nothing" —
+      // a refused or failed one leaves the panel not knowing either way.
+      searched.value = true
     }
     catch (e) {
       searchError.value = errorMessage(e, 'Failed to search memory')
       entries.value = []
+      searched.value = false
+    }
+    finally {
+      searching.value = false
     }
   }
 
@@ -209,6 +235,8 @@ export function useMemory() {
     // was earned" defect this panel exists to avoid, inverted.
     entries.value = []
     searchError.value = null
+    searchDenied.value = null
+    searched.value = false
     await fetchSpaces()
     await fetchGlobalSpacesForLabels()
   }
@@ -237,7 +265,7 @@ export function useMemory() {
   async function send(url: string, init: RequestInit, fallback: string): Promise<void> {
     const res = await fetch(url, init)
     if (res.status === 403)
-      throw new MemoryWriteDeniedError(await readError(res, 'memory.write is not granted in this scope'))
+      throw new MemoryWriteDeniedError(await readError(res, WRITE_DENIED_FALLBACK))
     if (!res.ok)
       throw new Error(await readError(res, fallback))
   }
@@ -281,5 +309,5 @@ export function useMemory() {
     void fetchSpaces()
   })
 
-  return { spaces, globalSpaces, entries, scope, searchText, loading, error, searchError, denied, held, fetchSpaces, searchEntries, setScope, createSpace, createEntry, supersedeEntry, expireEntry }
+  return { spaces, globalSpaces, entries, scope, searchText, loading, error, searchError, denied, searchDenied, searching, searched, held, fetchSpaces, searchEntries, setScope, createSpace, createEntry, supersedeEntry, expireEntry }
 }

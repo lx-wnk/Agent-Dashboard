@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 import MemorySettings from '@/features/settings/components/MemorySettings.vue'
 import { MemoryWriteDeniedError, useMemory } from '@/features/settings/composables/useMemory'
+import { selectByLabel } from '@/utils/testSelect'
 
 vi.mock('@/features/settings/composables/useMemory', async () => {
   const actual = await vi.importActual<typeof import('@/features/settings/composables/useMemory')>('@/features/settings/composables/useMemory')
@@ -49,8 +50,12 @@ describe('memorySettings', () => {
   let error: Ref<string | null>
   let searchError: Ref<string | null>
   let denied: Ref<string | null>
+  let searchDenied: Ref<string | null>
+  let searching: Ref<boolean>
+  let searched: Ref<boolean>
   let held: Ref<boolean>
   let globalSpaces: Ref<MemorySpace[]>
+  let fetchSpaces: ReturnType<typeof vi.fn>
   let searchEntries: ReturnType<typeof vi.fn>
   let setScope: ReturnType<typeof vi.fn>
   let createSpace: ReturnType<typeof vi.fn>
@@ -67,10 +72,15 @@ describe('memorySettings', () => {
     error = ref(null)
     searchError = ref(null)
     denied = ref(null)
+    searchDenied = ref(null)
+    searching = ref(false)
+    searched = ref(false)
     held = ref(false)
     globalSpaces = ref([])
+    fetchSpaces = vi.fn()
     searchEntries = vi.fn(async () => {
       entries.value = [{ ...baseHit }]
+      searched.value = true
     })
     setScope = vi.fn(async () => {})
     createSpace = vi.fn(async () => {})
@@ -88,8 +98,11 @@ describe('memorySettings', () => {
       error,
       searchError,
       denied,
+      searchDenied,
+      searching,
+      searched,
       held,
-      fetchSpaces: vi.fn(),
+      fetchSpaces,
       searchEntries,
       setScope,
       createSpace,
@@ -230,7 +243,7 @@ describe('memorySettings', () => {
 
     await wrapper.get('[data-testid="memory-space-new"]').trigger('click')
     await wrapper.get('[data-testid="memory-space-slug"]').setValue('  new-space  ')
-    await wrapper.get('[data-testid="memory-space-name"]').setValue('New space')
+    await wrapper.get('[data-testid="memory-space-name"]').setValue('  New space  ')
     await wrapper.get('[data-testid="memory-space-submit"]').trigger('click')
     await flushPromises()
 
@@ -305,8 +318,8 @@ describe('memorySettings', () => {
     await wrapper.get('[data-testid="memory-entry-space"]').setValue('project-notes')
     await wrapper.get('[data-testid="memory-entry-summary"]').setValue('Binds to loopback')
     await wrapper.get('[data-testid="memory-entry-content"]').setValue('The server binds 127.0.0.1 only.')
-    await wrapper.get('[data-testid="memory-entry-kind"]').setValue('lesson')
-    await wrapper.get('[data-testid="memory-entry-source-kind"]').setValue('agent')
+    await selectByLabel(wrapper.get('[data-testid="memory-entry-kind"]').element, 'lesson')
+    await selectByLabel(wrapper.get('[data-testid="memory-entry-source-kind"]').element, 'agent')
     await wrapper.get('[data-testid="memory-entry-submit"]').trigger('click')
     await flushPromises()
 
@@ -410,5 +423,287 @@ describe('memorySettings', () => {
 
     expect(wrapper.find('[data-testid="memory-space-new"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="memory-entry-new"]').exists()).toBe(true)
+  })
+
+  // The search's denial is not the panel's denial: the spaces table above it
+  // answered the same grant check successfully, and blanking it loses both
+  // the rows and the retry path.
+  it('renders a denied search inline, leaving the loaded spaces table in place', () => {
+    searchDenied.value = 'capability memory.read denied in scope global'
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+
+    const notice = wrapper.get('[data-testid="memory-search-denied"]')
+    expect(notice.text()).toContain('memory.read denied in scope global')
+    expect(wrapper.find('[data-testid="memory-space-s1"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="memory-denied"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="memory-empty"]').exists()).toBe(false)
+  })
+
+  // "Found nothing", "never asked" and "still asking" were one identical
+  // blank: the hits were a bare v-for with no empty branch at all.
+  it('tells a search that found nothing apart from one that never ran', async () => {
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+
+    expect(wrapper.get('[data-testid="memory-entries-unsearched"]').text()).toContain('No search')
+    expect(wrapper.find('[data-testid="memory-entries-empty"]').exists()).toBe(false)
+
+    searchEntries.mockImplementation(async () => {
+      entries.value = []
+      searched.value = true
+    })
+    await wrapper.get('[data-testid="memory-search-submit"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="memory-entries-empty"]').text()).toContain('No entries matched')
+    expect(wrapper.find('[data-testid="memory-entries-unsearched"]').exists()).toBe(false)
+  })
+
+  it('tells an in-flight search and a held one apart from both', async () => {
+    searching.value = true
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+
+    expect(wrapper.find('[data-testid="memory-entries-searching"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="memory-entries-unsearched"]').exists()).toBe(false)
+
+    searching.value = false
+    held.value = true
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="memory-entries-held"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="memory-entries-empty"]').exists()).toBe(false)
+  })
+
+  // A refused search says nothing about what matches, so the four-state
+  // region stays silent and lets the denial notice speak.
+  it('leaves the hit-state region silent while a denial or a failure explains it', async () => {
+    searchDenied.value = 'capability memory.read denied in scope global'
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+
+    expect(wrapper.get('[data-testid="memory-entries-status"]').text()).toBe('')
+
+    searchDenied.value = null
+    searchError.value = 'search boom'
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="memory-entries-status"]').text()).toBe('')
+  })
+
+  // handler.go maps every Gate.Authorize failure to 403 — a rate limit and a
+  // failed grant-store read included — so the panel may not name a cause the
+  // server never distinguished. The server's own message leads.
+  it('leads a read denial with the server message and demotes the grant advice to a likely cause', () => {
+    denied.value = 'grant g1 allows 1 use per 60s; 1 already used'
+    spaces.value = []
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+
+    const text = wrapper.get('[data-testid="memory-denied"]').text()
+    expect(text.startsWith('grant g1 allows 1 use per 60s; 1 already used')).toBe(true)
+    expect(text).toContain('Most likely cause')
+  })
+
+  it('leads a write denial with the server message and demotes the grant advice the same way', async () => {
+    createSpace.mockRejectedValue(new MemoryWriteDeniedError('grant g2 allows 1 use per 60s; 1 already used'))
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+
+    await wrapper.get('[data-testid="memory-space-new"]').trigger('click')
+    await wrapper.get('[data-testid="memory-space-slug"]').setValue('new-space')
+    await wrapper.get('[data-testid="memory-space-submit"]').trigger('click')
+    await flushPromises()
+
+    const text = wrapper.get('[data-testid="memory-space-error"]').text()
+    expect(text.startsWith('grant g2 allows 1 use per 60s; 1 already used')).toBe(true)
+    expect(text).toContain('Most likely cause')
+  })
+
+  // Ten sibling panels label their controls; these two selects had no
+  // accessible name at all — a screen reader announced "combo box" twice.
+  it('gives every control in the panel a label bound to its id', async () => {
+    scope.value = { scopeKind: 'project', scopeRef: '/tmp/demo' }
+    entries.value = [{ ...baseHit }]
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+    await wrapper.get('[data-testid="memory-space-new"]').trigger('click')
+    await wrapper.get('[data-testid="memory-entry-new"]').trigger('click')
+    await wrapper.get('[data-testid="memory-supersede-e1"]').trigger('click')
+
+    const root = wrapper.element as HTMLElement
+    const controls = Array.from(root.querySelectorAll('input, textarea, [role="combobox"]'))
+    expect(controls).toHaveLength(10)
+    for (const control of controls) {
+      const id = control.getAttribute('id')
+      expect(id, `no id on ${control.outerHTML}`).toBeTruthy()
+      expect(root.querySelector(`label[for="${id}"]`), `no label for #${id}`).not.toBeNull()
+    }
+  })
+
+  // A toggle whose label never changes ("+ New space" either way) is the
+  // only cue that the form can be dismissed again.
+  it('reports on each form toggle whether its form is open', async () => {
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+
+    for (const testid of ['memory-space-new', 'memory-entry-new']) {
+      const toggle = wrapper.get(`[data-testid="${testid}"]`)
+      expect(toggle.attributes('aria-expanded')).toBe('false')
+      await toggle.trigger('click')
+      expect(toggle.attributes('aria-expanded')).toBe('true')
+    }
+  })
+
+  // Closing the form unmounts the button that has focus, which drops it to
+  // <body> and loses the keyboard user's place in a long panel.
+  it('returns focus to the toggle that opened a form when the form closes', async () => {
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+    const toggle = wrapper.get('[data-testid="memory-space-new"]')
+    await toggle.trigger('click')
+    ;(wrapper.get('[data-testid="memory-space-submit"]').element as HTMLElement).focus()
+
+    await wrapper.get('[data-testid="memory-space-slug"]').setValue('new-space')
+    await wrapper.get('[data-testid="memory-space-submit"]').trigger('click')
+    await flushPromises()
+
+    expect(document.activeElement).toBe(toggle.element)
+  })
+
+  it('returns focus to the row control that opened an inline confirm', async () => {
+    entries.value = [{ ...baseHit }]
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+
+    await wrapper.get('[data-testid="memory-expire-e1"]').trigger('click')
+    await wrapper.get('[data-testid="memory-expire-confirm-e1"]').trigger('click')
+    await flushPromises()
+
+    expect(document.activeElement).toBe(wrapper.get('[data-testid="memory-expire-e1"]').element)
+  })
+
+  // A form that just closed leaves nothing on screen to read: the outcome of
+  // a write reaches a screen reader only through a live region.
+  it('announces a successful write through an always-mounted live region', async () => {
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+    const live = wrapper.get('[data-testid="memory-announcement"]')
+    expect(live.attributes('role')).toBe('status')
+    expect(live.attributes('aria-live')).toBe('polite')
+    expect(live.text()).toBe('')
+
+    await wrapper.get('[data-testid="memory-space-new"]').trigger('click')
+    await wrapper.get('[data-testid="memory-space-slug"]').setValue('new-space')
+    await wrapper.get('[data-testid="memory-space-submit"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="memory-announcement"]').text()).toContain('new-space')
+  })
+
+  it('announces a superseded and an expired entry too', async () => {
+    entries.value = [{ ...baseHit }]
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+
+    await wrapper.get('[data-testid="memory-supersede-e1"]').trigger('click')
+    await wrapper.get('[data-testid="memory-supersede-input-e1"]').setValue('e2')
+    await wrapper.get('[data-testid="memory-supersede-confirm-e1"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="memory-announcement"]').text()).toContain('superseded')
+
+    await wrapper.get('[data-testid="memory-expire-e1"]').trigger('click')
+    await wrapper.get('[data-testid="memory-expire-confirm-e1"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="memory-announcement"]').text()).toContain('expired')
+  })
+
+  // A live region mounted together with its text is not announced: it has to
+  // already be in the DOM when the content changes.
+  it('keeps the loading/held live region mounted while it has nothing to say', async () => {
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+    const live = wrapper.get('[data-testid="memory-status"]')
+    expect(live.attributes('role')).toBe('status')
+    expect(live.attributes('aria-live')).toBe('polite')
+    expect(live.text()).toBe('')
+
+    loading.value = true
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="memory-status"]').element).toBe(live.element)
+    expect(wrapper.get('[data-testid="memory-loading"]').text()).toContain('Loading')
+  })
+
+  // Without this the only way out of a failed load is a two-click scope
+  // detour that nothing on screen signposts.
+  it('offers a retry on the error state', async () => {
+    error.value = 'HTTP 500'
+    spaces.value = []
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+
+    await wrapper.get('[data-testid="memory-retry"]').trigger('click')
+
+    expect(fetchSpaces).toHaveBeenCalled()
+  })
+
+  it('refuses to create an entry without a space, a summary and content', async () => {
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+
+    await wrapper.get('[data-testid="memory-entry-new"]').trigger('click')
+    await wrapper.get('[data-testid="memory-entry-summary"]').setValue('Binds to loopback')
+    await wrapper.get('[data-testid="memory-entry-submit"]').trigger('click')
+    await flushPromises()
+
+    expect(createEntry).not.toHaveBeenCalled()
+    expect(wrapper.get('[data-testid="memory-entry-error"]').text()).toContain('required')
+  })
+
+  it('refuses to supersede without a replacement id, and says so in that row', async () => {
+    entries.value = [{ ...baseHit }]
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+
+    await wrapper.get('[data-testid="memory-supersede-e1"]').trigger('click')
+    await wrapper.get('[data-testid="memory-supersede-input-e1"]').setValue('   ')
+    await wrapper.get('[data-testid="memory-supersede-confirm-e1"]').trigger('click')
+    await flushPromises()
+
+    expect(supersedeEntry).not.toHaveBeenCalled()
+    expect(wrapper.get('[data-testid="memory-entry-action-error-e1"]').text()).toContain('required')
+  })
+
+  // Same reason the create form trims: capability.Match compares exactly, and
+  // a padded id is also simply not an id.
+  it('sends the trimmed replacement id', async () => {
+    entries.value = [{ ...baseHit }]
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+
+    await wrapper.get('[data-testid="memory-supersede-e1"]').trigger('click')
+    await wrapper.get('[data-testid="memory-supersede-input-e1"]').setValue('  e2  ')
+    await wrapper.get('[data-testid="memory-supersede-confirm-e1"]').trigger('click')
+    await flushPromises()
+
+    expect(supersedeEntry).toHaveBeenCalledWith('e1', 'e2')
+  })
+
+  // setScope clears the hits and refetches; re-running it for the scope that
+  // is already selected throws away a search the user just ran.
+  it('ignores a click on the scope that is already selected', async () => {
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+
+    await wrapper.get('[data-testid="memory-scope-global"]').trigger('click')
+    await flushPromises()
+
+    expect(setScope).not.toHaveBeenCalled()
+  })
+
+  // The server refuses a ref on global, so the form never offers it one —
+  // the mirror image of ResourceSettings.selectScopeKind.
+  it('drops the scope ref when switching to global', async () => {
+    scope.value = { scopeKind: 'project', scopeRef: '/tmp/demo' }
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+
+    await wrapper.get('[data-testid="memory-scope-global"]').trigger('click')
+    await flushPromises()
+
+    expect(setScope).toHaveBeenCalledWith({ scopeKind: 'global', scopeRef: '' })
+  })
+
+  it('carries the current ref over when switching between two ref-bearing scopes', async () => {
+    scope.value = { scopeKind: 'project', scopeRef: '/tmp/demo' }
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+
+    await wrapper.get('[data-testid="memory-scope-application"]').trigger('click')
+    await flushPromises()
+
+    expect(setScope).toHaveBeenCalledWith({ scopeKind: 'application', scopeRef: '/tmp/demo' })
   })
 })
