@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
+	"github.com/lx-wnk/agent-dashboard/server/internal/secretbox"
 	settingssvc "github.com/lx-wnk/agent-dashboard/server/internal/settings"
 )
 
@@ -61,7 +62,7 @@ func (h *Handler) list(w http.ResponseWriter, _ *http.Request) error {
 
 func (h *Handler) patch(w http.ResponseWriter, r *http.Request) error {
 	key := chi.URLParam(r, "key")
-	_, ok := settingssvc.Lookup(key)
+	def, ok := settingssvc.Lookup(key)
 	if !ok {
 		return fmt.Errorf("%w: unknown setting %q", apierr.ErrBadRequest, key)
 	}
@@ -78,10 +79,17 @@ func (h *Handler) patch(w http.ResponseWriter, r *http.Request) error {
 		}
 		return fmt.Errorf("settings.patch: %w", err)
 	}
+	// A secret value is never echoed back, even the one just submitted: the
+	// caller already has it, and a response body is more places for it to
+	// leak (logs, proxies, devtools history) than it needs to be.
+	respValue := body.Value
+	if def.Secret {
+		respValue = secretbox.MaskedSentinel
+	}
 	w.Header().Set("Content-Type", "application/json")
 	return json.NewEncoder(w).Encode(map[string]string{
 		"key":     key,
-		"value":   body.Value,
+		"value":   respValue,
 		"applied": string(h.svc.ApplyOf(key)),
 	})
 }

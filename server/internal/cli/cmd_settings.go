@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/secretbox"
 	"github.com/lx-wnk/agent-dashboard/server/internal/settings"
 )
 
@@ -82,7 +83,14 @@ func newSettingsCmd() *cobra.Command {
 			if err := s.SetValidated(ctx, args[0], args[1]); err != nil {
 				return err
 			}
-			fmt.Printf("set %s = %s\n", args[0], args[1])
+			// Never echo a secret value back, even the one just typed: it
+			// would land in terminal scrollback, tmux capture-pane, or a
+			// redirected log file.
+			display := args[1]
+			if d, ok := settings.Lookup(args[0]); ok && d.Secret {
+				display = secretbox.MaskedSentinel
+			}
+			fmt.Printf("set %s = %s\n", args[0], display)
 			return nil
 		})
 	}}
