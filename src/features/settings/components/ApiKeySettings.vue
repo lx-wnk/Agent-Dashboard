@@ -14,6 +14,7 @@ import { useTheme } from '@/composables/useTheme'
 import { toast } from '@/composables/useToast'
 import { useUser } from '@/composables/useUser'
 import GrantSettings from '@/features/settings/components/GrantSettings.vue'
+import ObsidianSettings from '@/features/settings/components/ObsidianSettings.vue'
 import PipelineConfigSettings from '@/features/settings/components/PipelineConfigSettings.vue'
 import ProjectSettings from '@/features/settings/components/ProjectSettings.vue'
 import RemoteSettings from '@/features/settings/components/RemoteSettings.vue'
@@ -42,7 +43,7 @@ function reopenOnboarding() {
 }
 
 // --- Nav ---
-type Section = 'appearance' | 'apiKeys' | 'grants' | 'remotes' | 'permissionPresets' | 'analytics' | 'systemPrompts' | 'plugins' | 'notifications' | 'providers' | 'tracker' | 'projects' | 'spawners' | 'pipelineConfig' | 'server'
+type Section = 'appearance' | 'apiKeys' | 'grants' | 'remotes' | 'permissionPresets' | 'analytics' | 'systemPrompts' | 'plugins' | 'notifications' | 'providers' | 'tracker' | 'projects' | 'spawners' | 'pipelineConfig' | 'server' | 'obsidian'
 const activeSection = ref<Section>('appearance')
 
 // Nav model — drives the sidebar list. requiresAuth items only show when auth is on.
@@ -50,6 +51,7 @@ const SECTIONS: readonly { id: Section, icon: string, label: string, requiresAut
   { id: 'appearance', icon: '◑', label: 'Appearance' },
   { id: 'apiKeys', icon: '⬡', label: 'API Keys' },
   { id: 'grants', icon: '🛡', label: 'Grants' },
+  { id: 'obsidian', icon: '🗒', label: 'Obsidian' },
   { id: 'remotes', icon: '⌂', label: 'My Remotes', requiresAuth: true },
   { id: 'permissionPresets', icon: '⚿', label: 'Permissions' },
   { id: 'analytics', icon: '📊', label: 'Analytics' },
@@ -630,6 +632,11 @@ const { isImporting, importStatus, start: startImport } = useHistoryImport()
         <!-- Grants -->
         <section v-else-if="activeSection === 'grants'">
           <GrantSettings />
+        </section>
+
+        <!-- Obsidian -->
+        <section v-else-if="activeSection === 'obsidian'">
+          <ObsidianSettings />
         </section>
 
         <!-- Remotes -->
