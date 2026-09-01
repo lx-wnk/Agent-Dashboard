@@ -68,3 +68,26 @@ func TestBuildObsidianClient_MissingVaultRootIsAnError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "obsidian.vaultRoot")
 }
+
+// TestEnsureObsidianSpace_IdempotentWithStableID pins the two properties
+// IndexNotes' spaceID argument depends on: a second call must not create a
+// second row, and the id a caller captured from the first call must still
+// resolve the same space after the second.
+func TestEnsureObsidianSpace_IdempotentWithStableID(t *testing.T) {
+	bundle, err := db.Open(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+	resources := repo.NewResourceRepo(bundle.Client)
+
+	first, err := ensureObsidianSpace(t.Context(), resources)
+	require.NoError(t, err)
+	assert.Equal(t, "obsidian", first.Slug)
+
+	second, err := ensureObsidianSpace(t.Context(), resources)
+	require.NoError(t, err)
+	assert.Equal(t, first.ID, second.ID, "a second call must resolve the same row, not create a new one")
+
+	rows, err := resources.ListForKind(t.Context(), repo.ResourceKindMemorySpace)
+	require.NoError(t, err)
+	assert.Len(t, rows, 1, "want exactly one memory_space resource after two calls")
+}

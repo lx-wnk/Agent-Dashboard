@@ -33,6 +33,7 @@ import (
 	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/hooks"
 	apimemory "github.com/lx-wnk/agent-dashboard/server/internal/api/memory"
+	apiobsidian "github.com/lx-wnk/agent-dashboard/server/internal/api/obsidian"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/onboarding"
 	planapi "github.com/lx-wnk/agent-dashboard/server/internal/api/plan"
 	apiplugins "github.com/lx-wnk/agent-dashboard/server/internal/api/plugins"
@@ -290,8 +291,13 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	// obsidianClient is nil when the vault is unconfigured (buildObsidianClient's
 	// own doc comment covers why that is not an error) and stays nil without
 	// a database, since Register and the capability catalogue it depends on
-	// need entClient too.
+	// need entClient too. obsidianSpaceID is set unconditionally alongside
+	// obsidian.Register below, regardless of whether the vault itself is
+	// configured — a memory space is cheap to hold ready, and the trigger
+	// handler needs it wired the moment a vault is configured, not after a
+	// restart.
 	var obsidianClient *obsidian.Client
+	var obsidianSpaceID string
 	if entClient != nil {
 		memRepo = repo.NewMemoryRepo(entClient, bundle.WriteClient)
 		memRetriever = memory.NewRetriever(bundle.DB, memRepo)
@@ -328,20 +334,28 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		// Register declares. Idempotent, so safe on every boot.
 		//
 		// obsidian.IndexNotes is the function that checks obsidian.search
-		// and obsidian.read against this catalogue, but nothing calls it in
-		// production yet — today it is exercised only by its own package
-		// tests. Client.Write and Client.Delete have no caller anywhere
-		// either.
+		// and obsidian.read against this catalogue; POST /api/obsidian/index
+		// (obsidianHandler below) is its production caller. Client.Write and
+		// Client.Delete still have no caller anywhere.
 		if err := obsidian.Register(ctx, resourceRepo, capabilityRepo); err != nil {
 			return nil, fmt.Errorf("obsidian: register application: %w", err)
 		}
 
+		// IndexNotes takes a spaceID and memory spaces are never
+		// auto-created (repo.MemoryRepo.CreateSpace is always caller-driven)
+		// — without this, the trigger below would 500 on a fresh install
+		// with nothing to resolve. Idempotent, same as Register just above.
+		obsidianSpace, err := ensureObsidianSpace(ctx, resourceRepo)
+		if err != nil {
+			return nil, fmt.Errorf("obsidian: ensure memory space: %w", err)
+		}
+		obsidianSpaceID = obsidianSpace.ID
+
 		// Construct the vault client from settings so it exists once the
 		// operator configures it, rather than only once something reads
-		// obsidian.IndexNotes — that call does not exist anywhere in this
-		// file yet. buildObsidianClient returns nil, nil when unconfigured;
-		// a half-configured vault fails the boot instead of silently
-		// disabling itself (see its own doc comment for why).
+		// obsidian.IndexNotes. buildObsidianClient returns nil, nil when
+		// unconfigured; a half-configured vault fails the boot instead of
+		// silently disabling itself (see its own doc comment for why).
 		obsidianClient, err = buildObsidianClient(ctx, settingsSvc)
 		if err != nil {
 			return nil, fmt.Errorf("obsidian: build client: %w", err)
@@ -635,6 +649,25 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		})
 	}
 
+	// Obsidian manual trigger — POST /api/obsidian/index. Unlike memoryHandler
+	// just above (built with askerArg because a human is waiting on that
+	// request), this Gate carries no Asker: the same reasoning
+	// AuthorizeMemory's closure documents for the pipeline's memory push
+	// (di_pipeline.go) applies here — nobody is watching this run resolve a
+	// capability question, so an ask decision must deny rather than hold the
+	// HTTP response open for a human who is not there. Mounted even when
+	// obsidianClient is nil (vault unconfigured); the handler itself answers
+	// 503 for that case rather than the route not existing at all, mirroring
+	// how auth.Handler stays mounted with a nil OAuthProvider.
+	var obsidianHandler *apiobsidian.Handler
+	if entClient != nil {
+		obsidianHandler = apiobsidian.NewHandler(obsidianClient, memRepo, memory.Gate{
+			Capabilities: repo.NewCapabilityRepo(entClient),
+			Grants:       repo.NewGrantRepo(entClient),
+			GrantUsage:   grantUsageRepo,
+		}, obsidianSpaceID)
+	}
+
 	// Eval / drift-detection subsystem. The onDrift callback is the only outward
 	// hook — eval/ stays notifications-agnostic; wiring lives here in the root.
 	var evalService *eval.Service
@@ -850,6 +883,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		SearchHandler:          searchHandler,
 		HistoryHandler:         historyHandler,
 		MemoryHandler:          memoryHandler,
+		ObsidianHandler:        obsidianHandler,
 		RefineHandler:          refineHandler,
 		PlanHandler:            planHandler,
 		AnalyticsHandler:       analyticsHandler,

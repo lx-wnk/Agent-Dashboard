@@ -31,6 +31,7 @@ import (
 	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/hooks"
 	apimemory "github.com/lx-wnk/agent-dashboard/server/internal/api/memory"
+	apiobsidian "github.com/lx-wnk/agent-dashboard/server/internal/api/obsidian"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/onboarding"
 	planapi "github.com/lx-wnk/agent-dashboard/server/internal/api/plan"
 	apiplugins "github.com/lx-wnk/agent-dashboard/server/internal/api/plugins"
@@ -172,6 +173,7 @@ type RouterDeps struct {
 	SearchHandler          *search.Handler
 	HistoryHandler         *apihistory.Handler
 	MemoryHandler          *apimemory.Handler
+	ObsidianHandler        *apiobsidian.Handler
 	RefineHandler          *refineapi.Handler
 	PlanHandler            *planapi.Handler
 	AnalyticsHandler       *apianalytics.Handler
@@ -417,6 +419,14 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 		if deps.MemoryHandler != nil {
 			deps.MemoryHandler.Mount(r)
+		}
+
+		// Obsidian's manual index trigger stays session-authenticated like
+		// every other write path in this group, same as grants above: it
+		// runs a real write into the memory store, never mounted in the
+		// hook/MCP bearer-token bypass group.
+		if deps.ObsidianHandler != nil {
+			deps.ObsidianHandler.Mount(r)
 		}
 
 		if deps.RefineHandler != nil {

@@ -32,10 +32,14 @@ const summaryMaxRunes = 200
 // it is required to perform is not a smaller signature, it is a broken one.
 //
 // This is the only production path that reaches Client.Search or
-// Client.Read. The gate lives here, not in Client itself: Client.Read,
-// Client.Write, Client.Search and Client.Delete take no capability repos
-// and enforce nothing, so a future caller that reaches the vault client
-// directly instead of through IndexNotes bypasses this check entirely.
+// Client.Read: POST /api/obsidian/index (internal/api/obsidian.Handler) is
+// IndexNotes' production caller, built with a memory.Gate that carries no
+// Asker (see its construction in serverapp/di.go) since nobody is watching
+// that run to answer for it. The gate lives here, not in Client itself:
+// Client.Read, Client.Write, Client.Search and Client.Delete take no
+// capability repos and enforce nothing, so a future caller that reaches the
+// vault client directly instead of through IndexNotes bypasses this check
+// entirely. Client.Write and Client.Delete still have no caller anywhere.
 //
 // A previous run's pointers are reconciled on every call: a note that
 // disappeared from the vault since it was indexed is discovered by directly
