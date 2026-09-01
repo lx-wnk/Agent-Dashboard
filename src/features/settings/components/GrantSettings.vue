@@ -12,6 +12,7 @@ import {
   useGrants,
 } from '@/features/settings/composables/useGrants'
 import { errorMessage } from '@/utils/errorMessage'
+import { formatDateTime, formatScope } from '@/utils/format'
 
 const { grants, capabilities, loading, fetchGrants, createGrant, revokeGrant } = useGrants()
 
@@ -130,16 +131,6 @@ async function handleRevoke(id: string) {
 }
 
 // ── Display helpers ──────────────────────────────────────────────────────────
-function formatDate(iso: string | null) {
-  if (!iso)
-    return '—'
-  return new Date(iso).toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-}
-
-function formatContext(kind: string, ref: string): string {
-  return ref ? `${kind}: ${ref}` : kind
-}
-
 function formatLimit(count: number, windowSeconds: number): string {
   return count > 0 ? `${count} / ${windowSeconds}s` : 'unlimited'
 }
@@ -198,14 +189,23 @@ function isLegacy(grantedBy: string): boolean {
       />
     </div>
 
-    <div v-if="loading" role="status" class="text-center py-12 text-fg-mute text-sm">
-      Loading grants...
+    <!-- Mounted unconditionally, contents swapped: a live region inserted
+         together with its text is not announced. -->
+    <div
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      data-testid="grant-status"
+      :class="loading ? 'text-center py-12 text-fg-mute text-sm' : 'sr-only'"
+    >
+      <span v-if="loading" data-testid="grant-loading">Loading grants...</span>
     </div>
-    <div v-else-if="!grants.length && !formVisible" class="text-center py-8 text-fg-mute text-sm">
+
+    <div v-if="!loading && !grants.length && !formVisible" data-testid="grant-empty" class="text-center py-8 text-fg-mute text-sm">
       No grants yet. Create one to allow a capability in a given context.
     </div>
 
-    <table v-else-if="!formVisible" class="w-full border-collapse text-[13px]">
+    <table v-else-if="!loading && !formVisible" class="w-full border-collapse text-[13px]">
       <thead>
         <tr>
           <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
@@ -246,7 +246,7 @@ function isLegacy(grantedBy: string): boolean {
             {{ g.capability_name }}
           </td>
           <td class="px-3 py-2.5 border-b border-line text-fg-mute font-mono text-xs">
-            {{ formatContext(g.context_kind, g.context_ref) }}
+            {{ formatScope(g.context_kind, g.context_ref) }}
           </td>
           <td class="px-3 py-2.5 border-b border-line text-fg-mute font-mono text-xs">
             {{ g.pattern || '*' }}
@@ -274,7 +274,7 @@ function isLegacy(grantedBy: string): boolean {
             {{ formatLimit(g.limit_count, g.limit_window_seconds) }}
           </td>
           <td class="px-3 py-2.5 border-b border-line text-fg-mute font-mono text-xs">
-            {{ formatDate(g.expires_at) }}
+            {{ formatDateTime(g.expires_at) }}
           </td>
           <td class="px-3 py-2.5 border-b border-line text-fg-mute">
             <span v-if="isLegacy(g.granted_by)" class="inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-raised text-fg-mute" title="Written by the legacy grant migration, not a person">
@@ -284,8 +284,8 @@ function isLegacy(grantedBy: string): boolean {
           </td>
           <td class="px-3 py-2.5 border-b border-line">
             <span v-if="!g.revoked_at" class="inline-block rounded px-2 py-0.5 text-[11px] font-semibold bg-success-soft text-success-text">Active</span>
-            <span v-else class="inline-block rounded px-2 py-0.5 text-[11px] font-semibold bg-raised text-fg-mute" :title="`Revoked ${formatDate(g.revoked_at)} by ${g.revoked_by}`">
-              Revoked {{ formatDate(g.revoked_at) }} by {{ g.revoked_by }}
+            <span v-else class="inline-block rounded px-2 py-0.5 text-[11px] font-semibold bg-raised text-fg-mute" :title="`Revoked ${formatDateTime(g.revoked_at)} by ${g.revoked_by}`">
+              Revoked {{ formatDateTime(g.revoked_at) }} by {{ g.revoked_by }}
             </span>
           </td>
           <td class="px-3 py-2.5 border-b border-line whitespace-nowrap">
