@@ -58,17 +58,19 @@ export function useResources() {
   async function fetchResources(next?: Partial<ResourceQuery>): Promise<void> {
     if (next)
       query.value = { ...query.value, ...next }
-    const { kind, scopeKind, scopeRef } = query.value
 
     // The server refuses a non-global scope with no ref (memory.ParseScope) —
     // hold the request rather than firing a known-400 on every keystroke.
-    if (scopeKind !== 'global' && scopeRef.trim() === '') {
+    // Reads `held`, the same computed the panel renders from, so there is
+    // exactly one place that decides whether this query is fireable.
+    if (held.value) {
       resources.value = []
       loading.value = false
       error.value = null
       return
     }
 
+    const { kind, scopeKind, scopeRef } = query.value
     loading.value = true
     error.value = null
     try {
