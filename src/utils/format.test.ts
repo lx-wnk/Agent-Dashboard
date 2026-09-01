@@ -1,6 +1,6 @@
 import type { TokenUsage } from '../types'
 import { describe, expect, it } from 'vitest'
-import { formatBurnRate, formatCost, formatRelativeActivity, formatTokens, formatUptime, isAwaitingInput, isStalled, maskToken, secondsSince, shortModel, STALLED_THRESHOLD_SECONDS, totalTokenCount } from './format'
+import { formatBurnRate, formatCost, formatDateTime, formatRelativeActivity, formatScope, formatTokens, formatUptime, isAwaitingInput, isStalled, maskToken, secondsSince, shortModel, STALLED_THRESHOLD_SECONDS, totalTokenCount } from './format'
 
 describe('totalTokenCount', () => {
   it('sums all four token fields', () => {
@@ -341,5 +341,29 @@ describe('isAwaitingInput', () => {
 
   it('stays silent when the flag is missing rather than guessing', () => {
     expect(isAwaitingInput({ status: 'active' })).toBe(false)
+  })
+})
+
+describe('formatScope', () => {
+  it('keeps the ref, so two rows with the same slug in different projects stay distinguishable', () => {
+    expect(formatScope('project', '/tmp/a')).toBe('project: /tmp/a')
+    expect(formatScope('project', '/tmp/b')).toBe('project: /tmp/b')
+  })
+
+  it('drops the separator when the kind carries no ref', () => {
+    expect(formatScope('global', '')).toBe('global')
+  })
+})
+
+describe('formatDateTime', () => {
+  it('renders an em dash for a missing timestamp rather than "Invalid Date"', () => {
+    expect(formatDateTime(null)).toBe('\u2014')
+  })
+
+  it('renders date and time for a real timestamp', () => {
+    const out = formatDateTime('2026-01-02T03:04:00Z')
+    expect(out).not.toBe('\u2014')
+    expect(out).toMatch(/2026/)
+    expect(out).toMatch(/:/)
   })
 })

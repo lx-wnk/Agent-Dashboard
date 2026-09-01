@@ -42,6 +42,7 @@ import (
 	providersapi "github.com/lx-wnk/agent-dashboard/server/internal/api/providers"
 	refineapi "github.com/lx-wnk/agent-dashboard/server/internal/api/refine"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/remotes"
+	apiresources "github.com/lx-wnk/agent-dashboard/server/internal/api/resources"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/search"
 	settingsapi "github.com/lx-wnk/agent-dashboard/server/internal/api/settings"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/systemprompts"
@@ -288,6 +289,9 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	// early so the boot predicate can read it, and migrate the legacy #230
 	// "plugins.enabled" setting into the table once (idempotent).
 	var pluginRepo repo.PluginRepo
+	// Hoisted out of the block below so the resources HTTP handler, built near
+	// the other handlers, can share this one instance.
+	var resourceRepo repo.ResourceRepo
 	// obsidianClient is nil when the vault is unconfigured (buildObsidianClient's
 	// own doc comment covers why that is not an error) and stays nil without
 	// a database, since Register and the capability catalogue it depends on
@@ -309,7 +313,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 			return nil, fmt.Errorf("seed plugins from enabled list: %w", err)
 		}
 
-		resourceRepo := repo.NewResourceRepo(entClient)
+		resourceRepo = repo.NewResourceRepo(entClient)
 		if linked, err := repo.ReconcilePluginResources(ctx, resourceRepo, entClient); err != nil {
 			slog.Warn("registry: plugin reconcile failed", "err", err)
 		} else if linked > 0 {
@@ -654,6 +658,22 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		})
 	}
 
+	// Resource registry read surface — GET /api/resources. Shares the single
+	// resourceRepo instance hoisted above (same rule as memRepo/memRetriever
+	// just above). Read-only, but not ungated: kind=memory_space answers the
+	// same rows GET /api/memory/spaces gates on memory.read, so it is built
+	// with the same Gate memoryHandler gets — asker included, because a human
+	// is waiting on this request too.
+	var resourcesHandler *apiresources.Handler
+	if entClient != nil {
+		resourcesHandler = apiresources.NewHandler(resourceRepo, memory.Gate{
+			Capabilities: repo.NewCapabilityRepo(entClient),
+			Grants:       repo.NewGrantRepo(entClient),
+			GrantUsage:   grantUsageRepo,
+			Asker:        askerArg,
+		})
+	}
+
 	// Obsidian manual trigger — POST /api/obsidian/index. Unlike memoryHandler
 	// just above (built with askerArg because a human is waiting on that
 	// request), this Gate carries no Asker: the same reasoning
@@ -888,6 +908,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		SearchHandler:          searchHandler,
 		HistoryHandler:         historyHandler,
 		MemoryHandler:          memoryHandler,
+		ResourcesHandler:       resourcesHandler,
 		ObsidianHandler:        obsidianHandler,
 		RefineHandler:          refineHandler,
 		PlanHandler:            planHandler,

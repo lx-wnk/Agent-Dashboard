@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { errorMessage } from '../errorMessage'
+import { errorMessage, readErrorMessage } from '../errorMessage'
 
 describe('errorMessage', () => {
   it('returns the message of an Error instance', () => {
@@ -18,5 +18,25 @@ describe('errorMessage', () => {
 
   it('preserves messages of Error subclasses', () => {
     expect(errorMessage(new TypeError('bad type'))).toBe('bad type')
+  })
+})
+
+describe('readErrorMessage', () => {
+  it('returns the error field the server sent', async () => {
+    const res = new Response(JSON.stringify({ error: 'grant g1 allows 1 use per 60s' }), { status: 403 })
+
+    expect(await readErrorMessage(res, 'fallback')).toBe('grant g1 allows 1 use per 60s')
+  })
+
+  it('falls back when the body is not JSON', async () => {
+    const res = new Response('<html>502</html>', { status: 502 })
+
+    expect(await readErrorMessage(res, 'fallback')).toBe('fallback')
+  })
+
+  it('falls back when the body is JSON without an error field', async () => {
+    const res = new Response(JSON.stringify({ detail: 'nope' }), { status: 403 })
+
+    expect(await readErrorMessage(res, 'fallback')).toBe('fallback')
   })
 })

@@ -1,4 +1,5 @@
 import { onMounted, ref } from 'vue'
+import { readErrorMessage } from '@/utils/errorMessage'
 
 // Grant and Capability are ent-generated rows (server/internal/db/ent/{grant,capability}.go)
 // encoded straight from their Go struct tags, which are ent's default snake_case —
@@ -60,11 +61,6 @@ export interface CreateGrantInput {
   reason: string
 }
 
-async function readError(res: Response, fallback: string): Promise<string> {
-  const body = await res.json().catch(() => ({ error: fallback })) as { error?: string }
-  return body.error || fallback
-}
-
 export function useGrants() {
   const grants = ref<Grant[]>([])
   const capabilities = ref<Capability[]>([])
@@ -74,7 +70,7 @@ export function useGrants() {
   async function fetchCapabilities(): Promise<void> {
     const res = await fetch('/api/capabilities')
     if (!res.ok)
-      throw new Error(await readError(res, `HTTP ${res.status}`))
+      throw new Error(await readErrorMessage(res, `HTTP ${res.status}`))
     capabilities.value = await res.json()
   }
 
@@ -85,7 +81,7 @@ export function useGrants() {
       const url = capabilityFilter ? `/api/grants?capability=${encodeURIComponent(capabilityFilter)}` : '/api/grants'
       const res = await fetch(url)
       if (!res.ok)
-        throw new Error(await readError(res, `HTTP ${res.status}`))
+        throw new Error(await readErrorMessage(res, `HTTP ${res.status}`))
       grants.value = await res.json()
     }
     catch (e) {
@@ -103,7 +99,7 @@ export function useGrants() {
       body: JSON.stringify(input),
     })
     if (!res.ok)
-      throw new Error(await readError(res, 'Failed to create grant'))
+      throw new Error(await readErrorMessage(res, 'Failed to create grant'))
     const grant = await res.json() as Grant
     grants.value.unshift(grant)
     return grant
@@ -114,7 +110,7 @@ export function useGrants() {
   async function revokeGrant(id: string, capabilityFilter?: string): Promise<void> {
     const res = await fetch(`/api/grants/${id}`, { method: 'DELETE' })
     if (!res.ok)
-      throw new Error(await readError(res, 'Failed to revoke grant'))
+      throw new Error(await readErrorMessage(res, 'Failed to revoke grant'))
     await fetchGrants(capabilityFilter)
   }
 

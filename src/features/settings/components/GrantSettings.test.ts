@@ -47,11 +47,13 @@ afterEach(() => {
 describe('grantSettings', () => {
   let grants: Ref<Grant[]>
   let capabilities: Ref<Capability[]>
+  let loading: Ref<boolean>
   let createGrant: ReturnType<typeof vi.fn>
   let revokeGrant: ReturnType<typeof vi.fn>
 
   beforeEach(() => {
     grants = ref([{ ...baseGrant }])
+    loading = ref(false)
     capabilities = ref([
       { id: 'c1', name: 'bash.exec', class: 'shell', enforceable_by: [], requires_pattern: true, reversible: false, description: '' },
     ])
@@ -67,7 +69,7 @@ describe('grantSettings', () => {
     vi.mocked(useGrants).mockReturnValue({
       grants,
       capabilities,
-      loading: ref(false),
+      loading,
       error: ref(null),
       fetchGrants: vi.fn(),
       createGrant,
@@ -88,6 +90,64 @@ describe('grantSettings', () => {
     expect(revokedRow.text()).toContain('Revoked')
     expect(revokedRow.text()).toContain('alex')
     expect(wrapper.get('[data-testid="grant-row-g3"]').text()).toContain('Legacy migration')
+  })
+
+  it('marks a grant on a capability no enforcement point reads as not enforced', () => {
+    capabilities.value = [
+      { id: 'c1', name: 'bash.exec', class: 'shell', enforceable_by: [], requires_pattern: true, reversible: false, description: '' },
+      { id: 'c2', name: 'memory.read', class: 'resource', enforceable_by: ['server'], requires_pattern: false, reversible: true, description: '' },
+    ]
+    grants.value = [
+      { ...baseGrant, id: 'g1', capability_name: 'bash.exec' },
+      { ...baseGrant, id: 'g2', capability_name: 'memory.read' },
+      { ...baseGrant, id: 'g3', capability_name: 'not.in.catalogue' },
+    ]
+    const wrapper = mount(GrantSettings, { attachTo: document.body })
+
+    expect(wrapper.get('[data-testid="grant-enforcement-g1"]').text()).toBe('none')
+    expect(wrapper.get('[data-testid="grant-enforcement-g2"]').text()).toBe('server')
+    expect(wrapper.get('[data-testid="grant-enforcement-g3"]').text()).toBe('unknown')
+  })
+
+  // The tone carries the meaning at a glance. A green "none" reads as enforced
+  // and defeats the column, so the badge classes are pinned, not just the text.
+  it('reserves the success tone for an actually enforced grant', () => {
+    capabilities.value = [
+      { id: 'c1', name: 'bash.exec', class: 'shell', enforceable_by: [], requires_pattern: true, reversible: false, description: '' },
+      { id: 'c2', name: 'memory.read', class: 'resource', enforceable_by: ['server'], requires_pattern: false, reversible: true, description: '' },
+    ]
+    grants.value = [
+      { ...baseGrant, id: 'g1', capability_name: 'bash.exec' },
+      { ...baseGrant, id: 'g2', capability_name: 'memory.read' },
+      { ...baseGrant, id: 'g3', capability_name: 'not.in.catalogue' },
+    ]
+    const wrapper = mount(GrantSettings, { attachTo: document.body })
+
+    for (const id of ['g1', 'g3']) {
+      const badge = wrapper.get(`[data-testid="grant-enforcement-${id}"]`)
+      expect(badge.classes()).toContain('bg-warning-soft')
+      expect(badge.classes()).not.toContain('bg-success-soft')
+    }
+    const enforced = wrapper.get('[data-testid="grant-enforcement-g2"]')
+    expect(enforced.classes()).toContain('bg-success-soft')
+    expect(enforced.classes()).not.toContain('bg-warning-soft')
+  })
+
+  it('keeps a live region mounted across the load, announcing by content change', async () => {
+    loading.value = true
+    const wrapper = mount(GrantSettings, { attachTo: document.body })
+
+    const region = wrapper.get('[data-testid="grant-status"]')
+    expect(region.attributes('role')).toBe('status')
+    expect(region.attributes('aria-live')).toBe('polite')
+    expect(wrapper.get('[data-testid="grant-loading"]').text()).toContain('Loading grants')
+
+    loading.value = false
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="grant-status"]').attributes('role')).toBe('status')
+    expect(wrapper.find('[data-testid="grant-loading"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="grant-row-g1"]').exists()).toBe(true)
   })
 
   it('posts the right body when creating a grant', async () => {

@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -58,11 +60,16 @@ func mustAllowGrant(t *testing.T, grants repo.GrantRepo, ctx context.Context, ca
 // mustStageRun creates a task and a stage run against client, for tests
 // exercising GET /api/memory/injections?stageRun= — RecordInjection refuses
 // a stage_run_id that does not reference a real row.
+var stageRunSeq int
+
 func mustStageRun(t *testing.T, client *ent.Client) string {
 	t.Helper()
 	ctx := context.Background()
+	// Unique slug per call: tasks.slug is unique, and the bulk-parameter tests
+	// need two stage runs in one database.
+	stageRunSeq++
 	task, err := repo.NewTaskRepo(client).Create(ctx, repo.CreateTaskInput{
-		Slug: "memory-http-task", Title: "Test Task", Cwd: "/tmp",
+		Slug: fmt.Sprintf("memory-http-task-%d", stageRunSeq), Title: "Test Task", Cwd: "/tmp",
 		CurrentStage: "concept", Priority: "medium", MaxIterations: 20, StageTimeoutSeconds: 1800,
 	})
 	require.NoError(t, err)
@@ -352,6 +359,112 @@ func TestListInjectionsByStageRun(t *testing.T) {
 	list := decodeSlice(t, w)
 	require.Len(t, list, 1)
 	require.Equal(t, stageRunID, list[0].(map[string]any)["stageRunId"])
+}
+
+// TestListInjectionsBulkSpendsOneGrantUse is the whole point of the repeated
+// parameter. The grant allows one use per hour; asking for two stage runs in
+// one request must answer both runs' records off that single use. Before the
+// bulk form the tab issued one gated request per run, so a ten-run modal spent
+// ten uses of the same memory.read grant the pipeline's own memory push
+// authorizes — reading the memory view exhausted the window and silently
+// stopped agent memory retrieval.
+func TestListInjectionsBulkSpendsOneGrantUse(t *testing.T) {
+	mux, client, memRepo, grants, capRepo, ctx := newMux(t)
+	repo.SeedCapabilities(ctx, capRepo)
+	_, err := grants.Create(ctx, repo.CreateGrantInput{
+		CapabilityName:     repo.CapabilityMemoryRead,
+		Context:            repo.GrantContextFor(repo.GrantContextGlobal, ""),
+		Mode:               repo.GrantModeAllow,
+		LimitCount:         1,
+		LimitWindowSeconds: 3600,
+		GrantedBy:          "test",
+	})
+	require.NoError(t, err)
+
+	space, err := memRepo.CreateSpace(ctx, repo.CreateSpaceInput{Slug: "notes", Name: "Notes", Scope: repo.GlobalScope()})
+	require.NoError(t, err)
+	entry, err := memRepo.CreateEntry(ctx, repo.CreateEntryInput{SpaceID: space.ID, Summary: "s", Content: "c", Kind: "fact", SourceKind: "user", Confidence: 1})
+	require.NoError(t, err)
+	runA, runB := mustStageRun(t, client), mustStageRun(t, client)
+	for _, id := range []string{runA, runB} {
+		_, err = memRepo.RecordInjection(ctx, repo.RecordInjectionInput{
+			StageRunID: id, EntryIDs: []string{entry.ID}, CharBudget: 4000, CharsUsed: 100, CandidateCount: 1,
+		})
+		require.NoError(t, err)
+	}
+
+	w := doJSON(t, mux, http.MethodGet, "/api/memory/injections?stageRun="+runA+"&stageRun="+runB, nil)
+	require.Equal(t, http.StatusOK, w.Code)
+	list := decodeSlice(t, w)
+	require.Len(t, list, 2)
+	require.Equal(t, runA, list[0].(map[string]any)["stageRunId"])
+	require.Equal(t, runB, list[1].(map[string]any)["stageRunId"])
+
+	// One use spent, not two: the hourly budget still has nothing left, and a
+	// per-run request pair would already have been refused on its second leg.
+	require.Equal(t, http.StatusForbidden,
+		doJSON(t, mux, http.MethodGet, "/api/memory/injections?stageRun="+runA, nil).Code)
+}
+
+// TestListInjectionsSingleIDIsUnchanged pins the documented one-id shape
+// against the bulk form: a lone id answers that run's records and nobody
+// else's, and an empty value is no id at all.
+func TestListInjectionsSingleIDIsUnchanged(t *testing.T) {
+	mux, client, memRepo, grants, capRepo, ctx := newMux(t)
+	repo.SeedCapabilities(ctx, capRepo)
+	mustAllowGrant(t, grants, ctx, repo.CapabilityMemoryRead, repo.GrantContextGlobal, "")
+
+	space, err := memRepo.CreateSpace(ctx, repo.CreateSpaceInput{Slug: "notes", Name: "Notes", Scope: repo.GlobalScope()})
+	require.NoError(t, err)
+	entry, err := memRepo.CreateEntry(ctx, repo.CreateEntryInput{SpaceID: space.ID, Summary: "s", Content: "c", Kind: "fact", SourceKind: "user", Confidence: 1})
+	require.NoError(t, err)
+	runA, runB := mustStageRun(t, client), mustStageRun(t, client)
+	for _, id := range []string{runA, runB} {
+		_, err = memRepo.RecordInjection(ctx, repo.RecordInjectionInput{
+			StageRunID: id, EntryIDs: []string{entry.ID}, CharBudget: 4000, CharsUsed: 100, CandidateCount: 1,
+		})
+		require.NoError(t, err)
+	}
+
+	w := doJSON(t, mux, http.MethodGet, "/api/memory/injections?stageRun="+runA, nil)
+	require.Equal(t, http.StatusOK, w.Code)
+	list := decodeSlice(t, w)
+	require.Len(t, list, 1)
+	require.Equal(t, runA, list[0].(map[string]any)["stageRunId"])
+
+	require.Equal(t, http.StatusBadRequest,
+		doJSON(t, mux, http.MethodGet, "/api/memory/injections?stageRun=", nil).Code)
+
+	// A repeated id is one id: the response must not carry that run twice.
+	w = doJSON(t, mux, http.MethodGet, "/api/memory/injections?stageRun="+runA+"&stageRun="+runA, nil)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Len(t, decodeSlice(t, w), 1)
+}
+
+// TestListInjectionsCapsTheIDList pins the boundary of the repeated parameter.
+// One Authorize covers the whole list, so the id count is what bounds the work
+// a single capability check pays for.
+func TestListInjectionsCapsTheIDList(t *testing.T) {
+	mux, _, _, grants, capRepo, ctx := newMux(t)
+	repo.SeedCapabilities(ctx, capRepo)
+	mustAllowGrant(t, grants, ctx, repo.CapabilityMemoryRead, repo.GrantContextGlobal, "")
+
+	// Distinct unknown ids: the cap is checked before any lookup, so no real
+	// stage run is needed to reach it — only the count matters.
+	query := func(n int) string {
+		parts := make([]string, 0, n)
+		for i := range n {
+			parts = append(parts, "stageRun=run-"+strconv.Itoa(i))
+		}
+		return "/api/memory/injections?" + strings.Join(parts, "&")
+	}
+
+	w := doJSON(t, mux, http.MethodGet, query(200), nil)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	w = doJSON(t, mux, http.MethodGet, query(201), nil)
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	require.Contains(t, w.Body.String(), "at most 200")
 }
 
 func TestListInjectionsRequiresStageRunParam(t *testing.T) {

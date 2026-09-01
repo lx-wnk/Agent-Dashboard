@@ -433,10 +433,31 @@ func (h *Handler) expireEntry(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
+// maxStageRunIDs bounds the repeated stageRun parameter. A task runs at most
+// max_iterations (default 20) passes over the pipeline's handful of stages, so
+// this clears any real task's stage-run count several times over.
+const maxStageRunIDs = 200
+
+// listInjections answers GET /api/memory/injections?stageRun=. The parameter
+// repeats: ?stageRun=a&stageRun=b answers both runs' records in one array, in
+// the order asked for. One id behaves exactly as it always did.
+//
+// The bulk form exists because the gate below records a rate-limit use on
+// every call (memory.Gate.Authorize). One request per stage run meant opening
+// a task modal with ten runs spent ten uses of the very same memory.read
+// grant the pipeline's own memory push authorizes — so reading the memory
+// view could exhaust the window and silently stop agent memory retrieval.
+// N ids now cost one Authorize.
 func (h *Handler) listInjections(w http.ResponseWriter, r *http.Request) error {
-	stageRun := r.URL.Query().Get("stageRun")
-	if stageRun == "" {
+	stageRuns := dedupe(r.URL.Query()["stageRun"])
+	if len(stageRuns) == 0 {
 		return apierr.NewAppError(http.StatusBadRequest, "stageRun is required")
+	}
+	// One Authorize covers the whole list, so without a cap a single
+	// capability check buys an unbounded number of queries.
+	if len(stageRuns) > maxStageRunIDs {
+		return apierr.NewAppError(http.StatusBadRequest,
+			"at most "+strconv.Itoa(maxStageRunIDs)+" stageRun ids per request")
 	}
 	// An injection record has no single owning space to match a grant
 	// pattern against (it can span several), so this is gated the same way
@@ -445,10 +466,36 @@ func (h *Handler) listInjections(w http.ResponseWriter, r *http.Request) error {
 	if err := h.authorize(r.Context(), repo.CapabilityMemoryRead, "", repo.GlobalScope()); err != nil {
 		return err
 	}
-	injections, err := h.repo.ListInjectionsByStageRun(r.Context(), stageRun)
-	if err != nil {
-		return err
+	var injections []*ent.MemoryInjection
+	for _, stageRun := range stageRuns {
+		// One local query per id rather than a single IN: the cost this
+		// route had was the gate, not the reads, and the repo already owns
+		// the per-run ordering.
+		rows, err := h.repo.ListInjectionsByStageRun(r.Context(), stageRun)
+		if err != nil {
+			return err
+		}
+		injections = append(injections, rows...)
 	}
 	apierr.WriteJSON(w, http.StatusOK, toMemoryInjectionResponses(injections))
 	return nil
+}
+
+// dedupe drops empty and repeated ids, preserving first-seen order: a caller
+// repeating one id must not be answered that run's records twice, and
+// ?stageRun= with an empty value is no id at all.
+func dedupe(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, v := range values {
+		if v == "" {
+			continue
+		}
+		if _, dup := seen[v]; dup {
+			continue
+		}
+		seen[v] = struct{}{}
+		out = append(out, v)
+	}
+	return out
 }

@@ -22,6 +22,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/presets"
 	refineapi "github.com/lx-wnk/agent-dashboard/server/internal/api/refine"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/remotes"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/resources"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/search"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/systemprompts"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/tasks"
@@ -124,8 +125,13 @@ func buildBypassRouter(t *testing.T) http.Handler {
 		PresetsHandler:       presets.NewHandler(repo.NewPermissionPresetRepo(c)),
 		SystemPromptsHandler: systemprompts.NewHandler(repo.NewSystemPromptRepo(c)),
 		GrantsHandler:        grants.NewHandler(repo.NewGrantRepo(c), repo.NewCapabilityRepo(c)),
-		SearchHandler:        search.NewHandler(rawrepo.NewSearchRepo(rawDB), merger.New(), nil, true),
-		HistoryHandler:       apihistory.NewHandler(histsvc.NewImporter(repo.NewAgentCostTrendRepo(c))),
+		ResourcesHandler: resources.NewHandler(repo.NewResourceRepo(c), memory.Gate{
+			Capabilities: repo.NewCapabilityRepo(c),
+			Grants:       repo.NewGrantRepo(c),
+			GrantUsage:   repo.NewGrantUsageRepo(c, bundle.WriteClient),
+		}),
+		SearchHandler:  search.NewHandler(rawrepo.NewSearchRepo(rawDB), merger.New(), nil, true),
+		HistoryHandler: apihistory.NewHandler(histsvc.NewImporter(repo.NewAgentCostTrendRepo(c))),
 		MemoryHandler: apimemory.NewHandler(
 			repo.NewMemoryRepo(c, bundle.WriteClient),
 			memory.NewRetriever(rawDB, repo.NewMemoryRepo(c, bundle.WriteClient)),

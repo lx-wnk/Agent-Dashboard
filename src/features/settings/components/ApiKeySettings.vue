@@ -31,6 +31,8 @@ const PluginSettings = defineAsyncComponent(() => import('@/features/plugins').t
 const ProviderSettings = defineAsyncComponent(() => import('@/features/settings/components/ProviderSettings.vue'))
 const TrackerSettingsPanel = defineAsyncComponent(() => import('@/features/settings/components/TrackerSettingsPanel.vue'))
 const AppSettings = defineAsyncComponent(() => import('@/features/settings/components/AppSettings.vue'))
+const MemorySettings = defineAsyncComponent(() => import('@/features/settings/components/MemorySettings.vue'))
+const ResourceSettings = defineAsyncComponent(() => import('@/features/settings/components/ResourceSettings.vue'))
 
 const { preference: themePref, setTheme } = useTheme()
 const { authEnabled } = useUser()
@@ -43,7 +45,7 @@ function reopenOnboarding() {
 }
 
 // --- Nav ---
-type Section = 'appearance' | 'apiKeys' | 'grants' | 'remotes' | 'permissionPresets' | 'analytics' | 'systemPrompts' | 'plugins' | 'notifications' | 'providers' | 'tracker' | 'projects' | 'spawners' | 'pipelineConfig' | 'server' | 'obsidian'
+type Section = 'appearance' | 'apiKeys' | 'grants' | 'registry' | 'memory' | 'remotes' | 'permissionPresets' | 'analytics' | 'systemPrompts' | 'plugins' | 'notifications' | 'providers' | 'tracker' | 'projects' | 'spawners' | 'pipelineConfig' | 'server' | 'obsidian'
 const activeSection = ref<Section>('appearance')
 
 // Nav model — drives the sidebar list. requiresAuth items only show when auth is on.
@@ -51,6 +53,8 @@ const SECTIONS: readonly { id: Section, icon: string, label: string, requiresAut
   { id: 'appearance', icon: '◑', label: 'Appearance' },
   { id: 'apiKeys', icon: '⬡', label: 'API Keys' },
   { id: 'grants', icon: '🛡', label: 'Grants' },
+  { id: 'registry', icon: '▤', label: 'Registry' },
+  { id: 'memory', icon: '🧠', label: 'Memory' },
   { id: 'obsidian', icon: '🗒', label: 'Obsidian' },
   { id: 'remotes', icon: '⌂', label: 'My Remotes', requiresAuth: true },
   { id: 'permissionPresets', icon: '⚿', label: 'Permissions' },
@@ -632,6 +636,16 @@ const { isImporting, importStatus, start: startImport } = useHistoryImport()
         <!-- Grants -->
         <section v-else-if="activeSection === 'grants'">
           <GrantSettings />
+        </section>
+
+        <!-- Registry -->
+        <section v-else-if="activeSection === 'registry'">
+          <ResourceSettings />
+        </section>
+
+        <!-- Memory -->
+        <section v-else-if="activeSection === 'memory'">
+          <MemorySettings />
         </section>
 
         <!-- Obsidian -->

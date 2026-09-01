@@ -1439,6 +1439,24 @@ const MemorySettings = defineAsyncComponent(() => import('@/features/settings/co
 
   (declare them alongside the other `let` bindings, and add `createSpace, createEntry, supersedeEntry, expireEntry` to the `vi.mocked(useMemory).mockReturnValue({ … })` object), then:
 
+**Every write carries the panel's scope, and the composable is what puts it there.**
+`mem.ParseScope` maps an empty `scope` to **global with no error**, and both write bodies
+carry the fields (`createSpaceBody{Slug,Name,Scope,ScopeRef}`,
+`createEntryBody{SpaceSlug,Scope,ScopeRef,…}` in `server/internal/api/memory/handler.go`),
+so a write that omits them is authorized against, and lands in, the global scope no matter
+what the panel is showing — a success message, a scoped list refresh that does not show the
+new row, and no error anywhere.
+
+Make that impossible rather than tested: the composable assembles `scope`/`scopeRef` from
+its own `scope` ref for all four writes, so no call site can omit or contradict it. The
+panel therefore passes only its own fields, which is what the assertions below assert. The
+scope assertions belong in `src/features/settings/composables/__tests__/useMemory.test.ts`,
+where the real request body is observable — including one test that threads a non-global
+scope end to end (`setScope({ scopeKind: 'project', scopeRef: '/x' })`, then create, then
+assert the body carries `scope: 'project', scopeRef: '/x'`). Without that last test a
+hard-coded `scope: 'global'` passes everything else.
+
+
 ```ts
   it('creates a space with the slug and name from the form', async () => {
     const wrapper = mount(MemorySettings, { attachTo: document.body })
