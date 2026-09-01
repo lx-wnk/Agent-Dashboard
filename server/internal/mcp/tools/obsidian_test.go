@@ -44,6 +44,16 @@ func TestKeysManageImpliesObsidianScopes(t *testing.T) {
 	require.True(t, resolved["obsidian:write"], "keys:manage must imply obsidian:write")
 }
 
+// TestObsidianWriteImpliesObsidianRead asserts scopeImplies directly for the
+// obsidian:write -> obsidian:read edge, not just through keys:manage's
+// aggregate expansion above. A dropped row here would leave every
+// write-only key unable to call obsidian_read, uncaught by the keys:manage
+// test alone.
+func TestObsidianWriteImpliesObsidianRead(t *testing.T) {
+	resolved := mcp.ResolveScopes([]string{"obsidian:write"})
+	require.True(t, resolved["obsidian:read"], "obsidian:write must imply obsidian:read")
+}
+
 // newFakeObsidianVault serves a minimal Obsidian Local REST API — one note
 // under "root/a.md" — and records whether it was ever contacted, mirroring
 // internal/api/obsidian/handler_test.go's newFakeVault. A test uses the
@@ -153,6 +163,10 @@ func TestObsidianDeleteDeniedBeforeVaultCall(t *testing.T) {
 
 	_, err := registry["obsidian_delete"].Handler(ctx, map[string]any{"path": "notes/a.md"})
 	require.Error(t, err)
+	// Pins the deny path specifically: if obsidian.delete were ever added to
+	// SeedCapabilities, this would silently flip to the ask path
+	// (capability.ErrAskRequired) while require.Error alone stayed green.
+	require.ErrorContains(t, err, "capability denied")
 	assert.False(t, *vaultCalled, "the vault must not be touched before the gate allows it")
 }
 
@@ -179,6 +193,10 @@ func TestObsidianToolsDenyBeforeVaultCallWhenCapabilityUncatalogued(t *testing.T
 			_, err := registry[tc.tool].Handler(ctx, tc.args)
 			require.Error(t, err)
 			require.ErrorContains(t, err, tc.tool)
+			// Same pin as TestObsidianDeleteDeniedBeforeVaultCall: without
+			// this, a future SeedCapabilities change could silently swap
+			// deny for ask here and every assertion above would stay green.
+			require.ErrorContains(t, err, "capability denied")
 			assert.False(t, *vaultCalled, "the vault must not be touched before the gate allows it")
 		})
 	}
@@ -275,4 +293,83 @@ func TestObsidianDeleteSucceedsWithAnAllowGrant(t *testing.T) {
 	assert.Equal(t, "a.md", out["path"])
 	assert.Equal(t, true, out["deleted"])
 	assert.True(t, *called, "an allowed delete must reach the vault")
+}
+
+// TestObsidianToolsRefuseTraversalEscapingAPatternNarrowedGrant is the
+// regression test for fix round 1's CRITICAL finding: the gate and the
+// vault client must agree on the same target. Client.Read/Write/Delete
+// normalize notePath through resolveVaultPath before building a request,
+// but capability.Match (pattern.go) is a plain strings.HasPrefix over
+// whatever string it is handed — so a raw, un-normalized
+// "notes/../secrets/keys.md" passes a "notes/*" grant on the strength of
+// its literal prefix, then resolves to "secrets/keys.md" once it reaches
+// the client, a target the grant never covered. Client.NormalizeNotePath is
+// the fix: every handler below normalizes once and hands the SAME string to
+// both Authorize and the client, so what the gate approves is exactly what
+// the vault receives.
+func TestObsidianToolsRefuseTraversalEscapingAPatternNarrowedGrant(t *testing.T) {
+	cases := []struct {
+		tool string
+		cap  string
+		args map[string]any
+	}{
+		{"obsidian_read", obsidianapp.CapabilityRead, map[string]any{"path": "notes/../secrets/keys.md"}},
+		{"obsidian_write", obsidianapp.CapabilityWrite, map[string]any{"path": "notes/../secrets/keys.md", "content": "pwned"}},
+		{"obsidian_delete", obsidianapp.CapabilityDelete, map[string]any{"path": "notes/../secrets/keys.md"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.tool, func(t *testing.T) {
+			deps, grants, ctx, called := obsidianTestDepsWithCatalogue(t)
+			_, err := grants.Create(ctx, repo.CreateGrantInput{
+				CapabilityName: tc.cap,
+				Context:        repo.GrantContextFor(repo.GrantContextGlobal, ""),
+				Pattern:        "notes/*",
+				Mode:           repo.GrantModeAllow,
+				GrantedBy:      "test",
+			})
+			require.NoError(t, err)
+
+			registry := mcp.ToolRegistry{}
+			RegisterObsidianTools(registry, deps)
+
+			_, err = registry[tc.tool].Handler(ctx, tc.args)
+			require.Error(t, err)
+			// The grant exists for this capability but its "notes/*"
+			// pattern never matches the normalized "secrets/keys.md", so
+			// Decide has no matching candidate and falls to
+			// defaultEffect("reach") = ask; with no Asker wired here that
+			// surfaces as capability.ErrAskRequired, not ErrDenied — the
+			// same two-sentinel distinction TestObsidianWriteDeniedWithoutGrantEvenWhenCapabilityCatalogued
+			// covers. Which sentinel fires is not the property under test;
+			// that the vault is never touched is.
+			require.ErrorContains(t, err, tc.tool)
+			assert.False(t, *called, "a path that only starts with the grant's prefix before traversal is collapsed must never reach the vault")
+		})
+	}
+}
+
+// TestObsidianDeleteAllowsATraversalThatStillLandsInTheGrantedSubtree
+// proves the fix does not simply reject every ".." — a request whose
+// normalized form still falls inside the granted pattern must succeed, the
+// same way TestObsidianDeleteSucceedsWithAnAllowGrant already does for the
+// no-traversal case. This is what distinguishes "normalize and compare" from
+// "reject any path containing .."; the brief was explicit that the former,
+// not the latter, is required.
+func TestObsidianDeleteAllowsATraversalThatStillLandsInTheGrantedSubtree(t *testing.T) {
+	deps, grants, ctx, called := obsidianTestDepsWithCatalogue(t)
+	_, err := grants.Create(ctx, repo.CreateGrantInput{
+		CapabilityName: obsidianapp.CapabilityDelete,
+		Context:        repo.GrantContextFor(repo.GrantContextGlobal, ""),
+		Pattern:        "notes/*",
+		Mode:           repo.GrantModeAllow,
+		GrantedBy:      "test",
+	})
+	require.NoError(t, err)
+
+	registry := mcp.ToolRegistry{}
+	RegisterObsidianTools(registry, deps)
+
+	out := invokeCoordTool(t, registry, ctx, "obsidian_delete", map[string]any{"path": "notes/sub/../a.md"})
+	assert.Equal(t, "notes/a.md", out["path"], "the normalized path, not the raw one, is what the tool reports and acts on")
+	assert.True(t, *called, "a traversal that still resolves inside the granted subtree must reach the vault")
 }

@@ -134,6 +134,45 @@ func TestVaultPathContainmentRefusesEscape(t *testing.T) {
 	}
 }
 
+// TestNormalizeNotePathCollapsesTraversal pins the exact reproduction from
+// fix round 1: a raw agent-supplied path containing a ".." segment must
+// resolve to the same canonical form the client itself would act on, not
+// the raw string a capability check would otherwise see.
+func TestNormalizeNotePathCollapsesTraversal(t *testing.T) {
+	client, err := obsidian.NewClient(obsidian.Config{
+		BaseURL:   "https://127.0.0.1:1", // never dialled
+		APIKey:    "secret",
+		VaultRoot: "root",
+		TLSMode:   obsidian.TLSInsecureLoopback,
+	})
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	got, err := client.NormalizeNotePath("notes/../secrets/keys.md")
+	if err != nil {
+		t.Fatalf("NormalizeNotePath: %v", err)
+	}
+	if got != "secrets/keys.md" {
+		t.Fatalf("NormalizeNotePath(%q) = %q, want %q", "notes/../secrets/keys.md", got, "secrets/keys.md")
+	}
+}
+
+func TestNormalizeNotePathRefusesEscape(t *testing.T) {
+	client, err := obsidian.NewClient(obsidian.Config{
+		BaseURL:   "https://127.0.0.1:1", // never dialled
+		APIKey:    "secret",
+		VaultRoot: "root",
+		TLSMode:   obsidian.TLSInsecureLoopback,
+	})
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	if _, err := client.NormalizeNotePath("../outside.md"); err == nil {
+		t.Fatal("NormalizeNotePath: want refusal for a path escaping VaultRoot")
+	}
+}
+
 func TestAPIKeyNeverAppearsInAnError(t *testing.T) {
 	const apiKey = "sekret-token-do-not-leak" //nolint:gosec // test fixture, not a real credential
 

@@ -58,9 +58,20 @@ func registerObsidianRead(registry mcp.ToolRegistry, d ObsidianDeps) {
 			"required": []string{"path"},
 		},
 		Handler: func(ctx context.Context, args map[string]any) (*mcp.ToolResult, error) {
-			notePath, err := mcp.StringArg(args, "path")
+			rawPath, err := mcp.StringArg(args, "path")
 			if err != nil {
 				return nil, err
+			}
+			// Normalize once, before the gate, and use the SAME string for
+			// the grant check and the client call — see Client.NormalizeNotePath's
+			// doc comment for why passing the raw path to Authorize while the
+			// client normalizes its own copy lets a ".." segment defeat a
+			// pattern-narrowed grant. A normalization failure is a malformed
+			// request (the client would refuse it too), not a permission
+			// question, so it fails before Authorize runs.
+			notePath, err := d.Client.NormalizeNotePath(rawPath)
+			if err != nil {
+				return nil, mcp.Fail("obsidian_read: " + err.Error())
 			}
 			// The note path is the capability value, so a grant can be
 			// narrowed to a subtree by pattern instead of the vault as a whole.
@@ -93,8 +104,14 @@ func registerObsidianSearch(registry mcp.ToolRegistry, d ObsidianDeps) {
 				return nil, err
 			}
 			// A search fans out across the whole vault rather than naming
-			// one target, so "" is capability.Match's documented wildcard —
-			// the same reasoning memory_search applies to CapabilityMemoryRead.
+			// one target, so there is no single path to pass as the
+			// capability value. "" is NOT capability.Match's wildcard here —
+			// that wildcard is an empty GRANT PATTERN (pattern.go's Match),
+			// not an empty requested value — so passing "" as the value
+			// actually fails closed under any pattern-narrowed grant (e.g.
+			// "notes/*" never matches ""); only an unconditional grant
+			// (empty pattern) authorizes search at all. Matches IndexNotes'
+			// own use of "" for the same capability.
 			if err := d.Gate.Authorize(ctx, obsidian.CapabilitySearch, "", obsidianScope()); err != nil {
 				return nil, mcp.Fail("obsidian_search: " + err.Error())
 			}
@@ -120,13 +137,19 @@ func registerObsidianWrite(registry mcp.ToolRegistry, d ObsidianDeps) {
 			"required": []string{"path", "content"},
 		},
 		Handler: func(ctx context.Context, args map[string]any) (*mcp.ToolResult, error) {
-			notePath, err := mcp.StringArg(args, "path")
+			rawPath, err := mcp.StringArg(args, "path")
 			if err != nil {
 				return nil, err
 			}
 			content, err := mcp.StringArg(args, "content")
 			if err != nil {
 				return nil, err
+			}
+			// See registerObsidianRead's identical comment: normalize
+			// before the gate, use the same value for both calls.
+			notePath, err := d.Client.NormalizeNotePath(rawPath)
+			if err != nil {
+				return nil, mcp.Fail("obsidian_write: " + err.Error())
 			}
 			if err := d.Gate.Authorize(ctx, obsidian.CapabilityWrite, notePath, obsidianScope()); err != nil {
 				return nil, mcp.Fail("obsidian_write: " + err.Error())
@@ -151,9 +174,15 @@ func registerObsidianDelete(registry mcp.ToolRegistry, d ObsidianDeps) {
 			"required": []string{"path"},
 		},
 		Handler: func(ctx context.Context, args map[string]any) (*mcp.ToolResult, error) {
-			notePath, err := mcp.StringArg(args, "path")
+			rawPath, err := mcp.StringArg(args, "path")
 			if err != nil {
 				return nil, err
+			}
+			// See registerObsidianRead's identical comment: normalize
+			// before the gate, use the same value for both calls.
+			notePath, err := d.Client.NormalizeNotePath(rawPath)
+			if err != nil {
+				return nil, mcp.Fail("obsidian_delete: " + err.Error())
 			}
 			if err := d.Gate.Authorize(ctx, obsidian.CapabilityDelete, notePath, obsidianScope()); err != nil {
 				return nil, mcp.Fail("obsidian_delete: " + err.Error())
