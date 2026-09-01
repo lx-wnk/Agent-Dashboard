@@ -47,6 +47,34 @@ export type MemoryEntryKind = typeof MEMORY_ENTRY_KINDS[number]
 export const MEMORY_SOURCE_KINDS = ['agent', 'user', 'application', 'import'] as const
 export type MemorySourceKind = typeof MEMORY_SOURCE_KINDS[number]
 
+// A 403 from a write route is a configuration state with a known fix, not a
+// failure of the request — memory.write is a separate grant from memory.read,
+// so it must be distinguishable from a transport error to be explained as one
+// (cf. `denied` on the read side).
+export class MemoryWriteDeniedError extends Error {}
+
+// Body of POST /api/memory/spaces (createSpaceBody in
+// server/internal/api/memory/handler.go) minus scope/scopeRef: those are
+// filled in below from the panel's current scope, so no caller can omit them.
+// mem.ParseScope turns a missing scope into global with no error, which would
+// authorize — and write — in the wrong scope with nothing reporting it.
+export interface CreateSpaceInput {
+  slug: string
+  name: string
+}
+
+// Body of POST /api/memory/entries (createEntryBody, same file), minus
+// scope/scopeRef for the same reason.
+export interface CreateEntryInput {
+  spaceSlug: string
+  summary: string
+  content: string
+  kind: MemoryEntryKind
+  sourceKind: MemorySourceKind
+  sourceRef: string
+  confidence: number
+}
+
 export interface MemoryScope {
   scopeKind: ResourceScopeKind
   scopeRef: string
@@ -185,9 +213,73 @@ export function useMemory() {
     await fetchGlobalSpacesForLabels()
   }
 
+  // The only place a write's scope comes from — the same `scope` ref
+  // scopeParams reads for every read request.
+  function scopeBody(): { scope: string, scopeRef: string } {
+    return {
+      scope: scope.value.scopeKind,
+      scopeRef: scope.value.scopeKind === 'global' ? '' : scope.value.scopeRef.trim(),
+    }
+  }
+
+  // A write carries the panel's scope, and the server refuses a non-global
+  // one with a blank ref — held here for the same reason every read is,
+  // reading the same computed rather than re-deriving the condition.
+  function requireScopeRef(): void {
+    if (held.value)
+      throw new Error('Enter a scope ref before writing in this scope.')
+  }
+
+  // Throws rather than writing to a ref: a write is triggered by one control
+  // and its outcome belongs next to that control, so the caller decides where
+  // to render it. Never touches `error`/`denied`, which the spaces fetch owns.
+  // No response body is read on success — DELETE answers 204 with none.
+  async function send(url: string, init: RequestInit, fallback: string): Promise<void> {
+    const res = await fetch(url, init)
+    if (res.status === 403)
+      throw new MemoryWriteDeniedError(await readError(res, 'memory.write is not granted in this scope'))
+    if (!res.ok)
+      throw new Error(await readError(res, fallback))
+  }
+
+  function jsonInit(method: string, body: unknown): RequestInit {
+    return { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+  }
+
+  // Refetched rather than splicing the created row in: which rows this scope
+  // lists, and in what order, is ListSpaces' answer to give.
+  async function createSpace(input: CreateSpaceInput): Promise<void> {
+    requireScopeRef()
+    await send('/api/memory/spaces', jsonInit('POST', { ...input, ...scopeBody() }), 'Failed to create space')
+    await fetchSpaces()
+  }
+
+  // Same reason, more so: the entries list is a ranked search result, not a
+  // table. Where a new entry lands — or whether it matches the current query
+  // at all — is the server's bm25 ranking to decide.
+  async function createEntry(input: CreateEntryInput): Promise<void> {
+    requireScopeRef()
+    await send('/api/memory/entries', jsonInit('POST', { ...input, ...scopeBody() }), 'Failed to create entry')
+    await searchEntries()
+  }
+
+  // No scope on the body: the path carries only an entry id, and the server
+  // resolves that entry's own space before authorizing.
+  async function supersedeEntry(id: string, supersededBy: string): Promise<void> {
+    await send(`/api/memory/entries/${encodeURIComponent(id)}`, jsonInit('PATCH', { supersededBy }), 'Failed to supersede entry')
+    await searchEntries()
+  }
+
+  // Refetched so the entry's disappearance comes from the server's own
+  // visibility rules (Retrieve drops expired hits) rather than being guessed.
+  async function expireEntry(id: string): Promise<void> {
+    await send(`/api/memory/entries/${encodeURIComponent(id)}`, { method: 'DELETE' }, 'Failed to expire entry')
+    await searchEntries()
+  }
+
   onMounted(() => {
     void fetchSpaces()
   })
 
-  return { spaces, globalSpaces, entries, scope, searchText, loading, error, searchError, denied, held, fetchSpaces, searchEntries, setScope }
+  return { spaces, globalSpaces, entries, scope, searchText, loading, error, searchError, denied, held, fetchSpaces, searchEntries, setScope, createSpace, createEntry, supersedeEntry, expireEntry }
 }

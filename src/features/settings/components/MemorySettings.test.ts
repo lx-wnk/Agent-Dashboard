@@ -4,7 +4,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 import MemorySettings from '@/features/settings/components/MemorySettings.vue'
-import { useMemory } from '@/features/settings/composables/useMemory'
+import { MemoryWriteDeniedError, useMemory } from '@/features/settings/composables/useMemory'
 
 vi.mock('@/features/settings/composables/useMemory', async () => {
   const actual = await vi.importActual<typeof import('@/features/settings/composables/useMemory')>('@/features/settings/composables/useMemory')
@@ -53,6 +53,10 @@ describe('memorySettings', () => {
   let globalSpaces: Ref<MemorySpace[]>
   let searchEntries: ReturnType<typeof vi.fn>
   let setScope: ReturnType<typeof vi.fn>
+  let createSpace: ReturnType<typeof vi.fn>
+  let createEntry: ReturnType<typeof vi.fn>
+  let supersedeEntry: ReturnType<typeof vi.fn>
+  let expireEntry: ReturnType<typeof vi.fn>
 
   beforeEach(() => {
     spaces = ref([{ ...baseSpace }])
@@ -69,6 +73,10 @@ describe('memorySettings', () => {
       entries.value = [{ ...baseHit }]
     })
     setScope = vi.fn(async () => {})
+    createSpace = vi.fn(async () => {})
+    createEntry = vi.fn(async () => {})
+    supersedeEntry = vi.fn(async () => {})
+    expireEntry = vi.fn(async () => {})
 
     vi.mocked(useMemory).mockReturnValue({
       spaces,
@@ -84,6 +92,10 @@ describe('memorySettings', () => {
       fetchSpaces: vi.fn(),
       searchEntries,
       setScope,
+      createSpace,
+      createEntry,
+      supersedeEntry,
+      expireEntry,
     } as unknown as ReturnType<typeof useMemory>)
   })
 
@@ -209,5 +221,143 @@ describe('memorySettings', () => {
     const hit = wrapper.get('[data-testid="memory-entry-e1"]')
     expect(hit.text()).toContain('unknown-space')
     expect(wrapper.find('[data-testid="memory-entry-outside-scope-e1"]').exists()).toBe(false)
+  })
+  // The panel sends only what the form owns. The scope is added inside the
+  // composable, from the single `scope` ref — see the wire-body assertions in
+  // composables/__tests__/useMemory.test.ts.
+  it('creates a space with the slug and name from the form', async () => {
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+
+    await wrapper.get('[data-testid="memory-space-new"]').trigger('click')
+    await wrapper.get('[data-testid="memory-space-slug"]').setValue('  new-space  ')
+    await wrapper.get('[data-testid="memory-space-name"]').setValue('New space')
+    await wrapper.get('[data-testid="memory-space-submit"]').trigger('click')
+    await flushPromises()
+
+    expect(createSpace).toHaveBeenCalledWith({ slug: 'new-space', name: 'New space' })
+    expect(wrapper.find('[data-testid="memory-space-slug"]').exists()).toBe(false)
+  })
+
+  it('refuses to create a space without a slug and says so next to the form', async () => {
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+
+    await wrapper.get('[data-testid="memory-space-new"]').trigger('click')
+    await wrapper.get('[data-testid="memory-space-name"]').setValue('New space')
+    await wrapper.get('[data-testid="memory-space-submit"]').trigger('click')
+    await flushPromises()
+
+    expect(createSpace).not.toHaveBeenCalled()
+    expect(wrapper.get('[data-testid="memory-space-error"]').text()).toContain('Slug')
+  })
+
+  it('creates an entry with its kind, source kind and confidence', async () => {
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+
+    await wrapper.get('[data-testid="memory-entry-new"]').trigger('click')
+    await wrapper.get('[data-testid="memory-entry-space"]').setValue('project-notes')
+    await wrapper.get('[data-testid="memory-entry-summary"]').setValue('Binds to loopback')
+    await wrapper.get('[data-testid="memory-entry-content"]').setValue('The server binds 127.0.0.1 only.')
+    await wrapper.get('[data-testid="memory-entry-submit"]').trigger('click')
+    await flushPromises()
+
+    expect(createEntry).toHaveBeenCalledWith({
+      spaceSlug: 'project-notes',
+      summary: 'Binds to loopback',
+      content: 'The server binds 127.0.0.1 only.',
+      kind: 'fact',
+      sourceKind: 'user',
+      sourceRef: '',
+      confidence: 1,
+    })
+  })
+
+  it('supersedes an entry with the replacement id from the inline form', async () => {
+    entries.value = [{ ...baseHit }]
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+
+    await wrapper.get('[data-testid="memory-supersede-e1"]').trigger('click')
+    await wrapper.get('[data-testid="memory-supersede-input-e1"]').setValue('e2')
+    await wrapper.get('[data-testid="memory-supersede-confirm-e1"]').trigger('click')
+    await flushPromises()
+
+    expect(supersedeEntry).toHaveBeenCalledWith('e1', 'e2')
+  })
+
+  it('expires an entry only after the confirm step', async () => {
+    entries.value = [{ ...baseHit }]
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+
+    await wrapper.get('[data-testid="memory-expire-e1"]').trigger('click')
+    expect(expireEntry).not.toHaveBeenCalled()
+
+    await wrapper.get('[data-testid="memory-expire-confirm-e1"]').trigger('click')
+    await flushPromises()
+
+    expect(expireEntry).toHaveBeenCalledWith('e1')
+  })
+
+  // memory.write is a separate grant from memory.read: a user who can read
+  // sees a fully populated panel and is refused only at the write. That
+  // refusal belongs next to the form that hit it — not in the panel-level
+  // `denied` box the read side owns, and not by blanking the spaces table
+  // the read grant legitimately filled.
+  it('renders a write denial next to the form, without disturbing the read side', async () => {
+    createSpace.mockRejectedValue(new MemoryWriteDeniedError('capability memory.write denied in scope global'))
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+
+    await wrapper.get('[data-testid="memory-space-new"]').trigger('click')
+    await wrapper.get('[data-testid="memory-space-slug"]').setValue('new-space')
+    await wrapper.get('[data-testid="memory-space-submit"]').trigger('click')
+    await flushPromises()
+
+    const notice = wrapper.get('[data-testid="memory-space-error"]')
+    expect(notice.text()).toContain('memory.write')
+    expect(notice.text()).toContain('Grants')
+    expect(wrapper.find('[data-testid="memory-denied"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="memory-space-s1"]').exists()).toBe(true)
+  })
+
+  // The counterpart to the test above: the capability hint is attached to a
+  // denial, not to every write failure. Appending it unconditionally would
+  // satisfy that test and tell a user with the grant to go fix a grant.
+  it('renders an ordinary write failure without the capability hint', async () => {
+    createSpace.mockRejectedValue(new Error('boom'))
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+
+    await wrapper.get('[data-testid="memory-space-new"]').trigger('click')
+    await wrapper.get('[data-testid="memory-space-slug"]').setValue('new-space')
+    await wrapper.get('[data-testid="memory-space-submit"]').trigger('click')
+    await flushPromises()
+
+    const notice = wrapper.get('[data-testid="memory-space-error"]')
+    expect(notice.text()).toContain('boom')
+    expect(notice.text()).not.toContain('Grants')
+  })
+
+  it('renders a denied expire in the row it was triggered from', async () => {
+    entries.value = [{ ...baseHit }]
+    expireEntry.mockRejectedValue(new MemoryWriteDeniedError('capability memory.write denied in scope global'))
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+
+    await wrapper.get('[data-testid="memory-expire-e1"]').trigger('click')
+    await wrapper.get('[data-testid="memory-expire-confirm-e1"]').trigger('click')
+    await flushPromises()
+
+    const notice = wrapper.get('[data-testid="memory-entry-action-error-e1"]')
+    expect(notice.text()).toContain('memory.write')
+    expect(notice.text()).toContain('Grants')
+    expect(wrapper.find('[data-testid="memory-denied"]').exists()).toBe(false)
+  })
+
+  // The write controls are gated on nothing the read side reports: a read
+  // denial says nothing about memory.write, and hiding them would leave a
+  // user who holds write with no way to use it.
+  it('keeps the write controls reachable while the read side is denied', () => {
+    denied.value = 'capability memory.read denied in scope global'
+    spaces.value = []
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+
+    expect(wrapper.find('[data-testid="memory-space-new"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="memory-entry-new"]').exists()).toBe(true)
   })
 })
