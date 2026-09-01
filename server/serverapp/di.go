@@ -336,7 +336,9 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		// obsidian.IndexNotes is the function that checks obsidian.search
 		// and obsidian.read against this catalogue; POST /api/obsidian/index
 		// (obsidianHandler below) is its production caller. Client.Write and
-		// Client.Delete still have no caller anywhere.
+		// Client.Delete are reached by the obsidian_write/obsidian_delete MCP
+		// tools (di_mcp.go's provideMCPHandler), gated the same way, with an
+		// Asker instead of none.
 		if err := obsidian.Register(ctx, resourceRepo, capabilityRepo); err != nil {
 			return nil, fmt.Errorf("obsidian: register application: %w", err)
 		}
@@ -600,14 +602,16 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	// handler's create core, so it must be built after taskHandler. nil when no DB.
 	sched, schedulesHandler := provideScheduler(entClient, taskHandler, taskBroadcaster, routerConfig.BypassAuth)
 
-	// The only two callers that may block a live request on a human decision:
-	// the memory MCP tools below (an agent is waiting on the tool response)
-	// and the HTTP memory handler further down (a browser request has a
-	// human on the other end). The pipeline's memory push (di_pipeline.go)
-	// and the obsidian trigger's Gate (obsidianHandler, built further down
-	// in this function) both construct their own memory.Gate with no Asker
-	// instead of sharing this one — nothing is waiting on either of them,
-	// so an unanswerable ask must deny rather than stall a spawn or an HTTP
+	// The only three callers that may block a live request on a human
+	// decision: the memory MCP tools below, the obsidian MCP tools below
+	// them (both have an agent waiting on the tool response), and the HTTP
+	// memory handler further down (a browser request has a human on the
+	// other end). The pipeline's memory push (di_pipeline.go) and the
+	// obsidian trigger's Gate (obsidianHandler, built further down in this
+	// function — distinct from the obsidian MCP tools, which share this
+	// asker) both construct their own memory.Gate with no Asker instead of
+	// sharing this one — nothing is watching either of them run, so an
+	// unanswerable ask must deny rather than stall a spawn or an HTTP
 	// response.
 	var memAsker *serverask.Asker
 	// Bypass-auth unmounts the route a human would answer through (router.go),
@@ -625,7 +629,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		}
 	}
 
-	mcpHandler := provideMCPHandler(entClient, orch, sched, taskBroadcaster, projectBroadcaster, refineRunner, memRepo, memRetriever, grantUsageRepo, askerArg)
+	mcpHandler := provideMCPHandler(entClient, orch, sched, taskBroadcaster, projectBroadcaster, refineRunner, memRepo, memRetriever, grantUsageRepo, askerArg, obsidianClient)
 
 	var histImporter *histsvc.Importer
 	var historyHandler *apihistory.Handler
