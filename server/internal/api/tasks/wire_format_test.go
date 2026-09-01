@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 )
@@ -232,5 +233,113 @@ func TestListAudit_WireFormat(t *testing.T) {
 	}
 	if untagged["details"] != nil {
 		t.Errorf("details = %v, want null", untagged["details"])
+	}
+}
+
+// TestListStageRuns_WireFormat asserts the camelCase keys src/types.ts declares
+// for StageRun, and that a zero iteration/cost/token count is sent as 0 rather
+// than dropped by the entity's omitempty tags.
+func TestListStageRuns_WireFormat(t *testing.T) {
+	client, r := newTestHandlerWithRepos(t)
+	task, err := repo.NewTaskRepo(client).Create(testCtx(t), repo.CreateTaskInput{
+		Slug:          "stage-run-wire-format",
+		Title:         "Stage Run Wire Format",
+		Cwd:           t.TempDir(),
+		MaxIterations: 5,
+		Priority:      "normal",
+		CurrentStage:  "implementation",
+	})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+
+	srRepo := repo.NewStageRunRepo(client)
+	finished, err := srRepo.Create(testCtx(t), repo.CreateStageRunInput{
+		TaskID:      task.ID,
+		Stage:       "implementation",
+		Iteration:   1,
+		SessionName: "impl-session",
+	})
+	if err != nil {
+		t.Fatalf("create finished run: %v", err)
+	}
+	started := time.Now().Add(-time.Hour)
+	ended := time.Now()
+	done := "done"
+	sessionID := "sess-1"
+	tokens := 1234
+	cost := 42
+	if _, err = srRepo.Update(testCtx(t), finished.ID, repo.UpdateStageRunInput{
+		Status:     &done,
+		SessionID:  &sessionID,
+		StartedAt:  &started,
+		EndedAt:    &ended,
+		TokensUsed: &tokens,
+		CostCents:  &cost,
+	}); err != nil {
+		t.Fatalf("update finished run: %v", err)
+	}
+	// Zero values: iteration, tokensUsed and costCents are all 0 here, which the
+	// entity's omitempty tags drop from the payload entirely.
+	if _, err = srRepo.Create(testCtx(t), repo.CreateStageRunInput{
+		TaskID:    task.ID,
+		Stage:     "self_review",
+		Iteration: 0,
+	}); err != nil {
+		t.Fatalf("create pending run: %v", err)
+	}
+
+	req := withAuth(t, httptest.NewRequest(http.MethodGet, "/api/tasks/"+task.ID+"/stage-runs", nil))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	rows := decodeRows(t, w.Body.Bytes())
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 stage runs, got %d: %s", len(rows), w.Body.String())
+	}
+
+	byStage := map[string]map[string]any{}
+	want := []string{"id", "taskId", "stage", "sessionId", "sessionName", "pid", "status", "iteration", "output", "tokensUsed", "costCents", "startedAt", "endedAt", "lastGrantAt"}
+	forbidden := []string{"task_id", "session_id", "session_name", "started_at", "ended_at", "tokens_used", "cost_cents", "last_grant_at", "created_at", "retry_count", "next_retry_at", "pending_user_prompt", "edges"}
+	for _, row := range rows {
+		stage, _ := row["stage"].(string)
+		byStage[stage] = row
+		t.Run(stage, func(t *testing.T) {
+			assertKeys(t, row, want, forbidden)
+		})
+	}
+
+	impl := byStage["implementation"]
+	if impl["taskId"] != task.ID {
+		t.Errorf("taskId = %v, want %q", impl["taskId"], task.ID)
+	}
+	if impl["sessionName"] != "impl-session" {
+		t.Errorf("sessionName = %v, want %q", impl["sessionName"], "impl-session")
+	}
+	if impl["startedAt"] == nil {
+		t.Error("startedAt = null, want a timestamp for a run that started")
+	}
+	if impl["endedAt"] == nil {
+		t.Error("endedAt = null, want a timestamp for a finished run")
+	}
+	if impl["tokensUsed"] != float64(1234) {
+		t.Errorf("tokensUsed = %v, want 1234", impl["tokensUsed"])
+	}
+
+	pending := byStage["self_review"]
+	if pending["iteration"] != float64(0) {
+		t.Errorf("iteration = %v, want 0 (not omitted)", pending["iteration"])
+	}
+	if pending["costCents"] != float64(0) {
+		t.Errorf("costCents = %v, want 0 (not omitted)", pending["costCents"])
+	}
+	if pending["startedAt"] != nil {
+		t.Errorf("startedAt = %v, want null", pending["startedAt"])
+	}
+	if pending["output"] != nil {
+		t.Errorf("output = %v, want null (not omitted)", pending["output"])
 	}
 }

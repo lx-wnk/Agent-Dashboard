@@ -843,13 +843,66 @@ func (h *Handler) resume(w http.ResponseWriter, r *http.Request) error {
 	return jsonReply(w, http.StatusAccepted, sr)
 }
 
+// stageRunResponse is the API response shape for one stage run. The ent entity's
+// own JSON tags are the storage column names and carry omitempty, which drops a
+// zero iteration, token count or cost from the payload instead of sending 0, and
+// leaks the empty edges container.
+//
+// retry_count, next_retry_at, pending_user_prompt and created_at are deliberately
+// absent: no client reads them off this route, the first two already reach the
+// browser as EnrichedTask.autoRetryCount/nextRetryAt, and the third is the agent's
+// queued input rather than run history.
+type stageRunResponse struct {
+	ID          string         `json:"id"`
+	TaskID      string         `json:"taskId"`
+	Stage       string         `json:"stage"`
+	SessionID   *string        `json:"sessionId"`
+	SessionName *string        `json:"sessionName"`
+	Pid         *int           `json:"pid"`
+	Status      string         `json:"status"`
+	Iteration   int            `json:"iteration"`
+	Output      map[string]any `json:"output"`
+	TokensUsed  int            `json:"tokensUsed"`
+	CostCents   int            `json:"costCents"`
+	StartedAt   *time.Time     `json:"startedAt"`
+	EndedAt     *time.Time     `json:"endedAt"`
+	LastGrantAt *time.Time     `json:"lastGrantAt"`
+}
+
+func toStageRunResponse(sr *ent.StageRun) stageRunResponse {
+	return stageRunResponse{
+		ID:          sr.ID,
+		TaskID:      sr.TaskID,
+		Stage:       sr.Stage,
+		SessionID:   sr.SessionID,
+		SessionName: sr.SessionName,
+		Pid:         sr.Pid,
+		Status:      sr.Status,
+		Iteration:   sr.Iteration,
+		Output:      sr.Output,
+		TokensUsed:  sr.TokensUsed,
+		CostCents:   sr.CostCents,
+		StartedAt:   sr.StartedAt,
+		EndedAt:     sr.EndedAt,
+		LastGrantAt: sr.LastGrantAt,
+	}
+}
+
+func toStageRunResponses(runs []*ent.StageRun) []stageRunResponse {
+	resp := make([]stageRunResponse, len(runs))
+	for i, sr := range runs {
+		resp[i] = toStageRunResponse(sr)
+	}
+	return resp
+}
+
 func (h *Handler) listStageRuns(w http.ResponseWriter, r *http.Request) error {
 	id := chi.URLParam(r, "id")
 	runs, err := h.srRepo.ListForTask(r.Context(), id)
 	if err != nil {
 		return fmt.Errorf("tasks.listStageRuns: %w", err)
 	}
-	return jsonReply(w, http.StatusOK, runs)
+	return jsonReply(w, http.StatusOK, toStageRunResponses(runs))
 }
 
 // auditEntryResponse is the API response shape for a single audit event.
