@@ -75,7 +75,7 @@ able to give up on purpose:
 
 | Enforcement point | What it covers |
 |---|---|
-| **Server** (`ServerEnforcer`) | The only point with complete coverage once a call site invokes it — nothing routes around it, and it cannot time out into an implicit allow. It is implemented and tested (`server/internal/capability/enforcer_server.go`) and has real production callers: every `/api/memory/*` request, both memory MCP tools (`memory_search`, `memory_write`), the task pipeline's automatic memory push into a stage's spawn prompt, and the Obsidian vault indexer, all through `memory.Gate.Authorize` (`server/internal/memory/authorize.go`). **An `Asker` is now wired to it — but only when authentication is on.** With `DASHBOARD_AUTH` in any real mode, `server/serverapp/di.go` builds a `serverask.Asker` (`server/internal/serverask/asker.go`): an `ask` decision holds the caller's request open, the pending ask rides the agent SSE frame into the dashboard's triage band, and **Allow**/**Deny** there posts to `POST /api/capabilities/decisions/respond`, which releases the held call. Under `DASHBOARD_AUTH=none` no asker is constructed and an `ask` still fails closed to `ErrAskRequired` — deliberately: the respond route is not mounted in that mode either, so "a human decided" would reduce to "any local process decided". Only two of the six call sites that reach the gate may block for a human — the HTTP memory handler (`server/internal/api/memory/handler.go`) and the memory MCP tools (`server/internal/mcp/tools/memory.go`). The pipeline's memory push (`server/serverapp/di_pipeline.go`) and the Obsidian indexer's three checks — `memory.write` on the target space, `obsidian.search`, `obsidian.read` (`server/internal/apps/obsidian/index.go`) — construct a `Gate` with no `Asker` on purpose: nothing is waiting on either, so an unanswerable ask must deny rather than stall a spawn or a background index run. An ask nobody answers within 25 seconds (`askHoldTimeout`) denies, and so does an ask still pending when the server restarts: a pending ask lives only in memory, is never persisted, and the caller's request fails closed when it disappears. A `deny` decision never reaches the asker at all — `ServerEnforcer.Enforce` returns `ErrDenied` for `EffectDeny` before the ask branch — so nobody can click an explicit denial into an allow; the only decision a human sees is one the Decider itself resolved to `ask`. One such case is a rate limit: an `allow` whose winning grant is exhausted is downgraded to `ask` by `Enforce`, with a reason naming the limit, so with an asker wired a human can now be asked to permit one use past a cap they set themselves. The other half of the old gap closed separately: the `agent-dashboard grants` CLI now creates standing grants, so a `memory.read`/`memory.write` request can be allowed once and for all rather than one call at a time. That is still the only surface for it — no HTTP route and no settings page creates a grant — and a fresh install therefore denies every memory call until you either run that CLI or answer an ask by hand. |
+| **Server** (`ServerEnforcer`) | The only point with complete coverage once a call site invokes it — nothing routes around it, and it cannot time out into an implicit allow. It is implemented and tested (`server/internal/capability/enforcer_server.go`) and has real production callers: every `/api/memory/*` request, both memory MCP tools (`memory_search`, `memory_write`), the task pipeline's automatic memory push into a stage's spawn prompt, the `POST /api/obsidian/index` trigger, and the four `obsidian_*` MCP tools, all through `memory.Gate.Authorize` (`server/internal/memory/authorize.go`). **An `Asker` is now wired to it — but only when authentication is on.** With `DASHBOARD_AUTH` in any real mode, `server/serverapp/di.go` builds a `serverask.Asker` (`server/internal/serverask/asker.go`): an `ask` decision holds the caller's request open, the pending ask rides the agent SSE frame into the dashboard's triage band, and **Allow**/**Deny** there posts to `POST /api/capabilities/decisions/respond`, which releases the held call. Under `DASHBOARD_AUTH=none` no asker is constructed and an `ask` still fails closed to `ErrAskRequired` — deliberately: the respond route is not mounted in that mode either, so "a human decided" would reduce to "any local process decided". Only three of the call sites that reach the gate may block for a human — the HTTP memory handler (`server/internal/api/memory/handler.go`), the memory MCP tools (`server/internal/mcp/tools/memory.go`), and the four `obsidian_*` MCP tools (`server/internal/mcp/tools/obsidian.go`, sharing the same `Asker` the memory tools use — an agent is genuinely waiting on the tool response either way). The pipeline's memory push (`server/serverapp/di_pipeline.go`) and the Obsidian index trigger's three checks — `memory.write` on the target space, `obsidian.search`, `obsidian.read` (`server/internal/apps/obsidian/index.go`, called from `POST /api/obsidian/index`) — construct their own `Gate` with no `Asker` on purpose: nothing is waiting on either, so an unanswerable ask must deny rather than stall a spawn or a background index run. Both gates reach the same three Obsidian capability checks, but only the MCP tools' can hold for a human — a fresh install therefore denies the index trigger by default until `obsidian.read`/`obsidian.search`/`memory.write` grants exist, while the same call through an MCP tool can surface as an `ask` card instead. An ask nobody answers within 25 seconds (`askHoldTimeout`) denies, and so does an ask still pending when the server restarts: a pending ask lives only in memory, is never persisted, and the caller's request fails closed when it disappears. A `deny` decision never reaches the asker at all — `ServerEnforcer.Enforce` returns `ErrDenied` for `EffectDeny` before the ask branch — so nobody can click an explicit denial into an allow; the only decision a human sees is one the Decider itself resolved to `ask`. One such case is a rate limit: an `allow` whose winning grant is exhausted is downgraded to `ask` by `Enforce`, with a reason naming the limit, so with an asker wired a human can now be asked to permit one use past a cap they set themselves. The other half of the old gap closed separately: the `agent-dashboard grants` CLI now creates standing grants, so a `memory.read`/`memory.write` request can be allowed once and for all rather than one call at a time. That is still the only surface for it — no HTTP route and no settings page creates a grant — and a fresh install therefore denies every memory call until you either run that CLI or answer an ask by hand. |
 | **Spawn** (`SpawnEnforcer`) | Complete for every agent the dashboard's task pipeline spawns itself: each granted `TaskPermission` is resolved through the Decider and rendered into that process's `--allowedTools` list (`server/internal/pipeline/spawner.go`). It cannot ask — the file is written before the process starts — so an `ask` decision is simply omitted, and the agent falls back to its own permission prompt for that call. |
 | **Hook** (`HookEnforcer`) | The only point that can reach a session you started by hand, because it rides Claude Code's own `PreToolUse` hook instead of a start-time handshake. **It fails open on a timeout, by design** — see below. |
 
@@ -213,22 +213,26 @@ guard blocks loopback on purpose, and Obsidian's API lives on loopback, so
 the client carries its own narrow, named dial policy rather than widening
 the shared guard to accommodate one application.
 
-**As of this increment, nothing in production constructs this client.** The
-settings surface that would supply `BaseURL`, `APIKey`, `VaultRoot`, and
-`TLSMode` does not exist — no HTTP route, no settings panel, no CLI command.
-`obsidian.Register`, the only part of this Application wired into boot
-(`server/serverapp/di.go`), writes only the application's registry identity
-and its four capability rows; it never builds a `Client`. So the TLS modes
-above describe code that is implemented and tested (`client_test.go`,
-`dial_test.go`) but has no way to run against a real vault today. The API
-key `Config.APIKey` would carry, once a settings surface exists, also has no
-encrypted home yet: the one plugin-agnostic key/value store,
-`AppSettingRepo`, persists a plain unencrypted string with no masking, and
-the existing AES-GCM secret path belongs to the subprocess plugin mechanism
-this Application deliberately does not use (`server/internal/apps/obsidian`'s
-package doc explains why). **State this plainly: an Obsidian API key
-configured today, by any means, would sit in the database in plaintext** —
-see [`PRIVACY.md`](../../PRIVACY.md).
+**The client is now constructed at boot, from `Settings → Obsidian`.**
+`buildObsidianClient` (`server/serverapp/di_obsidian.go`) reads
+`obsidian.baseURL`, `obsidian.vaultRoot`, `obsidian.apiKey`, and
+`obsidian.tlsMode` from the settings registry after `obsidian.Register` runs.
+Nothing set at all leaves the integration off; any one of `baseURL`,
+`vaultRoot`, or `apiKey` set without the other two fails the boot outright,
+naming the missing keys — a half-configured client would otherwise look
+healthy while every request shipped an empty `Authorization` header and
+failed 401. `obsidian.apiKey` is registered `Secret: true`
+(`server/internal/settings/registry.go`): it is encrypted at rest with the
+same AES-256-GCM `internal/secretbox` path the plugin secret mechanism
+already used, and reads back as `********` on every surface except
+`settings.Service.Secret`, the one accessor `buildObsidianClient` itself
+calls to decrypt it. `Client.Read`/`Write`/`Search`/`Delete` still take no
+capability repos and enforce nothing themselves — every production caller
+(the `POST /api/obsidian/index` trigger, and the four `obsidian_*` MCP
+tools below) authorizes through a `memory.Gate` before reaching the client,
+so a future caller that reaches the client directly instead would bypass
+that gate entirely. See [`PRIVACY.md`](../../PRIVACY.md) for what an
+indexing pass persists.
 
 ## Reporting a vulnerability
 
