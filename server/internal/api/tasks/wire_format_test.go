@@ -610,6 +610,59 @@ func TestPermissionWriteRoutes_WireFormat(t *testing.T) {
 	})
 }
 
+// TestCreatePermissionRequestGated_WireFormat asserts createPermissionRequest's
+// second return site (permission_request_routes.go's gated/manual-autonomy
+// fallthrough, reached when the owning task is not allow-all) answers the same
+// camelCase shape as its auto-approve return site above it. The tasks
+// newTestHandlerWithRepos creates default to spec_gated (allow-all per
+// taskcontrol.IsAllowAll), so TestPermissionWriteRoutes_WireFormat's
+// createPermissionRequest subtest only ever exercises the auto-approve
+// return — this task needs manual autonomy to reach the fallthrough.
+func TestCreatePermissionRequestGated_WireFormat(t *testing.T) {
+	client, r := newTestHandlerWithRepos(t)
+	manual := "manual"
+	task, err := repo.NewTaskRepo(client).Create(testCtx(t), repo.CreateTaskInput{
+		Slug:          "perm-write-wire-format-gated",
+		Title:         "Permission Write Wire Format Gated",
+		Cwd:           t.TempDir(),
+		MaxIterations: 5,
+		Priority:      "normal",
+		CurrentStage:  "implementation",
+		Autonomy:      &manual,
+	})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+	run, err := repo.NewStageRunRepo(client).Create(testCtx(t), repo.CreateStageRunInput{
+		TaskID:    task.ID,
+		Stage:     "implementation",
+		Iteration: 1,
+	})
+	if err != nil {
+		t.Fatalf("create stage run: %v", err)
+	}
+
+	body := `{"stageRunId":"` + run.ID + `","tool":"Bash","pattern":"ls -la"}`
+	req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/permission-requests", strings.NewReader(body)))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+	var row map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &row); err != nil {
+		t.Fatalf("unmarshal response: %v (body: %s)", err, w.Body.String())
+	}
+	assertKeys(t, row,
+		[]string{"id", "stageRunId", "tool", "pattern", "reason", "outcome", "requestedAt", "resolvedAt", "outsideSafeList"},
+		[]string{"stage_run_id", "requested_at", "resolved_at", "edges"},
+	)
+	if row["outcome"] != nil {
+		t.Errorf("outcome = %v, want null on the gated (non-auto-approved) path", row["outcome"])
+	}
+}
+
 // stageRunOrchestrator returns a populated *ent.StageRun from every
 // orchestrator call the stage-run action routes use, so tests reach the 2xx
 // path instead of the 409 conflict a nil stage run would produce.
