@@ -1,7 +1,7 @@
 import type { Ref } from 'vue'
 import type { StageRun } from '@/types'
 import { ref, watch } from 'vue'
-import { errorMessage } from '@/utils/errorMessage'
+import { errorMessage, readErrorMessage } from '@/utils/errorMessage'
 
 // Mirrors memoryInjectionResponse (server/internal/api/memory/handler.go) as
 // emitted by GET /api/memory/injections — one row per memory push into a stage
@@ -62,8 +62,7 @@ export function useStageInjections(stageRuns: Ref<StageRun[]>) {
     try {
       const res = await fetch(`/api/memory/injections?${query}`)
       if (res.status === 403) {
-        const body = await res.json().catch(() => ({})) as { error?: string }
-        refusal = body.error || DENIED_FALLBACK
+        refusal = await readErrorMessage(res, DENIED_FALLBACK)
       }
       else if (!res.ok) {
         throw new Error(`Failed to load memory injections (HTTP ${res.status})`)

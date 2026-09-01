@@ -1,6 +1,6 @@
 import type { ResourceScopeKind, ResourceView } from '@/features/settings/composables/useResources'
 import { computed, onMounted, ref } from 'vue'
-import { errorMessage } from '@/utils/errorMessage'
+import { errorMessage, readErrorMessage } from '@/utils/errorMessage'
 
 // A memory space IS a registry row (kind = memory_space) — MemoryRepo.ListSpaces
 // queries the same `resource` table ResourceRepo does. Aliased rather than
@@ -89,11 +89,6 @@ const GLOBAL_SCOPE: MemoryScope = { scopeKind: 'global', scopeRef: '' }
 const READ_DENIED_FALLBACK = 'The memory route refused this read (HTTP 403) without giving a reason.'
 const WRITE_DENIED_FALLBACK = 'The memory route refused this write (HTTP 403) without giving a reason.'
 
-async function readError(res: Response, fallback: string): Promise<string> {
-  const body = await res.json().catch(() => ({ error: fallback })) as { error?: string }
-  return body.error || fallback
-}
-
 function scopeParams(scope: MemoryScope): URLSearchParams {
   const params = new URLSearchParams({ scope: scope.scopeKind })
   if (scope.scopeKind !== 'global')
@@ -154,12 +149,12 @@ export function useMemory() {
     try {
       const res = await fetch(`/api/memory/spaces?${scopeParams(scope.value).toString()}`)
       if (res.status === 403) {
-        denied.value = await readError(res, READ_DENIED_FALLBACK)
+        denied.value = await readErrorMessage(res, READ_DENIED_FALLBACK)
         spaces.value = []
         return
       }
       if (!res.ok)
-        throw new Error(await readError(res, `HTTP ${res.status}`))
+        throw new Error(await readErrorMessage(res, `HTTP ${res.status}`))
       spaces.value = await res.json()
     }
     catch (e) {
@@ -206,13 +201,13 @@ export function useMemory() {
       params.set('q', searchText.value)
       const res = await fetch(`/api/memory/entries?${params.toString()}`)
       if (res.status === 403) {
-        searchDenied.value = await readError(res, READ_DENIED_FALLBACK)
+        searchDenied.value = await readErrorMessage(res, READ_DENIED_FALLBACK)
         entries.value = []
         searched.value = false
         return
       }
       if (!res.ok)
-        throw new Error(await readError(res, `HTTP ${res.status}`))
+        throw new Error(await readErrorMessage(res, `HTTP ${res.status}`))
       entries.value = await res.json()
       // Only a request that answered with rows licenses "found nothing" —
       // a refused or failed one leaves the panel not knowing either way.
@@ -265,9 +260,9 @@ export function useMemory() {
   async function send(url: string, init: RequestInit, fallback: string): Promise<void> {
     const res = await fetch(url, init)
     if (res.status === 403)
-      throw new MemoryWriteDeniedError(await readError(res, WRITE_DENIED_FALLBACK))
+      throw new MemoryWriteDeniedError(await readErrorMessage(res, WRITE_DENIED_FALLBACK))
     if (!res.ok)
-      throw new Error(await readError(res, fallback))
+      throw new Error(await readErrorMessage(res, fallback))
   }
 
   function jsonInit(method: string, body: unknown): RequestInit {
