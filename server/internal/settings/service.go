@@ -18,6 +18,9 @@ type Repo interface {
 	Set(ctx context.Context, key, value string) error
 	SetSecret(ctx context.Context, key, ciphertext, nonce string) error
 	GetSecret(ctx context.Context, key string) (string, string, bool, error)
+	// ListAll returns every stored key/value pair. The returned map may be
+	// an implementation's own backing store rather than a copy — callers
+	// must treat it as read-only and never write into it.
 	ListAll(ctx context.Context) (map[string]string, error)
 }
 
@@ -54,22 +57,29 @@ func New(repo Repo, box *secretbox.Box) *Service {
 // A row for a secret definition is stored in clear ciphertext by the repo, so
 // it is replaced with secretbox.MaskedSentinel here — otherwise Effective()
 // would publish base64 ciphertext, which is not a leak of the plaintext but
-// is still a value no consumer should see.
+// is still a value no consumer should see. The replacement is written into a
+// snapshot map built here, never into the map ListAll returned — that map may
+// be a Repo implementation's own backing store, per its doc comment, and
+// writing into it would let a masked read corrupt the stored ciphertext.
 func (s *Service) Load(ctx context.Context) error {
 	all, err := s.repo.ListAll(ctx)
 	if err != nil {
 		return fmt.Errorf("settings.Load: %w", err)
 	}
+	snapshot := make(map[string]string, len(all))
+	for k, v := range all {
+		snapshot[k] = v
+	}
 	for _, d := range All() {
 		if !d.Secret {
 			continue
 		}
-		if _, ok := all[d.Key]; ok {
-			all[d.Key] = secretbox.MaskedSentinel
+		if _, ok := snapshot[d.Key]; ok {
+			snapshot[d.Key] = secretbox.MaskedSentinel
 		}
 	}
 	s.mu.Lock()
-	s.snapshot = all
+	s.snapshot = snapshot
 	s.mu.Unlock()
 	return nil
 }

@@ -97,3 +97,29 @@ func TestService_SecretRoundTripAndMasking(t *testing.T) {
 	require.NoError(t, svc.Set(t.Context(), "obsidian.apiKey", secretbox.MaskedSentinel))
 	assert.Equal(t, before, repo.values["obsidian.apiKey"])
 }
+
+func TestService_LoadMasksAPreExistingSecretRow(t *testing.T) {
+	// Simulate a ciphertext row already sitting in the repo from a previous
+	// process (e.g. across a restart) — never written via Set in this test,
+	// so only Load's own masking loop can be responsible for the mask below.
+	repo := newFakeRepo()
+	repo.values["obsidian.apiKey"] = "ciphertext-from-before-restart"
+	repo.nonces["obsidian.apiKey"] = "nonce-from-before-restart"
+
+	svc := New(repo, nil)
+	require.NoError(t, svc.Load(t.Context()))
+
+	assert.Equal(t, secretbox.MaskedSentinel, svc.String("obsidian.apiKey"))
+	assert.Equal(t, secretbox.MaskedSentinel, svc.Effective()["obsidian.apiKey"])
+}
+
+func TestService_NilBox_SecretAndSetReturnErrNoSecretBox(t *testing.T) {
+	svc := New(newFakeRepo(), nil)
+	require.NoError(t, svc.Load(t.Context()))
+
+	_, err := svc.Secret(t.Context(), "obsidian.apiKey")
+	require.ErrorIs(t, err, ErrNoSecretBox)
+
+	err = svc.Set(t.Context(), "obsidian.apiKey", "sk-live-456")
+	require.ErrorIs(t, err, ErrNoSecretBox)
+}
