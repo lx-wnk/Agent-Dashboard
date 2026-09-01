@@ -419,6 +419,7 @@ func newTestHandlerWithRepos(t *testing.T) (*ent.Client, *chi.Mux) {
 		PermRepo:     permRepo,
 		AuditRepo:    auditRepo,
 		CfgRepo:      cfgRepo,
+		DepRepo:      repo.NewDependencyRepo(client),
 		ProjectRepo:  projectRepo,
 		SpawnerRepo:  spawnerRepo,
 		Orchestrator: &noopOrchestrator{},

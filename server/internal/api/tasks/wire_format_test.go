@@ -343,3 +343,112 @@ func TestListStageRuns_WireFormat(t *testing.T) {
 		t.Errorf("output = %v, want null (not omitted)", pending["output"])
 	}
 }
+
+// TestListDependencies_WireFormat asserts the dependency rows carry the joined
+// titles and the upstream task's current stage, which ent.TaskDependency stores
+// no column for, under the camelCase names TaskDependenciesTab.vue reads.
+func TestListDependencies_WireFormat(t *testing.T) {
+	client, r := newTestHandlerWithRepos(t)
+	taskRepo := repo.NewTaskRepo(client)
+	downstream, err := taskRepo.Create(testCtx(t), repo.CreateTaskInput{
+		Slug:          "dep-wire-downstream",
+		Title:         "Downstream Task",
+		Cwd:           t.TempDir(),
+		MaxIterations: 5,
+		Priority:      "normal",
+		CurrentStage:  "backlog",
+	})
+	if err != nil {
+		t.Fatalf("create downstream: %v", err)
+	}
+	upstream, err := taskRepo.Create(testCtx(t), repo.CreateTaskInput{
+		Slug:          "dep-wire-upstream",
+		Title:         "Upstream Task",
+		Cwd:           t.TempDir(),
+		MaxIterations: 5,
+		Priority:      "normal",
+		CurrentStage:  "implementation",
+	})
+	if err != nil {
+		t.Fatalf("create upstream: %v", err)
+	}
+	if _, err = repo.NewDependencyRepo(client).Add(testCtx(t), downstream.ID, upstream.ID, "done", "on_hold"); err != nil {
+		t.Fatalf("add dependency: %v", err)
+	}
+
+	want := []string{"id", "taskId", "taskTitle", "dependsOnId", "dependsOnTitle", "dependsOnStage", "requiredStage", "onCancelAction"}
+	forbidden := []string{"task_id", "depends_on_id", "required_stage", "on_cancel_action", "created_at", "createdAt", "edges"}
+
+	t.Run("upstream", func(t *testing.T) {
+		req := withAuth(t, httptest.NewRequest(http.MethodGet, "/api/tasks/"+downstream.ID+"/dependencies", nil))
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		rows := decodeRows(t, w.Body.Bytes())
+		if len(rows) != 1 {
+			t.Fatalf("expected 1 dependency, got %d: %s", len(rows), w.Body.String())
+		}
+		assertKeys(t, rows[0], want, forbidden)
+		if rows[0]["dependsOnTitle"] != "Upstream Task" {
+			t.Errorf("dependsOnTitle = %v, want %q", rows[0]["dependsOnTitle"], "Upstream Task")
+		}
+		if rows[0]["dependsOnStage"] != "implementation" {
+			t.Errorf("dependsOnStage = %v, want the upstream task's current stage %q", rows[0]["dependsOnStage"], "implementation")
+		}
+		if rows[0]["requiredStage"] != "done" {
+			t.Errorf("requiredStage = %v, want %q", rows[0]["requiredStage"], "done")
+		}
+		if rows[0]["onCancelAction"] != "on_hold" {
+			t.Errorf("onCancelAction = %v, want %q", rows[0]["onCancelAction"], "on_hold")
+		}
+	})
+
+	t.Run("downstream", func(t *testing.T) {
+		req := withAuth(t, httptest.NewRequest(http.MethodGet, "/api/tasks/"+upstream.ID+"/dependents", nil))
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		rows := decodeRows(t, w.Body.Bytes())
+		if len(rows) != 1 {
+			t.Fatalf("expected 1 dependent, got %d: %s", len(rows), w.Body.String())
+		}
+		assertKeys(t, rows[0], want, forbidden)
+		if rows[0]["taskTitle"] != "Downstream Task" {
+			t.Errorf("taskTitle = %v, want %q", rows[0]["taskTitle"], "Downstream Task")
+		}
+	})
+
+	t.Run("create", func(t *testing.T) {
+		third, err := taskRepo.Create(testCtx(t), repo.CreateTaskInput{
+			Slug:          "dep-wire-third",
+			Title:         "Third Task",
+			Cwd:           t.TempDir(),
+			MaxIterations: 5,
+			Priority:      "normal",
+			CurrentStage:  "concept",
+		})
+		if err != nil {
+			t.Fatalf("create third: %v", err)
+		}
+		body := `{"dependsOnId":"` + third.ID + `","requiredStage":"done","onCancelAction":"cancel"}`
+		req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/tasks/"+downstream.ID+"/dependencies", strings.NewReader(body)))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusCreated {
+			t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+		}
+		var row map[string]any
+		if err := json.Unmarshal(w.Body.Bytes(), &row); err != nil {
+			t.Fatalf("unmarshal response: %v (body: %s)", err, w.Body.String())
+		}
+		assertKeys(t, row, want, forbidden)
+		if row["dependsOnStage"] != "concept" {
+			t.Errorf("dependsOnStage = %v, want %q", row["dependsOnStage"], "concept")
+		}
+	})
+}
