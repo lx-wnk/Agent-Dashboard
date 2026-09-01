@@ -144,6 +144,28 @@ function formatLimit(count: number, windowSeconds: number): string {
   return count > 0 ? `${count} / ${windowSeconds}s` : 'unlimited'
 }
 
+// Mirrors isServerEnforceable / enforcementByCapability in
+// server/internal/cli/cmd_grants.go:252-274 — "server" is the one production
+// enforcement point that reads stored grants (internal/memory.Authorize), so a
+// capability that does not name it produces a grant the system records and
+// never applies.
+const ENFORCER_SERVER = 'server'
+
+const enforcementByCapability = computed(() => {
+  const byName = new Map<string, string>()
+  for (const c of capabilities.value)
+    byName.set(c.name, c.enforceable_by.includes(ENFORCER_SERVER) ? ENFORCER_SERVER : 'none')
+  return byName
+})
+
+// A grant whose capability is absent from the catalogue answers "unknown"
+// rather than "none": the catalogue may simply not have loaded yet, and
+// claiming the grant is inert would be a stronger statement than the data
+// supports. Same fallback as the CLI table.
+function enforcementOf(capabilityName: string): string {
+  return enforcementByCapability.value.get(capabilityName) ?? 'unknown'
+}
+
 function isLegacy(grantedBy: string): boolean {
   return grantedBy === LEGACY_GRANTED_BY
 }
@@ -199,6 +221,9 @@ function isLegacy(grantedBy: string): boolean {
             Mode
           </th>
           <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
+            Enforcement
+          </th>
+          <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
             Limit
           </th>
           <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
@@ -228,6 +253,22 @@ function isLegacy(grantedBy: string): boolean {
           </td>
           <td class="px-3 py-2.5 border-b border-line text-fg-mute">
             {{ g.mode }}
+          </td>
+          <td class="px-3 py-2.5 border-b border-line">
+            <span
+              v-if="enforcementOf(g.capability_name) === 'server'"
+              class="inline-block rounded px-2 py-0.5 text-[11px] font-semibold bg-success-soft text-success-text"
+              :data-testid="`grant-enforcement-${g.id}`"
+              title="Enforced server-side by internal/memory.Authorize"
+            >server</span>
+            <span
+              v-else
+              class="inline-block rounded px-2 py-0.5 text-[11px] font-semibold bg-warning-soft text-warning-text"
+              :data-testid="`grant-enforcement-${g.id}`"
+              :title="enforcementOf(g.capability_name) === 'none'
+                ? 'No enforcement point reads stored grants for this capability today — the grant is recorded and will apply once a reader exists'
+                : 'This capability is not in the loaded catalogue — enforceability cannot be determined yet'"
+            >{{ enforcementOf(g.capability_name) }}</span>
           </td>
           <td class="px-3 py-2.5 border-b border-line text-fg-mute whitespace-nowrap">
             {{ formatLimit(g.limit_count, g.limit_window_seconds) }}

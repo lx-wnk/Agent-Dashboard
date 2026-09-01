@@ -90,6 +90,23 @@ describe('grantSettings', () => {
     expect(wrapper.get('[data-testid="grant-row-g3"]').text()).toContain('Legacy migration')
   })
 
+  it('marks a grant on a capability no enforcement point reads as not enforced', () => {
+    capabilities.value = [
+      { id: 'c1', name: 'bash.exec', class: 'shell', enforceable_by: [], requires_pattern: true, reversible: false, description: '' },
+      { id: 'c2', name: 'memory.read', class: 'resource', enforceable_by: ['server'], requires_pattern: false, reversible: true, description: '' },
+    ]
+    grants.value = [
+      { ...baseGrant, id: 'g1', capability_name: 'bash.exec' },
+      { ...baseGrant, id: 'g2', capability_name: 'memory.read' },
+      { ...baseGrant, id: 'g3', capability_name: 'not.in.catalogue' },
+    ]
+    const wrapper = mount(GrantSettings, { attachTo: document.body })
+
+    expect(wrapper.get('[data-testid="grant-enforcement-g1"]').text()).toBe('none')
+    expect(wrapper.get('[data-testid="grant-enforcement-g2"]').text()).toBe('server')
+    expect(wrapper.get('[data-testid="grant-enforcement-g3"]').text()).toBe('unknown')
+  })
+
   it('posts the right body when creating a grant', async () => {
     const wrapper = mount(GrantSettings, { attachTo: document.body })
 
