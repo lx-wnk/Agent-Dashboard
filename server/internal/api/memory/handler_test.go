@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -437,6 +439,32 @@ func TestListInjectionsSingleIDIsUnchanged(t *testing.T) {
 	w = doJSON(t, mux, http.MethodGet, "/api/memory/injections?stageRun="+runA+"&stageRun="+runA, nil)
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Len(t, decodeSlice(t, w), 1)
+}
+
+// TestListInjectionsCapsTheIDList pins the boundary of the repeated parameter.
+// One Authorize covers the whole list, so the id count is what bounds the work
+// a single capability check pays for.
+func TestListInjectionsCapsTheIDList(t *testing.T) {
+	mux, _, _, grants, capRepo, ctx := newMux(t)
+	repo.SeedCapabilities(ctx, capRepo)
+	mustAllowGrant(t, grants, ctx, repo.CapabilityMemoryRead, repo.GrantContextGlobal, "")
+
+	// Distinct unknown ids: the cap is checked before any lookup, so no real
+	// stage run is needed to reach it — only the count matters.
+	query := func(n int) string {
+		parts := make([]string, 0, n)
+		for i := range n {
+			parts = append(parts, "stageRun=run-"+strconv.Itoa(i))
+		}
+		return "/api/memory/injections?" + strings.Join(parts, "&")
+	}
+
+	w := doJSON(t, mux, http.MethodGet, query(200), nil)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	w = doJSON(t, mux, http.MethodGet, query(201), nil)
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	require.Contains(t, w.Body.String(), "at most 200")
 }
 
 func TestListInjectionsRequiresStageRunParam(t *testing.T) {

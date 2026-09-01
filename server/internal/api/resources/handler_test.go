@@ -206,3 +206,37 @@ func TestList_GatesMemorySpaceButNotApplication(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Len(t, decodeList(t, w), 1)
 }
+
+// TestList_GateChecksTheRequestedScopeNotGlobal pins WHICH scope the
+// memory_space gate checks. Substituting repo.GlobalScope() for the requested
+// scope leaves the rest of this package green, yet it reopens the disclosure
+// the gate closes: the scopeRef echo is an existence oracle for filesystem
+// paths, and a caller granted memory.read in any one project could then probe
+// every other path with it.
+func TestList_GateChecksTheRequestedScopeNotGlobal(t *testing.T) {
+	mux, resourceRepo, grants, ctx := newUngrantedMux(t)
+	_, err := grants.Create(ctx, repo.CreateGrantInput{
+		CapabilityName: repo.CapabilityMemoryRead,
+		Context:        repo.GrantContextFor(repo.GrantContextProject, "/a"),
+		Pattern:        "",
+		Mode:           repo.GrantModeAllow,
+		GrantedBy:      "test",
+	})
+	require.NoError(t, err)
+	_, err = resourceRepo.Upsert(ctx, repo.UpsertResourceInput{
+		Kind: repo.ResourceKindMemorySpace, Slug: "notes", Name: "Notes",
+		Scope: repo.ProjectScope("/a"),
+	})
+	require.NoError(t, err)
+
+	// The granted path answers. Under a global-scope check this 200 becomes a
+	// 403, because the caller holds nothing at global.
+	require.Equal(t, http.StatusOK,
+		get(t, mux, "/api/resources?kind=memory_space&scope=project&scopeRef=/a").Code)
+
+	// Every other path stays refused — including global, which a project grant
+	// does not reach either.
+	require.Equal(t, http.StatusForbidden,
+		get(t, mux, "/api/resources?kind=memory_space&scope=project&scopeRef=/b").Code)
+	require.Equal(t, http.StatusForbidden, get(t, mux, "/api/resources?kind=memory_space").Code)
+}

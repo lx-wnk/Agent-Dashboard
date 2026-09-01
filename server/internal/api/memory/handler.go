@@ -433,6 +433,11 @@ func (h *Handler) expireEntry(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
+// maxStageRunIDs bounds the repeated stageRun parameter. A task runs at most
+// max_iterations (default 20) passes over the pipeline's handful of stages, so
+// this clears any real task's stage-run count several times over.
+const maxStageRunIDs = 200
+
 // listInjections answers GET /api/memory/injections?stageRun=. The parameter
 // repeats: ?stageRun=a&stageRun=b answers both runs' records in one array, in
 // the order asked for. One id behaves exactly as it always did.
@@ -447,6 +452,12 @@ func (h *Handler) listInjections(w http.ResponseWriter, r *http.Request) error {
 	stageRuns := dedupe(r.URL.Query()["stageRun"])
 	if len(stageRuns) == 0 {
 		return apierr.NewAppError(http.StatusBadRequest, "stageRun is required")
+	}
+	// One Authorize covers the whole list, so without a cap a single
+	// capability check buys an unbounded number of queries.
+	if len(stageRuns) > maxStageRunIDs {
+		return apierr.NewAppError(http.StatusBadRequest,
+			"at most "+strconv.Itoa(maxStageRunIDs)+" stageRun ids per request")
 	}
 	// An injection record has no single owning space to match a grant
 	// pattern against (it can span several), so this is gated the same way
