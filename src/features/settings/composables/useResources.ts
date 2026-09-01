@@ -1,4 +1,4 @@
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { errorMessage } from '@/utils/errorMessage'
 
 // Mirrors resourceView in server/internal/api/resources/handler.go — a
@@ -49,6 +49,12 @@ export function useResources() {
   const loading = ref(true)
   const error = ref<string | null>(null)
 
+  // True while a non-global scope has no ref yet — the request below is
+  // deliberately held rather than fired (see the guard in fetchResources).
+  // Exposed here, not re-derived at the call site, so the "should we hold"
+  // condition has exactly one owner.
+  const held = computed(() => query.value.scopeKind !== 'global' && query.value.scopeRef.trim() === '')
+
   async function fetchResources(next?: Partial<ResourceQuery>): Promise<void> {
     if (next)
       query.value = { ...query.value, ...next }
@@ -89,5 +95,5 @@ export function useResources() {
     void fetchResources()
   })
 
-  return { resources, query, loading, error, fetchResources }
+  return { resources, query, loading, error, held, fetchResources }
 }

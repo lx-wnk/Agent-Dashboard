@@ -35,6 +35,7 @@ describe('resourceSettings', () => {
   let query: Ref<ResourceQuery>
   let loading: Ref<boolean>
   let error: Ref<string | null>
+  let held: Ref<boolean>
   let fetchResources: ReturnType<typeof vi.fn>
 
   beforeEach(() => {
@@ -42,6 +43,7 @@ describe('resourceSettings', () => {
     query = ref<ResourceQuery>({ kind: 'application', scopeKind: 'global', scopeRef: '' })
     loading = ref(false)
     error = ref(null)
+    held = ref(false)
     fetchResources = vi.fn(async () => {})
 
     vi.mocked(useResources).mockReturnValue({
@@ -49,6 +51,7 @@ describe('resourceSettings', () => {
       query,
       loading,
       error,
+      held,
       fetchResources,
     } as unknown as ReturnType<typeof useResources>)
   })
@@ -80,6 +83,29 @@ describe('resourceSettings', () => {
 
     expect(wrapper.get('[data-testid="resource-error"]').text()).toContain('HTTP 500')
     expect(wrapper.find('[data-testid="resource-empty"]').exists()).toBe(false)
+  })
+
+  it('reads a held query (scope chosen, no ref typed yet) as "enter a ref", not as an empty registry', () => {
+    resources.value = []
+    query.value = { kind: 'application', scopeKind: 'project', scopeRef: '' }
+    held.value = true
+    const wrapper = mount(ResourceSettings, { attachTo: document.body })
+
+    expect(wrapper.get('[data-testid="resource-held"]').text()).toContain('Enter a scope ref')
+    expect(wrapper.find('[data-testid="resource-empty"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="resource-error"]').exists()).toBe(false)
+  })
+
+  it('shows the loading state over a stale error or empty result, and nothing else', () => {
+    resources.value = []
+    error.value = 'Failed to load application resources (HTTP 500)'
+    loading.value = true
+    const wrapper = mount(ResourceSettings, { attachTo: document.body })
+
+    wrapper.get('[data-testid="resource-loading"]')
+    expect(wrapper.find('[data-testid="resource-error"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="resource-empty"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="resource-held"]').exists()).toBe(false)
   })
 
   it('refetches with the new kind when the kind is switched', async () => {

@@ -7,7 +7,7 @@ import {
   useResources,
 } from '@/features/settings/composables/useResources'
 
-const { resources, query, loading, error, fetchResources } = useResources()
+const { resources, query, loading, error, held, fetchResources } = useResources()
 
 function selectKind(kind: ResourceKind) {
   if (kind !== query.value.kind)
@@ -96,8 +96,11 @@ function formatDate(iso: string) {
       >
     </div>
 
-    <div v-if="loading" class="text-center py-12 text-fg-mute text-sm">
+    <div v-if="loading" data-testid="resource-loading" class="text-center py-12 text-fg-mute text-sm">
       Loading registry...
+    </div>
+    <div v-else-if="held" data-testid="resource-held" class="text-center py-8 text-fg-mute text-sm">
+      Enter a scope ref to search.
     </div>
     <div v-else-if="error" data-testid="resource-error" class="rounded border border-danger-line bg-danger-soft text-danger-text px-3 py-2 text-xs">
       {{ error }}
