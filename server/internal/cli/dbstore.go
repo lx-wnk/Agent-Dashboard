@@ -19,6 +19,17 @@ import (
 // in clear.
 var ErrNoMasterKey = errors.New("cli: secretbox master key unavailable")
 
+// ErrMaskedValueRejected is returned by SetValidated when the submitted
+// value for a secret key is secretbox.MaskedSentinel. settings.Service.Set
+// treats the sentinel as "leave unchanged" because it always has the
+// previous ciphertext to fall back to; SetValidated is a raw upsert with no
+// such fallback, so silently accepting it would encrypt the literal
+// "********" over the real secret. An operator can reach this by
+// round-tripping list/get's own masked output back into set (by hand, or by
+// scripting list into set), so refusing loudly is more useful than a silent
+// no-op here.
+var ErrMaskedValueRejected = errors.New("cli: refusing to store the mask sentinel as a secret value")
+
 // dbStore opens the dashboard SQLite file directly (no HTTP), so settings can
 // be changed while the server is down — the lockout-safe escape hatch.
 type dbStore struct {
@@ -27,30 +38,25 @@ type dbStore struct {
 	grants     repo.GrantRepo
 	grantUsage repo.GrantUsageRepo
 	caps       repo.CapabilityRepo
-	box        *secretbox.Box
-	boxErr     error
 }
 
-// openDBStore opens (and migrates) the dashboard DB at path. The secretbox
-// master key is resolved the same way the server does (serverapp/di.go):
-// DASHBOARD_SECRET_KEY if set, else the persisted/generated key file.
-// Resolution failure is kept on the store rather than returned here — list,
-// get, and non-secret set must keep working even if the master key can't be
-// resolved; only SetValidated on a secret key turns it into a hard error.
+// openDBStore opens (and migrates) the dashboard DB at path. It does not
+// touch the secretbox master key: list/get/grants/caps and a non-secret set
+// never need it, and LoadOrGenerateMasterKey persists a new key file when
+// none exists — a read-only command (or one run under a different HOME, e.g.
+// via sudo) must not have that side effect. SetValidated resolves the key
+// lazily, only for an actual secret write.
 func openDBStore(path string) (*dbStore, error) {
 	bundle, err := db.Open(path)
 	if err != nil {
 		return nil, err
 	}
-	box, boxErr := loadSecretBox()
 	return &dbStore{
 		client:     bundle.Client,
 		repo:       repo.NewAppSettingRepo(bundle.Client),
 		grants:     repo.NewGrantRepo(bundle.Client),
 		grantUsage: repo.NewGrantUsageRepo(bundle.Client, bundle.WriteClient),
 		caps:       repo.NewCapabilityRepo(bundle.Client),
-		box:        box,
-		boxErr:     boxErr,
 	}, nil
 }
 
@@ -92,9 +98,12 @@ func (s *dbStore) Set(ctx context.Context, key, value string) error {
 }
 
 // SetValidated checks the registry before writing. A secret definition is
-// routed through the secretbox box resolved in openDBStore and never written
-// in clear; if the master key could not be resolved, the write is refused
-// with ErrNoMasterKey rather than silently falling back to plaintext.
+// encrypted with the secretbox master key — resolved lazily here, not in
+// openDBStore (see its doc comment) — and never written in clear. The mask
+// sentinel is refused rather than treated as "leave unchanged": see
+// ErrMaskedValueRejected. If the master key cannot be resolved, the write is
+// refused with ErrNoMasterKey rather than silently falling back to
+// plaintext.
 func (s *dbStore) SetValidated(ctx context.Context, key, value string) error {
 	def, ok := settings.Lookup(key)
 	if !ok {
@@ -106,10 +115,14 @@ func (s *dbStore) SetValidated(ctx context.Context, key, value string) error {
 	if !def.Secret {
 		return s.Set(ctx, key, value)
 	}
-	if s.box == nil {
-		return fmt.Errorf("%w: cannot set %q: %v", ErrNoMasterKey, key, s.boxErr)
+	if value == secretbox.MaskedSentinel {
+		return fmt.Errorf("%w: %q", ErrMaskedValueRejected, key)
 	}
-	ciphertext, nonce, err := s.box.Encrypt(value)
+	box, err := loadSecretBox()
+	if err != nil {
+		return fmt.Errorf("%w: cannot set %q: %v", ErrNoMasterKey, key, err)
+	}
+	ciphertext, nonce, err := box.Encrypt(value)
 	if err != nil {
 		return fmt.Errorf("encrypt %q: %w", key, err)
 	}

@@ -92,14 +92,25 @@ func newSettingsCmd() *cobra.Command {
 	return cmd
 }
 
-// maskSecretValue returns secretbox.MaskedSentinel when key's definition is
-// secret, value unchanged otherwise. Shared by list/get/set: the CLI must
-// never print a secret's raw stored value (ciphertext for list/get) or a
-// value it was just given (set) — the raw stored value is not the plaintext,
-// but it is still a value no consumer should see, matching the rule
-// Service.Load already enforces on the HTTP surface.
+// maskSecretValue returns secretbox.MaskedSentinel for a secret definition's
+// non-empty value, value unchanged otherwise. Shared by list/get/set: the
+// CLI must never print a secret's raw stored value (ciphertext for
+// list/get) or a value it was just given (set) — the raw stored value is
+// not the plaintext, but it is still a value no consumer should see,
+// matching the rule Service.Load already enforces on the HTTP surface.
+//
+// An unknown key (settings.Lookup misses) is masked too, fail-closed: a row
+// left behind by a secret key later renamed or dropped from the registry
+// must not become printable just because the registry no longer recognizes
+// it.
+//
+// An empty value is never masked, so an unset secret prints as unset rather
+// than as indistinguishable from a configured one.
 func maskSecretValue(key, value string) string {
-	if d, ok := settings.Lookup(key); ok && d.Secret {
+	if value == "" {
+		return value
+	}
+	if d, ok := settings.Lookup(key); !ok || d.Secret {
 		return secretbox.MaskedSentinel
 	}
 	return value

@@ -4,13 +4,48 @@ import (
 	"context"
 	"io"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/secretbox"
+	"github.com/lx-wnk/agent-dashboard/server/internal/settings"
 )
+
+// settingsRepoAdapter maps settings.Repo onto repo.AppSettingRepo, mirroring
+// serverapp/di.go's adapter of the same shape. Duplicated here rather than
+// exported across the package boundary — see CLAUDE.md's DRY-stops-at-the-
+// context-boundary rule; cli and serverapp are different bounded contexts.
+type settingsRepoAdapter struct{ inner repo.AppSettingRepo }
+
+func (a settingsRepoAdapter) Get(ctx context.Context, k string) (string, bool, error) {
+	return a.inner.Get(ctx, k)
+}
+func (a settingsRepoAdapter) Set(ctx context.Context, k, v string) error {
+	_, err := a.inner.Upsert(ctx, k, v)
+	return err
+}
+func (a settingsRepoAdapter) ListAll(ctx context.Context) (map[string]string, error) {
+	rows, err := a.inner.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	m := make(map[string]string, len(rows))
+	for _, r := range rows {
+		m[r.Key] = r.Value
+	}
+	return m, nil
+}
+func (a settingsRepoAdapter) SetSecret(ctx context.Context, k, ciphertext, nonce string) error {
+	_, err := a.inner.UpsertSecret(ctx, k, ciphertext, nonce)
+	return err
+}
+func (a settingsRepoAdapter) GetSecret(ctx context.Context, k string) (string, string, bool, error) {
+	return a.inner.GetSecret(ctx, k)
+}
 
 // isolateMasterKeyPaths keeps LoadOrGenerateMasterKey (called from
 // openDBStore) off the developer's real ~/.claude/dashboard-secret.key.
@@ -59,6 +94,11 @@ func TestDBStore_RejectsUnknownKey(t *testing.T) {
 // recovery path: a secret set through the CLI must land encrypted, mirroring
 // settings.Service's own round-trip test (internal/settings/service_test.go
 // TestService_SecretRoundTripAndMasking, assert.NotEqual on the stored row).
+// The decrypt round trip through settings.Service.Secret — the one real
+// non-masking read path — is the load-bearing assertion: "not equal to the
+// plaintext, not empty" alone would stay green even if Encrypt's ciphertext
+// and nonce were passed to UpsertSecret in the wrong order, which is exactly
+// the contract this test exists to pin.
 func TestDBStore_SetValidated_EncryptsSecretValue(t *testing.T) {
 	isolateMasterKeyPaths(t)
 	store, err := openDBStore(t.TempDir() + "/test.db")
@@ -72,6 +112,44 @@ func TestDBStore_SetValidated_EncryptsSecretValue(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEqual(t, "sk-live-999", all["obsidian.apiKey"])
 	assert.NotEmpty(t, all["obsidian.apiKey"])
+
+	box, err := loadSecretBox()
+	require.NoError(t, err)
+	svc := settings.New(settingsRepoAdapter{inner: store.repo}, box)
+	require.NoError(t, svc.Load(ctx))
+	got, err := svc.Secret(ctx, "obsidian.apiKey")
+	require.NoError(t, err)
+	assert.Equal(t, "sk-live-999", got)
+}
+
+// TestDBStore_SetValidated_RejectsMaskSentinelForSecret is the BLOCKING fix:
+// Service.Set treats secretbox.MaskedSentinel as "leave unchanged" because it
+// always has the previous ciphertext to fall back to. SetValidated is a raw
+// upsert with no such fallback — round-tripping list/get's own masked output
+// back into "set" (by hand, or by scripting list into set) must not encrypt
+// the literal sentinel over the real secret.
+func TestDBStore_SetValidated_RejectsMaskSentinelForSecret(t *testing.T) {
+	isolateMasterKeyPaths(t)
+	store, err := openDBStore(t.TempDir() + "/test.db")
+	require.NoError(t, err)
+	defer store.Close()
+	ctx := context.Background()
+
+	require.NoError(t, store.SetValidated(ctx, "obsidian.apiKey", "sk-live-real"))
+
+	err = store.SetValidated(ctx, "obsidian.apiKey", secretbox.MaskedSentinel)
+	require.ErrorIs(t, err, ErrMaskedValueRejected)
+
+	// The real secret must still be there — the rejected write must not have
+	// touched storage.
+	ciphertext, nonce, found, err := store.repo.GetSecret(ctx, "obsidian.apiKey")
+	require.NoError(t, err)
+	require.True(t, found)
+	box, err := loadSecretBox()
+	require.NoError(t, err)
+	pt, err := box.Decrypt(ciphertext, nonce)
+	require.NoError(t, err)
+	assert.Equal(t, "sk-live-real", pt)
 }
 
 // TestDBStore_SetValidated_RefusesSecretWithoutMasterKey pins Finding A's
@@ -189,4 +267,69 @@ func TestSettingsSetCmd_MasksSecretValueInOutput(t *testing.T) {
 
 	assert.NotContains(t, out, "sk-live-777")
 	assert.Contains(t, out, secretbox.MaskedSentinel)
+}
+
+// TestSettingsGetCmd_UnsetSecretPrintsEmptyNotMask is Minor 1: with no row
+// stored, "get obsidian.apiKey" must not print the mask sentinel — that
+// would be indistinguishable from a configured key and would send an
+// operator debugging a failing vault call down the wrong path.
+func TestSettingsGetCmd_UnsetSecretPrintsEmptyNotMask(t *testing.T) {
+	isolateMasterKeyPaths(t)
+	dbPath := t.TempDir() + "/test.db"
+
+	out := captureStdout(t, func() {
+		cmd := newSettingsCmd()
+		cmd.SetArgs([]string{"get", "obsidian.apiKey", "--db", dbPath})
+		require.NoError(t, cmd.Execute())
+	})
+
+	assert.NotContains(t, out, secretbox.MaskedSentinel)
+	assert.Equal(t, "\n", out)
+}
+
+// TestSettingsGetCmd_FailsClosedOnUnknownKey is Minor 2: a stored row whose
+// key is no longer in the registry (e.g. a secret key renamed or dropped in
+// a later release — registry drift) must still be masked, not printed in
+// clear just because settings.Lookup misses.
+func TestSettingsGetCmd_FailsClosedOnUnknownKey(t *testing.T) {
+	isolateMasterKeyPaths(t)
+	dbPath := t.TempDir() + "/test.db"
+
+	store, err := openDBStore(dbPath)
+	require.NoError(t, err)
+	require.NoError(t, store.Set(context.Background(), "obsidian.oldApiKey", "raw-value-should-not-print"))
+	require.NoError(t, store.Close())
+
+	out := captureStdout(t, func() {
+		cmd := newSettingsCmd()
+		cmd.SetArgs([]string{"get", "obsidian.oldApiKey", "--db", dbPath})
+		require.NoError(t, cmd.Execute())
+	})
+
+	assert.NotContains(t, out, "raw-value-should-not-print")
+	assert.Equal(t, secretbox.MaskedSentinel+"\n", out)
+}
+
+// TestOpenDBStore_DoesNotTouchMasterKeyFile is Minor 3: a read-only command
+// (list/get), or a non-secret set, must never generate or read the
+// secretbox master key file. LoadOrGenerateMasterKey persists a new key on
+// first use — resolving it eagerly in openDBStore means every dbStore user
+// (settings list/get, grants, caps) pays that side effect, and a command run
+// under a different HOME (e.g. sudo) would silently generate a second,
+// different key the server can never decrypt with.
+func TestOpenDBStore_DoesNotTouchMasterKeyFile(t *testing.T) {
+	keyDir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", keyDir)
+	t.Setenv("HOME", t.TempDir())
+	keyPath := filepath.Join(keyDir, "dashboard-secret.key")
+
+	store, err := openDBStore(t.TempDir() + "/test.db")
+	require.NoError(t, err)
+	defer store.Close()
+	_, statErr := os.Stat(keyPath)
+	assert.True(t, os.IsNotExist(statErr), "openDBStore must not generate a master key file")
+
+	require.NoError(t, store.Set(context.Background(), "auth.mode", "none"))
+	_, statErr = os.Stat(keyPath)
+	assert.True(t, os.IsNotExist(statErr), "a non-secret write must not generate a master key file")
 }
