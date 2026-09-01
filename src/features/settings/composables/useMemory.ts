@@ -52,6 +52,8 @@ export interface MemoryScope {
   scopeRef: string
 }
 
+const GLOBAL_SCOPE: MemoryScope = { scopeKind: 'global', scopeRef: '' }
+
 async function readError(res: Response, fallback: string): Promise<string> {
   const body = await res.json().catch(() => ({ error: fallback })) as { error?: string }
   return body.error || fallback
@@ -66,11 +68,22 @@ function scopeParams(scope: MemoryScope): URLSearchParams {
 
 export function useMemory() {
   const spaces = ref<MemorySpace[]>([])
+  // Global spaces visible from the current non-global scope, fetched only to
+  // resolve a hit's space label — Retriever.Retrieve unions every global
+  // space into a scoped search (server/internal/memory/retrieve.go:165-192),
+  // but ListSpaces filters on the exact scope, so `spaces` alone cannot name
+  // a hit that came from a global space. Never rendered as a row in the
+  // spaces table — that table's contract is "exactly this scope".
+  const globalSpaces = ref<MemorySpace[]>([])
   const entries = ref<MemoryEntryHit[]>([])
   const scope = ref<MemoryScope>({ scopeKind: 'global', scopeRef: '' })
   const searchText = ref('')
   const loading = ref(true)
   const error = ref<string | null>(null)
+  // Own ref from `error`: a failed search must not blank the already-loaded
+  // spaces table (and, with it, the only retry control) the way a shared ref
+  // rendered as a whole-panel replacement would.
+  const searchError = ref<string | null>(null)
   // Held apart from `error`: a 403 means the capability gate refused, which is
   // a configuration state with a known fix, not a failure of the request.
   const denied = ref<string | null>(null)
@@ -114,14 +127,33 @@ export function useMemory() {
     }
   }
 
+  // Fetches the global spaces list purely as a label-resolution source for
+  // entries.value — never assigned to `spaces`. Skipped at global scope
+  // (spaces already IS the global list there) and while held (nothing is
+  // searchable yet). A failure here must not fail the panel: fall back to
+  // the raw id, same as an unresolved space today.
+  async function fetchGlobalSpacesForLabels(): Promise<void> {
+    if (scope.value.scopeKind === 'global' || held.value) {
+      globalSpaces.value = []
+      return
+    }
+    try {
+      const res = await fetch(`/api/memory/spaces?${scopeParams(GLOBAL_SCOPE).toString()}`)
+      globalSpaces.value = res.ok ? await res.json() : []
+    }
+    catch {
+      globalSpaces.value = []
+    }
+  }
+
   async function searchEntries(): Promise<void> {
     if (held.value) {
       entries.value = []
-      error.value = null
+      searchError.value = null
       denied.value = null
       return
     }
-    error.value = null
+    searchError.value = null
     denied.value = null
     try {
       const params = scopeParams(scope.value)
@@ -137,19 +169,25 @@ export function useMemory() {
       entries.value = await res.json()
     }
     catch (e) {
-      error.value = errorMessage(e, 'Failed to search memory')
+      searchError.value = errorMessage(e, 'Failed to search memory')
       entries.value = []
     }
   }
 
   async function setScope(next: MemoryScope): Promise<void> {
     scope.value = next
+    // Otherwise the previous scope's search hits survive the switch and
+    // render under the new scope's heading — the same "more certainty than
+    // was earned" defect this panel exists to avoid, inverted.
+    entries.value = []
+    searchError.value = null
     await fetchSpaces()
+    await fetchGlobalSpacesForLabels()
   }
 
   onMounted(() => {
     void fetchSpaces()
   })
 
-  return { spaces, entries, scope, searchText, loading, error, denied, held, fetchSpaces, searchEntries, setScope }
+  return { spaces, globalSpaces, entries, scope, searchText, loading, error, searchError, denied, held, fetchSpaces, searchEntries, setScope }
 }

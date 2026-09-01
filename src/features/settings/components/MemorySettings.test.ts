@@ -47,8 +47,10 @@ describe('memorySettings', () => {
   let searchText: Ref<string>
   let loading: Ref<boolean>
   let error: Ref<string | null>
+  let searchError: Ref<string | null>
   let denied: Ref<string | null>
   let held: Ref<boolean>
+  let globalSpaces: Ref<MemorySpace[]>
   let searchEntries: ReturnType<typeof vi.fn>
   let setScope: ReturnType<typeof vi.fn>
 
@@ -59,8 +61,10 @@ describe('memorySettings', () => {
     searchText = ref('')
     loading = ref(false)
     error = ref(null)
+    searchError = ref(null)
     denied = ref(null)
     held = ref(false)
+    globalSpaces = ref([])
     searchEntries = vi.fn(async () => {
       entries.value = [{ ...baseHit }]
     })
@@ -68,11 +72,13 @@ describe('memorySettings', () => {
 
     vi.mocked(useMemory).mockReturnValue({
       spaces,
+      globalSpaces,
       entries,
       scope,
       searchText,
       loading,
       error,
+      searchError,
       denied,
       held,
       fetchSpaces: vi.fn(),
@@ -137,12 +143,71 @@ describe('memorySettings', () => {
   // "confirmed empty" — the empty-state message asserts nothing was found,
   // which is not knowable before a request with a ref has actually fired.
   it('renders the not-yet-asked state distinctly from confirmed-empty when a scope ref is required but missing', () => {
-    scope.value = { scopeKind: 'project', scopeRef: '' }
+    // scope is deliberately left at the default global value: held is the
+    // ONLY signal driving this branch. If the template ever re-derived the
+    // predicate from `scope` instead of reading `held`, this would still
+    // pass with `scope.scopeKind === 'global'` set explicitly here — so it
+    // is left untouched, matching the composable's mocked defaults.
     held.value = true
     spaces.value = []
     const wrapper = mount(MemorySettings, { attachTo: document.body })
 
     expect(wrapper.find('[data-testid="memory-held"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="memory-empty"]').exists()).toBe(false)
+  })
+
+  // F5.3: the loading branch was the only one of the five states with no
+  // testid and no coverage.
+  it('shows the loading state with its own testid', () => {
+    loading.value = true
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+
+    expect(wrapper.find('[data-testid="memory-loading"]').exists()).toBe(true)
+  })
+
+  // F2: the search box used to be gated on spaces.length, but a scope can
+  // have zero exact-scope spaces and still have searchable entries (the
+  // retriever unions in every global space). Search must stay reachable
+  // even when the spaces table renders its empty state.
+  it('keeps the search box reachable when the spaces list is empty', () => {
+    spaces.value = []
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+
+    expect(wrapper.find('[data-testid="memory-empty"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="memory-search-input"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="memory-search-submit"]').exists()).toBe(true)
+  })
+
+  // F3: a search failure must render inline, next to the search box, not
+  // replace the already-loaded spaces table the way the shared error ref did.
+  it('renders a search failure inline, next to the results, leaving the spaces table in place', () => {
+    searchError.value = 'search boom'
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+
+    expect(wrapper.get('[data-testid="memory-search-error"]').text()).toContain('search boom')
+    expect(wrapper.find('[data-testid="memory-space-s1"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="memory-search-input"]').exists()).toBe(true)
+  })
+
+  // F7: a hit from a global space has no row in `spaces` (exact-scope only)
+  // — label resolution must fall back to the separately-fetched global list
+  // and mark the result as coming from outside the selected scope.
+  it('resolves a hit from a global space via globalSpaces and marks it outside this scope', () => {
+    globalSpaces.value = [{ ...baseSpace, id: 'g1', slug: 'shared-notes', scopeKind: 'global' }]
+    entries.value = [{ ...baseHit, spaceId: 'g1' }]
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+
+    const hit = wrapper.get('[data-testid="memory-entry-e1"]')
+    expect(hit.text()).toContain('shared-notes')
+    expect(wrapper.find('[data-testid="memory-entry-outside-scope-e1"]').exists()).toBe(true)
+  })
+
+  it('falls back to the raw id when a hit resolves in neither spaces nor globalSpaces', () => {
+    entries.value = [{ ...baseHit, spaceId: 'unknown-space' }]
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+
+    const hit = wrapper.get('[data-testid="memory-entry-e1"]')
+    expect(hit.text()).toContain('unknown-space')
+    expect(wrapper.find('[data-testid="memory-entry-outside-scope-e1"]').exists()).toBe(false)
   })
 })

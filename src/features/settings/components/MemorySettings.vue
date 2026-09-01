@@ -3,7 +3,7 @@ import type { ResourceScopeKind } from '@/features/settings/composables/useResou
 import { useMemory } from '@/features/settings/composables/useMemory'
 import { RESOURCE_SCOPE_KINDS } from '@/features/settings/composables/useResources'
 
-const { spaces, entries, scope, searchText, loading, error, denied, held, searchEntries, setScope } = useMemory()
+const { spaces, globalSpaces, entries, scope, searchText, loading, error, searchError, denied, held, searchEntries, setScope } = useMemory()
 
 function selectScopeKind(scopeKind: ResourceScopeKind) {
   if (scopeKind !== scope.value.scopeKind)
@@ -18,8 +18,20 @@ function formatConfidence(value: number): string {
   return value.toFixed(2)
 }
 
+// The spaces table only ever lists exact-scope rows (that is what the scope
+// selector means) but a hit's space can be a global one the retriever
+// unioned in (server/internal/memory/retrieve.go:165-192) — so label
+// resolution alone falls back to the separately-fetched global list.
 function spaceLabel(spaceId: string): string {
-  return spaces.value.find(s => s.id === spaceId)?.slug ?? spaceId
+  const local = spaces.value.find(s => s.id === spaceId)
+  if (local)
+    return local.slug
+  const global = globalSpaces.value.find(s => s.id === spaceId)
+  return global ? global.slug : spaceId
+}
+
+function isOutsideScope(spaceId: string): boolean {
+  return !spaces.value.some(s => s.id === spaceId) && globalSpaces.value.some(s => s.id === spaceId)
 }
 </script>
 
@@ -66,7 +78,7 @@ function spaceLabel(spaceId: string): string {
     <div v-else-if="error" data-testid="memory-error" class="rounded border border-danger-line bg-danger-soft text-danger-text px-3 py-2 text-xs">
       {{ error }}
     </div>
-    <div v-else-if="loading" class="text-center py-12 text-fg-mute text-sm">
+    <div v-else-if="loading" data-testid="memory-loading" class="text-center py-12 text-fg-mute text-sm">
       Loading memory spaces...
     </div>
     <div v-else-if="held" data-testid="memory-held" class="text-center py-8 text-fg-mute text-sm">
@@ -75,74 +87,81 @@ function spaceLabel(spaceId: string): string {
     <div v-else-if="!spaces.length" data-testid="memory-empty" class="text-center py-8 text-fg-mute text-sm">
       No memory spaces in this scope yet.
     </div>
+    <table v-else class="w-full border-collapse text-[13px]">
+      <thead>
+        <tr>
+          <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
+            Space
+          </th>
+          <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
+            Name
+          </th>
+          <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
+            Scope
+          </th>
+          <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
+            State
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="s in spaces" :key="s.id" :data-testid="`memory-space-${s.id}`">
+          <td class="px-3 py-2.5 border-b border-line text-fg font-mono text-xs">
+            {{ s.slug }}
+          </td>
+          <td class="px-3 py-2.5 border-b border-line text-fg">
+            {{ s.name || '—' }}
+          </td>
+          <td class="px-3 py-2.5 border-b border-line text-fg-mute font-mono text-xs">
+            {{ s.scopeRef ? `${s.scopeKind}: ${s.scopeRef}` : s.scopeKind }}
+          </td>
+          <td class="px-3 py-2.5 border-b border-line text-fg-mute">
+            {{ s.state }}
+          </td>
+        </tr>
+      </tbody>
+    </table>
 
-    <template v-else>
-      <table class="w-full border-collapse text-[13px]">
-        <thead>
-          <tr>
-            <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
-              Space
-            </th>
-            <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
-              Name
-            </th>
-            <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
-              Scope
-            </th>
-            <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
-              State
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="s in spaces" :key="s.id" :data-testid="`memory-space-${s.id}`">
-            <td class="px-3 py-2.5 border-b border-line text-fg font-mono text-xs">
-              {{ s.slug }}
-            </td>
-            <td class="px-3 py-2.5 border-b border-line text-fg">
-              {{ s.name || '—' }}
-            </td>
-            <td class="px-3 py-2.5 border-b border-line text-fg-mute font-mono text-xs">
-              {{ s.scopeRef ? `${s.scopeKind}: ${s.scopeRef}` : s.scopeKind }}
-            </td>
-            <td class="px-3 py-2.5 border-b border-line text-fg-mute">
-              {{ s.state }}
-            </td>
-          </tr>
-        </tbody>
-      </table>
+    <!-- Sibling of the state chain above, not nested inside it: the spaces
+         list can be empty for this exact scope while entries are still
+         searchable (the retriever also unions in every global space), so
+         search must stay reachable regardless of what the spaces table shows. -->
+    <div class="flex items-center gap-2 pt-2 border-t border-line">
+      <input
+        v-model="searchText"
+        data-testid="memory-search-input"
+        type="text"
+        placeholder="Search entries in this scope"
+        class="flex-1 bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
+        @keyup.enter="searchEntries()"
+      >
+      <button
+        type="button"
+        data-testid="memory-search-submit"
+        class="px-3 py-1.5 rounded border border-line bg-raised text-fg text-sm cursor-pointer hover:bg-card"
+        @click="searchEntries()"
+      >
+        Search
+      </button>
+    </div>
+    <div v-if="searchError" data-testid="memory-search-error" class="rounded border border-danger-line bg-danger-soft text-danger-text px-3 py-2 text-xs">
+      {{ searchError }}
+    </div>
 
-      <div class="flex items-center gap-2 pt-2 border-t border-line">
-        <input
-          v-model="searchText"
-          data-testid="memory-search-input"
-          type="text"
-          placeholder="Search entries in this scope"
-          class="flex-1 bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
-          @keyup.enter="searchEntries()"
-        >
-        <button
-          type="button"
-          data-testid="memory-search-submit"
-          class="px-3 py-1.5 rounded border border-line bg-raised text-fg text-sm cursor-pointer hover:bg-card"
-          @click="searchEntries()"
-        >
-          Search
-        </button>
+    <div v-for="e in entries" :key="e.id" :data-testid="`memory-entry-${e.id}`" class="px-3 py-2.5 bg-app rounded-md">
+      <div class="flex items-center gap-2.5 mb-1">
+        <span class="font-semibold text-xs text-fg">{{ e.summary }}</span>
+        <span class="ml-auto font-mono text-[11px] text-fg-mute">{{ e.kind }} · {{ formatConfidence(e.confidence) }}</span>
       </div>
-
-      <div v-for="e in entries" :key="e.id" :data-testid="`memory-entry-${e.id}`" class="px-3 py-2.5 bg-app rounded-md">
-        <div class="flex items-center gap-2.5 mb-1">
-          <span class="font-semibold text-xs text-fg">{{ e.summary }}</span>
-          <span class="ml-auto font-mono text-[11px] text-fg-mute">{{ e.kind }} · {{ formatConfidence(e.confidence) }}</span>
-        </div>
-        <div class="text-[11px] text-fg-mute">
-          in <code>{{ spaceLabel(e.spaceId) }}</code>
-        </div>
-        <p class="text-[11px] text-fg-mute mt-1 whitespace-pre-wrap">
-          {{ e.content }}
-        </p>
+      <div class="text-[11px] text-fg-mute">
+        in <code>{{ spaceLabel(e.spaceId) }}</code>
+        <span v-if="isOutsideScope(e.spaceId)" :data-testid="`memory-entry-outside-scope-${e.id}`" class="italic">
+          — global, outside this scope
+        </span>
       </div>
-    </template>
+      <p class="text-[11px] text-fg-mute mt-1 whitespace-pre-wrap">
+        {{ e.content }}
+      </p>
+    </div>
   </div>
 </template>
