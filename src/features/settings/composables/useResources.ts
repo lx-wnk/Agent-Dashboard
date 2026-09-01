@@ -43,11 +43,26 @@ export interface ResourceQuery {
   scopeRef: string
 }
 
+// States only what is known. The route maps every Gate.Authorize failure to 403
+// — a missing grant, a rate limit and a failed read of the grant store alike —
+// so the fallback names no cause. The likely one is named once, by the notice
+// that renders this (cf. useMemory's READ_DENIED_FALLBACK).
+const DENIED_FALLBACK = 'The registry route refused this read (HTTP 403) without giving a reason.'
+
+async function readDenial(res: Response): Promise<string> {
+  const body = await res.json().catch(() => ({ error: DENIED_FALLBACK })) as { error?: string }
+  return body.error || DENIED_FALLBACK
+}
+
 export function useResources() {
   const resources = ref<ResourceView[]>([])
   const query = ref<ResourceQuery>({ kind: 'application', scopeKind: 'global', scopeRef: '' })
   const loading = ref(true)
   const error = ref<string | null>(null)
+  // Held apart from `error`: `kind=memory_space` is gated on memory.read, so on
+  // a fresh install a refusal is the ordinary first-run answer for that kind and
+  // has a different fix from a broken read.
+  const denied = ref<string | null>(null)
 
   // True while a non-global scope has no ref yet — the request below is
   // deliberately held rather than fired (see the guard in fetchResources).
@@ -67,17 +82,24 @@ export function useResources() {
       resources.value = []
       loading.value = false
       error.value = null
+      denied.value = null
       return
     }
 
     const { kind, scopeKind, scopeRef } = query.value
     loading.value = true
     error.value = null
+    denied.value = null
     try {
       const params = new URLSearchParams({ kind, scope: scopeKind })
       if (scopeKind !== 'global')
         params.set('scopeRef', scopeRef.trim())
       const res = await fetch(`/api/resources?${params.toString()}`)
+      if (res.status === 403) {
+        denied.value = await readDenial(res)
+        resources.value = []
+        return
+      }
       if (!res.ok)
         throw new Error(`Failed to load ${kind} resources (HTTP ${res.status})`)
       resources.value = await res.json()
@@ -97,5 +119,5 @@ export function useResources() {
     void fetchResources()
   })
 
-  return { resources, query, loading, error, held, fetchResources }
+  return { resources, query, loading, error, denied, held, fetchResources }
 }

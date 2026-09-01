@@ -37,6 +37,17 @@ function mountSettings() {
   })
 }
 
+// The panels are lazy, so the section is empty for a tick or two after the
+// click; `waitUntil` also fails the test if the nav item opens a different panel.
+async function openPanel(wrapper: ReturnType<typeof mountSettings>, label: string, marker: string) {
+  const button = wrapper.findAll('nav ul li button').find(b => b.text().includes(label))
+  if (!button)
+    throw new Error(`nav item "${label}" not found`)
+  await button.trigger('click')
+  await vi.waitUntil(() => wrapper.find(marker).exists(), { timeout: 2000, interval: 10 })
+  await flushPromises()
+}
+
 describe('apiKeySettings nav', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
@@ -71,5 +82,19 @@ describe('apiKeySettings nav', () => {
     await pluginsButton.trigger('click')
 
     expect(pluginsButton.attributes('aria-current')).toBe('page')
+  })
+
+  // Registry and Memory are adjacent nav items rendering sibling panels, so a
+  // swapped or deleted section is invisible without pinning which panel each one
+  // opens.
+  it('opens the panel each nav item names', async () => {
+    const wrapper = mountSettings()
+    await flushPromises()
+
+    await openPanel(wrapper, 'Registry', '[data-testid="resource-kind-application"]')
+    expect(wrapper.find('[data-testid="memory-space-new"]').exists()).toBe(false)
+
+    await openPanel(wrapper, 'Memory', '[data-testid="memory-space-new"]')
+    expect(wrapper.find('[data-testid="resource-kind-application"]').exists()).toBe(false)
   })
 })

@@ -18,7 +18,6 @@ import ObsidianSettings from '@/features/settings/components/ObsidianSettings.vu
 import PipelineConfigSettings from '@/features/settings/components/PipelineConfigSettings.vue'
 import ProjectSettings from '@/features/settings/components/ProjectSettings.vue'
 import RemoteSettings from '@/features/settings/components/RemoteSettings.vue'
-import ResourceSettings from '@/features/settings/components/ResourceSettings.vue'
 import SpawnerSettings from '@/features/settings/components/SpawnerSettings.vue'
 import SystemPromptSettings from '@/features/settings/components/SystemPromptSettings.vue'
 import { errorMessage } from '@/utils/errorMessage'
@@ -33,6 +32,7 @@ const ProviderSettings = defineAsyncComponent(() => import('@/features/settings/
 const TrackerSettingsPanel = defineAsyncComponent(() => import('@/features/settings/components/TrackerSettingsPanel.vue'))
 const AppSettings = defineAsyncComponent(() => import('@/features/settings/components/AppSettings.vue'))
 const MemorySettings = defineAsyncComponent(() => import('@/features/settings/components/MemorySettings.vue'))
+const ResourceSettings = defineAsyncComponent(() => import('@/features/settings/components/ResourceSettings.vue'))
 
 const { preference: themePref, setTheme } = useTheme()
 const { authEnabled } = useUser()
