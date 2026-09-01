@@ -76,10 +76,11 @@ describe('taskStagesTab — memory injections', () => {
     expect(block.text()).toContain('9 candidates')
   })
 
-  // The route takes exactly one stageRun id and has no bulk form, so the id
-  // must reach the query string per run — counting calls alone would pass on a
-  // composable that asked for the same run twice.
-  it('asks the injections route once per stage run, carrying that run id', async () => {
+  // Gate.Authorize records a rate-limit use per call against the same
+  // memory.read grant the pipeline's memory push spends, so N runs must cost
+  // exactly one request — and every run id must still reach the query string,
+  // which counting calls alone would not show.
+  it('asks the injections route once for the whole tab, carrying every run id', async () => {
     const fetchMock = vi.fn(async (_url: string) => new Response('[]', { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
 
@@ -87,21 +88,58 @@ describe('taskStagesTab — memory injections', () => {
     await flushPromises()
 
     expect(fetchMock.mock.calls.map(c => c[0])).toEqual([
-      '/api/memory/injections?stageRun=run-1',
-      '/api/memory/injections?stageRun=run-2',
+      '/api/memory/injections?stageRun=run-1&stageRun=run-2',
     ])
   })
 
-  it('renders nothing for a stage run that received no memory push', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('[]', { status: 200 })))
+  it('splits one bulk response back onto the run each record belongs to', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify([
+      makeInjection(),
+      makeInjection({ id: 'inj-2', stageRunId: 'run-2', entryIds: ['e3'], charsUsed: 300, candidateCount: 4 }),
+    ]), { status: 200 })))
 
-    const wrapper = mountTab([makeRun()])
+    const wrapper = mountTab([makeRun(), makeRun({ id: 'run-2', iteration: 2 })])
     await flushPromises()
 
-    expect(wrapper.find('[data-testid^="stage-injection-inj"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="stage-injection-inj-1"]').text()).toContain('2 entries')
+    expect(wrapper.get('[data-testid="stage-injection-inj-2"]').text()).toContain('1 entries')
+    expect(wrapper.find('[data-testid="stage-injection-none-run-1"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="stage-injection-none-run-2"]').exists()).toBe(false)
+  })
+
+  // A blank row is indistinguishable from "this tab does not show memory
+  // pushes at all", so the run that received none says so itself.
+  it('says so on the run that received no memory push', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify([makeInjection()]), { status: 200 })))
+
+    const wrapper = mountTab([makeRun(), makeRun({ id: 'run-2', iteration: 2 })])
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="stage-injection-none-run-1"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="stage-injection-none-run-2"]').text()).toBe('no memory push')
     expect(wrapper.find('[data-testid="stage-injection-denied"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="stage-injection-error"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="stage-injection-loading"]').exists()).toBe(false)
+  })
+
+  // The tab-level notices already name the cause; repeating "no memory push"
+  // under every run would claim the pushes are known to be absent when the
+  // read never landed.
+  it('stays quiet per run while loading and under a tab-level notice', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})))
+    const pending = mountTab([makeRun()])
+    await flushPromises()
+    expect(pending.find('[data-testid="stage-injection-none-run-1"]').exists()).toBe(false)
+
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 403 })))
+    const refused = mountTab([makeRun()])
+    await flushPromises()
+    expect(refused.find('[data-testid="stage-injection-none-run-1"]').exists()).toBe(false)
+
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('boom', { status: 500 })))
+    const broken = mountTab([makeRun()])
+    await flushPromises()
+    expect(broken.find('[data-testid="stage-injection-none-run-1"]').exists()).toBe(false)
   })
 
   it('shows one denial notice for the whole tab, naming the global scope', async () => {
@@ -233,9 +271,9 @@ describe('taskStagesTab — memory injections', () => {
     expect(wrapper.find('[data-testid="stage-injection-loading"]').exists()).toBe(true)
   })
 
-  // Every stage-run refresh starts a new batch of N requests, and the older
-  // batch can answer last. Applying it would drop the newer batch's runs and
-  // silently show "no memory push" for a run that has one.
+  // Every stage-run refresh starts a new request, and the older one can answer
+  // last. Applying it would drop the newer batch's runs and silently show
+  // "no memory push" for a run that has one.
   it('keeps the newest batch when an older one resolves last', async () => {
     const resolvers: Array<(rows: unknown[]) => void> = []
     vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((resolve) => {
@@ -249,13 +287,12 @@ describe('taskStagesTab — memory injections', () => {
 
     runs.value = [makeRun(), makeRun({ id: 'run-2', iteration: 2 })]
     await flushPromises()
-    expect(resolvers).toHaveLength(3)
+    expect(resolvers).toHaveLength(2)
 
-    resolvers[1]([makeInjection()])
-    resolvers[2]([makeInjection({ id: 'inj-2', stageRunId: 'run-2', entryIds: ['e3'] })])
+    resolvers[1]([makeInjection(), makeInjection({ id: 'inj-2', stageRunId: 'run-2', entryIds: ['e3'] })])
     await flushPromises()
 
-    // The stale first batch answers only now, and knows nothing of run-2.
+    // The stale first request answers only now, and knows nothing of run-2.
     resolvers[0]([])
     await flushPromises()
 

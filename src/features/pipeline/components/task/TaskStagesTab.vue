@@ -44,6 +44,17 @@ const { byStageRun, loading, denied, error } = useStageInjections(stageRuns)
       <div v-if="run.output" class="mt-1.5 text-[11px]">
         <StageOutputView :stage="run.stage" :output="run.output" :status="run.status" />
       </div>
+      <!-- Absence is otherwise rendered as nothing, which reads the same as
+           "this tab does not show memory pushes at all". Only said once the
+           answer is actually in: while loading, or under a tab-level denial or
+           error, the row's silence has a different cause already named above. -->
+      <div
+        v-if="!loading && !denied && !error && !(byStageRun[run.id] ?? []).length"
+        :data-testid="`stage-injection-none-${run.id}`"
+        class="mt-1.5 text-[11px] text-fg-mute"
+      >
+        no memory push
+      </div>
       <div
         v-for="inj in (byStageRun[run.id] ?? [])"
         :key="inj.id"
