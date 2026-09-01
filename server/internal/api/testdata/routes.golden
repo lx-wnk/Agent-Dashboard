@@ -61,6 +61,7 @@ GET /api/projects/{id}/pipeline-config
 GET /api/refine/{taskId}/status
 GET /api/refine/{taskId}/turns
 GET /api/remotes
+GET /api/resources
 GET /api/search
 GET /api/sessions
 GET /api/settings/api-keys

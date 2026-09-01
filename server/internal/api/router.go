@@ -41,6 +41,7 @@ import (
 	providersapi "github.com/lx-wnk/agent-dashboard/server/internal/api/providers"
 	refineapi "github.com/lx-wnk/agent-dashboard/server/internal/api/refine"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/remotes"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/resources"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/schedules"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/search"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/sessions"
@@ -173,6 +174,7 @@ type RouterDeps struct {
 	SearchHandler          *search.Handler
 	HistoryHandler         *apihistory.Handler
 	MemoryHandler          *apimemory.Handler
+	ResourcesHandler       *resources.Handler
 	ObsidianHandler        *apiobsidian.Handler
 	RefineHandler          *refineapi.Handler
 	PlanHandler            *planapi.Handler
@@ -419,6 +421,13 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 		if deps.MemoryHandler != nil {
 			deps.MemoryHandler.Mount(r)
+		}
+
+		// Read-only registry catalogue; sits with the other session-authenticated
+		// read routes (grants, capabilities) and is never mounted in the
+		// hook/MCP bearer-token group.
+		if deps.ResourcesHandler != nil {
+			deps.ResourcesHandler.Mount(r)
 		}
 
 		// Obsidian's manual index trigger stays session-authenticated like
