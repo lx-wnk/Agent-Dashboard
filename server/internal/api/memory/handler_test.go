@@ -269,7 +269,7 @@ func TestSecondScopesEntriesNeverAppear(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	entries := decodeSlice(t, w)
 	require.Len(t, entries, 1, "search scoped to B must not also surface A's entry")
-	require.Equal(t, "bravo secret rollout plan", entries[0].(map[string]any)["Summary"])
+	require.Equal(t, "bravo secret rollout plan", entries[0].(map[string]any)["summary"])
 
 	w = doJSON(t, mux, http.MethodGet, "/api/memory/spaces?scope=project&scopeRef=/path/B", nil)
 	require.Equal(t, http.StatusOK, w.Code)
@@ -291,7 +291,7 @@ func TestPatchSupersedeEntry(t *testing.T) {
 
 	w := doJSON(t, mux, http.MethodPatch, "/api/memory/entries/"+oldEntry.ID, map[string]any{"supersededBy": newEntry.ID})
 	require.Equal(t, http.StatusOK, w.Code)
-	require.Equal(t, newEntry.ID, decodeMap(t, w)["superseded_by"])
+	require.Equal(t, newEntry.ID, decodeMap(t, w)["supersededBy"])
 }
 
 func TestPatchSupersedeEntryFailsClosedOnUnknownEntry(t *testing.T) {
@@ -351,7 +351,7 @@ func TestListInjectionsByStageRun(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	list := decodeSlice(t, w)
 	require.Len(t, list, 1)
-	require.Equal(t, stageRunID, list[0].(map[string]any)["stage_run_id"])
+	require.Equal(t, stageRunID, list[0].(map[string]any)["stageRunId"])
 }
 
 func TestListInjectionsRequiresStageRunParam(t *testing.T) {
@@ -368,4 +368,89 @@ func TestListInjectionsDeniedWithoutGrant(t *testing.T) {
 
 	w := doJSON(t, mux, http.MethodGet, "/api/memory/injections?stageRun=whatever", nil)
 	require.Equal(t, http.StatusForbidden, w.Code)
+}
+
+// TestMemoryRoutesWireFormat asserts the raw key set on all four payload shapes
+// the memory routes answer with. Decoding into typed structs would pass before
+// and after the change, so every assertion here is against map keys.
+func TestMemoryRoutesWireFormat(t *testing.T) {
+	mux, client, memRepo, grants, capRepo, ctx := newMux(t)
+	repo.SeedCapabilities(ctx, capRepo)
+	mustAllowGrant(t, grants, ctx, repo.CapabilityMemoryWrite, repo.GrantContextGlobal, "")
+	mustAllowGrant(t, grants, ctx, repo.CapabilityMemoryRead, repo.GrantContextGlobal, "")
+
+	requireKeys := func(t *testing.T, row map[string]any, want, forbidden []string) {
+		t.Helper()
+		for _, k := range want {
+			require.Contains(t, row, k, "missing key %q in %v", k, row)
+		}
+		for _, k := range forbidden {
+			require.NotContains(t, row, k, "unexpected key %q in %v", k, row)
+		}
+	}
+
+	spaceKeys := []string{"id", "kind", "slug", "name", "scopeKind", "scopeRef", "nodeId", "state", "version", "origin", "originRef", "createdAt", "updatedAt"}
+	spaceForbidden := []string{"scope_kind", "scope_ref", "node_id", "origin_ref", "created_at", "updated_at"}
+
+	w := doJSON(t, mux, http.MethodPost, "/api/memory/spaces", map[string]any{"slug": "wire", "name": "Wire"})
+	require.Equal(t, http.StatusCreated, w.Code)
+	spaceResp := decodeMap(t, w)
+	requireKeys(t, spaceResp, spaceKeys, spaceForbidden)
+	spaceID := spaceResp["id"].(string)
+
+	w = doJSON(t, mux, http.MethodGet, "/api/memory/spaces", nil)
+	require.Equal(t, http.StatusOK, w.Code)
+	spaces := decodeSlice(t, w)
+	require.Len(t, spaces, 1)
+	requireKeys(t, spaces[0].(map[string]any), spaceKeys, spaceForbidden)
+
+	entryKeys := []string{"id", "spaceId", "summary", "content", "kind", "sourceKind", "sourceRef", "confidence", "validFrom", "validUntil", "supersededBy", "userId", "createdAt", "updatedAt"}
+	entryForbidden := []string{"space_id", "source_kind", "source_ref", "valid_from", "valid_until", "superseded_by", "user_id", "created_at", "updated_at", "ID", "SpaceID", "Summary"}
+
+	w = doJSON(t, mux, http.MethodPost, "/api/memory/entries", map[string]any{
+		"spaceSlug": "wire", "summary": "wire format note", "content": "the body",
+		"kind": "fact", "sourceKind": "user",
+	})
+	require.Equal(t, http.StatusCreated, w.Code)
+	created := decodeMap(t, w)
+	requireKeys(t, created, entryKeys, entryForbidden)
+
+	// The search projection is its own shape: memory.Entry carries no json tags
+	// at all today, so the wire spells these ID/SpaceID/Summary.
+	w = doJSON(t, mux, http.MethodGet, "/api/memory/entries?q=wire", nil)
+	require.Equal(t, http.StatusOK, w.Code)
+	hits := decodeSlice(t, w)
+	require.Len(t, hits, 1)
+	requireKeys(t, hits[0].(map[string]any),
+		[]string{"id", "spaceId", "summary", "content", "kind", "confidence", "createdAt"},
+		[]string{"ID", "SpaceID", "Summary", "Content", "Kind", "Confidence", "CreatedAt", "space_id", "created_at"})
+
+	// SupersedeEntry verifies the replacement id resolves to a real entry
+	// before writing the pointer, so the target must be a live entry, not an
+	// arbitrary string.
+	replacement, err := memRepo.CreateEntry(ctx, repo.CreateEntryInput{
+		SpaceID: spaceID, Summary: "replacement", Content: "replacement body", Kind: "fact", SourceKind: "user", Confidence: 1,
+	})
+	require.NoError(t, err)
+
+	w = doJSON(t, mux, http.MethodPatch, "/api/memory/entries/"+created["id"].(string), map[string]any{"supersededBy": replacement.ID})
+	require.Equal(t, http.StatusOK, w.Code)
+	requireKeys(t, decodeMap(t, w), entryKeys, entryForbidden)
+
+	stageRunID := mustStageRun(t, client)
+	_, err = memRepo.RecordInjection(ctx, repo.RecordInjectionInput{
+		StageRunID: stageRunID, EntryIDs: []string{created["id"].(string)}, CharBudget: 4000, CharsUsed: 0, CandidateCount: 0,
+	})
+	require.NoError(t, err)
+
+	w = doJSON(t, mux, http.MethodGet, "/api/memory/injections?stageRun="+stageRunID, nil)
+	require.Equal(t, http.StatusOK, w.Code)
+	injections := decodeSlice(t, w)
+	require.Len(t, injections, 1)
+	injection := injections[0].(map[string]any)
+	requireKeys(t, injection,
+		[]string{"id", "stageRunId", "entryIds", "charBudget", "charsUsed", "candidateCount", "createdAt", "updatedAt"},
+		[]string{"stage_run_id", "entry_ids", "char_budget", "chars_used", "candidate_count", "created_at", "updated_at"})
+	require.Equal(t, float64(0), injection["charsUsed"], "a zero char count must be sent, not omitted")
+	require.Equal(t, float64(0), injection["candidateCount"], "a zero candidate count must be sent, not omitted")
 }
