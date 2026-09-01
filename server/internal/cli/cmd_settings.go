@@ -54,7 +54,7 @@ func newSettingsCmd() *cobra.Command {
 				if v, ok := rows[d.Key]; ok {
 					val = v
 				}
-				fmt.Printf("%-28s = %-12s (%s, %s)\n", d.Key, val, d.Type, d.Apply)
+				fmt.Printf("%-28s = %-12s (%s, %s)\n", d.Key, maskSecretValue(d.Key, val), d.Type, d.Apply)
 			}
 			return nil
 		})
@@ -68,12 +68,12 @@ func newSettingsCmd() *cobra.Command {
 			}
 			if !ok {
 				if d, found := settings.Lookup(args[0]); found {
-					fmt.Println(d.Default)
+					fmt.Println(maskSecretValue(args[0], d.Default))
 					return nil
 				}
 				return errUnknownKey(args[0])
 			}
-			fmt.Println(v)
+			fmt.Println(maskSecretValue(args[0], v))
 			return nil
 		})
 	}}
@@ -83,18 +83,24 @@ func newSettingsCmd() *cobra.Command {
 			if err := s.SetValidated(ctx, args[0], args[1]); err != nil {
 				return err
 			}
-			// Never echo a secret value back, even the one just typed: it
-			// would land in terminal scrollback, tmux capture-pane, or a
-			// redirected log file.
-			display := args[1]
-			if d, ok := settings.Lookup(args[0]); ok && d.Secret {
-				display = secretbox.MaskedSentinel
-			}
-			fmt.Printf("set %s = %s\n", args[0], display)
+			fmt.Printf("set %s = %s\n", args[0], maskSecretValue(args[0], args[1]))
 			return nil
 		})
 	}}
 
 	cmd.AddCommand(list, get, set)
 	return cmd
+}
+
+// maskSecretValue returns secretbox.MaskedSentinel when key's definition is
+// secret, value unchanged otherwise. Shared by list/get/set: the CLI must
+// never print a secret's raw stored value (ciphertext for list/get) or a
+// value it was just given (set) — the raw stored value is not the plaintext,
+// but it is still a value no consumer should see, matching the rule
+// Service.Load already enforces on the HTTP surface.
+func maskSecretValue(key, value string) string {
+	if d, ok := settings.Lookup(key); ok && d.Secret {
+		return secretbox.MaskedSentinel
+	}
+	return value
 }

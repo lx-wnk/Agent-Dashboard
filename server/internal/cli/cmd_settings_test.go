@@ -116,6 +116,62 @@ func captureStdout(t *testing.T, fn func()) string {
 	return string(out)
 }
 
+// TestSettingsListCmd_MasksSecretValueInOutput guards "settings list": the
+// stored row for a secret key is base64 ciphertext, not plaintext, but it is
+// still a value no consumer should see (same rule Service.Load already
+// enforces server-side). Asserts on the whole captured stdout, not just a
+// substring pulled from one column, so the ciphertext escaping through any
+// part of the formatted line still fails the test.
+func TestSettingsListCmd_MasksSecretValueInOutput(t *testing.T) {
+	isolateMasterKeyPaths(t)
+	dbPath := t.TempDir() + "/test.db"
+
+	store, err := openDBStore(dbPath)
+	require.NoError(t, err)
+	require.NoError(t, store.SetValidated(context.Background(), "obsidian.apiKey", "sk-live-list"))
+	rows, err := store.List(context.Background())
+	require.NoError(t, err)
+	ciphertext := rows["obsidian.apiKey"]
+	require.NotEmpty(t, ciphertext)
+	require.NoError(t, store.Close())
+
+	out := captureStdout(t, func() {
+		cmd := newSettingsCmd()
+		cmd.SetArgs([]string{"list", "--db", dbPath})
+		require.NoError(t, cmd.Execute())
+	})
+
+	assert.NotContains(t, out, "sk-live-list")
+	assert.NotContains(t, out, ciphertext)
+	assert.Contains(t, out, secretbox.MaskedSentinel)
+}
+
+// TestSettingsGetCmd_MasksSecretValueInOutput mirrors the list test for
+// "settings get <key>".
+func TestSettingsGetCmd_MasksSecretValueInOutput(t *testing.T) {
+	isolateMasterKeyPaths(t)
+	dbPath := t.TempDir() + "/test.db"
+
+	store, err := openDBStore(dbPath)
+	require.NoError(t, err)
+	require.NoError(t, store.SetValidated(context.Background(), "obsidian.apiKey", "sk-live-get"))
+	rows, err := store.List(context.Background())
+	require.NoError(t, err)
+	ciphertext := rows["obsidian.apiKey"]
+	require.NotEmpty(t, ciphertext)
+	require.NoError(t, store.Close())
+
+	out := captureStdout(t, func() {
+		cmd := newSettingsCmd()
+		cmd.SetArgs([]string{"get", "obsidian.apiKey", "--db", dbPath})
+		require.NoError(t, cmd.Execute())
+	})
+
+	assert.NotContains(t, out, "sk-live-get")
+	assert.NotContains(t, out, ciphertext)
+	assert.Equal(t, secretbox.MaskedSentinel+"\n", out)
+}
+
 // TestSettingsSetCmd_MasksSecretValueInOutput guards the same defect class as
 // the PATCH-response mask (settings/handler_test.go), on the CLI's own
 // surface: "dashboard settings set obsidian.apiKey <value>" must not echo
