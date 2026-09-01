@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 import ObsidianSettings from '@/features/settings/components/ObsidianSettings.vue'
 import { useSettings } from '@/features/settings/composables/useSettings'
+import { selectByLabel } from '@/utils/testSelect'
 
 vi.mock('@/features/settings/composables/useSettings', async () => {
   const actual = await vi.importActual<typeof import('@/features/settings/composables/useSettings')>('@/features/settings/composables/useSettings')
@@ -101,6 +102,23 @@ describe('obsidianSettings', () => {
     expect(update).toHaveBeenCalledWith('obsidian.apiKey', 'real-secret-key')
   })
 
+  it('renders the seeded TLS mode value, not the pre-load default', () => {
+    items.value = settingsFixture({ 'obsidian.tlsMode': 'pinned' })
+    const wrapper = mount(ObsidianSettings, { attachTo: document.body })
+
+    expect(wrapper.get('[data-testid="obsidian-tlsmode"]').text()).toContain('pinned')
+  })
+
+  it('selecting a different TLS mode and saving PATCHes the chosen value', async () => {
+    const wrapper = mount(ObsidianSettings, { attachTo: document.body })
+
+    await selectByLabel(wrapper.get('[data-testid="obsidian-tlsmode"]').element, 'insecure-loopback')
+    await wrapper.get('[data-testid="obsidian-save"]').trigger('click')
+    await flushPromises()
+
+    expect(update).toHaveBeenCalledWith('obsidian.tlsMode', 'insecure-loopback')
+  })
+
   it('surfaces the restart requirement after a successful save', async () => {
     const toastMod = await import('@/composables/useToast')
     const successSpy = vi.spyOn(toastMod.toast, 'success')
@@ -167,5 +185,17 @@ describe('obsidianSettings', () => {
     const text = wrapper.get('[data-testid="obsidian-index-result"]').text()
     expect(text).not.toContain('503')
     expect(text.toLowerCase()).toContain('not configured')
+  })
+
+  it('turns a 409 in-progress response into a readable message, not a raw status code', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 409, json: async () => ({ error: 'an obsidian index run is already in progress' }) }))
+    const wrapper = mount(ObsidianSettings, { attachTo: document.body })
+
+    await wrapper.get('[data-testid="obsidian-index"]').trigger('click')
+    await flushPromises()
+
+    const text = wrapper.get('[data-testid="obsidian-index-result"]').text()
+    expect(text).not.toContain('409')
+    expect(text.toLowerCase()).toContain('already')
   })
 })

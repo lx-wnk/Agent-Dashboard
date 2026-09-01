@@ -99,17 +99,24 @@ async function save() {
 const indexing = ref(false)
 const indexMessage = ref<string | null>(null)
 
+// All three are readable, expected states, not errors: a missing grant, an
+// unconfigured vault, and a run already in flight (server-side single-flight
+// in internal/api/obsidian/handler.go) are worth explaining in the panel,
+// not flashing as a transient toast the way an unexpected failure is.
+const INDEX_STATUS_MESSAGES: Record<number, string> = {
+  403: 'Indexing was denied — grant obsidian.search, obsidian.read, and memory.write to allow it.',
+  503: 'The Obsidian vault is not configured yet — fill in the settings above and save.',
+  409: 'An index run is already in progress — try again shortly.',
+}
+
 async function runIndex() {
   indexing.value = true
   indexMessage.value = null
   try {
     const res = await fetch('/api/obsidian/index', { method: 'POST' })
-    if (res.status === 403) {
-      indexMessage.value = 'Indexing was denied — grant obsidian.search, obsidian.read, and memory.write to allow it.'
-      return
-    }
-    if (res.status === 503) {
-      indexMessage.value = 'The Obsidian vault is not configured yet — fill in the settings above and save.'
+    const knownMessage = INDEX_STATUS_MESSAGES[res.status]
+    if (knownMessage) {
+      indexMessage.value = knownMessage
       return
     }
     if (!res.ok) {
