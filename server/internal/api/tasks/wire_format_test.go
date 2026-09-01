@@ -1,6 +1,7 @@
 package tasks_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -8,7 +9,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/lx-wnk/agent-dashboard/server/internal/api/tasks"
+	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
+	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 )
 
 // decodeRows decodes a JSON array response into raw maps so assertions run
@@ -535,4 +543,309 @@ func TestTaskActions_WireFormat(t *testing.T) {
 			t.Errorf("currentStage = %v, want %q", row["currentStage"], "on_hold")
 		}
 	})
+}
+
+// TestPermissionWriteRoutes_WireFormat asserts the write routes answer the same
+// shape as the list routes beside them, which feed the same TypeScript types.
+func TestPermissionWriteRoutes_WireFormat(t *testing.T) {
+	client, r := newTestHandlerWithRepos(t)
+	task, err := repo.NewTaskRepo(client).Create(testCtx(t), repo.CreateTaskInput{
+		Slug:          "perm-write-wire-format",
+		Title:         "Permission Write Wire Format",
+		Cwd:           t.TempDir(),
+		MaxIterations: 5,
+		Priority:      "normal",
+		CurrentStage:  "implementation",
+	})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+	run, err := repo.NewStageRunRepo(client).Create(testCtx(t), repo.CreateStageRunInput{
+		TaskID:    task.ID,
+		Stage:     "implementation",
+		Iteration: 1,
+	})
+	if err != nil {
+		t.Fatalf("create stage run: %v", err)
+	}
+
+	t.Run("createPermissionRequest", func(t *testing.T) {
+		body := `{"stageRunId":"` + run.ID + `","tool":"Bash","pattern":"ls -la"}`
+		req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/permission-requests", strings.NewReader(body)))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusCreated {
+			t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+		}
+		var row map[string]any
+		if err := json.Unmarshal(w.Body.Bytes(), &row); err != nil {
+			t.Fatalf("unmarshal response: %v (body: %s)", err, w.Body.String())
+		}
+		assertKeys(t, row,
+			[]string{"id", "stageRunId", "tool", "pattern", "reason", "outcome", "requestedAt", "resolvedAt", "outsideSafeList"},
+			[]string{"stage_run_id", "requested_at", "resolved_at", "edges"},
+		)
+	})
+
+	t.Run("bulkGrantPermissions", func(t *testing.T) {
+		body := `{"permissions":[{"tool":"Write"},{"tool":"Read"}]}`
+		req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/tasks/"+task.ID+"/permissions/bulk", strings.NewReader(body)))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		rows := decodeRows(t, w.Body.Bytes())
+		if len(rows) == 0 {
+			t.Fatalf("expected granted permissions, got none: %s", w.Body.String())
+		}
+		for _, row := range rows {
+			assertKeys(t, row,
+				[]string{"id", "taskId", "tool", "pattern", "granted", "decidedBy", "requestedAt", "decidedAt", "expiresAt"},
+				[]string{"task_id", "requested_at", "decided_at", "decided_by", "expires_at", "manual_override", "edges"},
+			)
+		}
+	})
+}
+
+// stageRunOrchestrator returns a populated *ent.StageRun from every
+// orchestrator call the stage-run action routes use, so tests reach the 2xx
+// path instead of the 409 conflict a nil stage run would produce.
+type stageRunOrchestrator struct{}
+
+func (stageRunOrchestrator) ProgressTask(_ context.Context, taskID string, _ *pipeline.ProgressOpts) (*ent.StageRun, error) {
+	return &ent.StageRun{ID: taskID + "-progress"}, nil
+}
+func (stageRunOrchestrator) ResumeFromUser(_ context.Context, taskID, _ string) (*ent.StageRun, error) {
+	return &ent.StageRun{ID: taskID + "-resume"}, nil
+}
+func (stageRunOrchestrator) RequeueForUser(_ context.Context, taskID, _ string) (*ent.StageRun, error) {
+	return &ent.StageRun{ID: taskID + "-requeue"}, nil
+}
+func (stageRunOrchestrator) NotifyTaskTerminated(_ context.Context, _, _ string)      {}
+func (stageRunOrchestrator) InvalidateConfigCache()                                   {}
+func (stageRunOrchestrator) ClearStalePendingPermissions(_ context.Context, _ string) {}
+func (stageRunOrchestrator) EffectiveStageModel(_ context.Context, _ string) string   { return "" }
+
+// newActionRouteHandler wires a handler whose orchestrator always returns a
+// real stage run, needed by progress/retry/resume/resume-stage to reach their
+// success path.
+func newActionRouteHandler(t *testing.T) (*ent.Client, *chi.Mux) {
+	t.Helper()
+	bundle, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("db.Open: %v", err)
+	}
+	client := bundle.Client
+	t.Cleanup(func() { _ = client.Close() })
+
+	h := tasks.NewHandler(tasks.Deps{
+		Client:       client,
+		TaskRepo:     repo.NewTaskRepo(client),
+		SRRepo:       repo.NewStageRunRepo(client),
+		PermRepo:     repo.NewPermissionRepo(client),
+		AuditRepo:    repo.NewAuditEventRepo(client),
+		CfgRepo:      repo.NewPipelineConfigRepo(client),
+		Orchestrator: stageRunOrchestrator{},
+		Broadcaster:  sse.NewTaskBroadcaster(sse.NewBroadcaster()),
+	})
+	r := chi.NewRouter()
+	r.Use(auth.RequireAuth(testJWTSecret))
+	h.Mount(r)
+	return client, r
+}
+
+var stageRunWant = []string{"id", "taskId", "stage", "status", "iteration", "tokensUsed", "costCents"}
+var stageRunForbidden = []string{"task_id", "tokens_used", "cost_cents", "edges"}
+
+// TestProgressRoute_WireFormat asserts /progress answers both halves of its
+// map through ToTaskResponse and toStageRunResponse, not raw entities.
+func TestProgressRoute_WireFormat(t *testing.T) {
+	client, r := newActionRouteHandler(t)
+	task, err := repo.NewTaskRepo(client).Create(testCtx(t), repo.CreateTaskInput{
+		Slug:          "action-wire-progress",
+		Title:         "Progress Wire Format",
+		Cwd:           t.TempDir(),
+		MaxIterations: 5,
+		Priority:      "normal",
+		CurrentStage:  "implementation",
+	})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+
+	req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/tasks/"+task.ID+"/progress", nil))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal response: %v (body: %s)", err, w.Body.String())
+	}
+	taskRow, ok := body["task"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected task to be an object, got %T: %v", body["task"], body["task"])
+	}
+	assertKeys(t, taskRow,
+		[]string{"id", "slug", "currentStage", "silverBullet", "planMode", "userId"},
+		[]string{"current_stage", "silver_bullet", "plan_mode", "user_id", "edges"},
+	)
+	stageRunRow, ok := body["stageRun"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected stageRun to be an object, got %T: %v", body["stageRun"], body["stageRun"])
+	}
+	assertKeys(t, stageRunRow, stageRunWant, stageRunForbidden)
+}
+
+// TestProgressRoute_NilTaskStaysNull asserts that a discarded GetByID error
+// (task not found) still encodes "task" as JSON null rather than panicking
+// ToTaskResponse on a nil *ent.Task.
+func TestProgressRoute_NilTaskStaysNull(t *testing.T) {
+	_, r := newActionRouteHandler(t)
+
+	req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/tasks/does-not-exist/progress", nil))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal response: %v (body: %s)", err, w.Body.String())
+	}
+	if body["task"] != nil {
+		t.Errorf("task = %v, want null for a missing task", body["task"])
+	}
+	if _, ok := body["stageRun"].(map[string]any); !ok {
+		t.Fatalf("expected stageRun to still be present, got %T", body["stageRun"])
+	}
+}
+
+// TestRetryRoute_WireFormat asserts /retry answers the same stage-run shape
+// as the stage-run list route beside it.
+func TestRetryRoute_WireFormat(t *testing.T) {
+	client, r := newActionRouteHandler(t)
+	taskID := seedFailedRun(t, client, t.TempDir(), "implementation", "", false)
+
+	req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/tasks/"+taskID+"/retry", nil))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", w.Code, w.Body.String())
+	}
+	var row map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &row); err != nil {
+		t.Fatalf("unmarshal response: %v (body: %s)", err, w.Body.String())
+	}
+	assertKeys(t, row, stageRunWant, stageRunForbidden)
+}
+
+// TestResumeRoute_WireFormat asserts /resume answers the same stage-run shape.
+func TestResumeRoute_WireFormat(t *testing.T) {
+	client, r := newActionRouteHandler(t)
+	task, err := repo.NewTaskRepo(client).Create(testCtx(t), repo.CreateTaskInput{
+		Slug:          "action-wire-resume",
+		Title:         "Resume Wire Format",
+		Cwd:           t.TempDir(),
+		MaxIterations: 5,
+		Priority:      "normal",
+		CurrentStage:  "implementation",
+	})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+
+	req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/tasks/"+task.ID+"/resume", nil))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", w.Code, w.Body.String())
+	}
+	var row map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &row); err != nil {
+		t.Fatalf("unmarshal response: %v (body: %s)", err, w.Body.String())
+	}
+	assertKeys(t, row, stageRunWant, stageRunForbidden)
+}
+
+// TestResumeStageRoute_WireFormat asserts /resume-stage answers the same
+// stage-run shape.
+func TestResumeStageRoute_WireFormat(t *testing.T) {
+	client, r := newActionRouteHandler(t)
+	task, err := repo.NewTaskRepo(client).Create(testCtx(t), repo.CreateTaskInput{
+		Slug:          "action-wire-resume-stage",
+		Title:         "Resume Stage Wire Format",
+		Cwd:           t.TempDir(),
+		MaxIterations: 5,
+		Priority:      "normal",
+		CurrentStage:  "implementation",
+	})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+
+	req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/tasks/"+task.ID+"/resume-stage", nil))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", w.Code, w.Body.String())
+	}
+	var row map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &row); err != nil {
+		t.Fatalf("unmarshal response: %v (body: %s)", err, w.Body.String())
+	}
+	assertKeys(t, row, stageRunWant, stageRunForbidden)
+}
+
+// TestResolvePermissionRequest_WireFormat asserts the resolve route answers
+// the same permission-request shape as the list route beside it.
+func TestResolvePermissionRequest_WireFormat(t *testing.T) {
+	client, r := newTestHandlerWithRepos(t)
+	task, err := repo.NewTaskRepo(client).Create(testCtx(t), repo.CreateTaskInput{
+		Slug:          "action-wire-resolve",
+		Title:         "Resolve Wire Format",
+		Cwd:           t.TempDir(),
+		MaxIterations: 5,
+		Priority:      "normal",
+		CurrentStage:  "implementation",
+	})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+	run, err := repo.NewStageRunRepo(client).Create(testCtx(t), repo.CreateStageRunInput{
+		TaskID:    task.ID,
+		Stage:     "implementation",
+		Iteration: 1,
+	})
+	if err != nil {
+		t.Fatalf("create stage run: %v", err)
+	}
+	preq, err := repo.NewPermissionRepo(client).CreatePermissionRequest(testCtx(t), repo.CreatePermissionRequestInput{
+		StageRunID: run.ID,
+		Tool:       "Bash",
+	})
+	if err != nil {
+		t.Fatalf("create permission request: %v", err)
+	}
+
+	body := `{"outcome":"denied"}`
+	req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/tasks/"+task.ID+"/permission-requests/"+preq.ID+"/resolve", strings.NewReader(body)))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var row map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &row); err != nil {
+		t.Fatalf("unmarshal response: %v (body: %s)", err, w.Body.String())
+	}
+	assertKeys(t, row,
+		[]string{"id", "stageRunId", "tool", "pattern", "reason", "outcome", "requestedAt", "resolvedAt", "outsideSafeList"},
+		[]string{"stage_run_id", "requested_at", "resolved_at", "edges"},
+	)
 }

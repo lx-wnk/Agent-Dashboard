@@ -429,6 +429,9 @@ func newTestHandlerWithRepos(t *testing.T) (*ent.Client, *chi.Mux) {
 	r := chi.NewRouter()
 	r.Use(auth.RequireAuth(testJWTSecret))
 	h.Mount(r)
+	// Mount ingress routes without bearer middleware — unit tests drive them
+	// directly and don't need McpAuthMiddleware.
+	h.MountAgentIngress(r)
 	return client, r
 }
 

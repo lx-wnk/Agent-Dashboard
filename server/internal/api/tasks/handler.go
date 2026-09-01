@@ -729,7 +729,13 @@ func (h *Handler) progress(w http.ResponseWriter, r *http.Request) error {
 	}
 	task, _ := h.taskRepo.GetByID(r.Context(), id)
 	h.broadcastEnrichedUpdate(r.Context(), id)
-	return jsonReply(w, http.StatusOK, map[string]any{"task": task, "stageRun": sr})
+	// GetByID's error is deliberately discarded above, so task can be nil; the
+	// payload must then carry null rather than panic in the mapper.
+	var taskView any
+	if task != nil {
+		taskView = ToTaskResponse(task)
+	}
+	return jsonReply(w, http.StatusOK, map[string]any{"task": taskView, "stageRun": toStageRunResponse(sr)})
 }
 
 func (h *Handler) cancel(w http.ResponseWriter, r *http.Request) error {
@@ -774,7 +780,7 @@ func (h *Handler) retry(w http.ResponseWriter, r *http.Request) error {
 		return apierr.NewAppError(http.StatusConflict, "task could not progress")
 	}
 	h.broadcastEnrichedUpdate(r.Context(), id)
-	return jsonReply(w, http.StatusAccepted, sr)
+	return jsonReply(w, http.StatusAccepted, toStageRunResponse(sr))
 }
 
 func (h *Handler) advance(w http.ResponseWriter, r *http.Request) error {
@@ -840,7 +846,7 @@ func (h *Handler) resume(w http.ResponseWriter, r *http.Request) error {
 	}
 	_ = h.auditRepo.RecordTaskAudit(r.Context(), id, nil, "task_resumed", "task:"+id, map[string]any{"actor": "user", "hadPrompt": body.AdditionalPrompt != ""})
 	h.broadcastEnrichedUpdate(r.Context(), id)
-	return jsonReply(w, http.StatusAccepted, sr)
+	return jsonReply(w, http.StatusAccepted, toStageRunResponse(sr))
 }
 
 // stageRunResponse is the API response shape for one stage run. The ent entity's
@@ -1100,7 +1106,7 @@ func (h *Handler) resolvePermissionRequest(w http.ResponseWriter, r *http.Reques
 		}
 	}
 	h.broadcastEnrichedUpdate(r.Context(), id)
-	return jsonReply(w, http.StatusOK, resolved)
+	return jsonReply(w, http.StatusOK, toPermissionRequestResponse(resolved))
 }
 
 func (h *Handler) stream(w http.ResponseWriter, r *http.Request) {

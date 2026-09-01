@@ -129,7 +129,7 @@ func (h *Handler) createPermissionRequest(w http.ResponseWriter, r *http.Request
 				}
 			}
 			h.broadcastEnrichedEvent(r.Context(), "permission_request", sr.TaskID)
-			return jsonReply(w, http.StatusCreated, req)
+			return jsonReply(w, http.StatusCreated, toPermissionRequestResponse(req))
 		}
 
 		// Gated path: flip stage_run to awaiting_user if it is currently running.
@@ -147,7 +147,7 @@ func (h *Handler) createPermissionRequest(w http.ResponseWriter, r *http.Request
 		slog.Warn("createPermissionRequest: stage-run lookup failed; request not gated", "stageRunID", body.StageRunID, "reqID", req.ID, "err", srErr)
 	}
 
-	return jsonReply(w, http.StatusCreated, req)
+	return jsonReply(w, http.StatusCreated, toPermissionRequestResponse(req))
 }
 
 // bulkGrantPermissions handles POST /api/tasks/{id}/permissions/bulk.
@@ -276,7 +276,11 @@ func (h *Handler) bulkGrantPermissions(w http.ResponseWriter, r *http.Request) e
 	}
 
 	h.broadcastEnrichedUpdate(r.Context(), taskID)
-	return jsonReply(w, http.StatusOK, granted)
+	resp := make([]taskPermissionResponse, len(granted))
+	for i, p := range granted {
+		resp[i] = toTaskPermissionResponse(p)
+	}
+	return jsonReply(w, http.StatusOK, resp)
 }
 
 // bulkCreatePermissionRequests handles POST /api/permission-requests/bulk.
