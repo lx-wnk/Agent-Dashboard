@@ -452,3 +452,87 @@ func TestListDependencies_WireFormat(t *testing.T) {
 		}
 	})
 }
+
+// TestTaskActions_WireFormat asserts that the three task-returning action routes
+// answer camelCase and send false booleans rather than dropping them.
+func TestTaskActions_WireFormat(t *testing.T) {
+	client, r := newTestHandlerWithRepos(t)
+	taskRepo := repo.NewTaskRepo(client)
+
+	want := []string{"id", "slug", "title", "description", "cwd", "worktreePath", "sourceBranch", "targetBranch", "currentStage", "priority", "autonomy", "userId", "parentTaskId", "projectId", "spawnerId", "maxIterations", "tokenBudget", "costBudgetCents", "stageTimeoutSeconds", "silverBullet", "planMode", "rank", "metadata", "createdAt", "updatedAt"}
+	forbidden := []string{"worktree_path", "source_branch", "target_branch", "current_stage", "parent_task_id", "project_id", "spawner_id", "max_iterations", "token_budget", "cost_budget_cents", "stage_timeout_seconds", "silver_bullet", "plan_mode", "user_id", "created_at", "updated_at", "edges"}
+
+	newTask := func(t *testing.T, slug string) string {
+		t.Helper()
+		task, err := taskRepo.Create(testCtx(t), repo.CreateTaskInput{
+			Slug:          slug,
+			Title:         "Action Wire Format",
+			Cwd:           t.TempDir(),
+			MaxIterations: 5,
+			Priority:      "normal",
+			CurrentStage:  "implementation",
+		})
+		if err != nil {
+			t.Fatalf("create task: %v", err)
+		}
+		return task.ID
+	}
+
+	decodeOne := func(t *testing.T, w *httptest.ResponseRecorder) map[string]any {
+		t.Helper()
+		var row map[string]any
+		if err := json.Unmarshal(w.Body.Bytes(), &row); err != nil {
+			t.Fatalf("unmarshal response: %v (body: %s)", err, w.Body.String())
+		}
+		return row
+	}
+
+	t.Run("patch", func(t *testing.T) {
+		id := newTask(t, "action-wire-patch")
+		req := withAuth(t, httptest.NewRequest(http.MethodPatch, "/api/tasks/"+id, strings.NewReader(`{"title":"Renamed"}`)))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		row := decodeOne(t, w)
+		assertKeys(t, row, want, forbidden)
+		if row["silverBullet"] != false {
+			t.Errorf("silverBullet = %v, want false (not omitted)", row["silverBullet"])
+		}
+		if row["title"] != "Renamed" {
+			t.Errorf("title = %v, want %q", row["title"], "Renamed")
+		}
+	})
+
+	t.Run("cancel", func(t *testing.T) {
+		id := newTask(t, "action-wire-cancel")
+		req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/tasks/"+id+"/cancel", nil))
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		row := decodeOne(t, w)
+		assertKeys(t, row, want, forbidden)
+		if row["currentStage"] != "cancelled" {
+			t.Errorf("currentStage = %v, want %q", row["currentStage"], "cancelled")
+		}
+	})
+
+	t.Run("hold", func(t *testing.T) {
+		id := newTask(t, "action-wire-hold")
+		req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/tasks/"+id+"/hold", nil))
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		row := decodeOne(t, w)
+		assertKeys(t, row, want, forbidden)
+		if row["currentStage"] != "on_hold" {
+			t.Errorf("currentStage = %v, want %q", row["currentStage"], "on_hold")
+		}
+	})
+}

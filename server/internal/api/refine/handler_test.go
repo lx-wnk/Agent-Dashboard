@@ -406,3 +406,31 @@ func TestStatus_ReturnsNoneForUnknownTask(t *testing.T) {
 		t.Errorf("status field: got %v, want none", body["status"])
 	}
 }
+
+// TestConfirm_WireFormat asserts the confirm route answers the camelCase task
+// shape rather than the raw ent entity.
+func TestConfirm_WireFormat(t *testing.T) {
+	tasks := newFakeTaskRepo(defaultTask(t, "task-1"))
+	r := makeRouter(&fakeTurnRepo{}, tasks, noopSpawner)
+	req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/refine/task-1/confirm", nil))
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var row map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &row); err != nil {
+		t.Fatalf("unmarshal response: %v (body: %s)", err, rr.Body.String())
+	}
+	for _, k := range []string{"id", "title", "currentStage", "maxIterations", "silverBullet", "createdAt"} {
+		if _, ok := row[k]; !ok {
+			t.Errorf("missing key %q in %v", k, row)
+		}
+	}
+	for _, k := range []string{"current_stage", "max_iterations", "silver_bullet", "created_at", "edges"} {
+		if _, ok := row[k]; ok {
+			t.Errorf("unexpected key %q in %v", k, row)
+		}
+	}
+}

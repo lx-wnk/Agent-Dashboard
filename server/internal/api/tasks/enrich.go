@@ -12,11 +12,15 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/taskcontrol"
 )
 
-// EnrichedTask is the API response shape for a task. All fields use camelCase
-// JSON keys so they match the TypeScript PipelineTask interface without a
-// client-side transform. Do not embed *ent.Task here — ent generates snake_case
-// JSON tags that would silently shadow the camelCase keys below.
-type EnrichedTask struct {
+// TaskResponse is the API response shape for a task's own stored columns. It is
+// the base of EnrichedTask — embedded, so the enriched payload's wire format is
+// unchanged — and the whole answer for routes outside this package that return a
+// task and have no repos to compute anything from (plan approve, refine confirm).
+//
+// The ent entity's own tags are the storage column names and carry omitempty,
+// which drops silverBullet: false and planMode: false from the payload instead
+// of sending them, and leaks the empty edges container.
+type TaskResponse struct {
 	ID                  string                 `json:"id"`
 	Slug                string                 `json:"slug"`
 	Title               string                 `json:"title"`
@@ -42,6 +46,45 @@ type EnrichedTask struct {
 	Metadata            map[string]interface{} `json:"metadata"`
 	CreatedAt           time.Time              `json:"createdAt"`
 	UpdatedAt           time.Time              `json:"updatedAt"`
+}
+
+// ToTaskResponse maps a stored task onto the wire shape src/types.ts declares as
+// PipelineTask's non-computed half.
+func ToTaskResponse(t *ent.Task) TaskResponse {
+	return TaskResponse{
+		ID:                  t.ID,
+		Slug:                t.Slug,
+		Title:               t.Title,
+		Description:         t.Description,
+		Cwd:                 t.Cwd,
+		WorktreePath:        t.WorktreePath,
+		SourceBranch:        t.SourceBranch,
+		TargetBranch:        t.TargetBranch,
+		CurrentStage:        t.CurrentStage,
+		Priority:            t.Priority,
+		Autonomy:            t.Autonomy,
+		UserID:              t.UserID,
+		ParentTaskID:        t.ParentTaskID,
+		ProjectID:           t.ProjectID,
+		SpawnerID:           t.SpawnerID,
+		MaxIterations:       t.MaxIterations,
+		TokenBudget:         t.TokenBudget,
+		CostBudgetCents:     t.CostBudgetCents,
+		StageTimeoutSeconds: t.StageTimeoutSeconds,
+		SilverBullet:        t.SilverBullet,
+		PlanMode:            t.PlanMode,
+		Rank:                t.Rank,
+		Metadata:            t.Metadata,
+		CreatedAt:           t.CreatedAt,
+		UpdatedAt:           t.UpdatedAt,
+	}
+}
+
+// EnrichedTask is a task plus the fields computed at read time. The embedded
+// TaskResponse is anonymous, so encoding/json flattens its fields into the same
+// object — the payload is identical to the flat struct this replaced.
+type EnrichedTask struct {
+	TaskResponse
 	// Computed fields — not stored in DB.
 	NeedsUser                   bool                 `json:"needsUser"`
 	LatestStageRunStatus        *string              `json:"latestStageRunStatus"`
@@ -269,31 +312,7 @@ func enrichOne(ctx context.Context, t *ent.Task, latest *ent.StageRun, pendingPe
 	}
 
 	e := &EnrichedTask{
-		ID:                          t.ID,
-		Slug:                        t.Slug,
-		Title:                       t.Title,
-		Description:                 t.Description,
-		Cwd:                         t.Cwd,
-		WorktreePath:                t.WorktreePath,
-		SourceBranch:                t.SourceBranch,
-		TargetBranch:                t.TargetBranch,
-		CurrentStage:                t.CurrentStage,
-		Priority:                    t.Priority,
-		Autonomy:                    t.Autonomy,
-		UserID:                      t.UserID,
-		ParentTaskID:                t.ParentTaskID,
-		ProjectID:                   t.ProjectID,
-		SpawnerID:                   t.SpawnerID,
-		MaxIterations:               t.MaxIterations,
-		TokenBudget:                 t.TokenBudget,
-		CostBudgetCents:             t.CostBudgetCents,
-		StageTimeoutSeconds:         t.StageTimeoutSeconds,
-		SilverBullet:                t.SilverBullet,
-		PlanMode:                    t.PlanMode,
-		Rank:                        t.Rank,
-		Metadata:                    t.Metadata,
-		CreatedAt:                   t.CreatedAt,
-		UpdatedAt:                   t.UpdatedAt,
+		TaskResponse:                ToTaskResponse(t),
 		NeedsUser:                   needsUser,
 		LatestStageRunStatus:        latestStatus,
 		AutoRetryCount:              autoRetryCount,

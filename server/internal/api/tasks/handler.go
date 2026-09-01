@@ -653,7 +653,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) error {
 			})
 		}
 	}
-	return jsonReply(w, http.StatusOK, updated)
+	return jsonReply(w, http.StatusOK, ToTaskResponse(updated))
 }
 
 // parseNullableString decodes a PATCH field that may be absent, JSON null, or
@@ -748,7 +748,7 @@ func (h *Handler) cancel(w http.ResponseWriter, r *http.Request) error {
 	}
 	h.orchestrator.NotifyTaskTerminated(r.Context(), id, "cancelled")
 	h.broadcastEnrichedUpdate(r.Context(), id)
-	return jsonReply(w, http.StatusOK, updated)
+	return jsonReply(w, http.StatusOK, ToTaskResponse(updated))
 }
 
 func (h *Handler) retry(w http.ResponseWriter, r *http.Request) error {
@@ -811,7 +811,7 @@ func (h *Handler) hold(w http.ResponseWriter, r *http.Request) error {
 	}
 	_ = h.auditRepo.RecordTaskAudit(r.Context(), id, nil, "task_held", "task:"+id, map[string]any{"actor": "user", "fromStage": t.CurrentStage})
 	h.broadcastEnrichedUpdate(r.Context(), id)
-	return jsonReply(w, http.StatusOK, updated)
+	return jsonReply(w, http.StatusOK, ToTaskResponse(updated))
 }
 
 func (h *Handler) resume(w http.ResponseWriter, r *http.Request) error {
