@@ -543,10 +543,7 @@ func (h *Handler) approveAllPending(w http.ResponseWriter, r *http.Request) erro
 	}
 
 	h.broadcastEnrichedUpdate(r.Context(), taskID)
-	return jsonReply(w, http.StatusOK, map[string]any{
-		"approved": res.Approved,
-		"requeued": res.Requeued,
-	})
+	return jsonReply(w, http.StatusOK, res)
 }
 
 // isCovered checks whether a tool+pattern request is already satisfied by effective permissions.

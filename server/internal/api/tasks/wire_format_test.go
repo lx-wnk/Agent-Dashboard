@@ -310,13 +310,11 @@ func TestListStageRuns_WireFormat(t *testing.T) {
 	}
 
 	byStage := map[string]map[string]any{}
-	want := []string{"id", "taskId", "stage", "sessionId", "sessionName", "pid", "status", "iteration", "output", "tokensUsed", "costCents", "startedAt", "endedAt", "lastGrantAt"}
-	forbidden := []string{"task_id", "session_id", "session_name", "started_at", "ended_at", "tokens_used", "cost_cents", "last_grant_at", "created_at", "retry_count", "next_retry_at", "pending_user_prompt", "edges"}
 	for _, row := range rows {
 		stage, _ := row["stage"].(string)
 		byStage[stage] = row
 		t.Run(stage, func(t *testing.T) {
-			assertKeys(t, row, want, forbidden)
+			assertKeys(t, row, stageRunWant, stageRunForbidden)
 		})
 	}
 
@@ -710,8 +708,14 @@ func newActionRouteHandler(t *testing.T) (*ent.Client, *chi.Mux) {
 	return client, r
 }
 
-var stageRunWant = []string{"id", "taskId", "stage", "status", "iteration", "tokensUsed", "costCents"}
-var stageRunForbidden = []string{"task_id", "tokens_used", "cost_cents", "edges"}
+// stageRunWant/stageRunForbidden are the full stage-run wire shape asserted by
+// the list route (TestListStageRuns_WireFormat) and reused by every route that
+// answers a single stage run, so a field dropped from stageRunResponse fails
+// here rather than only in the list test. sessionName, startedAt and endedAt
+// were the fields silently missing before this branch's fix; a narrower list
+// here would let /progress, /retry, /resume and /resume-stage regress unnoticed.
+var stageRunWant = []string{"id", "taskId", "stage", "sessionId", "sessionName", "pid", "status", "iteration", "output", "tokensUsed", "costCents", "startedAt", "endedAt", "lastGrantAt"}
+var stageRunForbidden = []string{"task_id", "session_id", "session_name", "started_at", "ended_at", "tokens_used", "cost_cents", "last_grant_at", "created_at", "retry_count", "next_retry_at", "pending_user_prompt", "edges"}
 
 // TestProgressRoute_WireFormat asserts /progress answers both halves of its
 // map through ToTaskResponse and toStageRunResponse, not raw entities.
@@ -852,6 +856,93 @@ func TestResumeStageRoute_WireFormat(t *testing.T) {
 		t.Fatalf("unmarshal response: %v (body: %s)", err, w.Body.String())
 	}
 	assertKeys(t, row, stageRunWant, stageRunForbidden)
+}
+
+// TestAdvanceRoute_WireFormat asserts /advance's retry primary answers the
+// same stage-run DTO as /retry beside it, not a raw *ent.StageRun: the
+// dedicated route already converted, but Advance assigned sr straight into
+// AdvanceResult.Result, so a retry dispatched through /advance sent
+// created_at, an empty edges object, and dropped taskId/startedAt/costCents
+// under the entity's own omitempty tags.
+func TestAdvanceRoute_WireFormat(t *testing.T) {
+	client, r := newActionRouteHandler(t)
+	taskID := seedFailedRun(t, client, t.TempDir(), "implementation", "", false)
+
+	req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/tasks/"+taskID+"/advance", nil))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal response: %v (body: %s)", err, w.Body.String())
+	}
+	if body["primary"] != "retry" {
+		t.Fatalf("expected primary=retry, got %v", body["primary"])
+	}
+	result, ok := body["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected result to be an object, got %T: %v", body["result"], body["result"])
+	}
+	assertKeys(t, result, []string{"taskId", "startedAt", "costCents"}, []string{"edges", "created_at"})
+}
+
+// TestAdvanceApproveAllPending_WireFormat asserts /advance's
+// approve_all_pending primary answers the same lowercase shape as the
+// dedicated /approve-all-pending route and the MCP tool: ApproveAllPending's
+// result struct carried no json tags, so /advance (which embeds the struct
+// directly) answered PascalCase Go field names while the other two transports
+// hand-mapped the same two fields to lowercase.
+func TestAdvanceApproveAllPending_WireFormat(t *testing.T) {
+	client, r := newActionRouteHandler(t)
+	task, err := repo.NewTaskRepo(client).Create(testCtx(t), repo.CreateTaskInput{
+		Slug:          "action-wire-advance-approve-all",
+		Title:         "Advance Approve All Wire Format",
+		Cwd:           t.TempDir(),
+		MaxIterations: 5,
+		Priority:      "normal",
+		CurrentStage:  "implementation",
+	})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+	srRepo := repo.NewStageRunRepo(client)
+	run, err := srRepo.Create(testCtx(t), repo.CreateStageRunInput{TaskID: task.ID, Stage: "implementation", Iteration: 0})
+	if err != nil {
+		t.Fatalf("create run: %v", err)
+	}
+	awaiting := "awaiting_user"
+	if _, err := srRepo.Update(testCtx(t), run.ID, repo.UpdateStageRunInput{Status: &awaiting}); err != nil {
+		t.Fatalf("update run: %v", err)
+	}
+	pattern := "echo hi"
+	if _, err := repo.NewPermissionRepo(client).CreatePermissionRequest(testCtx(t), repo.CreatePermissionRequestInput{
+		StageRunID: run.ID,
+		Tool:       "Bash",
+		Pattern:    &pattern,
+	}); err != nil {
+		t.Fatalf("create perm request: %v", err)
+	}
+
+	req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/tasks/"+task.ID+"/advance", nil))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal response: %v (body: %s)", err, w.Body.String())
+	}
+	if body["primary"] != "approve_all_pending" {
+		t.Fatalf("expected primary=approve_all_pending, got %v", body["primary"])
+	}
+	result, ok := body["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected result to be an object, got %T: %v", body["result"], body["result"])
+	}
+	assertKeys(t, result, []string{"approved", "requeued"}, []string{"Approved", "Requeued"})
 }
 
 // TestResolvePermissionRequest_WireFormat asserts the resolve route answers

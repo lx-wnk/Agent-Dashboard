@@ -479,7 +479,7 @@ func registerApproveAllPending(registry mcp.ToolRegistry, d ControlDeps) {
 			}
 
 			safeBroadcast(d.Broadcast, taskID)
-			return mcp.OK(map[string]any{"approved": res.Approved, "requeued": res.Requeued})
+			return mcp.OK(res)
 		},
 	})
 }

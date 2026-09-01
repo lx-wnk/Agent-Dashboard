@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/taskcontrol"
 )
@@ -24,11 +25,23 @@ type AdvanceDeps struct {
 type AdvanceResult struct {
 	Dispatched bool   `json:"dispatched"`
 	Primary    string `json:"primary"`
-	// Result is the operation-specific payload (ApproveAllPendingResult, StageRun, etc.)
-	// or nil for no-op paths.
+	// Result is the operation-specific payload (ApproveAllPendingResult,
+	// stageRunResponse, etc.) or nil for no-op paths.
 	Result any `json:"result,omitempty"`
 	// Message provides context for non-dispatched cases.
 	Message string `json:"message,omitempty"`
+}
+
+// stageRunResultOrNil converts a stage run into the wire DTO, matching the
+// nil-check every other stage-run route already performs (progress, retry,
+// resume, resume-stage): the orchestrator can legitimately return (nil, nil)
+// when nothing was there to act on, and toStageRunResponse dereferences its
+// argument, so passing it a nil pointer directly would panic.
+func stageRunResultOrNil(sr *ent.StageRun) any {
+	if sr == nil {
+		return nil
+	}
+	return toStageRunResponse(sr)
 }
 
 // Advance executes the primary action from ComputeActions for the task.
@@ -80,7 +93,7 @@ func Advance(ctx context.Context, d AdvanceDeps, taskID string) (AdvanceResult, 
 		if err != nil {
 			return AdvanceResult{}, fmt.Errorf("advance(retry): %w", err)
 		}
-		return AdvanceResult{Dispatched: true, Primary: primary, Result: sr}, nil
+		return AdvanceResult{Dispatched: true, Primary: primary, Result: stageRunResultOrNil(sr)}, nil
 
 	case taskcontrol.ActionApproveAllPending:
 		res, err := ApproveAllPending(ctx, ApproveAllPendingDeps{
@@ -100,14 +113,14 @@ func Advance(ctx context.Context, d AdvanceDeps, taskID string) (AdvanceResult, 
 		if err != nil {
 			return AdvanceResult{}, fmt.Errorf("advance(progress): %w", err)
 		}
-		return AdvanceResult{Dispatched: true, Primary: primary, Result: sr}, nil
+		return AdvanceResult{Dispatched: true, Primary: primary, Result: stageRunResultOrNil(sr)}, nil
 
 	case taskcontrol.ActionResume:
 		sr, err := d.Orchestrator.ResumeFromUser(ctx, taskID, "")
 		if err != nil {
 			return AdvanceResult{}, fmt.Errorf("advance(resume): %w", err)
 		}
-		return AdvanceResult{Dispatched: true, Primary: primary, Result: sr}, nil
+		return AdvanceResult{Dispatched: true, Primary: primary, Result: stageRunResultOrNil(sr)}, nil
 
 	case taskcontrol.ActionApproveSpec:
 		// Spec approval is a deliberate human gate; advance must not auto-approve.
