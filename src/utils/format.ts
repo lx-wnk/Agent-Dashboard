@@ -108,3 +108,15 @@ export function maskToken(token: string): string {
   const tail = token.slice(-4)
   return head + '•'.repeat(token.length - 12) + tail
 }
+
+// A scope/context pair as one cell: `project: /tmp/x`, or the bare kind when it
+// carries no ref (`global`).
+export function formatScope(kind: string, ref: string): string {
+  return ref ? `${kind}: ${ref}` : kind
+}
+
+export function formatDateTime(iso: string | null): string {
+  if (!iso)
+    return '—'
+  return new Date(iso).toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
