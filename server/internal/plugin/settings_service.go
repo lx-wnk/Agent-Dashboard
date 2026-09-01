@@ -14,7 +14,7 @@ import (
 
 // MaskedSentinel is returned for secret values and, when sent back on Put,
 // signals "leave unchanged".
-const MaskedSentinel = "********"
+const MaskedSentinel = secretbox.MaskedSentinel
 
 // ErrUnknownKey is returned by Put when a submitted key is not in the schema.
 var ErrUnknownKey = errors.New("pluginsettings: unknown setting key")

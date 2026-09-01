@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/apps/obsidian"
 	"github.com/lx-wnk/agent-dashboard/server/internal/capability"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
@@ -27,6 +28,7 @@ func provideMCPHandler(
 	memRetriever *memory.Retriever,
 	grantUsageRepo repo.GrantUsageRepo,
 	memAsker capability.Asker,
+	obsidianClient *obsidian.Client,
 ) http.Handler {
 	if client == nil || orch == nil {
 		return nil
@@ -118,6 +120,22 @@ func provideMCPHandler(
 	mcptools.RegisterMemoryTools(registry, mcptools.MemoryDeps{
 		Repo:      memRepo,
 		Retriever: memRetriever,
+		Gate: memory.Gate{
+			Capabilities: repo.NewCapabilityRepo(client),
+			Grants:       repo.NewGrantRepo(client),
+			GrantUsage:   grantUsageRepo,
+			Asker:        memAsker,
+		},
+	})
+	// Shares memAsker with the memory tools above, not the obsidian trigger
+	// handler's Gate (built with no Asker in di.go): an MCP tool call has an
+	// agent genuinely waiting on the response, the same reasoning that
+	// applies to memory_write/memory_search, so an ask decision here may
+	// legitimately hold rather than having to fail closed. RegisterObsidianTools
+	// itself skips registering any tool when obsidianClient is nil (vault
+	// unconfigured).
+	mcptools.RegisterObsidianTools(registry, mcptools.ObsidianDeps{
+		Client: obsidianClient,
 		Gate: memory.Gate{
 			Capabilities: repo.NewCapabilityRepo(client),
 			Grants:       repo.NewGrantRepo(client),

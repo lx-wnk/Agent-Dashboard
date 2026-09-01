@@ -33,6 +33,7 @@ import (
 	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/hooks"
 	apimemory "github.com/lx-wnk/agent-dashboard/server/internal/api/memory"
+	apiobsidian "github.com/lx-wnk/agent-dashboard/server/internal/api/obsidian"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/onboarding"
 	planapi "github.com/lx-wnk/agent-dashboard/server/internal/api/plan"
 	apiplugins "github.com/lx-wnk/agent-dashboard/server/internal/api/plugins"
@@ -107,6 +108,15 @@ func (a settingsRepoAdapter) ListAll(ctx context.Context) (map[string]string, er
 	return m, nil
 }
 
+func (a settingsRepoAdapter) SetSecret(ctx context.Context, k, ciphertext, nonce string) error {
+	_, err := a.inner.UpsertSecret(ctx, k, ciphertext, nonce)
+	return err
+}
+
+func (a settingsRepoAdapter) GetSecret(ctx context.Context, k string) (string, string, bool, error) {
+	return a.inner.GetSecret(ctx, k)
+}
+
 // noopSettingsRepo backs the settings service when no database is configured,
 // so accessors always resolve to registry defaults and consumers never nil-check.
 type noopSettingsRepo struct{}
@@ -114,6 +124,12 @@ type noopSettingsRepo struct{}
 func (noopSettingsRepo) Get(context.Context, string) (string, bool, error) { return "", false, nil }
 func (noopSettingsRepo) Set(context.Context, string, string) error {
 	return fmt.Errorf("settings: no database configured")
+}
+func (noopSettingsRepo) SetSecret(context.Context, string, string, string) error {
+	return fmt.Errorf("settings: no database configured")
+}
+func (noopSettingsRepo) GetSecret(context.Context, string) (string, string, bool, error) {
+	return "", "", false, nil
 }
 func (noopSettingsRepo) ListAll(context.Context) (map[string]string, error) {
 	return map[string]string{}, nil
@@ -134,7 +150,10 @@ type ServerComponents struct {
 	CapabilityDecisions agentbroadcast.CapabilityDecisionProvider
 	Eval                *eval.Service
 	Settings            *settings.Service
-	Cleanup             func()
+	// Obsidian is nil when the vault is unconfigured or no database is
+	// present; see buildObsidianClient (di_obsidian.go).
+	Obsidian *obsidian.Client
+	Cleanup  func()
 }
 
 // ln is the address already bound by Listen, or nil to let the HTTP server
@@ -201,17 +220,37 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		providersHandler = providersapi.NewHandler(providerRegistry, providerSettingsSvc)
 	}
 
+	// Resolve the secretbox master key once, above every secret-aware
+	// consumer (settings.Service here, plugin.Service below), so both share
+	// one *secretbox.Box built from one key rather than two boxes that could
+	// in principle diverge. Only meaningful with a database — without one
+	// there is nothing to encrypt into, so box stays nil and each service's
+	// own nil-box guard turns a secret read/write into a named error instead
+	// of a panic.
+	var box *secretbox.Box
+	if entClient != nil {
+		masterKey, keyErr := secretbox.LoadOrGenerateMasterKey(os.Getenv("DASHBOARD_SECRET_KEY"))
+		if keyErr != nil {
+			return nil, fmt.Errorf("secret master key: %w", keyErr)
+		}
+		var boxErr error
+		box, boxErr = secretbox.New(masterKey)
+		if boxErr != nil {
+			return nil, fmt.Errorf("secretbox: %w", boxErr)
+		}
+	}
+
 	var settingsSvc *settings.Service
 	var settingsHandler *settingsapi.Handler
 	if entClient != nil {
 		appSettingRepo := repo.NewAppSettingRepo(entClient)
-		settingsSvc = settings.New(settingsRepoAdapter{inner: appSettingRepo})
+		settingsSvc = settings.New(settingsRepoAdapter{inner: appSettingRepo}, box)
 		if err := settingsSvc.Load(ctx); err != nil {
 			return nil, fmt.Errorf("settings load: %w", err)
 		}
 		settingsHandler = settingsapi.NewHandler(settingsSvc)
 	} else {
-		settingsSvc = settings.New(noopSettingsRepo{})
+		settingsSvc = settings.New(noopSettingsRepo{}, nil)
 		if err := settingsSvc.Load(ctx); err != nil {
 			return nil, fmt.Errorf("settings load: %w", err)
 		}
@@ -249,6 +288,17 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	// early so the boot predicate can read it, and migrate the legacy #230
 	// "plugins.enabled" setting into the table once (idempotent).
 	var pluginRepo repo.PluginRepo
+	// obsidianClient is nil when the vault is unconfigured (buildObsidianClient's
+	// own doc comment covers why that is not an error) and stays nil without
+	// a database, since Register and the capability catalogue it depends on
+	// need entClient too. obsidianSpaceID is set unconditionally alongside
+	// obsidian.Register below, regardless of whether the vault itself is
+	// configured: all four obsidian settings are ApplyRestart and the client
+	// is captured once here, so configuring a vault takes a restart either
+	// way — creating the space unconditionally just keeps that restart from
+	// also being the first run that has to create it.
+	var obsidianClient *obsidian.Client
+	var obsidianSpaceID string
 	if entClient != nil {
 		memRepo = repo.NewMemoryRepo(entClient, bundle.WriteClient)
 		memRetriever = memory.NewRetriever(bundle.DB, memRepo)
@@ -278,17 +328,40 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		}
 
 		// Obsidian is a builtin Application: its registry identity and its
-		// four capabilities only exist once Register runs. obsidian.IndexNotes
-		// (server/internal/apps/obsidian) is the one production caller that
-		// checks obsidian.search/obsidian.read against this catalogue, so
-		// without this call it reads a catalogue row that was never written
-		// (class, enforceable-by, reversible all zero-valued) instead of the
-		// one Register declares. obsidian.write and obsidian.delete have no
-		// caller at all yet — Client.Write/Client.Delete are never invoked in
-		// production — so nothing exercises those two either way. Idempotent,
-		// so safe on every boot.
+		// four capabilities only exist once Register runs — without this
+		// call, obsidian.search/obsidian.read/obsidian.write/obsidian.delete
+		// all resolve to a catalogue row that was never written (class,
+		// enforceable-by, reversible all zero-valued) instead of the one
+		// Register declares. Idempotent, so safe on every boot.
+		//
+		// obsidian.IndexNotes is the function that checks obsidian.search
+		// and obsidian.read against this catalogue; POST /api/obsidian/index
+		// (obsidianHandler below) is its production caller. Client.Write and
+		// Client.Delete are reached by the obsidian_write/obsidian_delete MCP
+		// tools (di_mcp.go's provideMCPHandler), gated the same way, with an
+		// Asker instead of none.
 		if err := obsidian.Register(ctx, resourceRepo, capabilityRepo); err != nil {
 			return nil, fmt.Errorf("obsidian: register application: %w", err)
+		}
+
+		// IndexNotes takes a spaceID and memory spaces are never
+		// auto-created (repo.MemoryRepo.CreateSpace is always caller-driven)
+		// — without this, the trigger below would 500 on a fresh install
+		// with nothing to resolve. Idempotent, same as Register just above.
+		obsidianSpace, err := ensureObsidianSpace(ctx, resourceRepo)
+		if err != nil {
+			return nil, fmt.Errorf("obsidian: ensure memory space: %w", err)
+		}
+		obsidianSpaceID = obsidianSpace.ID
+
+		// Construct the vault client from settings so it exists once the
+		// operator configures it, rather than only once something reads
+		// obsidian.IndexNotes. buildObsidianClient returns nil, nil when
+		// unconfigured; a half-configured vault fails the boot instead of
+		// silently disabling itself (see its own doc comment for why).
+		obsidianClient, err = buildObsidianClient(ctx, settingsSvc)
+		if err != nil {
+			return nil, fmt.Errorf("obsidian: build client: %w", err)
 		}
 
 		if rows, err := capabilityRepo.List(ctx); err != nil {
@@ -322,17 +395,10 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	pluginRegistry.SetEnabled(func(id string) bool { return activePlugins[id] })
 
 	// Build settings service early so the provider is wired before Load.
-	// Nil when running without a database (no entClient).
+	// Nil when running without a database (no entClient). box was resolved
+	// above, alongside settings.Service — shared, not re-derived.
 	var pluginSettingsSvc *plugin.Service
 	if entClient != nil {
-		masterKey, keyErr := secretbox.LoadOrGenerateMasterKey(os.Getenv("DASHBOARD_SECRET_KEY"))
-		if keyErr != nil {
-			return nil, fmt.Errorf("plugin secret key: %w", keyErr)
-		}
-		box, boxErr := secretbox.New(masterKey)
-		if boxErr != nil {
-			return nil, fmt.Errorf("plugin secretbox: %w", boxErr)
-		}
 		pluginSettingRepo := repo.NewPluginSettingRepo(entClient)
 		pluginSettingsSvc = plugin.NewSettingsService(pluginSettingRepoAdapter{inner: pluginSettingRepo}, box)
 		pluginRegistry.SetSettingsProvider(func(ctx context.Context, id string) (map[string]string, error) {
@@ -537,14 +603,17 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	// handler's create core, so it must be built after taskHandler. nil when no DB.
 	sched, schedulesHandler := provideScheduler(entClient, taskHandler, taskBroadcaster, routerConfig.BypassAuth)
 
-	// The only two callers that may block a live request on a human decision:
-	// the memory MCP tools below (an agent is waiting on the tool response)
-	// and the HTTP memory handler further down (a browser request has a
-	// human on the other end). The pipeline's memory push (di_pipeline.go)
-	// and the obsidian vault indexer build their own memory.Gate with no
-	// Asker instead of sharing this one — nothing is waiting on either, so
-	// an unanswerable ask must deny rather than stall a spawn or a
-	// background index run.
+	// The only three callers that may block a live request on a human
+	// decision: the memory MCP tools below, the obsidian MCP tools below
+	// them (both have an agent waiting on the tool response), and the HTTP
+	// memory handler further down (a browser request has a human on the
+	// other end). The pipeline's memory push (di_pipeline.go) and the
+	// obsidian trigger's Gate (obsidianHandler, built further down in this
+	// function — distinct from the obsidian MCP tools, which share this
+	// asker) both construct their own memory.Gate with no Asker instead of
+	// sharing this one — nothing is watching either of them run, so an
+	// unanswerable ask must deny rather than stall a spawn or an HTTP
+	// response.
 	var memAsker *serverask.Asker
 	// Bypass-auth unmounts the route a human would answer through (router.go),
 	// so an asker here would only hold every ask for its full timeout before
@@ -561,7 +630,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		}
 	}
 
-	mcpHandler := provideMCPHandler(entClient, orch, sched, taskBroadcaster, projectBroadcaster, refineRunner, memRepo, memRetriever, grantUsageRepo, askerArg)
+	mcpHandler := provideMCPHandler(entClient, orch, sched, taskBroadcaster, projectBroadcaster, refineRunner, memRepo, memRetriever, grantUsageRepo, askerArg, obsidianClient)
 
 	var histImporter *histsvc.Importer
 	var historyHandler *apihistory.Handler
@@ -583,6 +652,25 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 			GrantUsage:   grantUsageRepo,
 			Asker:        askerArg,
 		})
+	}
+
+	// Obsidian manual trigger — POST /api/obsidian/index. Unlike memoryHandler
+	// just above (built with askerArg because a human is waiting on that
+	// request), this Gate carries no Asker: the same reasoning
+	// AuthorizeMemory's closure documents for the pipeline's memory push
+	// (di_pipeline.go) applies here — nobody is watching this run resolve a
+	// capability question, so an ask decision must deny rather than hold the
+	// HTTP response open for a human who is not there. Mounted even when
+	// obsidianClient is nil (vault unconfigured); the handler itself answers
+	// 503 for that case rather than the route not existing at all, mirroring
+	// how auth.Handler stays mounted with a nil OAuthProvider.
+	var obsidianHandler *apiobsidian.Handler
+	if entClient != nil {
+		obsidianHandler = apiobsidian.NewHandler(obsidianClient, memRepo, memory.Gate{
+			Capabilities: repo.NewCapabilityRepo(entClient),
+			Grants:       repo.NewGrantRepo(entClient),
+			GrantUsage:   grantUsageRepo,
+		}, obsidianSpaceID)
 	}
 
 	// Eval / drift-detection subsystem. The onDrift callback is the only outward
@@ -800,6 +888,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		SearchHandler:          searchHandler,
 		HistoryHandler:         historyHandler,
 		MemoryHandler:          memoryHandler,
+		ObsidianHandler:        obsidianHandler,
 		RefineHandler:          refineHandler,
 		PlanHandler:            planHandler,
 		AnalyticsHandler:       analyticsHandler,
@@ -835,6 +924,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		CapabilityDecisions: capabilityDecisions,
 		Eval:                evalService,
 		Settings:            settingsSvc,
+		Obsidian:            obsidianClient,
 		Cleanup:             cleanup,
 	}, nil
 }

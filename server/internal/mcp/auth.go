@@ -49,6 +49,9 @@ var ToolScopeMap = map[string]string{
 	"revoke_api_key": "keys:manage",
 	// memory:read / memory:write
 	"memory_search": "memory:read", "memory_write": "memory:write",
+	// obsidian:read / obsidian:write
+	"obsidian_read": "obsidian:read", "obsidian_search": "obsidian:read",
+	"obsidian_write": "obsidian:write", "obsidian_delete": "obsidian:write",
 }
 
 var scopeImplies = map[string][]string{
@@ -57,8 +60,13 @@ var scopeImplies = map[string][]string{
 	"agent:coord":      {},
 	"memory:read":      {},
 	"memory:write":     {"memory:read"},
+	"obsidian:read":    {},
+	"obsidian:write":   {"obsidian:read"},
 	"pipeline:control": {"tasks:read", "agent:coord"},
-	"keys:manage":      {"tasks:read", "tasks:write", "pipeline:control", "agent:coord", "memory:read", "memory:write"},
+	"keys:manage": {
+		"tasks:read", "tasks:write", "pipeline:control", "agent:coord",
+		"memory:read", "memory:write", "obsidian:read", "obsidian:write",
+	},
 }
 
 // ResolveScopes expands scopes with their implied scopes.

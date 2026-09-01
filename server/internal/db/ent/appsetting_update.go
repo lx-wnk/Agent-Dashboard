@@ -56,6 +56,34 @@ func (_u *AppSettingUpdate) SetNillableValue(v *string) *AppSettingUpdate {
 	return _u
 }
 
+// SetSecret sets the "secret" field.
+func (_u *AppSettingUpdate) SetSecret(v bool) *AppSettingUpdate {
+	_u.mutation.SetSecret(v)
+	return _u
+}
+
+// SetNillableSecret sets the "secret" field if the given value is not nil.
+func (_u *AppSettingUpdate) SetNillableSecret(v *bool) *AppSettingUpdate {
+	if v != nil {
+		_u.SetSecret(*v)
+	}
+	return _u
+}
+
+// SetNonce sets the "nonce" field.
+func (_u *AppSettingUpdate) SetNonce(v string) *AppSettingUpdate {
+	_u.mutation.SetNonce(v)
+	return _u
+}
+
+// SetNillableNonce sets the "nonce" field if the given value is not nil.
+func (_u *AppSettingUpdate) SetNillableNonce(v *string) *AppSettingUpdate {
+	if v != nil {
+		_u.SetNonce(*v)
+	}
+	return _u
+}
+
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *AppSettingUpdate) SetUpdatedAt(v time.Time) *AppSettingUpdate {
 	_u.mutation.SetUpdatedAt(v)
@@ -118,6 +146,12 @@ func (_u *AppSettingUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 	if value, ok := _u.mutation.Value(); ok {
 		_spec.SetField(appsetting.FieldValue, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.Secret(); ok {
+		_spec.SetField(appsetting.FieldSecret, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.Nonce(); ok {
+		_spec.SetField(appsetting.FieldNonce, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(appsetting.FieldUpdatedAt, field.TypeTime, value)
 	}
@@ -165,6 +199,34 @@ func (_u *AppSettingUpdateOne) SetValue(v string) *AppSettingUpdateOne {
 func (_u *AppSettingUpdateOne) SetNillableValue(v *string) *AppSettingUpdateOne {
 	if v != nil {
 		_u.SetValue(*v)
+	}
+	return _u
+}
+
+// SetSecret sets the "secret" field.
+func (_u *AppSettingUpdateOne) SetSecret(v bool) *AppSettingUpdateOne {
+	_u.mutation.SetSecret(v)
+	return _u
+}
+
+// SetNillableSecret sets the "secret" field if the given value is not nil.
+func (_u *AppSettingUpdateOne) SetNillableSecret(v *bool) *AppSettingUpdateOne {
+	if v != nil {
+		_u.SetSecret(*v)
+	}
+	return _u
+}
+
+// SetNonce sets the "nonce" field.
+func (_u *AppSettingUpdateOne) SetNonce(v string) *AppSettingUpdateOne {
+	_u.mutation.SetNonce(v)
+	return _u
+}
+
+// SetNillableNonce sets the "nonce" field if the given value is not nil.
+func (_u *AppSettingUpdateOne) SetNillableNonce(v *string) *AppSettingUpdateOne {
+	if v != nil {
+		_u.SetNonce(*v)
 	}
 	return _u
 }
@@ -260,6 +322,12 @@ func (_u *AppSettingUpdateOne) sqlSave(ctx context.Context) (_node *AppSetting, 
 	}
 	if value, ok := _u.mutation.Value(); ok {
 		_spec.SetField(appsetting.FieldValue, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Secret(); ok {
+		_spec.SetField(appsetting.FieldSecret, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.Nonce(); ok {
+		_spec.SetField(appsetting.FieldNonce, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(appsetting.FieldUpdatedAt, field.TypeTime, value)

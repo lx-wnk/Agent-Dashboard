@@ -34,7 +34,12 @@ type Definition struct {
 	Default  string
 	Apply    Apply
 	Category string
-	Enum     []string               // for TypeEnum
+	Enum     []string // for TypeEnum
+	// Secret routes the value through secretbox on write and masks it on
+	// every read that is not Service.Secret. A secret definition must not
+	// carry a Default: a default would be returned in clear by the
+	// registry-fallback path before anything was ever stored.
+	Secret   bool
 	validate func(raw string) error // extra constraint beyond type parsing
 }
 
@@ -127,13 +132,36 @@ var definitions = func() map[string]Definition {
 		{Key: "usage.budget.session", Type: TypeInt, Default: "0", Apply: ApplyLive, Category: "usage", validate: nonNegativeInt("usage.budget.session")},
 		{Key: "usage.budget.weekly", Type: TypeInt, Default: "0", Apply: ApplyLive, Category: "usage", validate: nonNegativeInt("usage.budget.weekly")},
 		{Key: "onboarding.completed", Type: TypeBool, Default: "false", Apply: ApplyLive, Category: "onboarding"},
+		{Key: "obsidian.apiKey", Type: TypeString, Secret: true, Apply: ApplyRestart, Category: "obsidian"},
+		{Key: "obsidian.baseURL", Type: TypeString, Default: "", Apply: ApplyRestart, Category: "obsidian"},
+		{Key: "obsidian.vaultRoot", Type: TypeString, Default: "", Apply: ApplyRestart, Category: "obsidian"},
+		{Key: "obsidian.tlsMode", Type: TypeEnum, Enum: []string{"verify", "pinned", "insecure-loopback"}, Default: "verify", Apply: ApplyRestart, Category: "obsidian"},
 	}
 	m := make(map[string]Definition, len(list))
 	for _, d := range list {
 		m[d.Key] = d
 	}
+	if err := validateDefinitions(m); err != nil {
+		panic(err)
+	}
 	return m
 }()
+
+// validateDefinitions checks registry-wide invariants across every
+// definition. A secret definition must not carry a Default: the
+// registry-fallback path in Service.raw would return it in clear before
+// anything was ever stored. Called once at package init (a mis-registered
+// definition is a programming error, not a runtime condition), and exposed
+// separately so the invariant itself is unit-testable without a
+// registration API.
+func validateDefinitions(defs map[string]Definition) error {
+	for _, d := range defs {
+		if d.Secret && d.Default != "" {
+			return fmt.Errorf("settings: %s: secret settings must not have a Default", d.Key)
+		}
+	}
+	return nil
+}
 
 // Lookup returns the definition for key.
 func Lookup(key string) (Definition, bool) { d, ok := definitions[key]; return d, ok }

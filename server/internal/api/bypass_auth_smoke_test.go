@@ -17,6 +17,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/grants"
 	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
 	apimemory "github.com/lx-wnk/agent-dashboard/server/internal/api/memory"
+	apiobsidian "github.com/lx-wnk/agent-dashboard/server/internal/api/obsidian"
 	apiplugins "github.com/lx-wnk/agent-dashboard/server/internal/api/plugins"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/presets"
 	refineapi "github.com/lx-wnk/agent-dashboard/server/internal/api/refine"
@@ -133,6 +134,19 @@ func buildBypassRouter(t *testing.T) http.Handler {
 				Grants:       repo.NewGrantRepo(c),
 				GrantUsage:   repo.NewGrantUsageRepo(c, bundle.WriteClient),
 			},
+		),
+		// client is nil here — this router mirrors an unconfigured vault, the
+		// common case in production too — so /api/obsidian/index answers 503
+		// before ever reaching the gate below.
+		ObsidianHandler: apiobsidian.NewHandler(
+			nil,
+			repo.NewMemoryRepo(c, bundle.WriteClient),
+			memory.Gate{
+				Capabilities: repo.NewCapabilityRepo(c),
+				Grants:       repo.NewGrantRepo(c),
+				GrantUsage:   repo.NewGrantUsageRepo(c, bundle.WriteClient),
+			},
+			"obsidian",
 		),
 		RefineHandler: refineapi.NewHandler(refineapi.Deps{
 			Turns:     repo.NewRefinementTurnRepo(c),

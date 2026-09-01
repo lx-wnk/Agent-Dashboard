@@ -17,6 +17,10 @@ const (
 	FieldKey = "key"
 	// FieldValue holds the string denoting the value field in the database.
 	FieldValue = "value"
+	// FieldSecret holds the string denoting the secret field in the database.
+	FieldSecret = "secret"
+	// FieldNonce holds the string denoting the nonce field in the database.
+	FieldNonce = "nonce"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
@@ -30,6 +34,8 @@ var Columns = []string{
 	FieldID,
 	FieldKey,
 	FieldValue,
+	FieldSecret,
+	FieldNonce,
 	FieldCreatedAt,
 	FieldUpdatedAt,
 }
@@ -45,6 +51,10 @@ func ValidColumn(column string) bool {
 }
 
 var (
+	// DefaultSecret holds the default value on creation for the "secret" field.
+	DefaultSecret bool
+	// DefaultNonce holds the default value on creation for the "nonce" field.
+	DefaultNonce string
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 	// DefaultUpdatedAt holds the default value on creation for the "updated_at" field.
@@ -69,6 +79,16 @@ func ByKey(opts ...sql.OrderTermOption) OrderOption {
 // ByValue orders the results by the value field.
 func ByValue(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldValue, opts...).ToFunc()
+}
+
+// BySecret orders the results by the secret field.
+func BySecret(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSecret, opts...).ToFunc()
+}
+
+// ByNonce orders the results by the nonce field.
+func ByNonce(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldNonce, opts...).ToFunc()
 }
 
 // ByCreatedAt orders the results by the created_at field.

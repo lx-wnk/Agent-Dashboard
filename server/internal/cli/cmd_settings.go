@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/secretbox"
 	"github.com/lx-wnk/agent-dashboard/server/internal/settings"
 )
 
@@ -53,7 +54,7 @@ func newSettingsCmd() *cobra.Command {
 				if v, ok := rows[d.Key]; ok {
 					val = v
 				}
-				fmt.Printf("%-28s = %-12s (%s, %s)\n", d.Key, val, d.Type, d.Apply)
+				fmt.Printf("%-28s = %-12s (%s, %s)\n", d.Key, maskSecretValue(d.Key, val), d.Type, d.Apply)
 			}
 			return nil
 		})
@@ -67,12 +68,12 @@ func newSettingsCmd() *cobra.Command {
 			}
 			if !ok {
 				if d, found := settings.Lookup(args[0]); found {
-					fmt.Println(d.Default)
+					fmt.Println(maskSecretValue(args[0], d.Default))
 					return nil
 				}
 				return errUnknownKey(args[0])
 			}
-			fmt.Println(v)
+			fmt.Println(maskSecretValue(args[0], v))
 			return nil
 		})
 	}}
@@ -82,11 +83,35 @@ func newSettingsCmd() *cobra.Command {
 			if err := s.SetValidated(ctx, args[0], args[1]); err != nil {
 				return err
 			}
-			fmt.Printf("set %s = %s\n", args[0], args[1])
+			fmt.Printf("set %s = %s\n", args[0], maskSecretValue(args[0], args[1]))
 			return nil
 		})
 	}}
 
 	cmd.AddCommand(list, get, set)
 	return cmd
+}
+
+// maskSecretValue returns secretbox.MaskedSentinel for a secret definition's
+// non-empty value, value unchanged otherwise. Shared by list/get/set: the
+// CLI must never print a secret's raw stored value (ciphertext for
+// list/get) or a value it was just given (set) — the raw stored value is
+// not the plaintext, but it is still a value no consumer should see,
+// matching the rule Service.Load already enforces on the HTTP surface.
+//
+// An unknown key (settings.Lookup misses) is masked too, fail-closed: a row
+// left behind by a secret key later renamed or dropped from the registry
+// must not become printable just because the registry no longer recognizes
+// it.
+//
+// An empty value is never masked, so an unset secret prints as unset rather
+// than as indistinguishable from a configured one.
+func maskSecretValue(key, value string) string {
+	if value == "" {
+		return value
+	}
+	if d, ok := settings.Lookup(key); !ok || d.Secret {
+		return secretbox.MaskedSentinel
+	}
+	return value
 }

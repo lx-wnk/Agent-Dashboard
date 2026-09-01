@@ -10,6 +10,7 @@ const NAV_LABELS = [
   'Appearance',
   'API Keys',
   'Grants',
+  'Obsidian',
   'Permissions',
   'Analytics',
   'System Prompts',

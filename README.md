@@ -45,7 +45,7 @@ Agents spawned from the dashboard run as interactive **live** sessions rather th
 
 A live-injectable session's agent modal has a **Terminal** tab — a real `xterm.js` terminal streamed over a WebSocket (`GET /api/agents/{pid}/terminal`), so you see the session's actual pty output and can type into it directly. When the session asks an interactive multiple-choice question (`AskUserQuestion`), an overlay detects it from the live terminal screen and renders the options inline — pick them and **Send answer** drives the session's selector with real keystrokes over the same WebSocket. A multi-question flow's closing **review/submit** screen ("Ready to submit your answers?") is detected the same way, so the whole round can be completed without touching the terminal. Because it drives the pty directly, this works over any transport (tmux or the built-in pty broker). The same cards appear in the main needs-you band, backed by server-side detection of the session's rendered screen.
 
-**Extend** — authenticated MCP control plane with scoped tokens; in-dashboard `~/.claude` config explorer and git-worktree panel; frontend plugin slots and pluggable LLM adapters (OpenAI-compatible, Ollama, `anthropic`); Web Push, webhook, and email notifications. Plugins are enabled and disabled **live** from **Settings → Plugins** via `POST /api/plugins/{id}/activate` and `/deactivate` — no server restart needed for most plugins. Exception: plugins with the `auth_provider` capability are boot-wired (they affect server startup) and require a restart to take effect — after toggling one, the panel shows a "Restart required to apply" badge and a **Restart server** button; clicking it triggers the restart and a reconnect overlay polls until the server is back, then reloads the page automatically. Per-plugin settings with schema-defined fields (string, URL, integer, boolean, enum) are editable in the same panel; secret fields are masked and unchanged secrets are preserved on save. Route and UI extension plugins are reverse-proxied through a single catch-all at `/api/plugins/{id}/proxy/*`; a stopped or crashed plugin returns HTTP 503 rather than silently disappearing. A system-owned **memory** store lets agents and you persist facts, preferences, and lessons that outlive one task (`memory_search`/`memory_write` MCP tools, `/api/memory/*` HTTP routes, both gated by the capability model above) — a budgeted, ranked extract is automatically appended to every stage's spawn prompt. There is no UI for it yet; see [Privacy policy](./PRIVACY.md) for what it stores and how it's removed. An Obsidian vault is registered as the first resource-registry **Application** (`server/internal/apps/obsidian`), with four gated capabilities (read/search/write/delete) and a client that indexes notes into the memory store as pointers — but no settings surface exists yet to point it at a vault, so today it is implemented and tested and otherwise inert; see [Privacy policy](./PRIVACY.md) and [Security model](docs/guides/security.md) for exactly what's missing.
+**Extend** — authenticated MCP control plane with scoped tokens; in-dashboard `~/.claude` config explorer and git-worktree panel; frontend plugin slots and pluggable LLM adapters (OpenAI-compatible, Ollama, `anthropic`); Web Push, webhook, and email notifications. Plugins are enabled and disabled **live** from **Settings → Plugins** via `POST /api/plugins/{id}/activate` and `/deactivate` — no server restart needed for most plugins. Exception: plugins with the `auth_provider` capability are boot-wired (they affect server startup) and require a restart to take effect — after toggling one, the panel shows a "Restart required to apply" badge and a **Restart server** button; clicking it triggers the restart and a reconnect overlay polls until the server is back, then reloads the page automatically. Per-plugin settings with schema-defined fields (string, URL, integer, boolean, enum) are editable in the same panel; secret fields are masked and unchanged secrets are preserved on save. Route and UI extension plugins are reverse-proxied through a single catch-all at `/api/plugins/{id}/proxy/*`; a stopped or crashed plugin returns HTTP 503 rather than silently disappearing. A system-owned **memory** store lets agents and you persist facts, preferences, and lessons that outlive one task (`memory_search`/`memory_write` MCP tools, `/api/memory/*` HTTP routes, both gated by the capability model above) — a budgeted, ranked extract is automatically appended to every stage's spawn prompt. There is no UI for it yet; see [Privacy policy](./PRIVACY.md) for what it stores and how it's removed. An Obsidian vault is registered as a resource-registry **Application** (`server/internal/apps/obsidian`) with four gated capabilities (read/search/write/delete): configure it from **Settings → Obsidian**, then reach it through `POST /api/obsidian/index` (turns vault notes into memory pointers) or four capability-gated `obsidian_*` MCP tools that read, search, write, and delete notes directly — see [Obsidian vault](#obsidian-vault) below for what it takes to actually turn it on.
 
 **Supported agents / providers** — Claude Code is monitored by default. Codex CLI, Gemini CLI, and Junie CLI can be monitored too, but are opt-in. Enable or disable them from **Settings → Providers** in the dashboard UI — the change is persisted and takes effect within a few seconds without a restart. You can also set `DASHBOARD_PROVIDERS_ENABLED` to a comma-separated list of ids (`codex`, `gemini`, `junie`) as a fallback when no database row exists, or drop your own descriptor YAML files in a directory pointed to by `DASHBOARD_PROVIDER_DIR`. Agents using a local Ollama-served model show a cost of **$0** ("local") instead of "unknown".
 
@@ -140,6 +140,32 @@ agent-dashboard grants add memory.read --pattern '*' --scope global --mode allow
 ```
 
 See [Configuration](docs/guides/configuration.md) for the full settings/grants/plugins CLI reference.
+
+## Obsidian vault
+
+Point the dashboard at a local [Obsidian](https://obsidian.md) vault, via the
+[Local REST API](https://github.com/coddingtonbear/obsidian-local-rest-api) community plugin, from
+**Settings → Obsidian**: base URL, vault root, API key, and TLS mode. All four settings apply only
+after a server restart, and `baseURL`/`vaultRoot`/`apiKey` are a required trio: set all three, or
+none. With only one or two set, the next start **fails** and names the missing keys, rather than
+booting with the vault silently disabled — a vault you configured and that quietly does not run is
+worse than a refused start. Clearing all three in the panel (the API key field included) turns the
+integration back off.
+
+Once configured, **Index now** in the same panel (or `POST /api/obsidian/index`) turns vault notes
+into searchable memory pointers — but only once the `obsidian.read`, `obsidian.search`, and
+`memory.write` capability grants exist. A fresh install denies the run otherwise:
+
+```bash
+agent-dashboard grants add obsidian.read --pattern '*' --scope global --mode allow
+agent-dashboard grants add obsidian.search --pattern '*' --scope global --mode allow
+agent-dashboard grants add memory.write --pattern '*' --scope global --mode allow
+```
+
+(or the same three from **Settings → Grants**). Agents can also reach the vault directly — read,
+search, write, and delete a note — through four MCP tools gated the same way; see
+[MCP endpoint](docs/guides/mcp.md#scopes) for the scopes and
+[Security](docs/guides/security.md#obsidians-tls-trust-model) for the TLS trust model.
 
 ## Documentation
 

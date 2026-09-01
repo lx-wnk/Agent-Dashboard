@@ -35,6 +35,34 @@ func (_c *AppSettingCreate) SetValue(v string) *AppSettingCreate {
 	return _c
 }
 
+// SetSecret sets the "secret" field.
+func (_c *AppSettingCreate) SetSecret(v bool) *AppSettingCreate {
+	_c.mutation.SetSecret(v)
+	return _c
+}
+
+// SetNillableSecret sets the "secret" field if the given value is not nil.
+func (_c *AppSettingCreate) SetNillableSecret(v *bool) *AppSettingCreate {
+	if v != nil {
+		_c.SetSecret(*v)
+	}
+	return _c
+}
+
+// SetNonce sets the "nonce" field.
+func (_c *AppSettingCreate) SetNonce(v string) *AppSettingCreate {
+	_c.mutation.SetNonce(v)
+	return _c
+}
+
+// SetNillableNonce sets the "nonce" field if the given value is not nil.
+func (_c *AppSettingCreate) SetNillableNonce(v *string) *AppSettingCreate {
+	if v != nil {
+		_c.SetNonce(*v)
+	}
+	return _c
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (_c *AppSettingCreate) SetCreatedAt(v time.Time) *AppSettingCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -104,6 +132,14 @@ func (_c *AppSettingCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *AppSettingCreate) defaults() {
+	if _, ok := _c.mutation.Secret(); !ok {
+		v := appsetting.DefaultSecret
+		_c.mutation.SetSecret(v)
+	}
+	if _, ok := _c.mutation.Nonce(); !ok {
+		v := appsetting.DefaultNonce
+		_c.mutation.SetNonce(v)
+	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		v := appsetting.DefaultCreatedAt()
 		_c.mutation.SetCreatedAt(v)
@@ -121,6 +157,12 @@ func (_c *AppSettingCreate) check() error {
 	}
 	if _, ok := _c.mutation.Value(); !ok {
 		return &ValidationError{Name: "value", err: errors.New(`ent: missing required field "AppSetting.value"`)}
+	}
+	if _, ok := _c.mutation.Secret(); !ok {
+		return &ValidationError{Name: "secret", err: errors.New(`ent: missing required field "AppSetting.secret"`)}
+	}
+	if _, ok := _c.mutation.Nonce(); !ok {
+		return &ValidationError{Name: "nonce", err: errors.New(`ent: missing required field "AppSetting.nonce"`)}
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "AppSetting.created_at"`)}
@@ -171,6 +213,14 @@ func (_c *AppSettingCreate) createSpec() (*AppSetting, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Value(); ok {
 		_spec.SetField(appsetting.FieldValue, field.TypeString, value)
 		_node.Value = value
+	}
+	if value, ok := _c.mutation.Secret(); ok {
+		_spec.SetField(appsetting.FieldSecret, field.TypeBool, value)
+		_node.Secret = value
+	}
+	if value, ok := _c.mutation.Nonce(); ok {
+		_spec.SetField(appsetting.FieldNonce, field.TypeString, value)
+		_node.Nonce = value
 	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(appsetting.FieldCreatedAt, field.TypeTime, value)
@@ -253,6 +303,30 @@ func (u *AppSettingUpsert) SetValue(v string) *AppSettingUpsert {
 // UpdateValue sets the "value" field to the value that was provided on create.
 func (u *AppSettingUpsert) UpdateValue() *AppSettingUpsert {
 	u.SetExcluded(appsetting.FieldValue)
+	return u
+}
+
+// SetSecret sets the "secret" field.
+func (u *AppSettingUpsert) SetSecret(v bool) *AppSettingUpsert {
+	u.Set(appsetting.FieldSecret, v)
+	return u
+}
+
+// UpdateSecret sets the "secret" field to the value that was provided on create.
+func (u *AppSettingUpsert) UpdateSecret() *AppSettingUpsert {
+	u.SetExcluded(appsetting.FieldSecret)
+	return u
+}
+
+// SetNonce sets the "nonce" field.
+func (u *AppSettingUpsert) SetNonce(v string) *AppSettingUpsert {
+	u.Set(appsetting.FieldNonce, v)
+	return u
+}
+
+// UpdateNonce sets the "nonce" field to the value that was provided on create.
+func (u *AppSettingUpsert) UpdateNonce() *AppSettingUpsert {
+	u.SetExcluded(appsetting.FieldNonce)
 	return u
 }
 
@@ -344,6 +418,34 @@ func (u *AppSettingUpsertOne) SetValue(v string) *AppSettingUpsertOne {
 func (u *AppSettingUpsertOne) UpdateValue() *AppSettingUpsertOne {
 	return u.Update(func(s *AppSettingUpsert) {
 		s.UpdateValue()
+	})
+}
+
+// SetSecret sets the "secret" field.
+func (u *AppSettingUpsertOne) SetSecret(v bool) *AppSettingUpsertOne {
+	return u.Update(func(s *AppSettingUpsert) {
+		s.SetSecret(v)
+	})
+}
+
+// UpdateSecret sets the "secret" field to the value that was provided on create.
+func (u *AppSettingUpsertOne) UpdateSecret() *AppSettingUpsertOne {
+	return u.Update(func(s *AppSettingUpsert) {
+		s.UpdateSecret()
+	})
+}
+
+// SetNonce sets the "nonce" field.
+func (u *AppSettingUpsertOne) SetNonce(v string) *AppSettingUpsertOne {
+	return u.Update(func(s *AppSettingUpsert) {
+		s.SetNonce(v)
+	})
+}
+
+// UpdateNonce sets the "nonce" field to the value that was provided on create.
+func (u *AppSettingUpsertOne) UpdateNonce() *AppSettingUpsertOne {
+	return u.Update(func(s *AppSettingUpsert) {
+		s.UpdateNonce()
 	})
 }
 
@@ -604,6 +706,34 @@ func (u *AppSettingUpsertBulk) SetValue(v string) *AppSettingUpsertBulk {
 func (u *AppSettingUpsertBulk) UpdateValue() *AppSettingUpsertBulk {
 	return u.Update(func(s *AppSettingUpsert) {
 		s.UpdateValue()
+	})
+}
+
+// SetSecret sets the "secret" field.
+func (u *AppSettingUpsertBulk) SetSecret(v bool) *AppSettingUpsertBulk {
+	return u.Update(func(s *AppSettingUpsert) {
+		s.SetSecret(v)
+	})
+}
+
+// UpdateSecret sets the "secret" field to the value that was provided on create.
+func (u *AppSettingUpsertBulk) UpdateSecret() *AppSettingUpsertBulk {
+	return u.Update(func(s *AppSettingUpsert) {
+		s.UpdateSecret()
+	})
+}
+
+// SetNonce sets the "nonce" field.
+func (u *AppSettingUpsertBulk) SetNonce(v string) *AppSettingUpsertBulk {
+	return u.Update(func(s *AppSettingUpsert) {
+		s.SetNonce(v)
+	})
+}
+
+// UpdateNonce sets the "nonce" field to the value that was provided on create.
+func (u *AppSettingUpsertBulk) UpdateNonce() *AppSettingUpsertBulk {
+	return u.Update(func(s *AppSettingUpsert) {
+		s.UpdateNonce()
 	})
 }
 

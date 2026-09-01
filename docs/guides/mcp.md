@@ -23,9 +23,11 @@ Scopes are hierarchical — a higher scope implies all lower ones.
 | `pipeline:control` | Progress, approve, cancel, retry tasks; manage permissions; refine and plan gates (implies `tasks:read` and `agent:coord`) |
 | `memory:read` | Search and read entries from the system memory store |
 | `memory:write` | Write entries to the system memory store |
+| `obsidian:read` | Read and search notes in the configured Obsidian vault |
+| `obsidian:write` | Create, overwrite, or delete a note in the configured Obsidian vault (implies `obsidian:read`) |
 | `keys:manage` | Full access including API key management |
 
-## Tools (43)
+## Tools (47)
 
 **`tasks:read`** — `list_tasks`, `get_task`, `list_stage_runs`, `list_audit`, `list_permission_requests`, `list_projects`, `list_spawners`, `list_schedules`
 
@@ -39,7 +41,17 @@ Scopes are hierarchical — a higher scope implies all lower ones.
 
 **`memory:write`** — `memory_write`
 
+**`obsidian:read`** — `obsidian_read`, `obsidian_search`
+
+**`obsidian:write`** — `obsidian_write`, `obsidian_delete`
+
 **`keys:manage`** — `list_api_keys`, `create_api_key`, `revoke_api_key`
+
+The four `obsidian_*` tools reach the vault configured under **Settings → Obsidian**
+(`server/internal/apps/obsidian`); when that vault is not fully configured (`obsidian.baseURL`,
+`obsidian.vaultRoot`, and `obsidian.apiKey` are a required trio), none of the four are registered at
+all rather than being registered and always failing. `obsidian_write` and `obsidian_delete` are
+irreversible: a write overwrites any existing note at that path, and a delete cannot be undone.
 
 ### Attaching a task to a project
 

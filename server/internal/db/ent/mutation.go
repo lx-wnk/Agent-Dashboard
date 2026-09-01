@@ -1774,6 +1774,8 @@ type AppSettingMutation struct {
 	id            *string
 	key           *string
 	value         *string
+	secret        *bool
+	nonce         *string
 	created_at    *time.Time
 	updated_at    *time.Time
 	clearedFields map[string]struct{}
@@ -1958,6 +1960,78 @@ func (m *AppSettingMutation) ResetValue() {
 	m.value = nil
 }
 
+// SetSecret sets the "secret" field.
+func (m *AppSettingMutation) SetSecret(b bool) {
+	m.secret = &b
+}
+
+// Secret returns the value of the "secret" field in the mutation.
+func (m *AppSettingMutation) Secret() (r bool, exists bool) {
+	v := m.secret
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSecret returns the old "secret" field's value of the AppSetting entity.
+// If the AppSetting object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AppSettingMutation) OldSecret(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSecret is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSecret requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSecret: %w", err)
+	}
+	return oldValue.Secret, nil
+}
+
+// ResetSecret resets all changes to the "secret" field.
+func (m *AppSettingMutation) ResetSecret() {
+	m.secret = nil
+}
+
+// SetNonce sets the "nonce" field.
+func (m *AppSettingMutation) SetNonce(s string) {
+	m.nonce = &s
+}
+
+// Nonce returns the value of the "nonce" field in the mutation.
+func (m *AppSettingMutation) Nonce() (r string, exists bool) {
+	v := m.nonce
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldNonce returns the old "nonce" field's value of the AppSetting entity.
+// If the AppSetting object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AppSettingMutation) OldNonce(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldNonce is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldNonce requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldNonce: %w", err)
+	}
+	return oldValue.Nonce, nil
+}
+
+// ResetNonce resets all changes to the "nonce" field.
+func (m *AppSettingMutation) ResetNonce() {
+	m.nonce = nil
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (m *AppSettingMutation) SetCreatedAt(t time.Time) {
 	m.created_at = &t
@@ -2064,12 +2138,18 @@ func (m *AppSettingMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *AppSettingMutation) Fields() []string {
-	fields := make([]string, 0, 4)
+	fields := make([]string, 0, 6)
 	if m.key != nil {
 		fields = append(fields, appsetting.FieldKey)
 	}
 	if m.value != nil {
 		fields = append(fields, appsetting.FieldValue)
+	}
+	if m.secret != nil {
+		fields = append(fields, appsetting.FieldSecret)
+	}
+	if m.nonce != nil {
+		fields = append(fields, appsetting.FieldNonce)
 	}
 	if m.created_at != nil {
 		fields = append(fields, appsetting.FieldCreatedAt)
@@ -2089,6 +2169,10 @@ func (m *AppSettingMutation) Field(name string) (ent.Value, bool) {
 		return m.Key()
 	case appsetting.FieldValue:
 		return m.Value()
+	case appsetting.FieldSecret:
+		return m.Secret()
+	case appsetting.FieldNonce:
+		return m.Nonce()
 	case appsetting.FieldCreatedAt:
 		return m.CreatedAt()
 	case appsetting.FieldUpdatedAt:
@@ -2106,6 +2190,10 @@ func (m *AppSettingMutation) OldField(ctx context.Context, name string) (ent.Val
 		return m.OldKey(ctx)
 	case appsetting.FieldValue:
 		return m.OldValue(ctx)
+	case appsetting.FieldSecret:
+		return m.OldSecret(ctx)
+	case appsetting.FieldNonce:
+		return m.OldNonce(ctx)
 	case appsetting.FieldCreatedAt:
 		return m.OldCreatedAt(ctx)
 	case appsetting.FieldUpdatedAt:
@@ -2132,6 +2220,20 @@ func (m *AppSettingMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetValue(v)
+		return nil
+	case appsetting.FieldSecret:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSecret(v)
+		return nil
+	case appsetting.FieldNonce:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetNonce(v)
 		return nil
 	case appsetting.FieldCreatedAt:
 		v, ok := value.(time.Time)
@@ -2201,6 +2303,12 @@ func (m *AppSettingMutation) ResetField(name string) error {
 		return nil
 	case appsetting.FieldValue:
 		m.ResetValue()
+		return nil
+	case appsetting.FieldSecret:
+		m.ResetSecret()
+		return nil
+	case appsetting.FieldNonce:
+		m.ResetNonce()
 		return nil
 	case appsetting.FieldCreatedAt:
 		m.ResetCreatedAt()

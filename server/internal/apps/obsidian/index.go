@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path"
 	"strings"
 	"time"
 
@@ -31,11 +30,16 @@ const summaryMaxRunes = 200
 // in scope could supply it — a signature that cannot call the authorization
 // it is required to perform is not a smaller signature, it is a broken one.
 //
-// This is the only production path that reaches Client.Search or
-// Client.Read. The gate lives here, not in Client itself: Client.Read,
-// Client.Write, Client.Search and Client.Delete take no capability repos
-// and enforce nothing, so a future caller that reaches the vault client
-// directly instead of through IndexNotes bypasses this check entirely.
+// POST /api/obsidian/index (internal/api/obsidian.Handler) is IndexNotes'
+// production caller, built with a memory.Gate that carries no Asker (see its
+// construction in serverapp/di.go) since nobody is watching that run to
+// answer for it. It is not the only path to the vault: the four obsidian_*
+// MCP tools (internal/mcp/tools/obsidian.go) reach Client.Read,
+// Client.SearchUnderRoot, Client.Write and Client.Delete directly, gated the
+// same way but with an Asker. The gate lives in the callers, not in Client
+// itself: Client.Read, Client.Write, Client.Search and Client.Delete take no
+// capability repos and enforce nothing, so a future caller that reaches the
+// vault client directly instead bypasses this check entirely.
 //
 // A previous run's pointers are reconciled on every call: a note that
 // disappeared from the vault since it was indexed is discovered by directly
@@ -60,7 +64,7 @@ func IndexNotes(
 	scope := repo.Scope{Kind: repo.ScopeKind(space.ScopeKind), Ref: space.ScopeRef}.Normalize()
 
 	if err := gate.Authorize(ctx, repo.CapabilityMemoryWrite, space.Slug, scope); err != nil {
-		return 0, fmt.Errorf("obsidian.IndexNotes: %w", err)
+		return 0, fmt.Errorf("obsidian.IndexNotes: %s: %w", repo.CapabilityMemoryWrite, err)
 	}
 
 	now := time.Now()
@@ -76,7 +80,7 @@ func IndexNotes(
 	}
 
 	if err := gate.Authorize(ctx, CapabilitySearch, "", scope); err != nil {
-		return 0, fmt.Errorf("obsidian.IndexNotes: %w", err)
+		return 0, fmt.Errorf("obsidian.IndexNotes: %s: %w", CapabilitySearch, err)
 	}
 	// obsidian.read covers every Client.Read call this function makes below
 	// — both the new-note reads in the main loop and the existence probes
@@ -86,20 +90,19 @@ func IndexNotes(
 	// one note, and nothing in the capability schema expresses a
 	// per-note-path pattern for it to check instead.
 	if err := gate.Authorize(ctx, CapabilityRead, "", scope); err != nil {
-		return 0, fmt.Errorf("obsidian.IndexNotes: %w", err)
+		return 0, fmt.Errorf("obsidian.IndexNotes: %s: %w", CapabilityRead, err)
 	}
 
 	// Client.Search searches the whole vault, not just VaultRoot (see its
 	// doc comment) — this is the boundary question the client's own task
-	// left open. An empty query is relied on to mean "every note"; that
-	// assumption is exercised here against a fake server. Its proof against
-	// a live vault has no test today, and none is scheduled — the settings
-	// surface that would let it run at all does not exist. Results are then
-	// confined to VaultRoot by pathUnderRoot below: the configured root is
-	// the only boundary this application models, so it is the boundary
-	// enforced here — a memory grant's scope (global/project/application)
-	// carries no vault-path semantics to narrow this further.
-	results, err := client.Search(ctx, "")
+	// left open. SearchUnderRoot is the answer: it confines the results to
+	// VaultRoot and hands back root-relative paths, so nothing outside the
+	// configured root is read or pointed to. A memory grant's scope
+	// (global/project/application) carries no vault-path semantics to
+	// narrow this further. An empty query is relied on to mean "every
+	// note"; that assumption is exercised here against a fake server. Its
+	// proof against a live vault has no test today.
+	results, err := client.SearchUnderRoot(ctx, "")
 	if err != nil {
 		return 0, fmt.Errorf("obsidian.IndexNotes: search: %w", err)
 	}
@@ -107,10 +110,7 @@ func IndexNotes(
 	seen := make(map[string]bool, len(results))
 	indexed := 0
 	for _, r := range results {
-		notePath, ok := pathUnderRoot(client.vaultRoot, r.Path)
-		if !ok {
-			continue
-		}
+		notePath := r.Path
 		seen[notePath] = true
 		if _, already := priorPointers[notePath]; already {
 			continue
@@ -173,20 +173,6 @@ func IndexNotes(
 	}
 
 	return indexed, nil
-}
-
-// pathUnderRoot reports whether fullPath — a vault-relative path as returned
-// by Client.Search, which searches the whole vault — falls under root, and
-// if so returns the path relative to root that Read/Write/Delete expect.
-// This is the confinement Search itself does not apply.
-func pathUnderRoot(root, fullPath string) (string, bool) {
-	rootClean := path.Clean("/" + root)
-	fullClean := path.Clean("/" + fullPath)
-	prefix := rootClean + "/"
-	if !strings.HasPrefix(fullClean, prefix) {
-		return "", false
-	}
-	return strings.TrimPrefix(fullClean, prefix), true
 }
 
 // firstLine derives a short summary from a note body: its first non-blank

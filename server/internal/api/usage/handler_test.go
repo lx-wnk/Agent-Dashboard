@@ -23,14 +23,19 @@ func (f *fakeSettingsRepo) Get(_ context.Context, key string) (string, bool, err
 	v, ok := f.data[key]
 	return v, ok, nil
 }
-func (f *fakeSettingsRepo) Set(_ context.Context, _, _ string) error { return nil }
+func (f *fakeSettingsRepo) Set(_ context.Context, _, _ string) error          { return nil }
+func (f *fakeSettingsRepo) SetSecret(_ context.Context, _, _, _ string) error { return nil }
+func (f *fakeSettingsRepo) GetSecret(_ context.Context, key string) (string, string, bool, error) {
+	v, ok := f.data[key]
+	return v, "", ok, nil
+}
 func (f *fakeSettingsRepo) ListAll(_ context.Context) (map[string]string, error) {
 	return f.data, nil
 }
 
 func buildHandler(t *testing.T, settingsData map[string]string, configDir string) http.Handler {
 	t.Helper()
-	svc := settings.New(&fakeSettingsRepo{data: settingsData})
+	svc := settings.New(&fakeSettingsRepo{data: settingsData}, nil)
 	if err := svc.Load(context.Background()); err != nil {
 		t.Fatal(err)
 	}

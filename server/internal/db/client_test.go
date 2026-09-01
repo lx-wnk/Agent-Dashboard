@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db"
@@ -725,4 +726,28 @@ func TestOpen_LegacyPreApprovedColumnSurvives(t *testing.T) {
 	bundle2, err := db.Open(path)
 	require.NoError(t, err)
 	defer func() { _ = bundle2.Close() }()
+}
+
+func TestOpen_AppSettingGainsSecretColumns(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "legacy.db")
+	raw, err := sql.Open("sqlite", path)
+	require.NoError(t, err)
+	_, err = raw.Exec("CREATE TABLE `app_settings` (`id` text NOT NULL, `key` text NOT NULL UNIQUE, `value` text NOT NULL, `created_at` datetime NOT NULL, `updated_at` datetime NOT NULL, PRIMARY KEY (`id`))")
+	require.NoError(t, err)
+	_, err = raw.Exec("INSERT INTO app_settings (id, key, value, created_at, updated_at) VALUES ('1','git.allowPush','true',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)")
+	require.NoError(t, err)
+	require.NoError(t, raw.Close())
+
+	bundle, err := db.Open(path)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+
+	r := repo.NewAppSettingRepo(bundle.Client)
+	v, ok, err := r.Get(t.Context(), "git.allowPush")
+	require.NoError(t, err)
+	assert.True(t, ok)
+	assert.Equal(t, "true", v)
+
+	_, err = r.UpsertSecret(t.Context(), "obsidian.apiKey", "Y2lwaGVy", "bm9uY2U=")
+	require.NoError(t, err)
 }

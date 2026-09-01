@@ -123,6 +123,7 @@ POST /api/hooks/pre-tool
 POST /api/hooks/respond
 POST /api/memory/entries
 POST /api/memory/spaces
+POST /api/obsidian/index
 POST /api/permission-requests
 POST /api/permission-requests/bulk
 POST /api/permission-requests/bulk-resolve

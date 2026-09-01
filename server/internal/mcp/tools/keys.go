@@ -24,6 +24,8 @@ var validKeyScopes = map[string]bool{
 	"keys:manage":      true,
 	"memory:read":      true,
 	"memory:write":     true,
+	"obsidian:read":    true,
+	"obsidian:write":   true,
 }
 
 // RegisterKeyTools registers all 3 API key tools into the given registry.
@@ -80,7 +82,7 @@ func registerCreateAPIKey(registry mcp.ToolRegistry, d KeyDeps) {
 					"type": "array",
 					"items": map[string]any{
 						"type": "string",
-						"enum": []string{"tasks:read", "tasks:write", "pipeline:control", "keys:manage", "memory:read", "memory:write"},
+						"enum": []string{"tasks:read", "tasks:write", "pipeline:control", "keys:manage", "memory:read", "memory:write", "obsidian:read", "obsidian:write"},
 					},
 					"description": "List of scopes to grant to this key",
 				},
@@ -110,7 +112,7 @@ func registerCreateAPIKey(registry mcp.ToolRegistry, d KeyDeps) {
 				}
 				s = strings.TrimSpace(s)
 				if !validKeyScopes[s] {
-					return nil, mcp.Fail("invalid scope: " + s + " (allowed: tasks:read, tasks:write, pipeline:control, keys:manage, memory:read, memory:write)")
+					return nil, mcp.Fail("invalid scope: " + s + " (allowed: tasks:read, tasks:write, pipeline:control, keys:manage, memory:read, memory:write, obsidian:read, obsidian:write)")
 				}
 				scopes = append(scopes, s)
 			}

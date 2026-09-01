@@ -3,6 +3,7 @@ package settings
 import (
 	"testing"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/apps/obsidian"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -36,4 +37,23 @@ func TestRegistry_DefaultsAndValidation(t *testing.T) {
 
 	_, ok = Lookup("nope")
 	assert.False(t, ok)
+}
+
+func TestValidateDefinitions_RejectsSecretWithDefault(t *testing.T) {
+	bad := map[string]Definition{
+		"bad.secret": {Key: "bad.secret", Type: TypeString, Secret: true, Default: "leaked"},
+	}
+	err := validateDefinitions(bad)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "bad.secret")
+}
+
+func TestValidateDefinitions_AcceptsTheRegisteredDefinitions(t *testing.T) {
+	require.NoError(t, validateDefinitions(definitions))
+}
+
+func TestObsidianTLSModeEnum_MatchesClientConstants(t *testing.T) {
+	d, ok := Lookup("obsidian.tlsMode")
+	require.True(t, ok)
+	assert.Equal(t, []string{obsidian.TLSVerify, obsidian.TLSPinned, obsidian.TLSInsecureLoopback}, d.Enum)
 }
