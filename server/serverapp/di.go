@@ -149,7 +149,10 @@ type ServerComponents struct {
 	CapabilityDecisions agentbroadcast.CapabilityDecisionProvider
 	Eval                *eval.Service
 	Settings            *settings.Service
-	Cleanup             func()
+	// Obsidian is nil when the vault is unconfigured or no database is
+	// present; see buildObsidianClient (di_obsidian.go).
+	Obsidian *obsidian.Client
+	Cleanup  func()
 }
 
 // ln is the address already bound by Listen, or nil to let the HTTP server
@@ -284,6 +287,11 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	// early so the boot predicate can read it, and migrate the legacy #230
 	// "plugins.enabled" setting into the table once (idempotent).
 	var pluginRepo repo.PluginRepo
+	// obsidianClient is nil when the vault is unconfigured (buildObsidianClient's
+	// own doc comment covers why that is not an error) and stays nil without
+	// a database, since Register and the capability catalogue it depends on
+	// need entClient too.
+	var obsidianClient *obsidian.Client
 	if entClient != nil {
 		memRepo = repo.NewMemoryRepo(entClient, bundle.WriteClient)
 		memRetriever = memory.NewRetriever(bundle.DB, memRepo)
@@ -313,17 +321,30 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		}
 
 		// Obsidian is a builtin Application: its registry identity and its
-		// four capabilities only exist once Register runs. obsidian.IndexNotes
-		// (server/internal/apps/obsidian) is the one production caller that
-		// checks obsidian.search/obsidian.read against this catalogue, so
-		// without this call it reads a catalogue row that was never written
-		// (class, enforceable-by, reversible all zero-valued) instead of the
-		// one Register declares. obsidian.write and obsidian.delete have no
-		// caller at all yet — Client.Write/Client.Delete are never invoked in
-		// production — so nothing exercises those two either way. Idempotent,
-		// so safe on every boot.
+		// four capabilities only exist once Register runs — without this
+		// call, obsidian.search/obsidian.read/obsidian.write/obsidian.delete
+		// all resolve to a catalogue row that was never written (class,
+		// enforceable-by, reversible all zero-valued) instead of the one
+		// Register declares. Idempotent, so safe on every boot.
+		//
+		// obsidian.IndexNotes is the function that checks obsidian.search
+		// and obsidian.read against this catalogue, but nothing calls it in
+		// production yet — today it is exercised only by its own package
+		// tests. Client.Write and Client.Delete have no caller anywhere
+		// either.
 		if err := obsidian.Register(ctx, resourceRepo, capabilityRepo); err != nil {
 			return nil, fmt.Errorf("obsidian: register application: %w", err)
+		}
+
+		// Construct the vault client from settings so it exists once the
+		// operator configures it, rather than only once something reads
+		// obsidian.IndexNotes — that call does not exist anywhere in this
+		// file yet. buildObsidianClient returns nil, nil when unconfigured;
+		// a half-configured vault fails the boot instead of silently
+		// disabling itself (see its own doc comment for why).
+		obsidianClient, err = buildObsidianClient(ctx, settingsSvc)
+		if err != nil {
+			return nil, fmt.Errorf("obsidian: build client: %w", err)
 		}
 
 		if rows, err := capabilityRepo.List(ctx); err != nil {
@@ -569,10 +590,11 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	// the memory MCP tools below (an agent is waiting on the tool response)
 	// and the HTTP memory handler further down (a browser request has a
 	// human on the other end). The pipeline's memory push (di_pipeline.go)
-	// and the obsidian vault indexer build their own memory.Gate with no
-	// Asker instead of sharing this one — nothing is waiting on either, so
-	// an unanswerable ask must deny rather than stall a spawn or a
-	// background index run.
+	// builds its own memory.Gate with no Asker instead of sharing this one —
+	// nothing is waiting on it, so an unanswerable ask must deny rather than
+	// stall a spawn. obsidian.IndexNotes takes a memory.Gate as a parameter
+	// instead of building one (see its own doc comment); nothing in this
+	// file constructs or calls it.
 	var memAsker *serverask.Asker
 	// Bypass-auth unmounts the route a human would answer through (router.go),
 	// so an asker here would only hold every ask for its full timeout before
@@ -863,6 +885,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		CapabilityDecisions: capabilityDecisions,
 		Eval:                evalService,
 		Settings:            settingsSvc,
+		Obsidian:            obsidianClient,
 		Cleanup:             cleanup,
 	}, nil
 }
