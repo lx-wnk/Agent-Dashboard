@@ -18,6 +18,7 @@ import ObsidianSettings from '@/features/settings/components/ObsidianSettings.vu
 import PipelineConfigSettings from '@/features/settings/components/PipelineConfigSettings.vue'
 import ProjectSettings from '@/features/settings/components/ProjectSettings.vue'
 import RemoteSettings from '@/features/settings/components/RemoteSettings.vue'
+import ResourceSettings from '@/features/settings/components/ResourceSettings.vue'
 import SpawnerSettings from '@/features/settings/components/SpawnerSettings.vue'
 import SystemPromptSettings from '@/features/settings/components/SystemPromptSettings.vue'
 import { errorMessage } from '@/utils/errorMessage'
@@ -43,7 +44,7 @@ function reopenOnboarding() {
 }
 
 // --- Nav ---
-type Section = 'appearance' | 'apiKeys' | 'grants' | 'remotes' | 'permissionPresets' | 'analytics' | 'systemPrompts' | 'plugins' | 'notifications' | 'providers' | 'tracker' | 'projects' | 'spawners' | 'pipelineConfig' | 'server' | 'obsidian'
+type Section = 'appearance' | 'apiKeys' | 'grants' | 'registry' | 'remotes' | 'permissionPresets' | 'analytics' | 'systemPrompts' | 'plugins' | 'notifications' | 'providers' | 'tracker' | 'projects' | 'spawners' | 'pipelineConfig' | 'server' | 'obsidian'
 const activeSection = ref<Section>('appearance')
 
 // Nav model — drives the sidebar list. requiresAuth items only show when auth is on.
@@ -51,6 +52,7 @@ const SECTIONS: readonly { id: Section, icon: string, label: string, requiresAut
   { id: 'appearance', icon: '◑', label: 'Appearance' },
   { id: 'apiKeys', icon: '⬡', label: 'API Keys' },
   { id: 'grants', icon: '🛡', label: 'Grants' },
+  { id: 'registry', icon: '▤', label: 'Registry' },
   { id: 'obsidian', icon: '🗒', label: 'Obsidian' },
   { id: 'remotes', icon: '⌂', label: 'My Remotes', requiresAuth: true },
   { id: 'permissionPresets', icon: '⚿', label: 'Permissions' },
@@ -632,6 +634,11 @@ const { isImporting, importStatus, start: startImport } = useHistoryImport()
         <!-- Grants -->
         <section v-else-if="activeSection === 'grants'">
           <GrantSettings />
+        </section>
+
+        <!-- Registry -->
+        <section v-else-if="activeSection === 'registry'">
+          <ResourceSettings />
         </section>
 
         <!-- Obsidian -->
