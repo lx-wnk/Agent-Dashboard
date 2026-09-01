@@ -902,3 +902,53 @@ func TestResolvePermissionRequest_WireFormat(t *testing.T) {
 		[]string{"stage_run_id", "requested_at", "resolved_at", "edges"},
 	)
 }
+
+// TestExportTasksJSON_WireFormat asserts the downloaded JSON export carries the
+// same camelCase field names as the API, including inside the nested stage runs.
+func TestExportTasksJSON_WireFormat(t *testing.T) {
+	client, r := newTestHandlerWithRepos(t)
+	task, err := repo.NewTaskRepo(client).Create(testCtx(t), repo.CreateTaskInput{
+		Slug:          "export-wire-format",
+		Title:         "Export Wire Format",
+		Cwd:           t.TempDir(),
+		MaxIterations: 5,
+		Priority:      "normal",
+		CurrentStage:  "implementation",
+		UserID:        strPtr(t, "user-1"),
+	})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+	if _, err = repo.NewStageRunRepo(client).Create(testCtx(t), repo.CreateStageRunInput{
+		TaskID:    task.ID,
+		Stage:     "implementation",
+		Iteration: 1,
+	}); err != nil {
+		t.Fatalf("create stage run: %v", err)
+	}
+
+	req := withAuth(t, httptest.NewRequest(http.MethodGet, "/api/tasks/export?format=json", nil))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	rows := decodeRows(t, w.Body.Bytes())
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 exported task, got %d: %s", len(rows), w.Body.String())
+	}
+	assertKeys(t, rows[0],
+		[]string{"id", "slug", "title", "currentStage", "maxIterations", "silverBullet", "createdAt", "stageRuns"},
+		[]string{"current_stage", "max_iterations", "silver_bullet", "created_at", "edges"},
+	)
+
+	runs, ok := rows[0]["stageRuns"].([]any)
+	if !ok || len(runs) != 1 {
+		t.Fatalf("stageRuns = %v, want one nested run", rows[0]["stageRuns"])
+	}
+	assertKeys(t, runs[0].(map[string]any),
+		[]string{"id", "taskId", "stage", "status", "iteration", "tokensUsed", "costCents", "startedAt", "endedAt"},
+		[]string{"task_id", "tokens_used", "cost_cents", "started_at", "ended_at", "edges"},
+	)
+}
