@@ -17,13 +17,21 @@ func (f *fakeSettingsRepo) Get(_ context.Context, k string) (string, bool, error
 	return v, ok, nil
 }
 func (f *fakeSettingsRepo) Set(_ context.Context, k, v string) error { f.m[k] = v; return nil }
+func (f *fakeSettingsRepo) SetSecret(_ context.Context, k, ciphertext, _ string) error {
+	f.m[k] = ciphertext
+	return nil
+}
+func (f *fakeSettingsRepo) GetSecret(_ context.Context, k string) (string, string, bool, error) {
+	v, ok := f.m[k]
+	return v, "", ok, nil
+}
 func (f *fakeSettingsRepo) ListAll(_ context.Context) (map[string]string, error) {
 	return f.m, nil
 }
 
 func newSettingsService(t *testing.T, rows map[string]string) *settings.Service {
 	t.Helper()
-	svc := settings.New(&fakeSettingsRepo{m: rows})
+	svc := settings.New(&fakeSettingsRepo{m: rows}, nil)
 	require.NoError(t, svc.Load(context.Background()))
 	return svc
 }

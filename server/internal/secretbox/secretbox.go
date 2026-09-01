@@ -18,6 +18,11 @@ import (
 
 const secretKeyFileName = "dashboard-secret.key"
 
+// MaskedSentinel is what a secret value reads as on any surface that is not
+// explicitly decrypting it. Submitting it back means "leave unchanged", so it
+// must be a value no real secret would be.
+const MaskedSentinel = "********"
+
 // Box encrypts/decrypts strings with AES-256-GCM.
 type Box struct{ aead cipher.AEAD }
 

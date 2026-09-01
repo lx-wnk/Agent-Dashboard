@@ -26,7 +26,15 @@ func (f *fakeSettingsRepo) Get(_ context.Context, k string) (string, bool, error
 	v, ok := f.m[k]
 	return v, ok, nil
 }
-func (f *fakeSettingsRepo) Set(_ context.Context, k, v string) error             { f.m[k] = v; return nil }
+func (f *fakeSettingsRepo) Set(_ context.Context, k, v string) error { f.m[k] = v; return nil }
+func (f *fakeSettingsRepo) SetSecret(_ context.Context, k, ciphertext, _ string) error {
+	f.m[k] = ciphertext
+	return nil
+}
+func (f *fakeSettingsRepo) GetSecret(_ context.Context, k string) (string, string, bool, error) {
+	v, ok := f.m[k]
+	return v, "", ok, nil
+}
 func (f *fakeSettingsRepo) ListAll(_ context.Context) (map[string]string, error) { return f.m, nil }
 
 func setupHandler(t *testing.T) (*onboarding.Handler, *chi.Mux, repo.ApiKeyRepo) {
@@ -36,7 +44,7 @@ func setupHandler(t *testing.T) (*onboarding.Handler, *chi.Mux, repo.ApiKeyRepo)
 	t.Cleanup(func() { _ = bundle.Client.Close() })
 	apiKeyRepo := repo.NewApiKeyRepo(bundle.Client)
 
-	settingsSvc := settings.New(&fakeSettingsRepo{m: map[string]string{}})
+	settingsSvc := settings.New(&fakeSettingsRepo{m: map[string]string{}}, nil)
 	require.NoError(t, settingsSvc.Load(context.Background()))
 
 	h := onboarding.NewHandler(settingsSvc, apiKeyRepo)

@@ -22,7 +22,7 @@ func TestSeedPluginsFromEnabledList(t *testing.T) {
 	appSettingRepo := repo.NewAppSettingRepo(bundle.Client)
 	_, err = appSettingRepo.Upsert(ctx, "plugins.enabled", "p1,p2")
 	require.NoError(t, err)
-	settingsSvc := settings.New(settingsRepoAdapter{inner: appSettingRepo})
+	settingsSvc := settings.New(settingsRepoAdapter{inner: appSettingRepo}, nil)
 	require.NoError(t, settingsSvc.Load(ctx))
 
 	pluginRepo := repo.NewPluginRepo(bundle.Client)

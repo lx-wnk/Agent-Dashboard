@@ -107,6 +107,15 @@ func (a settingsRepoAdapter) ListAll(ctx context.Context) (map[string]string, er
 	return m, nil
 }
 
+func (a settingsRepoAdapter) SetSecret(ctx context.Context, k, ciphertext, nonce string) error {
+	_, err := a.inner.UpsertSecret(ctx, k, ciphertext, nonce)
+	return err
+}
+
+func (a settingsRepoAdapter) GetSecret(ctx context.Context, k string) (string, string, bool, error) {
+	return a.inner.GetSecret(ctx, k)
+}
+
 // noopSettingsRepo backs the settings service when no database is configured,
 // so accessors always resolve to registry defaults and consumers never nil-check.
 type noopSettingsRepo struct{}
@@ -114,6 +123,12 @@ type noopSettingsRepo struct{}
 func (noopSettingsRepo) Get(context.Context, string) (string, bool, error) { return "", false, nil }
 func (noopSettingsRepo) Set(context.Context, string, string) error {
 	return fmt.Errorf("settings: no database configured")
+}
+func (noopSettingsRepo) SetSecret(context.Context, string, string, string) error {
+	return fmt.Errorf("settings: no database configured")
+}
+func (noopSettingsRepo) GetSecret(context.Context, string) (string, string, bool, error) {
+	return "", "", false, nil
 }
 func (noopSettingsRepo) ListAll(context.Context) (map[string]string, error) {
 	return map[string]string{}, nil
@@ -201,17 +216,37 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		providersHandler = providersapi.NewHandler(providerRegistry, providerSettingsSvc)
 	}
 
+	// Resolve the secretbox master key once, above every secret-aware
+	// consumer (settings.Service here, plugin.Service below), so both share
+	// one *secretbox.Box built from one key rather than two boxes that could
+	// in principle diverge. Only meaningful with a database — without one
+	// there is nothing to encrypt into, so box stays nil and each service's
+	// own nil-box guard turns a secret read/write into a named error instead
+	// of a panic.
+	var box *secretbox.Box
+	if entClient != nil {
+		masterKey, keyErr := secretbox.LoadOrGenerateMasterKey(os.Getenv("DASHBOARD_SECRET_KEY"))
+		if keyErr != nil {
+			return nil, fmt.Errorf("secret master key: %w", keyErr)
+		}
+		var boxErr error
+		box, boxErr = secretbox.New(masterKey)
+		if boxErr != nil {
+			return nil, fmt.Errorf("secretbox: %w", boxErr)
+		}
+	}
+
 	var settingsSvc *settings.Service
 	var settingsHandler *settingsapi.Handler
 	if entClient != nil {
 		appSettingRepo := repo.NewAppSettingRepo(entClient)
-		settingsSvc = settings.New(settingsRepoAdapter{inner: appSettingRepo})
+		settingsSvc = settings.New(settingsRepoAdapter{inner: appSettingRepo}, box)
 		if err := settingsSvc.Load(ctx); err != nil {
 			return nil, fmt.Errorf("settings load: %w", err)
 		}
 		settingsHandler = settingsapi.NewHandler(settingsSvc)
 	} else {
-		settingsSvc = settings.New(noopSettingsRepo{})
+		settingsSvc = settings.New(noopSettingsRepo{}, nil)
 		if err := settingsSvc.Load(ctx); err != nil {
 			return nil, fmt.Errorf("settings load: %w", err)
 		}
@@ -322,17 +357,10 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	pluginRegistry.SetEnabled(func(id string) bool { return activePlugins[id] })
 
 	// Build settings service early so the provider is wired before Load.
-	// Nil when running without a database (no entClient).
+	// Nil when running without a database (no entClient). box was resolved
+	// above, alongside settings.Service — shared, not re-derived.
 	var pluginSettingsSvc *plugin.Service
 	if entClient != nil {
-		masterKey, keyErr := secretbox.LoadOrGenerateMasterKey(os.Getenv("DASHBOARD_SECRET_KEY"))
-		if keyErr != nil {
-			return nil, fmt.Errorf("plugin secret key: %w", keyErr)
-		}
-		box, boxErr := secretbox.New(masterKey)
-		if boxErr != nil {
-			return nil, fmt.Errorf("plugin secretbox: %w", boxErr)
-		}
 		pluginSettingRepo := repo.NewPluginSettingRepo(entClient)
 		pluginSettingsSvc = plugin.NewSettingsService(pluginSettingRepoAdapter{inner: pluginSettingRepo}, box)
 		pluginRegistry.SetSettingsProvider(func(ctx context.Context, id string) (map[string]string, error) {

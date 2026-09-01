@@ -34,12 +34,20 @@ type Definition struct {
 	Default  string
 	Apply    Apply
 	Category string
-	Enum     []string               // for TypeEnum
+	Enum     []string // for TypeEnum
+	// Secret routes the value through secretbox on write and masks it on
+	// every read that is not Service.Secret. A secret definition must not
+	// carry a Default: a default would be returned in clear by the
+	// registry-fallback path before anything was ever stored.
+	Secret   bool
 	validate func(raw string) error // extra constraint beyond type parsing
 }
 
 // Validate checks raw against the type, enum, and any extra constraint.
 func (d Definition) Validate(raw string) error {
+	if d.Secret && d.Default != "" {
+		return fmt.Errorf("%s: secret settings must not have a Default", d.Key)
+	}
 	switch d.Type {
 	case TypeBool:
 		if _, err := strconv.ParseBool(raw); err != nil {
@@ -127,6 +135,7 @@ var definitions = func() map[string]Definition {
 		{Key: "usage.budget.session", Type: TypeInt, Default: "0", Apply: ApplyLive, Category: "usage", validate: nonNegativeInt("usage.budget.session")},
 		{Key: "usage.budget.weekly", Type: TypeInt, Default: "0", Apply: ApplyLive, Category: "usage", validate: nonNegativeInt("usage.budget.weekly")},
 		{Key: "onboarding.completed", Type: TypeBool, Default: "false", Apply: ApplyLive, Category: "onboarding"},
+		{Key: "obsidian.apiKey", Type: TypeString, Secret: true, Apply: ApplyRestart, Category: "obsidian"},
 	}
 	m := make(map[string]Definition, len(list))
 	for _, d := range list {

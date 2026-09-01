@@ -33,6 +33,17 @@ func (r *memRepo) Set(_ context.Context, k, v string) error {
 	r.m[k] = v
 	return nil
 }
+func (r *memRepo) SetSecret(_ context.Context, k, ciphertext, _ string) error {
+	if r.setErr != nil {
+		return r.setErr
+	}
+	r.m[k] = ciphertext
+	return nil
+}
+func (r *memRepo) GetSecret(_ context.Context, k string) (string, string, bool, error) {
+	v, ok := r.m[k]
+	return v, "", ok, nil
+}
 func (r *memRepo) ListAll(_ context.Context) (map[string]string, error) { return r.m, nil }
 
 func newRouter(t *testing.T) (http.Handler, *settingssvc.Service) {
@@ -42,7 +53,7 @@ func newRouter(t *testing.T) (http.Handler, *settingssvc.Service) {
 
 func newRouterWithRepo(t *testing.T, repo settingssvc.Repo) (http.Handler, *settingssvc.Service) {
 	t.Helper()
-	svc := settingssvc.New(repo)
+	svc := settingssvc.New(repo, nil)
 	require.NoError(t, svc.Load(context.Background()))
 	h := settingsapi.NewHandler(svc)
 	r := chi.NewRouter()
