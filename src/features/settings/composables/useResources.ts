@@ -1,5 +1,5 @@
 import { computed, onMounted, ref } from 'vue'
-import { errorMessage } from '@/utils/errorMessage'
+import { errorMessage, readErrorMessage } from '@/utils/errorMessage'
 
 // Mirrors resourceView in server/internal/api/resources/handler.go — a
 // hand-written camelCase DTO, not an ent row, so these names are the
@@ -49,11 +49,6 @@ export interface ResourceQuery {
 // that renders this (cf. useMemory's READ_DENIED_FALLBACK).
 const DENIED_FALLBACK = 'The registry route refused this read (HTTP 403) without giving a reason.'
 
-async function readDenial(res: Response): Promise<string> {
-  const body = await res.json().catch(() => ({ error: DENIED_FALLBACK })) as { error?: string }
-  return body.error || DENIED_FALLBACK
-}
-
 export function useResources() {
   const resources = ref<ResourceView[]>([])
   const query = ref<ResourceQuery>({ kind: 'application', scopeKind: 'global', scopeRef: '' })
@@ -96,7 +91,7 @@ export function useResources() {
         params.set('scopeRef', scopeRef.trim())
       const res = await fetch(`/api/resources?${params.toString()}`)
       if (res.status === 403) {
-        denied.value = await readDenial(res)
+        denied.value = await readErrorMessage(res, DENIED_FALLBACK)
         resources.value = []
         return
       }

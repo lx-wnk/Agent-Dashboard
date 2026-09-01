@@ -127,7 +127,7 @@ const announcing = computed(() => panelState.value === 'loading' || panelState.v
       :class="announcing ? 'text-center py-8 text-fg-mute text-sm' : 'sr-only'"
     >
       <span v-if="panelState === 'loading'" data-testid="resource-loading">Loading registry...</span>
-      <span v-else-if="panelState === 'held'" data-testid="resource-held">Enter a scope ref to search.</span>
+      <span v-else-if="panelState === 'held'" data-testid="resource-held">Enter a scope ref to list what resolves in that scope.</span>
     </div>
 
     <div v-if="panelState === 'denied'" data-testid="resource-denied" role="alert" class="rounded border border-warning-line bg-warning-soft text-warning-text px-3 py-2 text-xs">

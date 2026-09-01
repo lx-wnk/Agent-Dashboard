@@ -237,6 +237,28 @@ describe('taskStagesTab — memory injections', () => {
     expect(wrapper.get('[data-testid="stage-injection-inj-2"]').text()).toContain('1 entries')
   })
 
+  // Every other render test mounts a single stage run, under which rendering
+  // Object.values(byStageRun).flat() is indistinguishable from the real
+  // byStageRun[run.id] — so "every run's memory push shows under every run"
+  // goes undetected. Two runs, one injection each, is what makes it visible.
+  it('renders under each run only that run\'s own memory push', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify([
+      makeInjection(),
+      makeInjection({ id: 'inj-2', stageRunId: 'run-2', entryIds: ['e3'], charsUsed: 300, candidateCount: 4 }),
+    ]), { status: 200 })))
+
+    const wrapper = mountTab([makeRun(), makeRun({ id: 'run-2', iteration: 2 })])
+    await flushPromises()
+
+    const first = wrapper.get('[data-testid="stage-run-run-1"]')
+    expect(first.find('[data-testid="stage-injection-inj-1"]').exists()).toBe(true)
+    expect(first.find('[data-testid="stage-injection-inj-2"]').exists()).toBe(false)
+
+    const second = wrapper.get('[data-testid="stage-run-run-2"]')
+    expect(second.find('[data-testid="stage-injection-inj-2"]').exists()).toBe(true)
+    expect(second.find('[data-testid="stage-injection-inj-1"]').exists()).toBe(false)
+  })
+
   // No run means no request was issued, so "checking" would be a lie — and the
   // first paint happens before any response could arrive.
   it('does not claim to be checking when there is no stage run to ask about', () => {

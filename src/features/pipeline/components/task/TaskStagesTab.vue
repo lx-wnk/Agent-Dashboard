@@ -27,7 +27,7 @@ const { byStageRun, loading, denied, error } = useStageInjections(stageRuns)
     <div v-if="stageRuns.length === 0" class="text-fg-mute text-xs text-center py-8">
       No stage runs yet.
     </div>
-    <div v-for="run in stageRuns" v-else :key="run.id" class="px-3 py-2.5 bg-app rounded-md mb-2">
+    <div v-for="run in stageRuns" v-else :key="run.id" :data-testid="`stage-run-${run.id}`" class="px-3 py-2.5 bg-app rounded-md mb-2">
       <div class="flex items-center gap-2.5 mb-1">
         <span class="font-semibold text-xs text-fg">{{ run.stage }}</span>
         <span class="font-mono text-[11px] text-fg-mute">iter {{ run.iteration }}</span>

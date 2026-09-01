@@ -674,6 +674,15 @@ describe('memorySettings', () => {
     expect(supersedeEntry).toHaveBeenCalledWith('e1', 'e2')
   })
 
+  // The chips are a toggle group, same as ResourceSettings' — without
+  // aria-pressed the active scope is signalled by colour alone.
+  it('marks the active scope chip as pressed', () => {
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+
+    expect(wrapper.get('[data-testid="memory-scope-global"]').attributes('aria-pressed')).toBe('true')
+    expect(wrapper.get('[data-testid="memory-scope-project"]').attributes('aria-pressed')).toBe('false')
+  })
+
   // setScope clears the hits and refetches; re-running it for the scope that
   // is already selected throws away a search the user just ran.
   it('ignores a click on the scope that is already selected', async () => {

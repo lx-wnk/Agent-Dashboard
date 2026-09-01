@@ -284,6 +284,7 @@ async function handleExpire(id: string) {
         :data-testid="`memory-scope-${s}`"
         class="px-2 py-0.5 rounded text-[11px] border border-line cursor-pointer"
         :class="s === scope.scopeKind ? 'bg-info-soft text-info-text border-transparent font-semibold' : 'bg-transparent text-fg-mute hover:text-fg'"
+        :aria-pressed="s === scope.scopeKind"
         @click="selectScopeKind(s)"
       >
         {{ s }}

@@ -1,4 +1,4 @@
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
 
@@ -625,6 +625,52 @@ describe('useMemory', () => {
 
     expect(result.searched.value).toBe(false)
     expect(result.searchDenied.value).toBeNull()
+  })
+
+  // A search still in flight when the scope changes used to land afterwards
+  // and write the previous scope's hits under the new scope's heading — and,
+  // because it also sets `searched`, assert them as this scope's confirmed
+  // answer rather than merely leaving them lying around.
+  it('drops a search that answers after the scope it was made in was left', async () => {
+    const { result } = withSetup(() => useMemory())
+    await vi.waitUntil(() => !result.loading.value)
+    let release!: (res: Response) => void
+    vi.mocked(globalThis.fetch).mockReturnValueOnce(new Promise<Response>((resolve) => {
+      release = resolve
+    }))
+
+    const pending = result.searchEntries()
+    vi.mocked(globalThis.fetch).mockResolvedValue(jsonResponse(200, []))
+    await result.setScope({ scopeKind: 'project', scopeRef: '/tmp/demo' })
+
+    release(jsonResponse(200, [HIT]))
+    await pending
+
+    expect(result.entries.value).toEqual([])
+    expect(result.searched.value).toBe(false)
+    // The dropped request never reaches its own reset, so setScope owns it —
+    // otherwise "Searching entries..." stays on screen for good.
+    expect(result.searching.value).toBe(false)
+  })
+
+  // Same window on the spaces side: the mount-time fetch is still in flight
+  // when the scope changes, and its rows are the previous scope's.
+  it('drops a spaces fetch that answers after a newer one has started', async () => {
+    let release!: (res: Response) => void
+    vi.mocked(globalThis.fetch).mockReturnValueOnce(new Promise<Response>((resolve) => {
+      release = resolve
+    }))
+    const { result } = withSetup(() => useMemory())
+
+    vi.mocked(globalThis.fetch).mockResolvedValue(jsonResponse(200, [{ id: 'p1', slug: 'project-notes' }]))
+    await result.setScope({ scopeKind: 'project', scopeRef: '/tmp/demo' })
+    expect(result.spaces.value.map(s => s.id)).toEqual(['p1'])
+
+    release(jsonResponse(200, [{ id: 'g1', slug: 'global-notes' }]))
+    await flushPromises()
+
+    expect(result.spaces.value.map(s => s.id)).toEqual(['p1'])
+    expect(result.loading.value).toBe(false)
   })
 
   // "Searching" is its own state: without it an in-flight search and an

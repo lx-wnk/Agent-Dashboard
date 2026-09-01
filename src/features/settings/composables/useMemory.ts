@@ -20,25 +20,6 @@ export interface MemoryEntryHit {
   createdAt: string
 }
 
-// Mirrors memoryEntryResponse (server/internal/api/memory/handler.go) as
-// emitted by POST and PATCH /api/memory/entries.
-export interface MemoryEntryRow {
-  id: string
-  spaceId: string
-  summary: string
-  content: string
-  kind: string
-  sourceKind: string
-  sourceRef: string | null
-  confidence: number
-  validFrom: string
-  validUntil: string | null
-  supersededBy: string | null
-  userId: string | null
-  createdAt: string
-  updatedAt: string
-}
-
 // Mirrors the kind column's documented values in memory_entry.go.
 export const MEMORY_ENTRY_KINDS = ['fact', 'preference', 'lesson', 'entity', 'pointer'] as const
 export type MemoryEntryKind = typeof MEMORY_ENTRY_KINDS[number]
@@ -133,7 +114,19 @@ export function useMemory() {
   // "should we hold" has exactly one owner (cf. useResources.held).
   const held = computed(() => scope.value.scopeKind !== 'global' && scope.value.scopeRef.trim() === '')
 
+  // A request belongs to the scope it was made in, and the scope can change
+  // while it is still in flight. Applying a superseded answer renders the
+  // previous scope's rows under the new scope's heading — and, for the search,
+  // asserts them as this scope's confirmed answer by also setting `searched`.
+  // Same batch counter as useStageInjections: capture at the start, drop the
+  // answer once a newer batch has started. One counter per ref written, so a
+  // spaces refetch cannot discard an unrelated in-flight search.
+  let latestSpaces = 0
+  let latestGlobalSpaces = 0
+  let latestSearch = 0
+
   async function fetchSpaces(): Promise<void> {
+    const batch = ++latestSpaces
     // The server refuses a non-global scope with no ref (memory.ParseScope) —
     // hold the request instead of firing a known-400.
     if (held.value) {
@@ -146,24 +139,28 @@ export function useMemory() {
     loading.value = true
     error.value = null
     denied.value = null
+    let rows: MemorySpace[] = []
+    let refusal: string | null = null
+    let failure: string | null = null
     try {
       const res = await fetch(`/api/memory/spaces?${scopeParams(scope.value).toString()}`)
-      if (res.status === 403) {
-        denied.value = await readErrorMessage(res, READ_DENIED_FALLBACK)
-        spaces.value = []
-        return
-      }
-      if (!res.ok)
+      if (res.status === 403)
+        refusal = await readErrorMessage(res, READ_DENIED_FALLBACK)
+      else if (!res.ok)
         throw new Error(await readErrorMessage(res, `HTTP ${res.status}`))
-      spaces.value = await res.json()
+      else
+        rows = await res.json()
     }
     catch (e) {
-      error.value = errorMessage(e, 'Failed to load memory spaces')
-      spaces.value = []
+      failure = errorMessage(e, 'Failed to load memory spaces')
     }
-    finally {
-      loading.value = false
-    }
+    if (batch !== latestSpaces)
+      return
+
+    spaces.value = rows
+    denied.value = refusal
+    error.value = failure
+    loading.value = false
   }
 
   // Fetches the global spaces list purely as a label-resolution source for
@@ -172,20 +169,28 @@ export function useMemory() {
   // searchable yet). A failure here must not fail the panel: fall back to
   // the raw id, same as an unresolved space today.
   async function fetchGlobalSpacesForLabels(): Promise<void> {
+    const batch = ++latestGlobalSpaces
     if (scope.value.scopeKind === 'global' || held.value) {
       globalSpaces.value = []
       return
     }
+    let rows: MemorySpace[] = []
     try {
       const res = await fetch(`/api/memory/spaces?${scopeParams(GLOBAL_SCOPE).toString()}`)
-      globalSpaces.value = res.ok ? await res.json() : []
+      rows = res.ok ? await res.json() : []
     }
     catch {
-      globalSpaces.value = []
+      rows = []
     }
+    // A late answer here marks hits as "outside this scope" (isOutsideScope)
+    // against a list the current scope never asked for.
+    if (batch !== latestGlobalSpaces)
+      return
+    globalSpaces.value = rows
   }
 
   async function searchEntries(): Promise<void> {
+    const batch = ++latestSearch
     if (held.value) {
       entries.value = []
       searchError.value = null
@@ -196,35 +201,45 @@ export function useMemory() {
     searchError.value = null
     searchDenied.value = null
     searching.value = true
+    let hits: MemoryEntryHit[] = []
+    let refusal: string | null = null
+    let failure: string | null = null
+    // Only a request that answered with rows licenses "found nothing" — a
+    // refused, failed or superseded one leaves the panel not knowing either way.
+    let answered = false
     try {
       const params = scopeParams(scope.value)
       params.set('q', searchText.value)
       const res = await fetch(`/api/memory/entries?${params.toString()}`)
       if (res.status === 403) {
-        searchDenied.value = await readErrorMessage(res, READ_DENIED_FALLBACK)
-        entries.value = []
-        searched.value = false
-        return
+        refusal = await readErrorMessage(res, READ_DENIED_FALLBACK)
       }
-      if (!res.ok)
+      else if (!res.ok) {
         throw new Error(await readErrorMessage(res, `HTTP ${res.status}`))
-      entries.value = await res.json()
-      // Only a request that answered with rows licenses "found nothing" —
-      // a refused or failed one leaves the panel not knowing either way.
-      searched.value = true
+      }
+      else {
+        hits = await res.json()
+        answered = true
+      }
     }
     catch (e) {
-      searchError.value = errorMessage(e, 'Failed to search memory')
-      entries.value = []
-      searched.value = false
+      failure = errorMessage(e, 'Failed to search memory')
     }
-    finally {
-      searching.value = false
-    }
+    if (batch !== latestSearch)
+      return
+
+    entries.value = hits
+    searchDenied.value = refusal
+    searchError.value = failure
+    searched.value = answered
+    searching.value = false
   }
 
   async function setScope(next: MemoryScope): Promise<void> {
     scope.value = next
+    // Bumped even though no search is fired here: a search still in flight
+    // belongs to the scope being left, and nothing else would supersede it.
+    latestSearch++
     // Otherwise the previous scope's search hits survive the switch and
     // render under the new scope's heading — the same "more certainty than
     // was earned" defect this panel exists to avoid, inverted.
@@ -232,6 +247,9 @@ export function useMemory() {
     searchError.value = null
     searchDenied.value = null
     searched.value = false
+    // The dropped search will never reach its own reset, and "Searching
+    // entries..." would otherwise stay on screen for good.
+    searching.value = false
     await fetchSpaces()
     await fetchGlobalSpacesForLabels()
   }
