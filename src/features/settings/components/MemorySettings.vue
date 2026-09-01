@@ -96,13 +96,22 @@ const entryFailure = ref<WriteFailure | null>(null)
 
 async function handleCreateEntry() {
   entryFailure.value = null
-  if (!entryForm.value.spaceSlug.trim() || !entryForm.value.summary.trim() || !entryForm.value.content.trim()) {
+  // Validated and sent as one value: a padded slug that passes a trimmed
+  // check but travels untrimmed misses capability.Match's exact comparison,
+  // so the write 403s and the panel blames a grant the user already holds.
+  const input: CreateEntryInput = {
+    ...entryForm.value,
+    spaceSlug: entryForm.value.spaceSlug.trim(),
+    summary: entryForm.value.summary.trim(),
+    content: entryForm.value.content.trim(),
+  }
+  if (!input.spaceSlug || !input.summary || !input.content) {
     entryFailure.value = { message: 'Space, summary and content are required.', denied: false }
     return
   }
   entrySaving.value = true
   try {
-    await createEntry({ ...entryForm.value })
+    await createEntry(input)
     entryFormVisible.value = false
     entryForm.value = emptyEntryForm()
   }

@@ -269,6 +269,48 @@ describe('memorySettings', () => {
       sourceRef: '',
       confidence: 1,
     })
+    expect(wrapper.find('[data-testid="memory-entry-space"]').exists()).toBe(false)
+  })
+
+  // The form validates the trimmed value; sending the raw one 403s on
+  // capability.Match's exact string comparison, and the panel then blames a
+  // grant the user already holds. One trim, used for both.
+  it('sends the trimmed values it validated, not the raw ones', async () => {
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+
+    await wrapper.get('[data-testid="memory-entry-new"]').trigger('click')
+    await wrapper.get('[data-testid="memory-entry-space"]').setValue('  project-notes  ')
+    await wrapper.get('[data-testid="memory-entry-summary"]').setValue('  Binds to loopback  ')
+    await wrapper.get('[data-testid="memory-entry-content"]').setValue('  The server binds 127.0.0.1 only.  ')
+    await wrapper.get('[data-testid="memory-entry-submit"]').trigger('click')
+    await flushPromises()
+
+    expect(createEntry).toHaveBeenCalledWith({
+      spaceSlug: 'project-notes',
+      summary: 'Binds to loopback',
+      content: 'The server binds 127.0.0.1 only.',
+      kind: 'fact',
+      sourceKind: 'user',
+      sourceRef: '',
+      confidence: 1,
+    })
+  })
+
+  // Neither select was exercised: re-binding the kind select to sourceKind
+  // shipped green.
+  it('sends the kind and source kind chosen in the selects', async () => {
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+
+    await wrapper.get('[data-testid="memory-entry-new"]').trigger('click')
+    await wrapper.get('[data-testid="memory-entry-space"]').setValue('project-notes')
+    await wrapper.get('[data-testid="memory-entry-summary"]').setValue('Binds to loopback')
+    await wrapper.get('[data-testid="memory-entry-content"]').setValue('The server binds 127.0.0.1 only.')
+    await wrapper.get('[data-testid="memory-entry-kind"]').setValue('lesson')
+    await wrapper.get('[data-testid="memory-entry-source-kind"]').setValue('agent')
+    await wrapper.get('[data-testid="memory-entry-submit"]').trigger('click')
+    await flushPromises()
+
+    expect(createEntry).toHaveBeenCalledWith(expect.objectContaining({ kind: 'lesson', sourceKind: 'agent' }))
   })
 
   it('supersedes an entry with the replacement id from the inline form', async () => {
@@ -315,6 +357,11 @@ describe('memorySettings', () => {
     expect(notice.text()).toContain('Grants')
     expect(wrapper.find('[data-testid="memory-denied"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="memory-space-s1"]').exists()).toBe(true)
+    // The form closes on success only. Closing it before the await would
+    // read as a success and throw away what the user typed.
+    const slug = wrapper.find('[data-testid="memory-space-slug"]')
+    expect(slug.exists()).toBe(true)
+    expect((slug.element as HTMLInputElement).value).toBe('new-space')
   })
 
   // The counterpart to the test above: the capability hint is attached to a
@@ -334,8 +381,11 @@ describe('memorySettings', () => {
     expect(notice.text()).not.toContain('Grants')
   })
 
-  it('renders a denied expire in the row it was triggered from', async () => {
-    entries.value = [{ ...baseHit }]
+  // Two rows on purpose: the id on entryActionFailure exists for exactly one
+  // requirement — render the failure where it happened — and with a single
+  // row a template that ignores the id looks identical.
+  it('renders a denied expire in the row it was triggered from, and nowhere else', async () => {
+    entries.value = [{ ...baseHit }, { ...baseHit, id: 'e2', summary: 'Another entry' }]
     expireEntry.mockRejectedValue(new MemoryWriteDeniedError('capability memory.write denied in scope global'))
     const wrapper = mount(MemorySettings, { attachTo: document.body })
 
@@ -346,6 +396,7 @@ describe('memorySettings', () => {
     const notice = wrapper.get('[data-testid="memory-entry-action-error-e1"]')
     expect(notice.text()).toContain('memory.write')
     expect(notice.text()).toContain('Grants')
+    expect(wrapper.find('[data-testid="memory-entry-action-error-e2"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="memory-denied"]').exists()).toBe(false)
   })
 

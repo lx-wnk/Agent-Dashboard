@@ -338,6 +338,15 @@ describe('useMemory', () => {
     vi.mocked(globalThis.fetch).mockClear()
 
     await expect(result.createSpace({ slug: 'a', name: 'A' })).rejects.toThrow('scope ref')
+    await expect(result.createEntry({
+      spaceSlug: 's',
+      summary: 'x',
+      content: 'y',
+      kind: 'fact',
+      sourceKind: 'user',
+      sourceRef: '',
+      confidence: 1,
+    })).rejects.toThrow('scope ref')
     expect(vi.mocked(globalThis.fetch)).not.toHaveBeenCalled()
   })
 })
