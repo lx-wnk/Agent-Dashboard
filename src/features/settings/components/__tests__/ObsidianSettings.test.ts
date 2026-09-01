@@ -80,15 +80,22 @@ describe('obsidianSettings', () => {
     expect(apiKeyInput.value).toBe(MASK)
   })
 
-  it('does not PATCH the API key at all when it was never configured', async () => {
-    items.value = settingsFixture({ 'obsidian.apiKey': '' })
+  it('clearing every field PATCHes all three empty, which is what turns the vault off', async () => {
     const wrapper = mount(ObsidianSettings, { attachTo: document.body })
 
-    await wrapper.get('[data-testid="obsidian-vaultroot"]').setValue('new-vault')
+    await wrapper.get('[data-testid="obsidian-baseurl"]').setValue('')
+    await wrapper.get('[data-testid="obsidian-vaultroot"]').setValue('')
+    await wrapper.get('[data-testid="obsidian-apikey"]').setValue('')
     await wrapper.get('[data-testid="obsidian-save"]').trigger('click')
     await flushPromises()
 
-    expect(update).not.toHaveBeenCalledWith('obsidian.apiKey', expect.anything())
+    // The API key is the one that could not be cleared before: the field
+    // shows the mask, which the server reads as "leave unchanged", so an
+    // emptied field HAD to be sent as an empty string or the encrypted row
+    // survived and the next boot hit the partial trio and refused to start.
+    expect(update).toHaveBeenCalledWith('obsidian.baseURL', '')
+    expect(update).toHaveBeenCalledWith('obsidian.vaultRoot', '')
+    expect(update).toHaveBeenCalledWith('obsidian.apiKey', '')
   })
 
   it('sends a freshly typed API key', async () => {
@@ -130,15 +137,30 @@ describe('obsidianSettings', () => {
     expect(successSpy).toHaveBeenCalledWith(expect.stringContaining('restart'))
   })
 
-  it('warns when the base URL / vault root / API key trio is incomplete, but does not block saving', async () => {
+  it('blocks the save when the trio is incomplete — that state fails the server boot', async () => {
     items.value = settingsFixture({ 'obsidian.vaultRoot': '' })
     const wrapper = mount(ObsidianSettings, { attachTo: document.body })
 
     expect(wrapper.find('[data-testid="obsidian-trio-warning"]').exists()).toBe(true)
 
+    const saveButton = wrapper.get('[data-testid="obsidian-save"]')
+    expect((saveButton.element as HTMLButtonElement).disabled).toBe(true)
+
+    await saveButton.trigger('click')
+    await flushPromises()
+    expect(update).not.toHaveBeenCalled()
+  })
+
+  it('allows the save once the missing member of the trio is filled in', async () => {
+    items.value = settingsFixture({ 'obsidian.vaultRoot': '' })
+    const wrapper = mount(ObsidianSettings, { attachTo: document.body })
+
+    await wrapper.get('[data-testid="obsidian-vaultroot"]').setValue('claude-memory')
+    expect(wrapper.find('[data-testid="obsidian-trio-warning"]').exists()).toBe(false)
+
     await wrapper.get('[data-testid="obsidian-save"]').trigger('click')
     await flushPromises()
-    expect(update).toHaveBeenCalled()
+    expect(update).toHaveBeenCalledWith('obsidian.vaultRoot', 'claude-memory')
   })
 
   it('shows no trio warning when the vault is fully configured', () => {

@@ -58,27 +58,32 @@ onMounted(refetch)
 
 // baseURL, vaultRoot and apiKey are a required trio server-side
 // (serverapp.buildObsidianClient) — some-but-not-all set is a state the
-// server will refuse to boot with. Warn, but a partial fill is still a
-// legitimate save: never block it.
+// server refuses to BOOT with, and the dashboard is what dies, so the save
+// is blocked rather than warned about. All three empty stays allowed: that
+// is the working "off" switch, and clearing the API key field really does
+// clear the stored secret (settings.Service.Set treats "" on a secret as a
+// clear, and the mask sentinel as "leave unchanged").
 const trioComplete = computed(() => {
   const setCount = [form.value.baseURL, form.value.vaultRoot, form.value.apiKey].filter(v => v !== '').length
   return setCount === 0 || setCount === 3
 })
 
 async function save() {
+  if (!trioComplete.value)
+    return
   saving.value = true
   try {
+    // obsidian.apiKey always reads back as the mask sentinel once it is set;
+    // sending it back untouched is how the server knows to leave it alone,
+    // and sending an empty string is how the user clears it — which is the
+    // only way the trio gets back to all-empty, since the field can never
+    // show the real key to leave behind.
     const pairs: Array<[string, string]> = [
       [KEY_BASE_URL, form.value.baseURL],
       [KEY_VAULT_ROOT, form.value.vaultRoot],
+      [KEY_API_KEY, form.value.apiKey],
       [KEY_TLS_MODE, form.value.tlsMode],
     ]
-    // obsidian.apiKey always reads back as the mask sentinel once it is set;
-    // sending it back untouched is how the server knows to leave it alone.
-    // Skip it entirely when it was never configured and the user did not
-    // type one — an empty string would encrypt and store an empty secret.
-    if (form.value.apiKey !== '')
-      pairs.push([KEY_API_KEY, form.value.apiKey])
 
     let applied: 'live' | 'restart' = 'live'
     for (const [key, value] of pairs) {
@@ -156,7 +161,7 @@ async function runIndex() {
         data-testid="obsidian-trio-warning"
         class="text-xs rounded-md px-3 py-2 bg-warning-soft text-warning-text"
       >
-        Base URL, vault root, and API key are a required trio — the server will not enable the vault at the next restart until all three are set.
+        Base URL, vault root, and API key are a required trio. With only some of them set the server <strong>refuses to start</strong> at the next restart, so saving is blocked: fill all three in, or clear all three (the API key field included) to turn the vault off.
       </div>
 
       <div class="grid grid-cols-1 gap-3 max-w-md">
@@ -207,7 +212,7 @@ async function runIndex() {
       </div>
 
       <div>
-        <AppButton variant="info" data-testid="obsidian-save" :disabled="saving" @click="save">
+        <AppButton variant="info" data-testid="obsidian-save" :disabled="saving || !trioComplete" @click="save">
           {{ saving ? 'Saving…' : 'Save' }}
         </AppButton>
       </div>

@@ -61,6 +61,11 @@ func New(repo Repo, box *secretbox.Box) *Service {
 // snapshot map built here, never into the map ListAll returned — that map may
 // be a Repo implementation's own backing store, per its doc comment, and
 // writing into it would let a masked read corrupt the stored ciphertext.
+//
+// An empty row value is a cleared secret (Set writes that shape, see its own
+// doc comment) and is left alone: masking it would make an unset secret
+// indistinguishable from a configured one on every surface, and would keep
+// buildObsidianClient from ever seeing the all-empty "vault off" state again.
 func (s *Service) Load(ctx context.Context) error {
 	all, err := s.repo.ListAll(ctx)
 	if err != nil {
@@ -74,7 +79,7 @@ func (s *Service) Load(ctx context.Context) error {
 		if !d.Secret {
 			continue
 		}
-		if _, ok := snapshot[d.Key]; ok {
+		if v, ok := snapshot[d.Key]; ok && v != "" {
 			snapshot[d.Key] = secretbox.MaskedSentinel
 		}
 	}
@@ -147,6 +152,9 @@ func (s *Service) Secret(ctx context.Context, key string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("settings.Secret: %w", err)
 	}
+	// An empty nonce is a row that was never written as a secret, or one Set
+	// cleared (it writes exactly that shape) — either way there is nothing to
+	// decrypt and the secret reads as unset.
 	if !found || nonce == "" {
 		return "", nil
 	}
@@ -156,6 +164,16 @@ func (s *Service) Secret(ctx context.Context, key string) (string, error) {
 // Set validates against the registry, persists, and updates the snapshot.
 // Validation failures are wrapped as *ValidationError (client error);
 // persistence failures are returned as plain wrapped errors (server error).
+//
+// An empty value on a secret definition CLEARS the secret rather than
+// encrypting the empty string: empty means "no value", and encrypting it
+// would leave a row that still reads back as secretbox.MaskedSentinel on
+// every surface while decrypting to "". Clearing writes an empty ciphertext
+// and an empty nonce over the row — Secret and repo.GetSecret both treat an
+// empty nonce as "not a secret row", so no stale ciphertext survives — which
+// is also the only way a caller can return obsidian's baseURL/vaultRoot/
+// apiKey trio to the all-empty state buildObsidianClient reads as "vault
+// off". Clearing needs no master key, so it is allowed even when box is nil.
 func (s *Service) Set(ctx context.Context, key, value string) error {
 	def, ok := Lookup(key)
 	if !ok {
@@ -164,6 +182,15 @@ func (s *Service) Set(ctx context.Context, key, value string) error {
 	if def.Secret {
 		if value == secretbox.MaskedSentinel {
 			return nil // the caller is echoing back what it was shown
+		}
+		if value == "" {
+			if err := s.repo.SetSecret(ctx, key, "", ""); err != nil {
+				return fmt.Errorf("settings.Set: clear %q: %w", key, err)
+			}
+			s.mu.Lock()
+			s.snapshot[key] = ""
+			s.mu.Unlock()
+			return nil
 		}
 		if s.box == nil {
 			return ErrNoSecretBox

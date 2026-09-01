@@ -54,11 +54,15 @@ func TestObsidianWriteImpliesObsidianRead(t *testing.T) {
 	require.True(t, resolved["obsidian:read"], "obsidian:write must imply obsidian:read")
 }
 
-// newFakeObsidianVault serves a minimal Obsidian Local REST API — one note
-// under "root/a.md" — and records whether it was ever contacted, mirroring
-// internal/api/obsidian/handler_test.go's newFakeVault. A test uses the
-// returned bool to prove the gate denied a call before the vault client
-// ever made a request.
+// newFakeObsidianVault serves a minimal Obsidian Local REST API and records
+// whether it was ever contacted, mirroring internal/api/obsidian/handler_test.go's
+// newFakeVault. A test uses the returned bool to prove the gate denied a
+// call before the vault client ever made a request.
+//
+// Search reports two notes: "root/a.md" inside the configured VaultRoot and
+// "elsewhere/secret.md" outside it. The upstream endpoint is vault-wide by
+// design, so a fake that only ever returned in-root hits could not tell a
+// confining caller from a non-confining one.
 func newFakeObsidianVault(t *testing.T) (*httptest.Server, *bool) {
 	t.Helper()
 	called := false
@@ -66,7 +70,10 @@ func newFakeObsidianVault(t *testing.T) (*httptest.Server, *bool) {
 	mux.HandleFunc("/search/simple/", func(w http.ResponseWriter, r *http.Request) {
 		called = true
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode([]map[string]any{{"filename": "root/a.md", "score": 1}})
+		_ = json.NewEncoder(w).Encode([]map[string]any{
+			{"filename": "root/a.md", "score": 1},
+			{"filename": "elsewhere/secret.md", "score": 0.9},
+		})
 	})
 	mux.HandleFunc("/vault/", func(w http.ResponseWriter, r *http.Request) {
 		called = true
@@ -260,8 +267,39 @@ func TestObsidianSearchSucceedsWithAnAllowGrant(t *testing.T) {
 	out := invokeCoordTool(t, registry, ctx, "obsidian_search", map[string]any{"query": "anything"})
 	results, ok := out["results"].([]any)
 	require.True(t, ok, "results must be a list, got %T", out["results"])
-	require.Len(t, results, 1)
+	require.Len(t, results, 1, "only the in-root note may be reported; the fake vault also returns one outside VaultRoot")
 	assert.True(t, *called, "an allowed search must reach the vault")
+}
+
+// TestObsidianSearchDropsResultsOutsideVaultRoot is the regression test for
+// the whole-branch review's search-confinement finding: Client.Search is
+// vault-wide, so returning its results verbatim let one obsidian.search
+// grant enumerate note paths anywhere in the vault — past the boundary
+// resolveVaultPath calls "a boundary, not a suggestion". A follow-up
+// obsidian_read of such a path is refused, so the content never leaks, but
+// the filename and the note's existence do.
+//
+// The reported path must also be the root-relative one: that is the form
+// obsidian_read accepts, so a vault-full path would be a result the agent
+// cannot act on.
+func TestObsidianSearchDropsResultsOutsideVaultRoot(t *testing.T) {
+	deps, grants, ctx, called := obsidianTestDepsWithCatalogue(t)
+	mustAllowMemoryGrant(t, grants, ctx, obsidianapp.CapabilitySearch)
+
+	registry := mcp.ToolRegistry{}
+	RegisterObsidianTools(registry, deps)
+
+	out := invokeCoordTool(t, registry, ctx, "obsidian_search", map[string]any{"query": "anything"})
+	require.True(t, *called, "the search must actually have reached the vault")
+
+	raw, err := json.Marshal(out["results"])
+	require.NoError(t, err)
+	var results []obsidianapp.SearchResult
+	require.NoError(t, json.Unmarshal(raw, &results))
+
+	require.Len(t, results, 1)
+	assert.Equal(t, "a.md", results[0].Path, "the in-root hit must be reported root-relative, the form obsidian_read accepts")
+	assert.NotContains(t, string(raw), "secret.md", "a note outside VaultRoot must not be named at all")
 }
 
 // TestObsidianWriteSucceedsWithAnAllowGrant is the D8 write half of this

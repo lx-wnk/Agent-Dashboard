@@ -81,9 +81,11 @@ func (h *Handler) patch(w http.ResponseWriter, r *http.Request) error {
 	}
 	// A secret value is never echoed back, even the one just submitted: the
 	// caller already has it, and a response body is more places for it to
-	// leak (logs, proxies, devtools history) than it needs to be.
+	// leak (logs, proxies, devtools history) than it needs to be. An empty
+	// value is the exception: it cleared the secret (settings.Service.Set),
+	// so masking it would report a configured secret where there is none.
 	respValue := body.Value
-	if def.Secret {
+	if def.Secret && respValue != "" {
 		respValue = secretbox.MaskedSentinel
 	}
 	w.Header().Set("Content-Type", "application/json")

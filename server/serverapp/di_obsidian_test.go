@@ -91,3 +91,38 @@ func TestEnsureObsidianSpace_IdempotentWithStableID(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, rows, 1, "want exactly one memory_space resource after two calls")
 }
+
+// TestBuildObsidianClient_ClearingTheTrioTurnsTheVaultOff is the round trip
+// the Settings panel walks: configure the vault, then clear all three
+// fields through the same settings.Service.Set the HTTP surface uses, and
+// boot again. The partial-trio failure is deliberate and still tested above;
+// what this pins is that the all-empty state stays reachable from the same
+// path, so a user who turns the vault off does not brick the next start.
+//
+// The stuck state this guards against was never in Set: an encrypted empty
+// string decrypts back to "", so even the old Set would have landed here in
+// the all-empty branch. It was the panel, which sent the mask sentinel
+// ("leave unchanged") or skipped the key entirely and so could not express
+// "clear" at all. The Effective assertion below is the half Set owns: a
+// cleared key must read back unset, not as the mask that made it look
+// configured on every surface the user can see.
+func TestBuildObsidianClient_ClearingTheTrioTurnsTheVaultOff(t *testing.T) {
+	svc := newSettingsServiceForTest(t)
+	require.NoError(t, svc.Set(t.Context(), "obsidian.baseURL", "https://127.0.0.1:27124"))
+	require.NoError(t, svc.Set(t.Context(), "obsidian.vaultRoot", "notes"))
+	require.NoError(t, svc.Set(t.Context(), "obsidian.apiKey", "secret-key"))
+
+	client, err := buildObsidianClient(t.Context(), svc)
+	require.NoError(t, err)
+	require.NotNil(t, client, "the configured trio must build a client, or the clear below proves nothing")
+
+	require.NoError(t, svc.Set(t.Context(), "obsidian.baseURL", ""))
+	require.NoError(t, svc.Set(t.Context(), "obsidian.vaultRoot", ""))
+	require.NoError(t, svc.Set(t.Context(), "obsidian.apiKey", ""))
+
+	client, err = buildObsidianClient(t.Context(), svc)
+	require.NoError(t, err, "clearing all three must turn the vault off, not refuse the boot")
+	assert.Nil(t, client)
+	assert.Empty(t, svc.Effective()["obsidian.apiKey"],
+		"the panel re-reads this after the save — a cleared key that still shows the mask reads as configured")
+}

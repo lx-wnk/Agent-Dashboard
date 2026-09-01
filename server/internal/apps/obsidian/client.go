@@ -365,11 +365,13 @@ type searchResponseItem struct {
 // Search runs the Local REST API's simple search across the whole vault.
 //
 // Unlike Read/Write/Delete, results are not confined to VaultRoot — the
-// upstream endpoint searches the entire vault by design. IndexNotes
-// (index.go) is the caller that has to live with this: it filters results to
-// VaultRoot itself (pathUnderRoot) before treating anything as indexable, so
-// a note outside the configured root is never read or pointed to just
-// because the vault-wide search happened to surface it.
+// upstream endpoint searches the entire vault by design, and this method
+// reports what it returns verbatim. Both callers that surface results
+// outside this package — IndexNotes (index.go) and the obsidian_search MCP
+// tool (internal/mcp/tools/obsidian.go) — go through SearchUnderRoot
+// instead, and any new one must too: a bare path outside VaultRoot is
+// already a disclosure (the note exists, and it is called this), even
+// though a follow-up Read of it would be refused by resolveVaultPath.
 func (c *Client) Search(ctx context.Context, query string) ([]SearchResult, error) {
 	u := *c.baseURL
 	u.Path = "/search/simple/"
@@ -402,4 +404,43 @@ func (c *Client) Search(ctx context.Context, query string) ([]SearchResult, erro
 		results[i] = SearchResult{Path: it.Filename, Score: it.Score}
 	}
 	return results, nil
+}
+
+// SearchUnderRoot runs Search and keeps only the results that fall under
+// VaultRoot, with each Path rewritten to the root-relative form
+// Read/Write/Delete accept. This is the confinement Search itself does not
+// apply, and it is the method every caller outside this package must use:
+// the configured root is the only boundary this application models, so a
+// result outside it is neither readable nor namable.
+//
+// The rewrite is not cosmetic — a caller that hands a raw Search path back
+// to an agent hands it a path Read would then refuse, because Read resolves
+// its argument inside VaultRoot.
+func (c *Client) SearchUnderRoot(ctx context.Context, query string) ([]SearchResult, error) {
+	all, err := c.Search(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	confined := make([]SearchResult, 0, len(all))
+	for _, r := range all {
+		rel, ok := pathUnderRoot(c.vaultRoot, r.Path)
+		if !ok {
+			continue
+		}
+		confined = append(confined, SearchResult{Path: rel, Score: r.Score})
+	}
+	return confined, nil
+}
+
+// pathUnderRoot reports whether fullPath — a vault-relative path as returned
+// by Client.Search, which searches the whole vault — falls under root, and
+// if so returns the path relative to root that Read/Write/Delete expect.
+func pathUnderRoot(root, fullPath string) (string, bool) {
+	rootClean := path.Clean("/" + root)
+	fullClean := path.Clean("/" + fullPath)
+	prefix := rootClean + "/"
+	if !strings.HasPrefix(fullClean, prefix) {
+		return "", false
+	}
+	return strings.TrimPrefix(fullClean, prefix), true
 }

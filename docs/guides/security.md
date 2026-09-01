@@ -233,8 +233,19 @@ capability repos and enforce nothing themselves — every production caller
 (the `POST /api/obsidian/index` trigger, and the four `obsidian_*` MCP
 tools below) authorizes through a `memory.Gate` before reaching the client,
 so a future caller that reaches the client directly instead would bypass
-that gate entirely. See [`PRIVACY.md`](../../PRIVACY.md) for what an
-indexing pass persists.
+that gate entirely.
+
+`VaultRoot` is a second, independent boundary: `Read`/`Write`/`Delete`
+resolve their note path inside it (`resolveVaultPath`) and refuse anything
+that escapes, and the vault's own search endpoint — which is vault-wide by
+design — is only ever reached through `Client.SearchUnderRoot`, which drops
+results outside the root and rewrites the survivors to the root-relative
+form `obsidian_read` accepts. Both callers use it: the index pass and the
+`obsidian_search` MCP tool. Returning raw search results would disclose the
+names and existence of notes outside the configured root to any holder of a
+single `obsidian.search` grant, even though reading them would still be
+refused. See [`PRIVACY.md`](../../PRIVACY.md) for what an indexing pass
+persists.
 
 ## Reporting a vulnerability
 

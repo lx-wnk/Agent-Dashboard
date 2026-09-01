@@ -107,15 +107,21 @@ func registerObsidianSearch(registry mcp.ToolRegistry, d ObsidianDeps) {
 			// one target, so there is no single path to pass as the
 			// capability value. "" is NOT capability.Match's wildcard here —
 			// that wildcard is an empty GRANT PATTERN (pattern.go's Match),
-			// not an empty requested value — so passing "" as the value
-			// actually fails closed under any pattern-narrowed grant (e.g.
-			// "notes/*" never matches ""); only an unconditional grant
-			// (empty pattern) authorizes search at all. Matches IndexNotes'
-			// own use of "" for the same capability.
+			// not an empty requested value — so a grant narrowed to a literal
+			// prefix ("notes/" say) never matches "" and leaves search denied.
+			// An empty pattern and a "*" pattern both authorize it (Match's
+			// prefix branch: every string carries the empty prefix), which is
+			// what README's `grants add obsidian.search --pattern '*'` relies
+			// on. Matches IndexNotes' own use of "" for the same capability.
 			if err := d.Gate.Authorize(ctx, obsidian.CapabilitySearch, "", obsidianScope()); err != nil {
 				return nil, mcp.Fail("obsidian_search: " + err.Error())
 			}
-			results, err := d.Client.Search(ctx, query)
+			// SearchUnderRoot, never Search: Client.Search is vault-wide, so
+			// its raw results would hand the agent the names of notes outside
+			// VaultRoot — an existence disclosure past the boundary
+			// resolveVaultPath enforces on every other call, and against paths
+			// a follow-up obsidian_read would then refuse anyway.
+			results, err := d.Client.SearchUnderRoot(ctx, query)
 			if err != nil {
 				return nil, mcp.Fail("obsidian_search: " + err.Error())
 			}

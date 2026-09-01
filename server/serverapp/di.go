@@ -293,9 +293,10 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	// a database, since Register and the capability catalogue it depends on
 	// need entClient too. obsidianSpaceID is set unconditionally alongside
 	// obsidian.Register below, regardless of whether the vault itself is
-	// configured — a memory space is cheap to hold ready, and the trigger
-	// handler needs it wired the moment a vault is configured, not after a
-	// restart.
+	// configured: all four obsidian settings are ApplyRestart and the client
+	// is captured once here, so configuring a vault takes a restart either
+	// way — creating the space unconditionally just keeps that restart from
+	// also being the first run that has to create it.
 	var obsidianClient *obsidian.Client
 	var obsidianSpaceID string
 	if entClient != nil {

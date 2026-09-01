@@ -102,7 +102,7 @@ func (r *entAppSettingRepo) GetSecret(ctx context.Context, key string) (string, 
 func (r *entAppSettingRepo) byKey(ctx context.Context, key string) (*ent.AppSetting, error) {
 	row, err := r.client.AppSetting.Query().Where(appsetting.KeyEQ(key)).Only(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("appsetting.Upsert reload: %w", err)
+		return nil, fmt.Errorf("appsetting reload %q: %w", key, err)
 	}
 	return row, nil
 }

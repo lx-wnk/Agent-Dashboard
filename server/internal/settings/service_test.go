@@ -123,3 +123,39 @@ func TestService_NilBox_SecretAndSetReturnErrNoSecretBox(t *testing.T) {
 	err = svc.Set(t.Context(), "obsidian.apiKey", "sk-live-456")
 	require.ErrorIs(t, err, ErrNoSecretBox)
 }
+
+// TestService_SetEmptyClearsASecret pins the semantics buildObsidianClient's
+// all-empty "vault off" branch depends on: an empty value on a secret
+// definition clears the stored secret instead of encrypting the empty
+// string. Encrypting it would leave a row that still reads back as the mask
+// on every surface while decrypting to "" — a secret that looks configured
+// and is not.
+func TestService_SetEmptyClearsASecret(t *testing.T) {
+	box, err := secretbox.New(make([]byte, 32))
+	require.NoError(t, err)
+	repo := newFakeRepo()
+	svc := New(repo, box)
+	require.NoError(t, svc.Load(t.Context()))
+
+	require.NoError(t, svc.Set(t.Context(), "obsidian.apiKey", "sk-live-123"))
+	require.Equal(t, secretbox.MaskedSentinel, svc.String("obsidian.apiKey"))
+
+	require.NoError(t, svc.Set(t.Context(), "obsidian.apiKey", ""))
+
+	got, err := svc.Secret(t.Context(), "obsidian.apiKey")
+	require.NoError(t, err)
+	assert.Empty(t, got, "a cleared secret must decrypt to nothing")
+	assert.Empty(t, repo.nonces["obsidian.apiKey"], "the nonce must be cleared, so no stale ciphertext can be decrypted")
+
+	// The mask is what makes a cleared secret indistinguishable from a
+	// configured one, so every non-decrypting surface must report it unset.
+	assert.Empty(t, svc.String("obsidian.apiKey"))
+	assert.Empty(t, svc.Effective()["obsidian.apiKey"])
+
+	// And it must survive a restart: Load rebuilds the snapshot from the
+	// repo and must not mask the cleared row back into looking configured.
+	reloaded := New(repo, box)
+	require.NoError(t, reloaded.Load(t.Context()))
+	assert.Empty(t, reloaded.String("obsidian.apiKey"), "a cleared secret must still read as unset after a reload")
+	assert.Empty(t, reloaded.Effective()["obsidian.apiKey"])
+}

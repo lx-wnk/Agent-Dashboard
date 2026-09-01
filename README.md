@@ -146,8 +146,11 @@ See [Configuration](docs/guides/configuration.md) for the full settings/grants/p
 Point the dashboard at a local [Obsidian](https://obsidian.md) vault, via the
 [Local REST API](https://github.com/coddingtonbear/obsidian-local-rest-api) community plugin, from
 **Settings → Obsidian**: base URL, vault root, API key, and TLS mode. All four settings apply only
-after a server restart, and `baseURL`/`vaultRoot`/`apiKey` are a required trio — the vault stays
-disabled until all three are set, not just one or two of them.
+after a server restart, and `baseURL`/`vaultRoot`/`apiKey` are a required trio: set all three, or
+none. With only one or two set, the next start **fails** and names the missing keys, rather than
+booting with the vault silently disabled — a vault you configured and that quietly does not run is
+worse than a refused start. Clearing all three in the panel (the API key field included) turns the
+integration back off.
 
 Once configured, **Index now** in the same panel (or `POST /api/obsidian/index`) turns vault notes
 into searchable memory pointers — but only once the `obsidian.read`, `obsidian.search`, and
