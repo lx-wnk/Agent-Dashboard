@@ -83,12 +83,20 @@ func init() {
 	apikey.DefaultCreatedAt = apikeyDescCreatedAt.Default.(func() time.Time)
 	appsettingFields := schema.AppSetting{}.Fields()
 	_ = appsettingFields
+	// appsettingDescSecret is the schema descriptor for secret field.
+	appsettingDescSecret := appsettingFields[3].Descriptor()
+	// appsetting.DefaultSecret holds the default value on creation for the secret field.
+	appsetting.DefaultSecret = appsettingDescSecret.Default.(bool)
+	// appsettingDescNonce is the schema descriptor for nonce field.
+	appsettingDescNonce := appsettingFields[4].Descriptor()
+	// appsetting.DefaultNonce holds the default value on creation for the nonce field.
+	appsetting.DefaultNonce = appsettingDescNonce.Default.(string)
 	// appsettingDescCreatedAt is the schema descriptor for created_at field.
-	appsettingDescCreatedAt := appsettingFields[3].Descriptor()
+	appsettingDescCreatedAt := appsettingFields[5].Descriptor()
 	// appsetting.DefaultCreatedAt holds the default value on creation for the created_at field.
 	appsetting.DefaultCreatedAt = appsettingDescCreatedAt.Default.(func() time.Time)
 	// appsettingDescUpdatedAt is the schema descriptor for updated_at field.
-	appsettingDescUpdatedAt := appsettingFields[4].Descriptor()
+	appsettingDescUpdatedAt := appsettingFields[6].Descriptor()
 	// appsetting.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	appsetting.DefaultUpdatedAt = appsettingDescUpdatedAt.Default.(func() time.Time)
 	// appsetting.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

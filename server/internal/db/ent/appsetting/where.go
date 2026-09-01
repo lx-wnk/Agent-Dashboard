@@ -74,6 +74,16 @@ func Value(v string) predicate.AppSetting {
 	return predicate.AppSetting(sql.FieldEQ(FieldValue, v))
 }
 
+// Secret applies equality check predicate on the "secret" field. It's identical to SecretEQ.
+func Secret(v bool) predicate.AppSetting {
+	return predicate.AppSetting(sql.FieldEQ(FieldSecret, v))
+}
+
+// Nonce applies equality check predicate on the "nonce" field. It's identical to NonceEQ.
+func Nonce(v string) predicate.AppSetting {
+	return predicate.AppSetting(sql.FieldEQ(FieldNonce, v))
+}
+
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
 func CreatedAt(v time.Time) predicate.AppSetting {
 	return predicate.AppSetting(sql.FieldEQ(FieldCreatedAt, v))
@@ -212,6 +222,81 @@ func ValueEqualFold(v string) predicate.AppSetting {
 // ValueContainsFold applies the ContainsFold predicate on the "value" field.
 func ValueContainsFold(v string) predicate.AppSetting {
 	return predicate.AppSetting(sql.FieldContainsFold(FieldValue, v))
+}
+
+// SecretEQ applies the EQ predicate on the "secret" field.
+func SecretEQ(v bool) predicate.AppSetting {
+	return predicate.AppSetting(sql.FieldEQ(FieldSecret, v))
+}
+
+// SecretNEQ applies the NEQ predicate on the "secret" field.
+func SecretNEQ(v bool) predicate.AppSetting {
+	return predicate.AppSetting(sql.FieldNEQ(FieldSecret, v))
+}
+
+// NonceEQ applies the EQ predicate on the "nonce" field.
+func NonceEQ(v string) predicate.AppSetting {
+	return predicate.AppSetting(sql.FieldEQ(FieldNonce, v))
+}
+
+// NonceNEQ applies the NEQ predicate on the "nonce" field.
+func NonceNEQ(v string) predicate.AppSetting {
+	return predicate.AppSetting(sql.FieldNEQ(FieldNonce, v))
+}
+
+// NonceIn applies the In predicate on the "nonce" field.
+func NonceIn(vs ...string) predicate.AppSetting {
+	return predicate.AppSetting(sql.FieldIn(FieldNonce, vs...))
+}
+
+// NonceNotIn applies the NotIn predicate on the "nonce" field.
+func NonceNotIn(vs ...string) predicate.AppSetting {
+	return predicate.AppSetting(sql.FieldNotIn(FieldNonce, vs...))
+}
+
+// NonceGT applies the GT predicate on the "nonce" field.
+func NonceGT(v string) predicate.AppSetting {
+	return predicate.AppSetting(sql.FieldGT(FieldNonce, v))
+}
+
+// NonceGTE applies the GTE predicate on the "nonce" field.
+func NonceGTE(v string) predicate.AppSetting {
+	return predicate.AppSetting(sql.FieldGTE(FieldNonce, v))
+}
+
+// NonceLT applies the LT predicate on the "nonce" field.
+func NonceLT(v string) predicate.AppSetting {
+	return predicate.AppSetting(sql.FieldLT(FieldNonce, v))
+}
+
+// NonceLTE applies the LTE predicate on the "nonce" field.
+func NonceLTE(v string) predicate.AppSetting {
+	return predicate.AppSetting(sql.FieldLTE(FieldNonce, v))
+}
+
+// NonceContains applies the Contains predicate on the "nonce" field.
+func NonceContains(v string) predicate.AppSetting {
+	return predicate.AppSetting(sql.FieldContains(FieldNonce, v))
+}
+
+// NonceHasPrefix applies the HasPrefix predicate on the "nonce" field.
+func NonceHasPrefix(v string) predicate.AppSetting {
+	return predicate.AppSetting(sql.FieldHasPrefix(FieldNonce, v))
+}
+
+// NonceHasSuffix applies the HasSuffix predicate on the "nonce" field.
+func NonceHasSuffix(v string) predicate.AppSetting {
+	return predicate.AppSetting(sql.FieldHasSuffix(FieldNonce, v))
+}
+
+// NonceEqualFold applies the EqualFold predicate on the "nonce" field.
+func NonceEqualFold(v string) predicate.AppSetting {
+	return predicate.AppSetting(sql.FieldEqualFold(FieldNonce, v))
+}
+
+// NonceContainsFold applies the ContainsFold predicate on the "nonce" field.
+func NonceContainsFold(v string) predicate.AppSetting {
+	return predicate.AppSetting(sql.FieldContainsFold(FieldNonce, v))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.

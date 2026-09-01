@@ -74,6 +74,8 @@ var (
 		{Name: "id", Type: field.TypeString},
 		{Name: "key", Type: field.TypeString, Unique: true},
 		{Name: "value", Type: field.TypeString},
+		{Name: "secret", Type: field.TypeBool, Default: false},
+		{Name: "nonce", Type: field.TypeString, Default: ""},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 	}

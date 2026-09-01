@@ -21,6 +21,10 @@ type AppSetting struct {
 	Key string `json:"key,omitempty"`
 	// Value holds the value of the "value" field.
 	Value string `json:"value,omitempty"`
+	// Secret holds the value of the "secret" field.
+	Secret bool `json:"secret,omitempty"`
+	// Nonce holds the value of the "nonce" field.
+	Nonce string `json:"nonce,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
@@ -33,7 +37,9 @@ func (*AppSetting) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case appsetting.FieldID, appsetting.FieldKey, appsetting.FieldValue:
+		case appsetting.FieldSecret:
+			values[i] = new(sql.NullBool)
+		case appsetting.FieldID, appsetting.FieldKey, appsetting.FieldValue, appsetting.FieldNonce:
 			values[i] = new(sql.NullString)
 		case appsetting.FieldCreatedAt, appsetting.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -69,6 +75,18 @@ func (_m *AppSetting) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field value", values[i])
 			} else if value.Valid {
 				_m.Value = value.String
+			}
+		case appsetting.FieldSecret:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field secret", values[i])
+			} else if value.Valid {
+				_m.Secret = value.Bool
+			}
+		case appsetting.FieldNonce:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field nonce", values[i])
+			} else if value.Valid {
+				_m.Nonce = value.String
 			}
 		case appsetting.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -123,6 +141,12 @@ func (_m *AppSetting) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("value=")
 	builder.WriteString(_m.Value)
+	builder.WriteString(", ")
+	builder.WriteString("secret=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Secret))
+	builder.WriteString(", ")
+	builder.WriteString("nonce=")
+	builder.WriteString(_m.Nonce)
 	builder.WriteString(", ")
 	builder.WriteString("created_at=")
 	builder.WriteString(_m.CreatedAt.Format(time.ANSIC))
