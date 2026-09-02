@@ -16,6 +16,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
+	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	mem "github.com/lx-wnk/agent-dashboard/server/internal/memory"
@@ -26,13 +27,18 @@ import (
 // resource (the plugin lifecycle handler, the memory handler), so this route
 // cannot become a second, unvalidated write path into the same table.
 type Handler struct {
-	resources repo.ResourceRepo
-	gate      mem.Gate
+	resources  repo.ResourceRepo
+	schedules  repo.TaskScheduleRepo
+	gate       mem.Gate
+	bypassAuth bool
 }
 
-// NewHandler creates a Handler.
-func NewHandler(r repo.ResourceRepo, gate mem.Gate) *Handler {
-	return &Handler{resources: r, gate: gate}
+// NewHandler creates a Handler. schedules may be nil, in which case
+// kind=routine answers an empty list. bypassAuth is the loopback single-user
+// mode, in which the routine listing is not narrowed to the caller — the same
+// flag and the same meaning as api/schedules.NewHandler's.
+func NewHandler(r repo.ResourceRepo, schedules repo.TaskScheduleRepo, gate mem.Gate, bypassAuth bool) *Handler {
+	return &Handler{resources: r, schedules: schedules, gate: gate, bypassAuth: bypassAuth}
 }
 
 // Mount registers the resource registry routes on r.
@@ -97,6 +103,54 @@ func viewOf(row *ent.Resource) resourceView {
 	}
 }
 
+// routineViews projects task_schedule rows into the routine kind. The
+// registry table has no routine rows and deliberately gets none: a schedule
+// already carries the trigger, the task template and the budget a routine is
+// made of, so a mirrored registry row would be a second truth to keep in sync
+// on every create, rename, enable and delete. Projecting on read keeps one
+// writer.
+//
+// The projected ID is the schedule's own, which is exactly the ContextRef a
+// "routine" capability grant is anchored to (memory.RoutineContext) — the id
+// shown here is the id to grant against.
+//
+// Schedules have no scope column, so every routine is reported at global
+// scope. That matches how ListMerged treats global rows: they resolve in
+// every scope.
+func (h *Handler) routineViews(r *http.Request) ([]resourceView, error) {
+	// A non-nil empty slice, not nil: nil encodes as null and a client that
+	// maps over the list would crash on it — the same reason list() below
+	// builds its slice with make.
+	if h.schedules == nil {
+		return []resourceView{}, nil
+	}
+	payload, _ := auth.PayloadFromContext(r.Context())
+	rows, err := h.schedules.ListForUser(r.Context(), payload.Sub, h.bypassAuth)
+	if err != nil {
+		return nil, fmt.Errorf("resources.list routines: %w", err)
+	}
+	out := make([]resourceView, 0, len(rows))
+	for _, s := range rows {
+		state := repo.ResourceStateDisabled
+		if s.Enabled {
+			state = repo.ResourceStateEnabled
+		}
+		out = append(out, resourceView{
+			ID:        s.ID,
+			Kind:      repo.ResourceKindRoutine,
+			Slug:      s.SlugPrefix,
+			Name:      s.Name,
+			ScopeKind: string(repo.ScopeGlobal),
+			NodeID:    repo.DefaultNodeID,
+			State:     state,
+			Origin:    repo.ResourceOriginLocal,
+			CreatedAt: s.CreatedAt,
+			UpdatedAt: s.UpdatedAt,
+		})
+	}
+	return out, nil
+}
+
 // scopeFromQuery parses the shared "scope"/"scopeRef" query params through
 // mem.ParseScope — the one parser every transport that accepts a caller-
 // supplied scope uses (MCP tool args, the memory HTTP routes), so the accepted
@@ -137,12 +191,23 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) error {
 	// rows and any extra row names the path's own. Same capability, same
 	// empty value, same requested scope as listSpaces, so the two cannot
 	// drift apart again. The other kinds are not gated: application rows are
-	// already public via /api/plugins, and nothing writes routine or skill
-	// yet. Do not "simplify" this into gating everything or nothing.
+	// already public via /api/plugins, routine rows are the schedules
+	// /api/schedules already serves to the same caller (routineViews applies
+	// that route's own user narrowing), and nothing writes skill yet. Do not
+	// "simplify" this into gating everything or nothing.
 	if kind == repo.ResourceKindMemorySpace {
 		if err := h.gate.Authorize(r.Context(), repo.CapabilityMemoryRead, "", scope); err != nil {
 			return apierr.NewAppError(http.StatusForbidden, err.Error())
 		}
+	}
+
+	if kind == repo.ResourceKindRoutine {
+		out, err := h.routineViews(r)
+		if err != nil {
+			return err
+		}
+		w.Header().Set("Content-Type", "application/json")
+		return json.NewEncoder(w).Encode(out)
 	}
 
 	// ListMerged, not ListForScope: the UI wants the effective set a caller in

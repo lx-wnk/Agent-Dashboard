@@ -42,6 +42,11 @@ func (Task) Fields() []ent.Field {
 		field.JSON("metadata", map[string]any{}).Optional(),
 		field.String("project_id").Optional().Nillable(),
 		field.String("spawner_id").Optional().Nillable(),
+		// routine_id names the task_schedule that materialized this task.
+		// It is the anchor for "routine" capability grants, so it is set by
+		// the scheduler only and never accepted from a request body — a
+		// caller-writable routine id would let any task claim a routine's grants.
+		field.String("routine_id").Optional().Nillable(),
 		field.Float("rank").Optional().Nillable(),
 		field.Time("created_at").Default(time.Now).Immutable(),
 		field.Time("updated_at").Default(time.Now).UpdateDefault(time.Now),

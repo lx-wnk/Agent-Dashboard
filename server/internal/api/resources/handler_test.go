@@ -35,7 +35,7 @@ func newUngrantedMux(t *testing.T) (*chi.Mux, repo.ResourceRepo, repo.GrantRepo,
 		GrantUsage:   repo.NewGrantUsageRepo(bundle.Client, bundle.WriteClient),
 	}
 	mux := chi.NewRouter()
-	apiresources.NewHandler(resourceRepo, gate).Mount(mux)
+	apiresources.NewHandler(resourceRepo, repo.NewTaskScheduleRepo(bundle.Client), gate, true).Mount(mux)
 	return mux, resourceRepo, grantRepo, ctx
 }
 
@@ -113,11 +113,13 @@ func TestList_AnswersCamelCaseDTO(t *testing.T) {
 func TestList_EmptyKindIsAnEmptyArrayNotNull(t *testing.T) {
 	mux, _, _ := newMux(t)
 
-	w := get(t, mux, "/api/resources?kind=routine")
+	w := get(t, mux, "/api/resources?kind=skill")
 	require.Equal(t, http.StatusOK, w.Code)
-	// routine and skill have no writer anywhere in the codebase yet, so this
-	// list is legitimately empty. It must encode as [] so the client can
-	// render "none yet" instead of crashing on a null.
+	// skill has no writer anywhere in the codebase yet, so this list is
+	// legitimately empty. It must encode as [] so the client can render
+	// "none yet" instead of crashing on a null. routine takes a different
+	// code path now (it projects task_schedule rows) and owns the same
+	// assertion in routine_projection_test.go.
 	require.Equal(t, "[]\n", w.Body.String())
 }
 

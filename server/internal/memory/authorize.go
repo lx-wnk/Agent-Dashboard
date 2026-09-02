@@ -47,15 +47,32 @@ func ParseScope(kind, ref string) (repo.Scope, error) {
 // specificity while a global grant still backs up a scope that has none of
 // its own — the same union visibleSpaceScopes (retrieve.go) already applies
 // to which spaces are visible, mirrored here for which grants apply.
-func Contexts(scope repo.Scope) []capability.Context {
+//
+// extra carries contexts the memory scope cannot express because they name
+// the caller rather than the data — today that is the routine a task was
+// materialized from (RoutineContext below). They are prepended because
+// capability.Decide resolves by specificity and a caller-level context is
+// narrower than the scope it reads in; ordering within the slice is not what
+// Decide ranks on (contextRank is), so this is for readability, not effect.
+func Contexts(scope repo.Scope, extra ...capability.Context) []capability.Context {
 	scope = scope.Normalize()
-	if scope.IsGlobal() {
-		return []capability.Context{{Kind: string(repo.ScopeGlobal)}}
+	out := make([]capability.Context, 0, len(extra)+2)
+	out = append(out, extra...)
+	if !scope.IsGlobal() {
+		out = append(out, capability.Context{Kind: string(scope.Kind), Ref: scope.Ref})
 	}
-	return []capability.Context{
-		{Kind: string(scope.Kind), Ref: scope.Ref},
-		{Kind: string(repo.ScopeGlobal)},
+	return append(out, capability.Context{Kind: string(repo.ScopeGlobal)})
+}
+
+// RoutineContext is the context chain entry for work a routine started, or
+// nothing when routineID is empty (a task a human created). A routine context
+// with an empty ref would match every grant stored with an empty ContextRef,
+// so the empty case must yield no context at all rather than a blank one.
+func RoutineContext(routineID string) []capability.Context {
+	if routineID == "" {
+		return nil
 	}
+	return []capability.Context{{Kind: repo.GrantContextRoutine, Ref: routineID}}
 }
 
 // Gate resolves and enforces capability.Decide requests for one caller. This
@@ -79,7 +96,7 @@ type Gate struct {
 // resolves to a zero-value CapabilityView (empty Class), which
 // capability.Decide's defaultEffect sends to deny — the fail-closed
 // behaviour SeedCapabilities exists to make the normal case.
-func (g Gate) Authorize(ctx context.Context, capName, value string, scope repo.Scope) error {
+func (g Gate) Authorize(ctx context.Context, capName, value string, scope repo.Scope, extra ...capability.Context) error {
 	var capView capability.CapabilityView
 	if row, err := g.Capabilities.Get(ctx, capName); err == nil {
 		capView = capability.CapabilityView{Name: row.Name, Class: row.Class, EnforceableBy: row.EnforceableBy}
@@ -105,7 +122,7 @@ func (g Gate) Authorize(ctx context.Context, capName, value string, scope repo.S
 		}
 	}
 
-	req := capability.Request{Capability: capName, Value: value, Contexts: Contexts(scope)}
+	req := capability.Request{Capability: capName, Value: value, Contexts: Contexts(scope, extra...)}
 	decision := capability.Decide(req, grantViews, capView)
 
 	grantView, usedInWindow, err := rateLimitUsage(ctx, g.GrantUsage, decision, grantViews)

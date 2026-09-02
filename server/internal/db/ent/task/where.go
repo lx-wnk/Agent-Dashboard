@@ -165,6 +165,11 @@ func SpawnerID(v string) predicate.Task {
 	return predicate.Task(sql.FieldEQ(FieldSpawnerID, v))
 }
 
+// RoutineID applies equality check predicate on the "routine_id" field. It's identical to RoutineIDEQ.
+func RoutineID(v string) predicate.Task {
+	return predicate.Task(sql.FieldEQ(FieldRoutineID, v))
+}
+
 // Rank applies equality check predicate on the "rank" field. It's identical to RankEQ.
 func Rank(v float64) predicate.Task {
 	return predicate.Task(sql.FieldEQ(FieldRank, v))
@@ -1378,6 +1383,81 @@ func SpawnerIDEqualFold(v string) predicate.Task {
 // SpawnerIDContainsFold applies the ContainsFold predicate on the "spawner_id" field.
 func SpawnerIDContainsFold(v string) predicate.Task {
 	return predicate.Task(sql.FieldContainsFold(FieldSpawnerID, v))
+}
+
+// RoutineIDEQ applies the EQ predicate on the "routine_id" field.
+func RoutineIDEQ(v string) predicate.Task {
+	return predicate.Task(sql.FieldEQ(FieldRoutineID, v))
+}
+
+// RoutineIDNEQ applies the NEQ predicate on the "routine_id" field.
+func RoutineIDNEQ(v string) predicate.Task {
+	return predicate.Task(sql.FieldNEQ(FieldRoutineID, v))
+}
+
+// RoutineIDIn applies the In predicate on the "routine_id" field.
+func RoutineIDIn(vs ...string) predicate.Task {
+	return predicate.Task(sql.FieldIn(FieldRoutineID, vs...))
+}
+
+// RoutineIDNotIn applies the NotIn predicate on the "routine_id" field.
+func RoutineIDNotIn(vs ...string) predicate.Task {
+	return predicate.Task(sql.FieldNotIn(FieldRoutineID, vs...))
+}
+
+// RoutineIDGT applies the GT predicate on the "routine_id" field.
+func RoutineIDGT(v string) predicate.Task {
+	return predicate.Task(sql.FieldGT(FieldRoutineID, v))
+}
+
+// RoutineIDGTE applies the GTE predicate on the "routine_id" field.
+func RoutineIDGTE(v string) predicate.Task {
+	return predicate.Task(sql.FieldGTE(FieldRoutineID, v))
+}
+
+// RoutineIDLT applies the LT predicate on the "routine_id" field.
+func RoutineIDLT(v string) predicate.Task {
+	return predicate.Task(sql.FieldLT(FieldRoutineID, v))
+}
+
+// RoutineIDLTE applies the LTE predicate on the "routine_id" field.
+func RoutineIDLTE(v string) predicate.Task {
+	return predicate.Task(sql.FieldLTE(FieldRoutineID, v))
+}
+
+// RoutineIDContains applies the Contains predicate on the "routine_id" field.
+func RoutineIDContains(v string) predicate.Task {
+	return predicate.Task(sql.FieldContains(FieldRoutineID, v))
+}
+
+// RoutineIDHasPrefix applies the HasPrefix predicate on the "routine_id" field.
+func RoutineIDHasPrefix(v string) predicate.Task {
+	return predicate.Task(sql.FieldHasPrefix(FieldRoutineID, v))
+}
+
+// RoutineIDHasSuffix applies the HasSuffix predicate on the "routine_id" field.
+func RoutineIDHasSuffix(v string) predicate.Task {
+	return predicate.Task(sql.FieldHasSuffix(FieldRoutineID, v))
+}
+
+// RoutineIDIsNil applies the IsNil predicate on the "routine_id" field.
+func RoutineIDIsNil() predicate.Task {
+	return predicate.Task(sql.FieldIsNull(FieldRoutineID))
+}
+
+// RoutineIDNotNil applies the NotNil predicate on the "routine_id" field.
+func RoutineIDNotNil() predicate.Task {
+	return predicate.Task(sql.FieldNotNull(FieldRoutineID))
+}
+
+// RoutineIDEqualFold applies the EqualFold predicate on the "routine_id" field.
+func RoutineIDEqualFold(v string) predicate.Task {
+	return predicate.Task(sql.FieldEqualFold(FieldRoutineID, v))
+}
+
+// RoutineIDContainsFold applies the ContainsFold predicate on the "routine_id" field.
+func RoutineIDContainsFold(v string) predicate.Task {
+	return predicate.Task(sql.FieldContainsFold(FieldRoutineID, v))
 }
 
 // RankEQ applies the EQ predicate on the "rank" field.

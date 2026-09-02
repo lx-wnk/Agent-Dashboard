@@ -39,7 +39,7 @@ function onScopeRefChange(event: Event) {
 
 const EMPTY_MESSAGES: Record<ResourceKind, string> = {
   application: 'No applications registered yet.',
-  routine: 'No routines registered yet. Nothing writes routines to the registry today.',
+  routine: 'No routines yet. A routine is a schedule — create one from the Schedules view.',
   skill: 'No skills registered yet. Nothing writes skills to the registry today.',
   memory_space: 'No memory spaces registered yet. Create one from the Memory panel.',
 }

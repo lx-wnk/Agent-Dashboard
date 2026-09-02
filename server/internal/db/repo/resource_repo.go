@@ -38,8 +38,10 @@ const (
 	ResourceOriginRemote  = "remote"
 )
 
-// defaultNodeID is written into every resource until the node registry lands.
-const defaultNodeID = "local"
+// DefaultNodeID is written into every resource until the node registry
+// lands. Exported because a projected resource (api/resources reports
+// task_schedule rows as routines) has to report the same node.
+const DefaultNodeID = "local"
 
 // UpsertResourceInput is the named input for Upsert. Named rather than
 // positional because the call has more than four parameters, which is where
@@ -113,7 +115,7 @@ func (r *entResourceRepo) Upsert(ctx context.Context, in UpsertResourceInput) (*
 		SetName(in.Name).
 		SetScopeKind(string(scope.Kind)).
 		SetScopeRef(scope.Ref).
-		SetNodeID(defaultNodeID).
+		SetNodeID(DefaultNodeID).
 		SetState(state).
 		SetVersion(in.Version).
 		SetOrigin(origin).

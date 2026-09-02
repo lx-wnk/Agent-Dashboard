@@ -277,7 +277,7 @@ func injectMemoryBlock(ctx *StageContext) string {
 	// unwired InjectMemory above means no memory. A caller that wants the
 	// push wires both; a test that wants it wires a permissive authorizer
 	// explicitly rather than relying on nil to skip the check.
-	if err := ctx.AuthorizeMemory(ctx.Ctx, scope); err != nil {
+	if err := ctx.AuthorizeMemory(ctx.Ctx, scope, strOrEmpty(ctx.Task.RoutineID)); err != nil {
 		ctx.RecordAudit(ctx.StageRun.Stage+"_memory_denied", map[string]any{"error": err.Error()})
 		return ""
 	}
