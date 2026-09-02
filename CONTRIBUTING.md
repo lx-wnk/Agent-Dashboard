@@ -33,7 +33,7 @@ task dev
 
 Starts the Go backend via `air` (hot-reload on `.go` file changes) and serves the Vue SPA, both on port 13120.
 
-To re-trigger the first-run onboarding flow (e.g. to test it) once you've already completed or skipped it, reset its setting: `agent-dashboard settings set onboarding.completed false`.
+To re-trigger the first-run onboarding flow (e.g. to test it) once you've already completed or skipped it, reset its setting: `agent-dashboard settings set onboarding.completed false`. The CLI writes straight to the database and a running server reads its settings once at startup, so restart the server afterwards — otherwise the command reports success and the flow stays hidden.
 
 ## Production build
 
