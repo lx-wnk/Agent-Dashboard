@@ -3,8 +3,8 @@ import AppChip from '@/components/ui/AppChip.vue'
 import StageOutputView from '@/features/pipeline/components/StageOutputView.vue'
 import { useInjectedTaskDetails } from '@/features/pipeline/composables/taskModalContext'
 import { useStageInjections } from '@/features/pipeline/composables/useStageInjections'
+import { formatDateTime } from '@/utils/format'
 import { runStatusTone } from '@/utils/statusColors'
-import { formatTaskDate } from '@/utils/taskFormat'
 
 const { stageRuns } = useInjectedTaskDetails()
 const { byStageRun, loading, denied, error } = useStageInjections(stageRuns)
@@ -39,7 +39,7 @@ const { byStageRun, loading, denied, error } = useStageInjections(stageRuns)
         session: <code>{{ run.sessionName }}</code>
       </div>
       <div class="text-[11px] text-fg-mute mt-0.5">
-        started {{ formatTaskDate(run.startedAt) }} · ended {{ formatTaskDate(run.endedAt) }}
+        started {{ formatDateTime(run.startedAt) }} · ended {{ formatDateTime(run.endedAt) }}
       </div>
       <div v-if="run.output" class="mt-1.5 text-[11px]">
         <StageOutputView :stage="run.stage" :output="run.output" :status="run.status" />

@@ -1,6 +1,6 @@
 import type { TokenUsage } from '../types'
 import { describe, expect, it } from 'vitest'
-import { formatBurnRate, formatCost, formatDateTime, formatRelativeActivity, formatScope, formatTokens, formatUptime, isAwaitingInput, isStalled, maskToken, secondsSince, shortModel, STALLED_THRESHOLD_SECONDS, totalTokenCount } from './format'
+import { formatBurnRate, formatCost, formatDateTime, formatRelativeActivity, formatRelativeThenDate, formatScope, formatTokens, formatUptime, isAwaitingInput, isStalled, maskToken, secondsSince, shortModel, STALLED_THRESHOLD_SECONDS, totalTokenCount } from './format'
 
 describe('totalTokenCount', () => {
   it('sums all four token fields', () => {
@@ -365,5 +365,51 @@ describe('formatDateTime', () => {
     expect(out).not.toBe('\u2014')
     expect(out).toMatch(/2026/)
     expect(out).toMatch(/:/)
+  })
+
+  it('renders an em dash for undefined, not just null', () => {
+    expect(formatDateTime(undefined)).toBe('\u2014')
+  })
+
+  // toLocaleString answers "Invalid Date" instead of throwing, so without an
+  // explicit check this is what a malformed timestamp would render.
+  it('falls back to the raw string for an unparseable timestamp', () => {
+    expect(formatDateTime('not-a-date')).toBe('not-a-date')
+  })
+})
+
+describe('formatRelativeThenDate', () => {
+  const now = Date.parse('2026-01-10T12:00:00Z')
+
+  it('renders an em dash for a missing timestamp', () => {
+    expect(formatRelativeThenDate(null, now)).toBe('\u2014')
+    expect(formatRelativeThenDate(undefined, now)).toBe('\u2014')
+  })
+
+  it('renders minutes under an hour', () => {
+    expect(formatRelativeThenDate('2026-01-10T11:40:00Z', now)).toBe('20m ago')
+  })
+
+  it('renders hours between one hour and a day', () => {
+    expect(formatRelativeThenDate('2026-01-10T07:00:00Z', now)).toBe('5h ago')
+  })
+
+  it('renders days between a day and a week', () => {
+    expect(formatRelativeThenDate('2026-01-07T12:00:00Z', now)).toBe('3d ago')
+  })
+
+  it('falls back to a calendar date beyond a week', () => {
+    const out = formatRelativeThenDate('2025-11-01T12:00:00Z', now)
+    expect(out).not.toMatch(/ago/)
+    expect(out).toMatch(/2025/)
+  })
+
+  it('switches from hours to days exactly at 24 hours, not before', () => {
+    expect(formatRelativeThenDate('2026-01-09T12:00:01Z', now)).toBe('24h ago')
+    expect(formatRelativeThenDate('2026-01-09T11:59:59Z', now)).toBe('1d ago')
+  })
+
+  it('falls back to the raw string for an unparseable timestamp', () => {
+    expect(formatRelativeThenDate('not-a-date', now)).toBe('not-a-date')
   })
 })
