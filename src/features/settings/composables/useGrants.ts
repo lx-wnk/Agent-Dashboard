@@ -1,35 +1,39 @@
 import { onMounted, ref } from 'vue'
 import { readErrorMessage } from '@/utils/errorMessage'
 
-// Grant and Capability are ent-generated rows (server/internal/db/ent/{grant,capability}.go)
-// encoded straight from their Go struct tags, which are ent's default snake_case —
-// unlike the rest of this codebase's camelCase DTOs, so the field names here
-// intentionally do not match the sdk.generated.ts convention.
+// Mirrors grantResponse and capabilityResponse in
+// server/internal/api/grants/handler.go. Both used to be ent rows encoded
+// straight from their storage tags, which is why these were snake_case; the
+// tags also carried omitempty, so limitCount 0 (meaning unlimited) and an
+// empty contextRef (meaning global scope) never arrived at all.
 export interface Capability {
   id: string
   name: string
   class: string
-  enforceable_by: string[]
-  requires_pattern: boolean
+  enforceableBy: string[]
+  requiresPattern: boolean
   reversible: boolean
   description: string
 }
 
 export interface Grant {
   id: string
-  capability_name: string
-  context_kind: string
-  context_ref: string
+  capabilityName: string
+  contextKind: string
+  contextRef: string
   pattern: string
   mode: string
-  limit_count: number
-  limit_window_seconds: number
-  expires_at: string | null
-  granted_by: string
-  granted_at: string
-  revoked_at: string | null
-  revoked_by: string
+  limitCount: number
+  limitWindowSeconds: number
+  expiresAt: string | null
+  grantedBy: string
+  grantedAt: string
+  revokedAt: string | null
+  revokedBy: string
   reason: string
+  // Always present now that the response is a DTO; the entity's omitempty hid
+  // it on every single-node install, where it is the empty string.
+  nodeId: string
 }
 
 // The grant a legacy migration wrote before per-user attribution existed
@@ -105,7 +109,7 @@ export function useGrants() {
     return grant
   }
 
-  // No response body on success (204) — refetch so revoked_at/revoked_by come
+  // No response body on success (204) — refetch so revokedAt/revokedBy come
   // from the server rather than being guessed on the client.
   async function revokeGrant(id: string, capabilityFilter?: string): Promise<void> {
     const res = await fetch(`/api/grants/${id}`, { method: 'DELETE' })

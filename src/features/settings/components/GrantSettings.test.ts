@@ -16,19 +16,20 @@ vi.mock('@/features/settings/composables/useGrants', async () => {
 
 const baseGrant: Grant = {
   id: 'g1',
-  capability_name: 'bash.exec',
-  context_kind: 'global',
-  context_ref: '',
+  capabilityName: 'bash.exec',
+  contextKind: 'global',
+  contextRef: '',
   pattern: '*',
   mode: 'allow',
-  limit_count: 0,
-  limit_window_seconds: 0,
-  expires_at: null,
-  granted_by: 'alex',
-  granted_at: '2026-01-01T00:00:00Z',
-  revoked_at: null,
-  revoked_by: '',
+  limitCount: 0,
+  limitWindowSeconds: 0,
+  expiresAt: null,
+  grantedBy: 'alex',
+  grantedAt: '2026-01-01T00:00:00Z',
+  revokedAt: null,
+  revokedBy: '',
   reason: '',
+  nodeId: '',
 }
 
 async function selectOption(wrapper: ReturnType<typeof mount>, triggerTestId: string, label: string): Promise<void> {
@@ -55,15 +56,15 @@ describe('grantSettings', () => {
     grants = ref([{ ...baseGrant }])
     loading = ref(false)
     capabilities = ref([
-      { id: 'c1', name: 'bash.exec', class: 'shell', enforceable_by: [], requires_pattern: true, reversible: false, description: '' },
+      { id: 'c1', name: 'bash.exec', class: 'shell', enforceableBy: [], requiresPattern: true, reversible: false, description: '' },
     ])
     createGrant = vi.fn(async (input: Record<string, unknown>) => {
-      const created = { ...baseGrant, id: 'g-new', capability_name: input.capabilityName as string }
+      const created = { ...baseGrant, id: 'g-new', capabilityName: input.capabilityName as string }
       grants.value = [created, ...grants.value]
       return created
     })
     revokeGrant = vi.fn(async (id: string) => {
-      grants.value = grants.value.map(g => g.id === id ? { ...g, revoked_at: '2026-02-01T00:00:00Z', revoked_by: 'alex' } : g)
+      grants.value = grants.value.map(g => g.id === id ? { ...g, revokedAt: '2026-02-01T00:00:00Z', revokedBy: 'alex' } : g)
     })
 
     vi.mocked(useGrants).mockReturnValue({
@@ -80,8 +81,8 @@ describe('grantSettings', () => {
   it('renders the grant list, including a revoked row and a legacy-migration row', () => {
     grants.value = [
       { ...baseGrant, id: 'g1' },
-      { ...baseGrant, id: 'g2', revoked_at: '2026-02-01T00:00:00Z', revoked_by: 'alex' },
-      { ...baseGrant, id: 'g3', granted_by: 'migration:legacy' },
+      { ...baseGrant, id: 'g2', revokedAt: '2026-02-01T00:00:00Z', revokedBy: 'alex' },
+      { ...baseGrant, id: 'g3', grantedBy: 'migration:legacy' },
     ]
     const wrapper = mount(GrantSettings, { attachTo: document.body })
 
@@ -94,13 +95,13 @@ describe('grantSettings', () => {
 
   it('marks a grant on a capability no enforcement point reads as not enforced', () => {
     capabilities.value = [
-      { id: 'c1', name: 'bash.exec', class: 'shell', enforceable_by: [], requires_pattern: true, reversible: false, description: '' },
-      { id: 'c2', name: 'memory.read', class: 'resource', enforceable_by: ['server'], requires_pattern: false, reversible: true, description: '' },
+      { id: 'c1', name: 'bash.exec', class: 'shell', enforceableBy: [], requiresPattern: true, reversible: false, description: '' },
+      { id: 'c2', name: 'memory.read', class: 'resource', enforceableBy: ['server'], requiresPattern: false, reversible: true, description: '' },
     ]
     grants.value = [
-      { ...baseGrant, id: 'g1', capability_name: 'bash.exec' },
-      { ...baseGrant, id: 'g2', capability_name: 'memory.read' },
-      { ...baseGrant, id: 'g3', capability_name: 'not.in.catalogue' },
+      { ...baseGrant, id: 'g1', capabilityName: 'bash.exec' },
+      { ...baseGrant, id: 'g2', capabilityName: 'memory.read' },
+      { ...baseGrant, id: 'g3', capabilityName: 'not.in.catalogue' },
     ]
     const wrapper = mount(GrantSettings, { attachTo: document.body })
 
@@ -113,13 +114,13 @@ describe('grantSettings', () => {
   // and defeats the column, so the badge classes are pinned, not just the text.
   it('reserves the success tone for an actually enforced grant', () => {
     capabilities.value = [
-      { id: 'c1', name: 'bash.exec', class: 'shell', enforceable_by: [], requires_pattern: true, reversible: false, description: '' },
-      { id: 'c2', name: 'memory.read', class: 'resource', enforceable_by: ['server'], requires_pattern: false, reversible: true, description: '' },
+      { id: 'c1', name: 'bash.exec', class: 'shell', enforceableBy: [], requiresPattern: true, reversible: false, description: '' },
+      { id: 'c2', name: 'memory.read', class: 'resource', enforceableBy: ['server'], requiresPattern: false, reversible: true, description: '' },
     ]
     grants.value = [
-      { ...baseGrant, id: 'g1', capability_name: 'bash.exec' },
-      { ...baseGrant, id: 'g2', capability_name: 'memory.read' },
-      { ...baseGrant, id: 'g3', capability_name: 'not.in.catalogue' },
+      { ...baseGrant, id: 'g1', capabilityName: 'bash.exec' },
+      { ...baseGrant, id: 'g2', capabilityName: 'memory.read' },
+      { ...baseGrant, id: 'g3', capabilityName: 'not.in.catalogue' },
     ]
     const wrapper = mount(GrantSettings, { attachTo: document.body })
 
@@ -202,7 +203,7 @@ describe('grantSettings', () => {
   it('marks a revoked grant next to its mode, not only in the status column', () => {
     grants.value = [
       { ...baseGrant, id: 'g1' },
-      { ...baseGrant, id: 'g2', revoked_at: '2026-02-01T00:00:00Z', revoked_by: 'alex' },
+      { ...baseGrant, id: 'g2', revokedAt: '2026-02-01T00:00:00Z', revokedBy: 'alex' },
     ]
     const wrapper = mount(GrantSettings, { attachTo: document.body })
 

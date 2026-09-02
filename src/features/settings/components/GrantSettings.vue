@@ -145,7 +145,7 @@ const ENFORCER_SERVER = 'server'
 const enforcementByCapability = computed(() => {
   const byName = new Map<string, string>()
   for (const c of capabilities.value)
-    byName.set(c.name, c.enforceable_by.includes(ENFORCER_SERVER) ? ENFORCER_SERVER : 'none')
+    byName.set(c.name, c.enforceableBy.includes(ENFORCER_SERVER) ? ENFORCER_SERVER : 'none')
   return byName
 })
 
@@ -245,12 +245,12 @@ function isLegacy(grantedBy: string): boolean {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="g in grants" :key="g.id" :data-testid="`grant-row-${g.id}`" :class="{ 'opacity-60': g.revoked_at }">
+          <tr v-for="g in grants" :key="g.id" :data-testid="`grant-row-${g.id}`" :class="{ 'opacity-60': g.revokedAt }">
             <td class="px-3 py-2.5 border-b border-line text-fg font-medium whitespace-nowrap">
-              {{ g.capability_name }}
+              {{ g.capabilityName }}
             </td>
             <td class="px-3 py-2.5 border-b border-line text-fg-mute font-mono text-xs">
-              {{ formatScope(g.context_kind, g.context_ref) }}
+              {{ formatScope(g.contextKind, g.contextRef) }}
             </td>
             <td class="px-3 py-2.5 border-b border-line text-fg-mute font-mono text-xs">
               {{ g.pattern || '*' }}
@@ -258,14 +258,14 @@ function isLegacy(grantedBy: string): boolean {
             <td class="px-3 py-2.5 border-b border-line text-fg-mute">
               {{ g.mode }}
               <span
-                v-if="g.revoked_at"
+                v-if="g.revokedAt"
                 class="inline-block rounded px-1.5 py-0.5 ml-1 text-[10px] font-semibold uppercase tracking-wide bg-raised text-fg-mute"
                 :data-testid="`grant-mode-revoked-${g.id}`"
               >Revoked</span>
             </td>
             <td class="px-3 py-2.5 border-b border-line">
               <span
-                v-if="enforcementOf(g.capability_name) === 'server'"
+                v-if="enforcementOf(g.capabilityName) === 'server'"
                 class="inline-block rounded px-2 py-0.5 text-[11px] font-semibold bg-success-soft text-success-text"
                 :data-testid="`grant-enforcement-${g.id}`"
                 title="Enforced server-side by internal/memory.Authorize"
@@ -274,31 +274,31 @@ function isLegacy(grantedBy: string): boolean {
                 v-else
                 class="inline-block rounded px-2 py-0.5 text-[11px] font-semibold bg-warning-soft text-warning-text"
                 :data-testid="`grant-enforcement-${g.id}`"
-                :title="enforcementOf(g.capability_name) === 'none'
+                :title="enforcementOf(g.capabilityName) === 'none'
                   ? 'No enforcement point reads stored grants for this capability today — the grant is recorded and will apply once a reader exists'
                   : 'This capability is not in the loaded catalogue — enforceability cannot be determined yet'"
-              >{{ enforcementOf(g.capability_name) }}</span>
+              >{{ enforcementOf(g.capabilityName) }}</span>
             </td>
             <td class="px-3 py-2.5 border-b border-line text-fg-mute whitespace-nowrap">
-              {{ formatLimit(g.limit_count, g.limit_window_seconds) }}
+              {{ formatLimit(g.limitCount, g.limitWindowSeconds) }}
             </td>
             <td class="px-3 py-2.5 border-b border-line text-fg-mute font-mono text-xs">
-              {{ formatDateTime(g.expires_at) }}
+              {{ formatDateTime(g.expiresAt) }}
             </td>
             <td class="px-3 py-2.5 border-b border-line text-fg-mute">
-              <span v-if="isLegacy(g.granted_by)" class="inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-raised text-fg-mute" title="Written by the legacy grant migration, not a person">
+              <span v-if="isLegacy(g.grantedBy)" class="inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-raised text-fg-mute" title="Written by the legacy grant migration, not a person">
                 Legacy migration
               </span>
-              <span v-else>{{ g.granted_by }}</span>
+              <span v-else>{{ g.grantedBy }}</span>
             </td>
             <td class="px-3 py-2.5 border-b border-line">
-              <span v-if="!g.revoked_at" class="inline-block rounded px-2 py-0.5 text-[11px] font-semibold bg-success-soft text-success-text">Active</span>
-              <span v-else class="inline-block rounded px-2 py-0.5 text-[11px] font-semibold bg-raised text-fg-mute" :title="`Revoked ${formatDateTime(g.revoked_at)} by ${g.revoked_by}`">
-                Revoked {{ formatDateTime(g.revoked_at) }} by {{ g.revoked_by }}
+              <span v-if="!g.revokedAt" class="inline-block rounded px-2 py-0.5 text-[11px] font-semibold bg-success-soft text-success-text">Active</span>
+              <span v-else class="inline-block rounded px-2 py-0.5 text-[11px] font-semibold bg-raised text-fg-mute" :title="`Revoked ${formatDateTime(g.revokedAt)} by ${g.revokedBy}`">
+                Revoked {{ formatDateTime(g.revokedAt) }} by {{ g.revokedBy }}
               </span>
             </td>
             <td class="px-3 py-2.5 border-b border-line whitespace-nowrap">
-              <template v-if="!g.revoked_at">
+              <template v-if="!g.revokedAt">
                 <template v-if="confirmRevokeId === g.id">
                   <AppButton variant="danger" size="sm" class="mr-1" :disabled="revokingId === g.id" :data-testid="`grant-revoke-confirm-${g.id}`" @click="handleRevoke(g.id)">
                     {{ revokingId === g.id ? 'Revoking…' : 'Confirm' }}
