@@ -253,6 +253,11 @@ function isLegacy(grantedBy: string): boolean {
           </td>
           <td class="px-3 py-2.5 border-b border-line text-fg-mute">
             {{ g.mode }}
+            <span
+              v-if="g.revoked_at"
+              class="inline-block rounded px-1.5 py-0.5 ml-1 text-[10px] font-semibold uppercase tracking-wide bg-raised text-fg-mute"
+              :data-testid="`grant-mode-revoked-${g.id}`"
+            >Revoked</span>
           </td>
           <td class="px-3 py-2.5 border-b border-line">
             <span

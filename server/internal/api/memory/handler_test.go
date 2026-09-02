@@ -213,6 +213,73 @@ func TestCreateEntryThenSearchFindsIt(t *testing.T) {
 	require.Len(t, decodeSlice(t, w), 1)
 }
 
+// TestSearchEntriesSpaceIDBrowsesWithoutQueryText proves the browse path: a
+// spaceId parameter lists that space's valid entries even though the query
+// text is blank — retrieve.go returns nothing for an empty query by design,
+// so without this branch a space full of entries would answer "no results"
+// unless the caller already knew a word inside one of them.
+func TestSearchEntriesSpaceIDBrowsesWithoutQueryText(t *testing.T) {
+	mux, _, memRepo, grants, capRepo, ctx := newMux(t)
+	repo.SeedCapabilities(ctx, capRepo)
+	mustAllowGrant(t, grants, ctx, repo.CapabilityMemoryWrite, repo.GrantContextGlobal, "")
+	mustAllowGrant(t, grants, ctx, repo.CapabilityMemoryRead, repo.GrantContextGlobal, "")
+	space, err := memRepo.CreateSpace(ctx, repo.CreateSpaceInput{Slug: "notes", Name: "Notes", Scope: repo.GlobalScope()})
+	require.NoError(t, err)
+	_, err = memRepo.CreateEntry(ctx, repo.CreateEntryInput{
+		SpaceID: space.ID, Summary: "browse me", Content: "no query text needed",
+		Kind: "fact", SourceKind: "user", Confidence: 1,
+	})
+	require.NoError(t, err)
+
+	w := doJSON(t, mux, http.MethodGet, "/api/memory/entries?spaceId="+space.ID, nil)
+	require.Equal(t, http.StatusOK, w.Code)
+	entries := decodeSlice(t, w)
+	require.Len(t, entries, 1)
+	require.Equal(t, "browse me", entries[0].(map[string]any)["summary"])
+}
+
+// TestSearchEntriesSpaceIDDeniedBeforeSpaceLookup is the regression test for
+// the space-existence oracle on the browse path: without a memory.read grant,
+// a real space id and a made-up one must come back with the identical status
+// and body — otherwise an ungranted caller could tell them apart.
+func TestSearchEntriesSpaceIDDeniedBeforeSpaceLookup(t *testing.T) {
+	mux, _, memRepo, grants, capRepo, ctx := newMux(t)
+	repo.SeedCapabilities(ctx, capRepo)
+	mustAllowGrant(t, grants, ctx, repo.CapabilityMemoryWrite, repo.GrantContextGlobal, "")
+	space, err := memRepo.CreateSpace(ctx, repo.CreateSpaceInput{Slug: "notes", Name: "Notes", Scope: repo.GlobalScope()})
+	require.NoError(t, err)
+
+	wReal := doJSON(t, mux, http.MethodGet, "/api/memory/entries?spaceId="+space.ID, nil)
+	wFake := doJSON(t, mux, http.MethodGet, "/api/memory/entries?spaceId=does-not-exist", nil)
+
+	require.Equal(t, http.StatusForbidden, wReal.Code)
+	require.Equal(t, http.StatusForbidden, wFake.Code)
+	require.Equal(t, wFake.Code, wReal.Code)
+	require.Equal(t, wFake.Body.String(), wReal.Body.String())
+}
+
+// TestSearchEntriesSpaceIDFailsClosedOnScopeMismatch proves a grant valid in
+// one scope cannot read a space that belongs to a different scope by passing
+// its id: the mismatch answers 404, the same status a missing space answers,
+// never the entries and never 403.
+func TestSearchEntriesSpaceIDFailsClosedOnScopeMismatch(t *testing.T) {
+	mux, _, memRepo, grants, capRepo, ctx := newMux(t)
+	repo.SeedCapabilities(ctx, capRepo)
+	mustAllowGrant(t, grants, ctx, repo.CapabilityMemoryWrite, repo.GrantContextGlobal, "")
+	mustAllowGrant(t, grants, ctx, repo.CapabilityMemoryRead, repo.GrantContextGlobal, "")
+
+	space, err := memRepo.CreateSpace(ctx, repo.CreateSpaceInput{Slug: "notes", Name: "Notes", Scope: repo.ProjectScope("/path/A")})
+	require.NoError(t, err)
+	_, err = memRepo.CreateEntry(ctx, repo.CreateEntryInput{
+		SpaceID: space.ID, Summary: "a-only", Content: "a-only detail",
+		Kind: "fact", SourceKind: "user", Confidence: 1,
+	})
+	require.NoError(t, err)
+
+	w := doJSON(t, mux, http.MethodGet, "/api/memory/entries?spaceId="+space.ID+"&scope=project&scopeRef=/path/B", nil)
+	require.Equal(t, http.StatusNotFound, w.Code)
+}
+
 func TestSearchEntriesFailsClosedOnUnparseableScope(t *testing.T) {
 	mux, _, _, _, capRepo, ctx := newMux(t)
 	repo.SeedCapabilities(ctx, capRepo)

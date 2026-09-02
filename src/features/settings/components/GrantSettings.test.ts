@@ -199,6 +199,17 @@ describe('grantSettings', () => {
     expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('unknown capability'))
   })
 
+  it('marks a revoked grant next to its mode, not only in the status column', () => {
+    grants.value = [
+      { ...baseGrant, id: 'g1' },
+      { ...baseGrant, id: 'g2', revoked_at: '2026-02-01T00:00:00Z', revoked_by: 'alex' },
+    ]
+    const wrapper = mount(GrantSettings, { attachTo: document.body })
+
+    expect(wrapper.get('[data-testid="grant-mode-revoked-g2"]').text()).toContain('Revoked')
+    expect(wrapper.find('[data-testid="grant-mode-revoked-g1"]').exists()).toBe(false)
+  })
+
   it('revokes a grant via DELETE and reflects the revoked state', async () => {
     const wrapper = mount(GrantSettings, { attachTo: document.body })
 
