@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 import GrantSettings from '@/features/settings/components/GrantSettings.vue'
 import { useGrants } from '@/features/settings/composables/useGrants'
+import { formatDateTime } from '@/utils/format'
 
 vi.mock('@/features/settings/composables/useGrants', async () => {
   const actual = await vi.importActual<typeof import('@/features/settings/composables/useGrants')>('@/features/settings/composables/useGrants')
@@ -209,6 +210,32 @@ describe('grantSettings', () => {
 
     expect(wrapper.get('[data-testid="grant-mode-revoked-g2"]').text()).toContain('Revoked')
     expect(wrapper.find('[data-testid="grant-mode-revoked-g1"]').exists()).toBe(false)
+  })
+
+  it('merges granted-by and status into one Provenance column', () => {
+    grants.value = [
+      { ...baseGrant, id: 'g1', grantedBy: 'cli:alexanderwink' },
+      { ...baseGrant, id: 'g2', grantedBy: 'cli:alexanderwink', revokedAt: '2026-02-01T00:00:00Z', revokedBy: 'alex' },
+      { ...baseGrant, id: 'g3', grantedBy: 'migration:legacy' },
+    ]
+    const wrapper = mount(GrantSettings, { attachTo: document.body })
+
+    const activeRow = wrapper.get('[data-testid="grant-row-g1"]').text()
+    expect(activeRow).toContain('cli:alexanderwink')
+    expect(activeRow).not.toContain('Revoked')
+
+    const revokedRow = wrapper.get('[data-testid="grant-row-g2"]').text()
+    expect(revokedRow).toContain('cli:alexanderwink')
+    expect(revokedRow).toContain(`Revoked ${formatDateTime('2026-02-01T00:00:00Z')} by alex`)
+
+    const legacyRow = wrapper.get('[data-testid="grant-row-g3"]').text()
+    expect(legacyRow).toContain('Legacy migration')
+  })
+
+  it('drops one column when merging Granted By and Status into Provenance', () => {
+    const wrapper = mount(GrantSettings, { attachTo: document.body })
+
+    expect(wrapper.findAll('th')).toHaveLength(9)
   })
 
   it('revokes a grant via DELETE and reflects the revoked state', async () => {

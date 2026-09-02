@@ -205,7 +205,7 @@ function isLegacy(grantedBy: string): boolean {
       No grants yet. Create one to allow a capability in a given context.
     </div>
 
-    <!-- Eleven columns do not fit the settings dialog. Without this the whole
+    <!-- The table is wider than the settings dialog. Without this the whole
          dialog body scrolls sideways and the last columns are simply gone; the
          table scrolls inside its own box instead. -->
     <div v-else-if="!loading && !formVisible" data-testid="grant-table-scroll" class="overflow-x-auto">
@@ -234,10 +234,7 @@ function isLegacy(grantedBy: string): boolean {
               Expires
             </th>
             <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
-              Granted By
-            </th>
-            <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
-              Status
+              Provenance
             </th>
             <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
               Actions
@@ -286,16 +283,15 @@ function isLegacy(grantedBy: string): boolean {
               {{ formatDateTime(g.expiresAt) }}
             </td>
             <td class="px-3 py-2.5 border-b border-line text-fg-mute">
-              <span v-if="isLegacy(g.grantedBy)" class="inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-raised text-fg-mute" title="Written by the legacy grant migration, not a person">
-                Legacy migration
-              </span>
-              <span v-else>{{ g.grantedBy }}</span>
-            </td>
-            <td class="px-3 py-2.5 border-b border-line">
-              <span v-if="!g.revokedAt" class="inline-block rounded px-2 py-0.5 text-[11px] font-semibold bg-success-soft text-success-text">Active</span>
-              <span v-else class="inline-block rounded px-2 py-0.5 text-[11px] font-semibold bg-raised text-fg-mute" :title="`Revoked ${formatDateTime(g.revokedAt)} by ${g.revokedBy}`">
+              <div>
+                <span v-if="isLegacy(g.grantedBy)" class="inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-raised text-fg-mute" title="Written by the legacy grant migration, not a person">
+                  Legacy migration
+                </span>
+                <span v-else>{{ g.grantedBy }}</span>
+              </div>
+              <div v-if="g.revokedAt" class="text-[11px] mt-0.5">
                 Revoked {{ formatDateTime(g.revokedAt) }} by {{ g.revokedBy }}
-              </span>
+              </div>
             </td>
             <td class="px-3 py-2.5 border-b border-line whitespace-nowrap">
               <template v-if="!g.revokedAt">
