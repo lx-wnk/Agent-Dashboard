@@ -411,6 +411,26 @@ func (_u *TaskUpdate) ClearSpawnerID() *TaskUpdate {
 	return _u
 }
 
+// SetRoutineID sets the "routine_id" field.
+func (_u *TaskUpdate) SetRoutineID(v string) *TaskUpdate {
+	_u.mutation.SetRoutineID(v)
+	return _u
+}
+
+// SetNillableRoutineID sets the "routine_id" field if the given value is not nil.
+func (_u *TaskUpdate) SetNillableRoutineID(v *string) *TaskUpdate {
+	if v != nil {
+		_u.SetRoutineID(*v)
+	}
+	return _u
+}
+
+// ClearRoutineID clears the value of the "routine_id" field.
+func (_u *TaskUpdate) ClearRoutineID() *TaskUpdate {
+	_u.mutation.ClearRoutineID()
+	return _u
+}
+
 // SetRank sets the "rank" field.
 func (_u *TaskUpdate) SetRank(v float64) *TaskUpdate {
 	_u.mutation.ResetRank()
@@ -763,6 +783,12 @@ func (_u *TaskUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.SpawnerIDCleared() {
 		_spec.ClearField(task.FieldSpawnerID, field.TypeString)
+	}
+	if value, ok := _u.mutation.RoutineID(); ok {
+		_spec.SetField(task.FieldRoutineID, field.TypeString, value)
+	}
+	if _u.mutation.RoutineIDCleared() {
+		_spec.ClearField(task.FieldRoutineID, field.TypeString)
 	}
 	if value, ok := _u.mutation.Rank(); ok {
 		_spec.SetField(task.FieldRank, field.TypeFloat64, value)
@@ -1356,6 +1382,26 @@ func (_u *TaskUpdateOne) ClearSpawnerID() *TaskUpdateOne {
 	return _u
 }
 
+// SetRoutineID sets the "routine_id" field.
+func (_u *TaskUpdateOne) SetRoutineID(v string) *TaskUpdateOne {
+	_u.mutation.SetRoutineID(v)
+	return _u
+}
+
+// SetNillableRoutineID sets the "routine_id" field if the given value is not nil.
+func (_u *TaskUpdateOne) SetNillableRoutineID(v *string) *TaskUpdateOne {
+	if v != nil {
+		_u.SetRoutineID(*v)
+	}
+	return _u
+}
+
+// ClearRoutineID clears the value of the "routine_id" field.
+func (_u *TaskUpdateOne) ClearRoutineID() *TaskUpdateOne {
+	_u.mutation.ClearRoutineID()
+	return _u
+}
+
 // SetRank sets the "rank" field.
 func (_u *TaskUpdateOne) SetRank(v float64) *TaskUpdateOne {
 	_u.mutation.ResetRank()
@@ -1738,6 +1784,12 @@ func (_u *TaskUpdateOne) sqlSave(ctx context.Context) (_node *Task, err error) {
 	}
 	if _u.mutation.SpawnerIDCleared() {
 		_spec.ClearField(task.FieldSpawnerID, field.TypeString)
+	}
+	if value, ok := _u.mutation.RoutineID(); ok {
+		_spec.SetField(task.FieldRoutineID, field.TypeString, value)
+	}
+	if _u.mutation.RoutineIDCleared() {
+		_spec.ClearField(task.FieldRoutineID, field.TypeString)
 	}
 	if value, ok := _u.mutation.Rank(); ok {
 		_spec.SetField(task.FieldRank, field.TypeFloat64, value)

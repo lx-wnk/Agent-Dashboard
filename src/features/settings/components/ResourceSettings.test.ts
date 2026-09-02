@@ -105,7 +105,7 @@ describe('resourceSettings', () => {
     await flushPromises()
 
     expect(lastUrl()).toBe('/api/resources?kind=routine&scope=global')
-    expect(wrapper.get('[data-testid="resource-empty"]').text()).toContain('No routines registered yet')
+    expect(wrapper.get('[data-testid="resource-empty"]').text()).toContain('A routine is a schedule')
     expect(wrapper.find('[data-testid="resource-error"]').exists()).toBe(false)
   })
 

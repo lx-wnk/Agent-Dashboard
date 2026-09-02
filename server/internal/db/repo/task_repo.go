@@ -56,6 +56,7 @@ type CreateTaskInput struct {
 	Metadata            map[string]any
 	ProjectID           *string
 	SpawnerID           *string
+	RoutineID           *string
 	Rank                *float64
 }
 
@@ -137,7 +138,7 @@ func (r *entTaskRepo) Create(ctx context.Context, in CreateTaskInput) (*ent.Task
 	if in.Metadata != nil {
 		q = q.SetMetadata(in.Metadata)
 	}
-	q = q.SetNillableProjectID(in.ProjectID).SetNillableSpawnerID(in.SpawnerID).SetNillableAutonomy(in.Autonomy)
+	q = q.SetNillableProjectID(in.ProjectID).SetNillableSpawnerID(in.SpawnerID).SetNillableRoutineID(in.RoutineID).SetNillableAutonomy(in.Autonomy)
 	if in.Rank != nil {
 		q = q.SetRank(*in.Rank)
 	} else {

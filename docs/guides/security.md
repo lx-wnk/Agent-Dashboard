@@ -49,9 +49,17 @@ idempotent — see [`PRIVACY.md`](../../PRIVACY.md)). The memory store's
 levels — a memory scope's own context (project or application) plus the
 global fallback, or just the global level alone when the request itself is
 global-scoped — rather than one fixed level. So the six-level hierarchy has
-a second level to rank against for memory today; agent session, task, and
-routine still have no `grants`-table reader, and `SpawnEnforcer` still
-bypasses the table entirely via the mechanism above.
+a second level to rank against for memory today; and a third, `routine`, for
+the subset of those calls that a routine started: a task materialized by a
+schedule carries that schedule's id in `task.routine_id`, and the pipeline's
+memory push passes it to `memory.Gate.Authorize` as an extra context, so a
+grant made with `--scope routine:<schedule id>` decides that push. It is
+still only the push — an MCP tool call cannot be attributed to a routine,
+because the MCP token an agent is spawned with (`DASHBOARD_MCP_TOKEN`, one
+value from config for every task) identifies no task, so `obsidian_write`
+and the memory tools resolve without a routine context. Agent session and
+task still have no `grants`-table reader, and `SpawnEnforcer` still bypasses
+the table entirely via the mechanism above.
 
 A capability also declares which enforcement points it can be applied at,
 and a resolved decision carries that same list forward — but the two wired

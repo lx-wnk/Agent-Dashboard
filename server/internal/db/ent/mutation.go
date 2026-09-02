@@ -22440,6 +22440,7 @@ type TaskMutation struct {
 	metadata                 *map[string]interface{}
 	project_id               *string
 	spawner_id               *string
+	routine_id               *string
 	rank                     *float64
 	addrank                  *float64
 	created_at               *time.Time
@@ -23547,6 +23548,55 @@ func (m *TaskMutation) ResetSpawnerID() {
 	delete(m.clearedFields, task.FieldSpawnerID)
 }
 
+// SetRoutineID sets the "routine_id" field.
+func (m *TaskMutation) SetRoutineID(s string) {
+	m.routine_id = &s
+}
+
+// RoutineID returns the value of the "routine_id" field in the mutation.
+func (m *TaskMutation) RoutineID() (r string, exists bool) {
+	v := m.routine_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRoutineID returns the old "routine_id" field's value of the Task entity.
+// If the Task object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TaskMutation) OldRoutineID(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRoutineID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRoutineID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRoutineID: %w", err)
+	}
+	return oldValue.RoutineID, nil
+}
+
+// ClearRoutineID clears the value of the "routine_id" field.
+func (m *TaskMutation) ClearRoutineID() {
+	m.routine_id = nil
+	m.clearedFields[task.FieldRoutineID] = struct{}{}
+}
+
+// RoutineIDCleared returns if the "routine_id" field was cleared in this mutation.
+func (m *TaskMutation) RoutineIDCleared() bool {
+	_, ok := m.clearedFields[task.FieldRoutineID]
+	return ok
+}
+
+// ResetRoutineID resets all changes to the "routine_id" field.
+func (m *TaskMutation) ResetRoutineID() {
+	m.routine_id = nil
+	delete(m.clearedFields, task.FieldRoutineID)
+}
+
 // SetRank sets the "rank" field.
 func (m *TaskMutation) SetRank(f float64) {
 	m.rank = &f
@@ -23939,7 +23989,7 @@ func (m *TaskMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *TaskMutation) Fields() []string {
-	fields := make([]string, 0, 24)
+	fields := make([]string, 0, 25)
 	if m.slug != nil {
 		fields = append(fields, task.FieldSlug)
 	}
@@ -24003,6 +24053,9 @@ func (m *TaskMutation) Fields() []string {
 	if m.spawner_id != nil {
 		fields = append(fields, task.FieldSpawnerID)
 	}
+	if m.routine_id != nil {
+		fields = append(fields, task.FieldRoutineID)
+	}
 	if m.rank != nil {
 		fields = append(fields, task.FieldRank)
 	}
@@ -24062,6 +24115,8 @@ func (m *TaskMutation) Field(name string) (ent.Value, bool) {
 		return m.ProjectID()
 	case task.FieldSpawnerID:
 		return m.SpawnerID()
+	case task.FieldRoutineID:
+		return m.RoutineID()
 	case task.FieldRank:
 		return m.Rank()
 	case task.FieldCreatedAt:
@@ -24119,6 +24174,8 @@ func (m *TaskMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldProjectID(ctx)
 	case task.FieldSpawnerID:
 		return m.OldSpawnerID(ctx)
+	case task.FieldRoutineID:
+		return m.OldRoutineID(ctx)
 	case task.FieldRank:
 		return m.OldRank(ctx)
 	case task.FieldCreatedAt:
@@ -24281,6 +24338,13 @@ func (m *TaskMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetSpawnerID(v)
 		return nil
+	case task.FieldRoutineID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRoutineID(v)
+		return nil
 	case task.FieldRank:
 		v, ok := value.(float64)
 		if !ok {
@@ -24428,6 +24492,9 @@ func (m *TaskMutation) ClearedFields() []string {
 	if m.FieldCleared(task.FieldSpawnerID) {
 		fields = append(fields, task.FieldSpawnerID)
 	}
+	if m.FieldCleared(task.FieldRoutineID) {
+		fields = append(fields, task.FieldRoutineID)
+	}
 	if m.FieldCleared(task.FieldRank) {
 		fields = append(fields, task.FieldRank)
 	}
@@ -24477,6 +24544,9 @@ func (m *TaskMutation) ClearField(name string) error {
 		return nil
 	case task.FieldSpawnerID:
 		m.ClearSpawnerID()
+		return nil
+	case task.FieldRoutineID:
+		m.ClearRoutineID()
 		return nil
 	case task.FieldRank:
 		m.ClearRank()
@@ -24551,6 +24621,9 @@ func (m *TaskMutation) ResetField(name string) error {
 		return nil
 	case task.FieldSpawnerID:
 		m.ResetSpawnerID()
+		return nil
+	case task.FieldRoutineID:
+		m.ResetRoutineID()
 		return nil
 	case task.FieldRank:
 		m.ResetRank()

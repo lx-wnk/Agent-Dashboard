@@ -114,7 +114,7 @@ func (r *entGrantRepo) Create(ctx context.Context, in CreateGrantInput) (*ent.Gr
 		SetNillableExpiresAt(in.ExpiresAt).
 		SetGrantedBy(in.GrantedBy).
 		SetReason(in.Reason).
-		SetNodeID(defaultNodeID).
+		SetNodeID(DefaultNodeID).
 		Save(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("grant.Create: %w", err)

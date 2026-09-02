@@ -288,6 +288,20 @@ func (_c *TaskCreate) SetNillableSpawnerID(v *string) *TaskCreate {
 	return _c
 }
 
+// SetRoutineID sets the "routine_id" field.
+func (_c *TaskCreate) SetRoutineID(v string) *TaskCreate {
+	_c.mutation.SetRoutineID(v)
+	return _c
+}
+
+// SetNillableRoutineID sets the "routine_id" field if the given value is not nil.
+func (_c *TaskCreate) SetNillableRoutineID(v *string) *TaskCreate {
+	if v != nil {
+		_c.SetRoutineID(*v)
+	}
+	return _c
+}
+
 // SetRank sets the "rank" field.
 func (_c *TaskCreate) SetRank(v float64) *TaskCreate {
 	_c.mutation.SetRank(v)
@@ -636,6 +650,10 @@ func (_c *TaskCreate) createSpec() (*Task, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.SpawnerID(); ok {
 		_spec.SetField(task.FieldSpawnerID, field.TypeString, value)
 		_node.SpawnerID = &value
+	}
+	if value, ok := _c.mutation.RoutineID(); ok {
+		_spec.SetField(task.FieldRoutineID, field.TypeString, value)
+		_node.RoutineID = &value
 	}
 	if value, ok := _c.mutation.Rank(); ok {
 		_spec.SetField(task.FieldRank, field.TypeFloat64, value)
@@ -1104,6 +1122,24 @@ func (u *TaskUpsert) UpdateSpawnerID() *TaskUpsert {
 // ClearSpawnerID clears the value of the "spawner_id" field.
 func (u *TaskUpsert) ClearSpawnerID() *TaskUpsert {
 	u.SetNull(task.FieldSpawnerID)
+	return u
+}
+
+// SetRoutineID sets the "routine_id" field.
+func (u *TaskUpsert) SetRoutineID(v string) *TaskUpsert {
+	u.Set(task.FieldRoutineID, v)
+	return u
+}
+
+// UpdateRoutineID sets the "routine_id" field to the value that was provided on create.
+func (u *TaskUpsert) UpdateRoutineID() *TaskUpsert {
+	u.SetExcluded(task.FieldRoutineID)
+	return u
+}
+
+// ClearRoutineID clears the value of the "routine_id" field.
+func (u *TaskUpsert) ClearRoutineID() *TaskUpsert {
+	u.SetNull(task.FieldRoutineID)
 	return u
 }
 
@@ -1590,6 +1626,27 @@ func (u *TaskUpsertOne) UpdateSpawnerID() *TaskUpsertOne {
 func (u *TaskUpsertOne) ClearSpawnerID() *TaskUpsertOne {
 	return u.Update(func(s *TaskUpsert) {
 		s.ClearSpawnerID()
+	})
+}
+
+// SetRoutineID sets the "routine_id" field.
+func (u *TaskUpsertOne) SetRoutineID(v string) *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetRoutineID(v)
+	})
+}
+
+// UpdateRoutineID sets the "routine_id" field to the value that was provided on create.
+func (u *TaskUpsertOne) UpdateRoutineID() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateRoutineID()
+	})
+}
+
+// ClearRoutineID clears the value of the "routine_id" field.
+func (u *TaskUpsertOne) ClearRoutineID() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.ClearRoutineID()
 	})
 }
 
@@ -2249,6 +2306,27 @@ func (u *TaskUpsertBulk) UpdateSpawnerID() *TaskUpsertBulk {
 func (u *TaskUpsertBulk) ClearSpawnerID() *TaskUpsertBulk {
 	return u.Update(func(s *TaskUpsert) {
 		s.ClearSpawnerID()
+	})
+}
+
+// SetRoutineID sets the "routine_id" field.
+func (u *TaskUpsertBulk) SetRoutineID(v string) *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetRoutineID(v)
+	})
+}
+
+// UpdateRoutineID sets the "routine_id" field to the value that was provided on create.
+func (u *TaskUpsertBulk) UpdateRoutineID() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateRoutineID()
+	})
+}
+
+// ClearRoutineID clears the value of the "routine_id" field.
+func (u *TaskUpsertBulk) ClearRoutineID() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.ClearRoutineID()
 	})
 }
 

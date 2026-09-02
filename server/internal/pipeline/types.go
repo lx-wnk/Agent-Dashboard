@@ -164,7 +164,11 @@ type StageContext struct {
 	// one memory read in the system with no capability gate. Nil disables
 	// the push the same way a nil InjectMemory does; a denial degrades to no
 	// memory block rather than failing the spawn (see injectMemoryBlock).
-	AuthorizeMemory func(ctx context.Context, scope repo.Scope) error
+	//
+	// routineID names the routine whose firing produced this task, so a
+	// grant made against that routine is in scope for the push. Empty for
+	// a task a human created.
+	AuthorizeMemory func(ctx context.Context, scope repo.Scope, routineID string) error
 }
 
 // StageHandler is implemented by each pipeline stage.
@@ -324,7 +328,7 @@ type OrchestratorOptions struct {
 	// gates. Production wires a closure over repo.CapabilityRepo/GrantRepo
 	// calling memory.Authorize at DI time (serverapp/di_pipeline.go); nil
 	// disables the push the same way a nil InjectMemory does.
-	AuthorizeMemory func(ctx context.Context, scope repo.Scope) error
+	AuthorizeMemory func(ctx context.Context, scope repo.Scope, routineID string) error
 }
 
 // StageFailedInfo carries failure metadata to the OnStageFailed callback.

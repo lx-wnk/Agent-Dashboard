@@ -60,6 +60,8 @@ type Task struct {
 	ProjectID *string `json:"project_id,omitempty"`
 	// SpawnerID holds the value of the "spawner_id" field.
 	SpawnerID *string `json:"spawner_id,omitempty"`
+	// RoutineID holds the value of the "routine_id" field.
+	RoutineID *string `json:"routine_id,omitempty"`
 	// Rank holds the value of the "rank" field.
 	Rank *float64 `json:"rank,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
@@ -136,7 +138,7 @@ func (*Task) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullFloat64)
 		case task.FieldMaxIterations, task.FieldTokenBudget, task.FieldCostBudgetCents, task.FieldStageTimeoutSeconds:
 			values[i] = new(sql.NullInt64)
-		case task.FieldID, task.FieldSlug, task.FieldTitle, task.FieldDescription, task.FieldCwd, task.FieldWorktreePath, task.FieldSourceBranch, task.FieldTargetBranch, task.FieldCurrentStage, task.FieldPriority, task.FieldUserID, task.FieldParentTaskID, task.FieldAutonomy, task.FieldProjectID, task.FieldSpawnerID:
+		case task.FieldID, task.FieldSlug, task.FieldTitle, task.FieldDescription, task.FieldCwd, task.FieldWorktreePath, task.FieldSourceBranch, task.FieldTargetBranch, task.FieldCurrentStage, task.FieldPriority, task.FieldUserID, task.FieldParentTaskID, task.FieldAutonomy, task.FieldProjectID, task.FieldSpawnerID, task.FieldRoutineID:
 			values[i] = new(sql.NullString)
 		case task.FieldCreatedAt, task.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -299,6 +301,13 @@ func (_m *Task) assignValues(columns []string, values []any) error {
 				_m.SpawnerID = new(string)
 				*_m.SpawnerID = value.String
 			}
+		case task.FieldRoutineID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field routine_id", values[i])
+			} else if value.Valid {
+				_m.RoutineID = new(string)
+				*_m.RoutineID = value.String
+			}
 		case task.FieldRank:
 			if value, ok := values[i].(*sql.NullFloat64); !ok {
 				return fmt.Errorf("unexpected type %T for field rank", values[i])
@@ -454,6 +463,11 @@ func (_m *Task) String() string {
 	builder.WriteString(", ")
 	if v := _m.SpawnerID; v != nil {
 		builder.WriteString("spawner_id=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.RoutineID; v != nil {
+		builder.WriteString("routine_id=")
 		builder.WriteString(*v)
 	}
 	builder.WriteString(", ")

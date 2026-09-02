@@ -439,9 +439,13 @@ func BuildSpawnEnv(opts SpawnAgentOptions) []string {
 	// Final defense-in-depth pass: secrets must never leak even if a future
 	// code path puts them into `merged` above. The Stage-1 and Stage-2 loops
 	// already filter them, but this guarantees the invariant at the exit.
-	// DASHBOARD_MCP_TOKEN is deliberately NOT in deniedEnvKeys — it is a
-	// per-task credential injected at Stage 3 above, and this loop must not
-	// delete it or the spawned agent's channel bridge loses /api/mcp access.
+	// DASHBOARD_MCP_TOKEN is deliberately NOT in deniedEnvKeys — it is
+	// injected at Stage 3 above, and this loop must not delete it or the
+	// spawned agent's channel bridge loses /api/mcp access. It is one value
+	// from config (Options.MCPToken, wired once in serverapp/di_pipeline.go),
+	// handed unchanged to every spawn: it identifies the dashboard, not this
+	// task, so nothing server-side can attribute an MCP call to the task or
+	// the routine that made it.
 	for denied := range deniedEnvKeys {
 		delete(merged, denied)
 	}

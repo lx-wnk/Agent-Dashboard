@@ -56,6 +56,8 @@ const (
 	FieldProjectID = "project_id"
 	// FieldSpawnerID holds the string denoting the spawner_id field in the database.
 	FieldSpawnerID = "spawner_id"
+	// FieldRoutineID holds the string denoting the routine_id field in the database.
+	FieldRoutineID = "routine_id"
 	// FieldRank holds the string denoting the rank field in the database.
 	FieldRank = "rank"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
@@ -126,6 +128,7 @@ var Columns = []string{
 	FieldMetadata,
 	FieldProjectID,
 	FieldSpawnerID,
+	FieldRoutineID,
 	FieldRank,
 	FieldCreatedAt,
 	FieldUpdatedAt,
@@ -274,6 +277,11 @@ func ByProjectID(opts ...sql.OrderTermOption) OrderOption {
 // BySpawnerID orders the results by the spawner_id field.
 func BySpawnerID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldSpawnerID, opts...).ToFunc()
+}
+
+// ByRoutineID orders the results by the routine_id field.
+func ByRoutineID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRoutineID, opts...).ToFunc()
 }
 
 // ByRank orders the results by the rank field.

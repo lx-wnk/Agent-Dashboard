@@ -156,9 +156,9 @@ func provideOrchestrator(
 		// the pipeline. The push reads across the whole scope rather than
 		// one space, so it authorizes with the empty wildcard value, same as
 		// memory_search.
-		AuthorizeMemory: func(ctx context.Context, scope repo.Scope) error {
+		AuthorizeMemory: func(ctx context.Context, scope repo.Scope, routineID string) error {
 			gate := memory.Gate{Capabilities: capabilityRepo, Grants: grantRepo, GrantUsage: grantUsageRepo}
-			return gate.Authorize(ctx, repo.CapabilityMemoryRead, "", scope)
+			return gate.Authorize(ctx, repo.CapabilityMemoryRead, "", scope, memory.RoutineContext(routineID)...)
 		},
 		// BuildTaskPayload is called inside applyTransitionWrites, bound to the
 		// active transaction, so the returned snapshot reflects the just-applied

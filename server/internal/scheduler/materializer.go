@@ -27,6 +27,7 @@ type NewTaskSpec struct {
 	CostBudgetCents *int
 	ProjectID       string
 	SpawnerID       string
+	RoutineID       string
 	UserID          *string
 	Metadata        map[string]any
 }
@@ -83,6 +84,9 @@ func (m *Materializer) Materialize(ctx context.Context, s *ent.TaskSchedule, fir
 		CostBudgetCents: s.CostBudgetCents,
 		UserID:          s.UserID,
 		Metadata:        s.Metadata,
+		// The schedule IS the routine: its id is what a "routine" capability
+		// grant is anchored to, so every task it materializes carries it.
+		RoutineID: s.ID,
 	}
 	if s.ProjectID != nil {
 		spec.ProjectID = *s.ProjectID

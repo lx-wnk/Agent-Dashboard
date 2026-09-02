@@ -336,10 +336,14 @@ type CreateTaskParams struct {
 	CostBudgetCents *int
 	ProjectID       string // empty = unset
 	SpawnerID       string // empty = unset
-	UserID          *string
-	Metadata        map[string]any
-	Autonomy        *string
-	PlanMode        *bool
+	// RoutineID is the task_schedule that materialized this task, empty for
+	// a task a human created. Deliberately absent from the HTTP create body:
+	// the scheduler is the only writer (see the schema field's comment).
+	RoutineID string
+	UserID    *string
+	Metadata  map[string]any
+	Autonomy  *string
+	PlanMode  *bool
 }
 
 // CreateTaskFromInput is the reusable task-creation core: it checks slug
@@ -398,6 +402,14 @@ func (h *Handler) CreateTaskFromInput(ctx context.Context, p CreateTaskParams) (
 		spawnerIDPtr = &sid
 	}
 
+	// No existence check, unlike project and spawner above: the scheduler is
+	// the only caller that sets this and it holds the schedule already.
+	var routineIDPtr *string
+	if p.RoutineID != "" {
+		rid := p.RoutineID
+		routineIDPtr = &rid
+	}
+
 	priority := p.Priority
 	if priority == "" {
 		priority = db.DefaultPriority
@@ -440,6 +452,7 @@ func (h *Handler) CreateTaskFromInput(ctx context.Context, p CreateTaskParams) (
 		CostBudgetCents:     costBudget,
 		ProjectID:           projectIDPtr,
 		SpawnerID:           spawnerIDPtr,
+		RoutineID:           routineIDPtr,
 		Autonomy:            p.Autonomy,
 		Metadata:            p.Metadata,
 		PlanMode:            planMode,
