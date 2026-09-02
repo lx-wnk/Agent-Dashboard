@@ -2,6 +2,7 @@
 import type { CreateScheduleBody, SchedulePreview, ScheduleView, UpdateScheduleBody } from '../composables/useSchedules'
 import { ref, watch } from 'vue'
 import { createSchedule, previewSchedule, updateSchedule } from '../composables/useSchedules'
+import { formatDateTime } from '../utils/format'
 import { TASK_PRIORITY_OPTIONS } from '../utils/taskOptions'
 import AppButton from './ui/AppButton.vue'
 import AppInput from './ui/AppInput.vue'
@@ -62,15 +63,6 @@ function schedulePreview() {
 
 // Both the phrase and the timezone affect the parsed cron + next runs.
 watch([nlText, timezone], schedulePreview)
-
-function formatNextRun(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString()
-  }
-  catch {
-    return iso
-  }
-}
 
 async function onSubmit() {
   submitError.value = null
@@ -158,7 +150,7 @@ async function onSubmit() {
             :key="i"
             class="text-fg-mute text-xs font-mono"
           >
-            {{ formatNextRun(run) }}
+            {{ formatDateTime(run) }}
           </li>
         </ul>
       </div>

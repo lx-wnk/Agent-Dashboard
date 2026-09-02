@@ -17,9 +17,10 @@ import { useInjectedTask, useInjectedTaskDetails } from '@/features/pipeline/com
 import { completedPhasesFromTurns, fetchRefineTurns, lastAssistantContent } from '@/features/pipeline/composables/useRefinementChat'
 import { useTaskAssignment } from '@/features/pipeline/composables/useTaskAssignment'
 import { refreshTask } from '@/features/pipeline/composables/useTasks'
+import { formatDateTime } from '@/utils/format'
 import { STAGE_LABELS } from '@/utils/stageLabels'
 import { runStatusLabel, runStatusTone } from '@/utils/statusColors'
-import { activeRuntime, formatCents, formatTaskDate, taskRuntime } from '@/utils/taskFormat'
+import { activeRuntime, formatCents, taskRuntime } from '@/utils/taskFormat'
 import { TASK_AUTONOMY_OPTIONS } from '@/utils/taskOptions'
 
 const emit = defineEmits<{ openChat: [task: PipelineTask] }>()
@@ -220,7 +221,7 @@ watch(
         <dt class="text-fg-mute text-[11px] uppercase tracking-[0.5px]">
           Created
         </dt><dd class="text-fg">
-          {{ formatTaskDate(task.createdAt) }}
+          {{ formatDateTime(task.createdAt) }}
         </dd>
       </div>
       <div class="contents">
@@ -393,8 +394,8 @@ watch(
           {{ runStatusLabel(latestStageRun.status) }}
         </AppChip>
         <span class="text-[11px] text-fg-mute ml-auto">
-          {{ formatTaskDate(latestStageRun.startedAt) }}
-          <template v-if="latestStageRun.endedAt"> → {{ formatTaskDate(latestStageRun.endedAt) }}</template>
+          {{ formatDateTime(latestStageRun.startedAt) }}
+          <template v-if="latestStageRun.endedAt"> → {{ formatDateTime(latestStageRun.endedAt) }}</template>
         </span>
       </div>
       <AgentChatStream

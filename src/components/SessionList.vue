@@ -2,7 +2,7 @@
 import type { SessionInfo } from '../composables/useSessions'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useSessions } from '../composables/useSessions'
-import { formatCost, shortModel } from '../utils/format'
+import { formatCost, formatRelativeThenDate, shortModel } from '../utils/format'
 import SessionDetailModal from './SessionDetailModal.vue'
 import AppModal from './ui/AppModal.vue'
 import AppModalHeader from './ui/AppModalHeader.vue'
@@ -27,21 +27,6 @@ const filtered = computed(() => {
     || (s.firstPrompt && s.firstPrompt.toLowerCase().includes(q)),
   )
 })
-
-function formatDate(iso: string): string {
-  const d = new Date(iso)
-  const now = new Date()
-  const diffMs = now.getTime() - d.getTime()
-  const diffH = diffMs / 3600000
-
-  if (diffH < 1)
-    return `${Math.round(diffMs / 60000)}m ago`
-  if (diffH < 24)
-    return `${Math.round(diffH)}h ago`
-  if (diffH < 168)
-    return `${Math.round(diffH / 24)}d ago`
-  return d.toLocaleDateString()
-}
 
 function shortenPath(path: string): string {
   if (props.homeDir && path.startsWith(props.homeDir)) {
@@ -119,7 +104,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
             <span v-if="s.model" class="text-[10px] px-1.5 py-px rounded bg-raised text-fg-mute uppercase tracking-wide font-mono">{{ shortModel(s.model) }}</span>
             <span v-if="s.costEstimate > 0" class="text-[10px] px-1.5 py-px rounded bg-raised text-green-600 dark:text-green-400 font-mono">{{ formatCost(s.costEstimate) }}</span>
             <span class="text-[10px] px-1.5 py-px rounded bg-raised text-fg-mute font-mono" :title="s.sessionId">{{ s.sessionId.slice(0, 8) }}</span>
-            <span class="ml-auto text-[10px] text-fg-mute">{{ formatDate(s.lastModified) }}</span>
+            <span class="ml-auto text-[10px] text-fg-mute">{{ formatRelativeThenDate(s.lastModified) }}</span>
           </div>
         </div>
       </div>

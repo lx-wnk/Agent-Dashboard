@@ -1,11 +1,5 @@
 import type { PipelineTask, StageRun } from '../types'
 
-export function formatTaskDate(iso: string | null): string {
-  if (!iso)
-    return '—'
-  return new Date(iso).toLocaleString()
-}
-
 export function formatCents(cents: number): string {
   if (cents === 0)
     return '—'

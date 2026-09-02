@@ -115,8 +115,37 @@ export function formatScope(kind: string, ref: string): string {
   return ref ? `${kind}: ${ref}` : kind
 }
 
-export function formatDateTime(iso: string | null): string {
+// An unparseable timestamp falls back to the raw string. Neither the Date
+// constructor nor toLocaleString throws on one — they yield the literal
+// "Invalid Date" — so a try/catch around this can never fire and the check has
+// to be explicit.
+export function formatDateTime(iso: string | null | undefined): string {
   if (!iso)
     return '—'
+  if (Number.isNaN(Date.parse(iso)))
+    return iso
   return new Date(iso).toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+const HOUR_MS = 3600000
+
+// Recent timestamps read as an age ("20m ago"), older ones as a plain date:
+// for a session list, how long ago is the question up to about a week out, and
+// the calendar date after that. nowMs is injectable so the boundaries are
+// testable, matching secondsSince above.
+export function formatRelativeThenDate(iso: string | null | undefined, nowMs: number = Date.now()): string {
+  if (!iso)
+    return '—'
+  const t = Date.parse(iso)
+  if (Number.isNaN(t))
+    return iso
+  const diffMs = nowMs - t
+  const diffH = diffMs / HOUR_MS
+  if (diffH < 1)
+    return `${Math.round(diffMs / 60000)}m ago`
+  if (diffH < 24)
+    return `${Math.round(diffH)}h ago`
+  if (diffH < 168)
+    return `${Math.round(diffH / 24)}d ago`
+  return new Date(t).toLocaleDateString()
 }

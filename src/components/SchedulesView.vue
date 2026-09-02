@@ -3,6 +3,7 @@ import type { ScheduleView } from '../composables/useSchedules'
 import { ref, watch } from 'vue'
 import { deleteSchedule, runScheduleNow, updateSchedule, useSchedules } from '../composables/useSchedules'
 import { toast } from '../composables/useToast'
+import { formatDateTime } from '../utils/format'
 import ScheduleForm from './ScheduleForm.vue'
 import AppButton from './ui/AppButton.vue'
 import AppModal from './ui/AppModal.vue'
@@ -67,17 +68,6 @@ async function onDelete(s: ScheduleView) {
     toast.error((err as Error).message)
   }
 }
-
-function formatDate(iso: string | null | undefined): string {
-  if (!iso)
-    return '—'
-  try {
-    return new Date(iso).toLocaleString()
-  }
-  catch {
-    return iso
-  }
-}
 </script>
 
 <template>
@@ -120,8 +110,8 @@ function formatDate(iso: string | null | undefined): string {
           </div>
           <div class="flex gap-4 mt-1 text-xs text-fg-faint flex-wrap">
             <span class="font-mono">{{ s.cronExpr }}</span>
-            <span>Next: {{ formatDate(s.nextRunAt) }}</span>
-            <span v-if="s.lastRunAt">Last: {{ formatDate(s.lastRunAt) }}</span>
+            <span>Next: {{ formatDateTime(s.nextRunAt) }}</span>
+            <span v-if="s.lastRunAt">Last: {{ formatDateTime(s.lastRunAt) }}</span>
           </div>
         </div>
 
