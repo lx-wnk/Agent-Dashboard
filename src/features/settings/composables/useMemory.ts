@@ -61,6 +61,10 @@ export interface MemoryScope {
   scopeRef: string
 }
 
+// 'browse' names the space, 'search' names the query — the two are otherwise
+// the same blank list in `entries`.
+export type MemoryEntriesView = 'search' | 'browse'
+
 const GLOBAL_SCOPE: MemoryScope = { scopeKind: 'global', scopeRef: '' }
 
 // States only what is known. handler.go's authorize() maps every Gate.Authorize
@@ -107,6 +111,11 @@ export function useMemory() {
   // asked" and "found nothing" are one identical empty list.
   const searching = ref(false)
   const searched = ref(false)
+  // Search and browse both write `entries`, so the panel otherwise cannot
+  // tell "searched and found nothing" from "browsed this space and it is
+  // empty" — two different sentences need a subject, and only browse has one.
+  const entriesView = ref<MemoryEntriesView>('search')
+  const browsedSpaceId = ref<string | null>(null)
 
   // True while a non-global scope has no ref yet — the request below is
   // deliberately held rather than fired (see the guard in fetchSpaces and
@@ -191,6 +200,11 @@ export function useMemory() {
 
   async function searchEntries(): Promise<void> {
     const batch = ++latestSearch
+    // A genuine search supersedes any browse in progress or on screen — both
+    // write `entries`, and a stale "Browsing X" banner from before this call
+    // would otherwise survive under the search's own results.
+    entriesView.value = 'search'
+    browsedSpaceId.value = null
     if (held.value) {
       entries.value = []
       searchError.value = null
@@ -235,6 +249,69 @@ export function useMemory() {
     searching.value = false
   }
 
+  // Mirrors searchEntries exactly: same held guard, same latestSearch batch
+  // (a browse and a search both write `entries`, so whichever answers last
+  // has to win regardless of which one the user started second), same
+  // answered-gates-searched rule for "found nothing".
+  async function browseSpace(spaceId: string): Promise<void> {
+    const batch = ++latestSearch
+    entriesView.value = 'browse'
+    browsedSpaceId.value = spaceId
+    if (held.value) {
+      entries.value = []
+      searchError.value = null
+      searchDenied.value = null
+      searched.value = false
+      return
+    }
+    searchError.value = null
+    searchDenied.value = null
+    searching.value = true
+    let hits: MemoryEntryHit[] = []
+    let refusal: string | null = null
+    let failure: string | null = null
+    let answered = false
+    try {
+      const params = scopeParams(scope.value)
+      params.set('spaceId', spaceId)
+      const res = await fetch(`/api/memory/entries?${params.toString()}`)
+      if (res.status === 403) {
+        refusal = await readErrorMessage(res, READ_DENIED_FALLBACK)
+      }
+      else if (!res.ok) {
+        throw new Error(await readErrorMessage(res, `HTTP ${res.status}`))
+      }
+      else {
+        hits = await res.json()
+        answered = true
+      }
+    }
+    catch (e) {
+      failure = errorMessage(e, 'Failed to browse memory space')
+    }
+    if (batch !== latestSearch)
+      return
+
+    entries.value = hits
+    searchDenied.value = refusal
+    searchError.value = failure
+    searched.value = answered
+    searching.value = false
+  }
+
+  // The only way out of a browse: bumps the same batch counter so a request
+  // still in flight cannot land afterwards and reopen the view it just left.
+  function leaveBrowse(): void {
+    latestSearch++
+    entriesView.value = 'search'
+    browsedSpaceId.value = null
+    entries.value = []
+    searchError.value = null
+    searchDenied.value = null
+    searched.value = false
+    searching.value = false
+  }
+
   async function setScope(next: MemoryScope): Promise<void> {
     scope.value = next
     // Bumped even though no search is fired here: a search still in flight
@@ -247,6 +324,10 @@ export function useMemory() {
     searchError.value = null
     searchDenied.value = null
     searched.value = false
+    // Same reason: a "Browsing X" banner for a space in the scope just left
+    // would otherwise survive under the new scope's heading.
+    entriesView.value = 'search'
+    browsedSpaceId.value = null
     // The dropped search will never reach its own reset, and "Searching
     // entries..." would otherwise stay on screen for good.
     searching.value = false
@@ -322,5 +403,5 @@ export function useMemory() {
     void fetchSpaces()
   })
 
-  return { spaces, globalSpaces, entries, scope, searchText, loading, error, searchError, denied, searchDenied, searching, searched, held, fetchSpaces, searchEntries, setScope, createSpace, createEntry, supersedeEntry, expireEntry }
+  return { spaces, globalSpaces, entries, scope, searchText, loading, error, searchError, denied, searchDenied, searching, searched, entriesView, browsedSpaceId, held, fetchSpaces, searchEntries, browseSpace, leaveBrowse, setScope, createSpace, createEntry, supersedeEntry, expireEntry }
 }

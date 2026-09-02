@@ -22,9 +22,13 @@ const {
   searchDenied,
   searching,
   searched,
+  entriesView,
+  browsedSpaceId,
   held,
   fetchSpaces,
   searchEntries,
+  browseSpace,
+  leaveBrowse,
   setScope,
   createSpace,
   createEntry,
@@ -87,8 +91,11 @@ const entriesStatus = computed<{ testid: string, text: string } | null>(() => {
     return null
   if (!searched.value)
     return { testid: 'memory-entries-unsearched', text: 'No search has been run yet.' }
-  if (!entries.value.length)
-    return { testid: 'memory-entries-empty', text: 'No entries matched this search.' }
+  if (!entries.value.length) {
+    return entriesView.value === 'browse'
+      ? { testid: 'memory-entries-browse-empty', text: 'This space has no entries yet.' }
+      : { testid: 'memory-entries-empty', text: 'No entries matched this search.' }
+  }
   return null
 })
 
@@ -395,7 +402,14 @@ async function handleExpire(id: string) {
         <tbody>
           <tr v-for="s in spaces" :key="s.id" :data-testid="`memory-space-${s.id}`">
             <td class="px-3 py-2.5 border-b border-line text-fg font-mono text-xs">
-              {{ s.slug }}
+              <button
+                type="button"
+                :data-testid="`memory-space-browse-${s.id}`"
+                class="cursor-pointer underline decoration-dotted underline-offset-2 hover:text-info-text focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent rounded"
+                @click="browseSpace(s.id)"
+              >
+                {{ s.slug }}
+              </button>
             </td>
             <td class="px-3 py-2.5 border-b border-line text-fg">
               {{ s.name || '—' }}
@@ -434,8 +448,16 @@ async function handleExpire(id: string) {
           data-testid="memory-entry-space"
           type="text"
           placeholder="space slug"
+          list="memory-entry-space-options"
           class="bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg font-mono focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
         >
+        <!-- Suggestions only, never a constraint: createEntry deliberately
+             never creates a space on the fly, but memory.read and
+             memory.write are separate grants — a scope with a denied or
+             empty spaces table must still accept a typed slug. -->
+        <datalist id="memory-entry-space-options" data-testid="memory-entry-space-options">
+          <option v-for="s in spaces" :key="s.id" :value="s.slug" />
+        </datalist>
       </div>
       <div class="flex flex-col gap-1">
         <label for="memory-entry-summary" class="text-[10px] font-semibold uppercase tracking-wider text-fg-mute">Summary</label>
@@ -479,12 +501,12 @@ async function handleExpire(id: string) {
           class="w-full"
         />
       </div>
+      <div v-if="entryFailure" data-testid="memory-entry-error" role="alert" class="col-span-2 rounded border border-danger-line bg-danger-soft text-danger-text px-3 py-2 text-xs">
+        {{ failureText(entryFailure) }}
+      </div>
       <AppButton variant="info" data-testid="memory-entry-submit" :disabled="entrySaving" class="col-span-2 justify-self-start" @click="handleCreateEntry">
         {{ entrySaving ? 'Creating…' : 'Create entry' }}
       </AppButton>
-    </div>
-    <div v-if="entryFailure" data-testid="memory-entry-error" role="alert" class="rounded border border-danger-line bg-danger-soft text-danger-text px-3 py-2 text-xs">
-      {{ failureText(entryFailure) }}
     </div>
 
     <!-- Sibling of the state chain above, not nested inside it: the spaces
@@ -504,6 +526,16 @@ async function handleExpire(id: string) {
       >
       <AppButton data-testid="memory-search-submit" @click="searchEntries()">
         Search
+      </AppButton>
+    </div>
+
+    <!-- Browsing replaces the search's results with one space's entries; the
+         banner names which space so leaving it (back to whatever the search
+         box still holds) is not a guess. -->
+    <div v-if="entriesView === 'browse'" data-testid="memory-browse-banner" class="flex items-center gap-2 text-xs text-fg-mute">
+      <span>Browsing <code>{{ spaceLabel(browsedSpaceId ?? '') }}</code></span>
+      <AppButton size="sm" variant="ghost" data-testid="memory-browse-leave" @click="leaveBrowse()">
+        Back to search
       </AppButton>
     </div>
 
