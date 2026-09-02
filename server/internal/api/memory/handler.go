@@ -141,6 +141,26 @@ func toMemorySearchHitResponses(entries []mem.Entry) []memorySearchHitResponse {
 	return resp
 }
 
+// toMemorySearchHitResponsesFromEntries maps ent.MemoryEntry rows (a browse
+// listing) into the same memorySearchHitResponse shape the search branch
+// answers, so GET /api/memory/entries keeps exactly one response shape
+// regardless of which path served the request.
+func toMemorySearchHitResponsesFromEntries(entries []*ent.MemoryEntry) []memorySearchHitResponse {
+	resp := make([]memorySearchHitResponse, len(entries))
+	for i, e := range entries {
+		resp[i] = memorySearchHitResponse{
+			ID:         e.ID,
+			SpaceID:    e.SpaceID,
+			Summary:    e.Summary,
+			Content:    e.Content,
+			Kind:       e.Kind,
+			Confidence: e.Confidence,
+			CreatedAt:  e.CreatedAt,
+		}
+	}
+	return resp
+}
+
 // memoryInjectionResponse is the record of what was pushed into one spawn.
 type memoryInjectionResponse struct {
 	ID             string    `json:"id"`
@@ -270,6 +290,10 @@ func (h *Handler) searchEntries(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
+	if spaceID := q.Get("spaceId"); spaceID != "" {
+		return h.browseSpace(w, r, spaceID, scope)
+	}
+
 	// An unparseable or absent limit is ignored rather than rejected — same
 	// as GET /api/search — and Retriever.Retrieve clamps whatever comes
 	// through (<=0 to its default, above its ceiling down to it), so a zero,
@@ -285,6 +309,38 @@ func (h *Handler) searchEntries(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	apierr.WriteJSON(w, http.StatusOK, toMemorySearchHitResponses(entries))
+	return nil
+}
+
+// browseSpace answers GET /api/memory/entries?spaceId= — a plain listing of
+// spaceID's valid entries, for the case an empty query text must not search:
+// retrieve.go returns nothing for one by design, since a blank query must
+// never dump the whole store into a prompt. Authorize has already run in
+// searchEntries before this is reached, on the same empty value and scope
+// the search path checks — resolving the space first would let scope answer
+// as a 404-vs-403 oracle for an ungranted caller (see createEntry's own note
+// on this).
+//
+// scope is the caller's requested scope, already authorized against; it is
+// compared against the resolved space's own scope, and a mismatch answers
+// 404 rather than the entries — a grant in one scope must not read a
+// different scope's space by id. A missing space id answers the identical
+// 404, so the two cases stay indistinguishable to the caller.
+func (h *Handler) browseSpace(w http.ResponseWriter, r *http.Request, spaceID string, scope repo.Scope) error {
+	space, err := h.repo.GetSpaceByID(r.Context(), spaceID)
+	if err != nil {
+		return apierr.NewAppError(http.StatusNotFound, "unknown space "+spaceID)
+	}
+	spaceScope := repo.Scope{Kind: repo.ScopeKind(space.ScopeKind), Ref: space.ScopeRef}.Normalize()
+	if spaceScope != scope {
+		return apierr.NewAppError(http.StatusNotFound, "unknown space "+spaceID)
+	}
+
+	entries, err := h.repo.ListValid(r.Context(), spaceID, time.Now())
+	if err != nil {
+		return err
+	}
+	apierr.WriteJSON(w, http.StatusOK, toMemorySearchHitResponsesFromEntries(entries))
 	return nil
 }
 
