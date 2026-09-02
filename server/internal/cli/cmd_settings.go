@@ -84,6 +84,9 @@ func newSettingsCmd() *cobra.Command {
 				return err
 			}
 			fmt.Printf("set %s = %s\n", args[0], maskSecretValue(args[0], args[1]))
+			if d, ok := settings.Lookup(args[0]); ok && d.Apply == settings.ApplyLive {
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: a running server holds its settings snapshot from startup — this change reaches it only after a restart\n")
+			}
 			return nil
 		})
 	}}

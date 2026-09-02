@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"os"
@@ -369,6 +370,46 @@ func TestSettingsGetCmd_FailsClosedOnUnknownKey(t *testing.T) {
 
 	assert.NotContains(t, out, "raw-value-should-not-print")
 	assert.Equal(t, secretbox.MaskedSentinel+"\n", out)
+}
+
+// TestSettingsSetCmd_WarnsOnLiveApplyKey guards the running-server blind spot:
+// "settings set" writes straight to the DB, but a running server only reads
+// its settings once at startup (settings.Service.Load), so an ApplyLive key
+// silently does not reach it until a restart. The warning must land on
+// stderr, not stdout, so stdout stays script-safe.
+func TestSettingsSetCmd_WarnsOnLiveApplyKey(t *testing.T) {
+	isolateMasterKeyPaths(t)
+	dbPath := t.TempDir() + "/test.db"
+
+	var stderr bytes.Buffer
+	stdout := captureStdout(t, func() {
+		cmd := newSettingsCmd()
+		cmd.SetErr(&stderr)
+		cmd.SetArgs([]string{"set", "onboarding.completed", "true", "--db", dbPath})
+		require.NoError(t, cmd.Execute())
+	})
+
+	assert.Equal(t, "set onboarding.completed = true\n", stdout)
+	assert.Contains(t, stderr.String(), "restart")
+}
+
+// TestSettingsSetCmd_NoWarningOnRestartApplyKey mirrors the above for an
+// ApplyRestart key, where the registry already documents that a restart is
+// needed — repeating that here would just be noise.
+func TestSettingsSetCmd_NoWarningOnRestartApplyKey(t *testing.T) {
+	isolateMasterKeyPaths(t)
+	dbPath := t.TempDir() + "/test.db"
+
+	var stderr bytes.Buffer
+	stdout := captureStdout(t, func() {
+		cmd := newSettingsCmd()
+		cmd.SetErr(&stderr)
+		cmd.SetArgs([]string{"set", "auth.mode", "plugin", "--db", dbPath})
+		require.NoError(t, cmd.Execute())
+	})
+
+	assert.Equal(t, "set auth.mode = plugin\n", stdout)
+	assert.Empty(t, stderr.String())
 }
 
 // TestOpenDBStore_DoesNotTouchMasterKeyFile is Minor 3: a read-only command
