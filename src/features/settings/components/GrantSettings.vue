@@ -205,7 +205,7 @@ function isLegacy(grantedBy: string): boolean {
       No grants yet. Create one to allow a capability in a given context.
     </div>
 
-    <!-- Eleven columns do not fit the settings dialog. Without this the whole
+    <!-- The table is wider than the settings dialog. Without this the whole
          dialog body scrolls sideways and the last columns are simply gone; the
          table scrolls inside its own box instead. -->
     <div v-else-if="!loading && !formVisible" data-testid="grant-table-scroll" class="overflow-x-auto">
