@@ -1,8 +1,8 @@
 import type { Ref } from 'vue'
-import type { MemoryEntryHit, MemoryScope, MemorySpace } from '@/features/settings/composables/useMemory'
+import type { MemoryEntriesView, MemoryEntryHit, MemoryScope, MemorySpace } from '@/features/settings/composables/useMemory'
 import { flushPromises, mount } from '@vue/test-utils'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ref } from 'vue'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { defineComponent, ref } from 'vue'
 import MemorySettings from '@/features/settings/components/MemorySettings.vue'
 import { MemoryWriteDeniedError, useMemory } from '@/features/settings/composables/useMemory'
 import { selectByLabel } from '@/utils/testSelect'
@@ -53,10 +53,14 @@ describe('memorySettings', () => {
   let searchDenied: Ref<string | null>
   let searching: Ref<boolean>
   let searched: Ref<boolean>
+  let entriesView: Ref<MemoryEntriesView>
+  let browsedSpaceId: Ref<string | null>
   let held: Ref<boolean>
   let globalSpaces: Ref<MemorySpace[]>
   let fetchSpaces: ReturnType<typeof vi.fn>
   let searchEntries: ReturnType<typeof vi.fn>
+  let browseSpace: ReturnType<typeof vi.fn>
+  let leaveBrowse: ReturnType<typeof vi.fn>
   let setScope: ReturnType<typeof vi.fn>
   let createSpace: ReturnType<typeof vi.fn>
   let createEntry: ReturnType<typeof vi.fn>
@@ -75,12 +79,28 @@ describe('memorySettings', () => {
     searchDenied = ref(null)
     searching = ref(false)
     searched = ref(false)
+    entriesView = ref<MemoryEntriesView>('search')
+    browsedSpaceId = ref(null)
     held = ref(false)
     globalSpaces = ref([])
     fetchSpaces = vi.fn()
     searchEntries = vi.fn(async () => {
+      entriesView.value = 'search'
+      browsedSpaceId.value = null
       entries.value = [{ ...baseHit }]
       searched.value = true
+    })
+    browseSpace = vi.fn(async (spaceId: string) => {
+      entriesView.value = 'browse'
+      browsedSpaceId.value = spaceId
+      entries.value = [{ ...baseHit, spaceId }]
+      searched.value = true
+    })
+    leaveBrowse = vi.fn(() => {
+      entriesView.value = 'search'
+      browsedSpaceId.value = null
+      entries.value = []
+      searched.value = false
     })
     setScope = vi.fn(async () => {})
     createSpace = vi.fn(async () => {})
@@ -101,9 +121,13 @@ describe('memorySettings', () => {
       searchDenied,
       searching,
       searched,
+      entriesView,
+      browsedSpaceId,
       held,
       fetchSpaces,
       searchEntries,
+      browseSpace,
+      leaveBrowse,
       setScope,
       createSpace,
       createEntry,
@@ -714,5 +738,195 @@ describe('memorySettings', () => {
     await flushPromises()
 
     expect(setScope).toHaveBeenCalledWith({ scopeKind: 'application', scopeRef: '/tmp/demo' })
+  })
+
+  // A space row is a control, not a decorated table cell: a keyboard user
+  // needs a real button to reach it, and "activatable" has to be announced.
+  it('activates a space row: browseSpace is called with the space id and the returned hits render', async () => {
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+
+    await wrapper.get('[data-testid="memory-space-browse-s1"]').trigger('click')
+    await flushPromises()
+
+    expect(browseSpace).toHaveBeenCalledWith('s1')
+    expect(wrapper.get('[data-testid="memory-entry-e1"]').text()).toContain('The dashboard binds to 127.0.0.1')
+  })
+
+  // The blank list that means "found nothing" and the blank list that means
+  // "this space has nothing in it" must not collapse into the same testid.
+  it('shows the browse-empty state, not the search-empty state, for a browsed space with no entries', async () => {
+    browseSpace.mockImplementation(async (spaceId: string) => {
+      entriesView.value = 'browse'
+      browsedSpaceId.value = spaceId
+      entries.value = []
+      searched.value = true
+    })
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+
+    await wrapper.get('[data-testid="memory-space-browse-s1"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="memory-entries-browse-empty"]').text()).toContain('no entries')
+    expect(wrapper.find('[data-testid="memory-entries-empty"]').exists()).toBe(false)
+  })
+
+  it('renders the denial notice on a 403 browse without claiming the space is empty', async () => {
+    browseSpace.mockImplementation(async (spaceId: string) => {
+      entriesView.value = 'browse'
+      browsedSpaceId.value = spaceId
+      searchDenied.value = 'capability memory.read denied in scope global'
+      entries.value = []
+      searched.value = false
+    })
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+
+    await wrapper.get('[data-testid="memory-space-browse-s1"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="memory-search-denied"]').text()).toContain('memory.read')
+    expect(wrapper.find('[data-testid="memory-entries-browse-empty"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="memory-entries-empty"]').exists()).toBe(false)
+  })
+
+  it('leaving the browse view returns to the search state', async () => {
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+    await wrapper.get('[data-testid="memory-space-browse-s1"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="memory-browse-banner"]').exists()).toBe(true)
+
+    await wrapper.get('[data-testid="memory-browse-leave"]').trigger('click')
+    await flushPromises()
+
+    expect(leaveBrowse).toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="memory-browse-banner"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="memory-entries-unsearched"]').text()).toContain('No search')
+  })
+
+  // Free text backed by suggestions, not a select: createEntry never creates
+  // a space on the fly, but the spaces table can legitimately be empty or
+  // denied while a write is still possible (separate grants) — a select would
+  // then offer nothing and block the write.
+  it('offers the loaded space slugs via datalist while still accepting a slug that is not among them', async () => {
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+    await wrapper.get('[data-testid="memory-entry-new"]').trigger('click')
+
+    const options = wrapper.findAll('[data-testid="memory-entry-space-options"] option')
+    expect(options.map(o => o.attributes('value'))).toEqual(['project-notes'])
+
+    await wrapper.get('[data-testid="memory-entry-space"]').setValue('unlisted-space')
+    expect((wrapper.get('[data-testid="memory-entry-space"]').element as HTMLInputElement).value).toBe('unlisted-space')
+  })
+
+  // Was rendered below the submit button, outside the form grid — a denied
+  // create left the page looking unchanged until the user scrolled.
+  it('renders the create-entry error before the submit button in DOM order', async () => {
+    const wrapper = mount(MemorySettings, { attachTo: document.body })
+    await wrapper.get('[data-testid="memory-entry-new"]').trigger('click')
+    await wrapper.get('[data-testid="memory-entry-summary"]').setValue('Binds to loopback')
+    await wrapper.get('[data-testid="memory-entry-submit"]').trigger('click')
+    await flushPromises()
+
+    const form = wrapper.get('#memory-entry-form').element
+    const nodes = Array.from(form.querySelectorAll('[data-testid="memory-entry-error"], [data-testid="memory-entry-submit"]'))
+    expect(nodes.map(n => n.getAttribute('data-testid'))).toEqual(['memory-entry-error', 'memory-entry-submit'])
+  })
+})
+
+// Browse and search share `entries`, `searchError`, `searchDenied` and
+// `searched` through the same `latestSearch` batch counter that already
+// arbitrates a search against a scope change — that arbitration, and
+// setScope's reset of state a mocked setScope cannot exercise, only exist in
+// the real composable.
+describe('memorySettings browse wiring against the real useMemory composable', () => {
+  let realUseMemory: typeof import('@/features/settings/composables/useMemory').useMemory
+
+  function jsonResponse(status: number, body: unknown): Response {
+    return { ok: status >= 200 && status < 300, status, json: () => Promise.resolve(body) } as Response
+  }
+
+  function withSetup<T>(composable: () => T) {
+    let result!: T
+    const Wrapper = defineComponent({
+      setup() {
+        result = composable()
+        return {}
+      },
+      template: '<div />',
+    })
+    const wrapper = mount(Wrapper, { attachTo: document.body })
+    return { result, wrapper }
+  }
+
+  beforeEach(async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(200, [])))
+    const actual = await vi.importActual<typeof import('@/features/settings/composables/useMemory')>('@/features/settings/composables/useMemory')
+    realUseMemory = actual.useMemory
+    vi.mocked(useMemory).mockImplementation(realUseMemory)
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('sends spaceId and the current scope on a browse request', async () => {
+    const { result } = withSetup(() => realUseMemory())
+    await vi.waitUntil(() => !result.loading.value)
+    vi.mocked(globalThis.fetch).mockClear()
+    vi.mocked(globalThis.fetch).mockResolvedValue(jsonResponse(200, [baseHit]))
+
+    await result.browseSpace('s1')
+
+    expect(String(vi.mocked(globalThis.fetch).mock.calls[0][0])).toBe('/api/memory/entries?scope=global&spaceId=s1')
+    expect(result.entries.value).toEqual([baseHit])
+    expect(result.searched.value).toBe(true)
+  })
+
+  // A search started after a browse is already in flight must win, whichever
+  // one answers last — same rule searchEntries already keeps against a scope
+  // change, applied to the sibling request that writes the same ref.
+  it('drops a browse answer that lands after a search made afterward already landed', async () => {
+    const { result } = withSetup(() => realUseMemory())
+    await vi.waitUntil(() => !result.loading.value)
+    let release!: (res: Response) => void
+    vi.mocked(globalThis.fetch).mockReturnValueOnce(new Promise<Response>((resolve) => {
+      release = resolve
+    }))
+
+    const pendingBrowse = result.browseSpace('s1')
+    vi.mocked(globalThis.fetch).mockResolvedValue(jsonResponse(200, [baseHit]))
+    await result.searchEntries()
+    expect(result.entries.value).toEqual([baseHit])
+
+    release(jsonResponse(200, [{ ...baseHit, id: 'stale-from-browse' }]))
+    await pendingBrowse
+
+    expect(result.entries.value).toEqual([baseHit])
+    expect(result.entriesView.value).toBe('search')
+  })
+
+  // Pins a previously surviving mutant: deleting setScope's reset of
+  // `searchError` failed no test. Also covers the browse-state reset added
+  // in the same place, for the same reason.
+  it('setScope clears a stale search error and resets the browse state', async () => {
+    const { result } = withSetup(() => realUseMemory())
+    await vi.waitUntil(() => !result.loading.value)
+
+    vi.mocked(globalThis.fetch).mockResolvedValue(jsonResponse(500, { error: 'search boom' }))
+    await result.searchEntries()
+    expect(result.searchError.value).toBe('search boom')
+
+    vi.mocked(globalThis.fetch).mockResolvedValue(jsonResponse(200, []))
+    await result.setScope({ scopeKind: 'project', scopeRef: '/tmp/demo' })
+    expect(result.searchError.value).toBeNull()
+
+    vi.mocked(globalThis.fetch).mockResolvedValue(jsonResponse(200, [baseHit]))
+    await result.browseSpace('s1')
+    expect(result.entriesView.value).toBe('browse')
+    expect(result.browsedSpaceId.value).toBe('s1')
+
+    vi.mocked(globalThis.fetch).mockResolvedValue(jsonResponse(200, []))
+    await result.setScope({ scopeKind: 'global', scopeRef: '' })
+    expect(result.entriesView.value).toBe('search')
+    expect(result.browsedSpaceId.value).toBeNull()
   })
 })
