@@ -145,7 +145,7 @@ const ENFORCER_SERVER = 'server'
 const enforcementByCapability = computed(() => {
   const byName = new Map<string, string>()
   for (const c of capabilities.value)
-    byName.set(c.name, c.enforceable_by.includes(ENFORCER_SERVER) ? ENFORCER_SERVER : 'none')
+    byName.set(c.name, c.enforceableBy.includes(ENFORCER_SERVER) ? ENFORCER_SERVER : 'none')
   return byName
 })
 
@@ -205,118 +205,123 @@ function isLegacy(grantedBy: string): boolean {
       No grants yet. Create one to allow a capability in a given context.
     </div>
 
-    <table v-else-if="!loading && !formVisible" class="w-full border-collapse text-[13px]">
-      <thead>
-        <tr>
-          <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
-            Capability
-          </th>
-          <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
-            Context
-          </th>
-          <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
-            Pattern
-          </th>
-          <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
-            Mode
-          </th>
-          <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
-            Enforcement
-          </th>
-          <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
-            Limit
-          </th>
-          <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
-            Expires
-          </th>
-          <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
-            Granted By
-          </th>
-          <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
-            Status
-          </th>
-          <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
-            Actions
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="g in grants" :key="g.id" :data-testid="`grant-row-${g.id}`" :class="{ 'opacity-60': g.revoked_at }">
-          <td class="px-3 py-2.5 border-b border-line text-fg font-medium whitespace-nowrap">
-            {{ g.capability_name }}
-          </td>
-          <td class="px-3 py-2.5 border-b border-line text-fg-mute font-mono text-xs">
-            {{ formatScope(g.context_kind, g.context_ref) }}
-          </td>
-          <td class="px-3 py-2.5 border-b border-line text-fg-mute font-mono text-xs">
-            {{ g.pattern || '*' }}
-          </td>
-          <td class="px-3 py-2.5 border-b border-line text-fg-mute">
-            {{ g.mode }}
-            <span
-              v-if="g.revoked_at"
-              class="inline-block rounded px-1.5 py-0.5 ml-1 text-[10px] font-semibold uppercase tracking-wide bg-raised text-fg-mute"
-              :data-testid="`grant-mode-revoked-${g.id}`"
-            >Revoked</span>
-          </td>
-          <td class="px-3 py-2.5 border-b border-line">
-            <span
-              v-if="enforcementOf(g.capability_name) === 'server'"
-              class="inline-block rounded px-2 py-0.5 text-[11px] font-semibold bg-success-soft text-success-text"
-              :data-testid="`grant-enforcement-${g.id}`"
-              title="Enforced server-side by internal/memory.Authorize"
-            >server</span>
-            <span
-              v-else
-              class="inline-block rounded px-2 py-0.5 text-[11px] font-semibold bg-warning-soft text-warning-text"
-              :data-testid="`grant-enforcement-${g.id}`"
-              :title="enforcementOf(g.capability_name) === 'none'
-                ? 'No enforcement point reads stored grants for this capability today — the grant is recorded and will apply once a reader exists'
-                : 'This capability is not in the loaded catalogue — enforceability cannot be determined yet'"
-            >{{ enforcementOf(g.capability_name) }}</span>
-          </td>
-          <td class="px-3 py-2.5 border-b border-line text-fg-mute whitespace-nowrap">
-            {{ formatLimit(g.limit_count, g.limit_window_seconds) }}
-          </td>
-          <td class="px-3 py-2.5 border-b border-line text-fg-mute font-mono text-xs">
-            {{ formatDateTime(g.expires_at) }}
-          </td>
-          <td class="px-3 py-2.5 border-b border-line text-fg-mute">
-            <span v-if="isLegacy(g.granted_by)" class="inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-raised text-fg-mute" title="Written by the legacy grant migration, not a person">
-              Legacy migration
-            </span>
-            <span v-else>{{ g.granted_by }}</span>
-          </td>
-          <td class="px-3 py-2.5 border-b border-line">
-            <span v-if="!g.revoked_at" class="inline-block rounded px-2 py-0.5 text-[11px] font-semibold bg-success-soft text-success-text">Active</span>
-            <span v-else class="inline-block rounded px-2 py-0.5 text-[11px] font-semibold bg-raised text-fg-mute" :title="`Revoked ${formatDateTime(g.revoked_at)} by ${g.revoked_by}`">
-              Revoked {{ formatDateTime(g.revoked_at) }} by {{ g.revoked_by }}
-            </span>
-          </td>
-          <td class="px-3 py-2.5 border-b border-line whitespace-nowrap">
-            <template v-if="!g.revoked_at">
-              <template v-if="confirmRevokeId === g.id">
-                <AppButton variant="danger" size="sm" class="mr-1" :disabled="revokingId === g.id" :data-testid="`grant-revoke-confirm-${g.id}`" @click="handleRevoke(g.id)">
-                  {{ revokingId === g.id ? 'Revoking…' : 'Confirm' }}
-                </AppButton>
-                <AppButton variant="secondary" size="sm" @click="confirmRevokeId = null">
-                  Cancel
-                </AppButton>
-              </template>
-              <button
+    <!-- Eleven columns do not fit the settings dialog. Without this the whole
+         dialog body scrolls sideways and the last columns are simply gone; the
+         table scrolls inside its own box instead. -->
+    <div v-else-if="!loading && !formVisible" data-testid="grant-table-scroll" class="overflow-x-auto">
+      <table class="w-full min-w-max border-collapse text-[13px]">
+        <thead>
+          <tr>
+            <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
+              Capability
+            </th>
+            <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
+              Context
+            </th>
+            <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
+              Pattern
+            </th>
+            <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
+              Mode
+            </th>
+            <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
+              Enforcement
+            </th>
+            <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
+              Limit
+            </th>
+            <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
+              Expires
+            </th>
+            <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
+              Granted By
+            </th>
+            <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
+              Status
+            </th>
+            <th class="text-left text-[10px] uppercase tracking-wide text-fg-mute px-3 py-2 border-b border-line">
+              Actions
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="g in grants" :key="g.id" :data-testid="`grant-row-${g.id}`" :class="{ 'opacity-60': g.revokedAt }">
+            <td class="px-3 py-2.5 border-b border-line text-fg font-medium whitespace-nowrap">
+              {{ g.capabilityName }}
+            </td>
+            <td class="px-3 py-2.5 border-b border-line text-fg-mute font-mono text-xs">
+              {{ formatScope(g.contextKind, g.contextRef) }}
+            </td>
+            <td class="px-3 py-2.5 border-b border-line text-fg-mute font-mono text-xs">
+              {{ g.pattern || '*' }}
+            </td>
+            <td class="px-3 py-2.5 border-b border-line text-fg-mute">
+              {{ g.mode }}
+              <span
+                v-if="g.revokedAt"
+                class="inline-block rounded px-1.5 py-0.5 ml-1 text-[10px] font-semibold uppercase tracking-wide bg-raised text-fg-mute"
+                :data-testid="`grant-mode-revoked-${g.id}`"
+              >Revoked</span>
+            </td>
+            <td class="px-3 py-2.5 border-b border-line">
+              <span
+                v-if="enforcementOf(g.capabilityName) === 'server'"
+                class="inline-block rounded px-2 py-0.5 text-[11px] font-semibold bg-success-soft text-success-text"
+                :data-testid="`grant-enforcement-${g.id}`"
+                title="Enforced server-side by internal/memory.Authorize"
+              >server</span>
+              <span
                 v-else
-                type="button"
-                class="bg-transparent border-none text-fg-mute cursor-pointer text-sm px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-600 dark:hover:text-red-400"
-                :data-testid="`grant-revoke-${g.id}`"
-                @click="confirmRevokeId = g.id"
-              >
-                Revoke
-              </button>
-            </template>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+                class="inline-block rounded px-2 py-0.5 text-[11px] font-semibold bg-warning-soft text-warning-text"
+                :data-testid="`grant-enforcement-${g.id}`"
+                :title="enforcementOf(g.capabilityName) === 'none'
+                  ? 'No enforcement point reads stored grants for this capability today — the grant is recorded and will apply once a reader exists'
+                  : 'This capability is not in the loaded catalogue — enforceability cannot be determined yet'"
+              >{{ enforcementOf(g.capabilityName) }}</span>
+            </td>
+            <td class="px-3 py-2.5 border-b border-line text-fg-mute whitespace-nowrap">
+              {{ formatLimit(g.limitCount, g.limitWindowSeconds) }}
+            </td>
+            <td class="px-3 py-2.5 border-b border-line text-fg-mute font-mono text-xs">
+              {{ formatDateTime(g.expiresAt) }}
+            </td>
+            <td class="px-3 py-2.5 border-b border-line text-fg-mute">
+              <span v-if="isLegacy(g.grantedBy)" class="inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-raised text-fg-mute" title="Written by the legacy grant migration, not a person">
+                Legacy migration
+              </span>
+              <span v-else>{{ g.grantedBy }}</span>
+            </td>
+            <td class="px-3 py-2.5 border-b border-line">
+              <span v-if="!g.revokedAt" class="inline-block rounded px-2 py-0.5 text-[11px] font-semibold bg-success-soft text-success-text">Active</span>
+              <span v-else class="inline-block rounded px-2 py-0.5 text-[11px] font-semibold bg-raised text-fg-mute" :title="`Revoked ${formatDateTime(g.revokedAt)} by ${g.revokedBy}`">
+                Revoked {{ formatDateTime(g.revokedAt) }} by {{ g.revokedBy }}
+              </span>
+            </td>
+            <td class="px-3 py-2.5 border-b border-line whitespace-nowrap">
+              <template v-if="!g.revokedAt">
+                <template v-if="confirmRevokeId === g.id">
+                  <AppButton variant="danger" size="sm" class="mr-1" :disabled="revokingId === g.id" :data-testid="`grant-revoke-confirm-${g.id}`" @click="handleRevoke(g.id)">
+                    {{ revokingId === g.id ? 'Revoking…' : 'Confirm' }}
+                  </AppButton>
+                  <AppButton variant="secondary" size="sm" @click="confirmRevokeId = null">
+                    Cancel
+                  </AppButton>
+                </template>
+                <button
+                  v-else
+                  type="button"
+                  class="bg-transparent border-none text-fg-mute cursor-pointer text-sm px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-600 dark:hover:text-red-400"
+                  :data-testid="`grant-revoke-${g.id}`"
+                  @click="confirmRevokeId = g.id"
+                >
+                  Revoke
+                </button>
+              </template>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
 
     <!-- Create form -->
     <div v-if="formVisible" class="flex flex-col gap-4">

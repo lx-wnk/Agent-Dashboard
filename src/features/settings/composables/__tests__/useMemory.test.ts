@@ -692,4 +692,119 @@ describe('useMemory', () => {
     expect(result.searching.value).toBe(false)
     expect(result.searched.value).toBe(true)
   })
+
+  // The browse path's own pins. Its behaviour is asserted through the panel in
+  // MemorySettings.test.ts; these mirror the searchEntries tests above so the
+  // two paths that write `entries` are held to one standard in one place.
+  it('sends spaceId, and no query text, on a browse request', async () => {
+    const { result } = withSetup(() => useMemory())
+    await vi.waitUntil(() => !result.loading.value)
+    result.searchText.value = 'binds'
+
+    await result.browseSpace('s1')
+
+    expect(urlOf(vi.mocked(globalThis.fetch).mock.calls.length - 1)).toBe('/api/memory/entries?scope=global&spaceId=s1')
+  })
+
+  it('threads a non-global scope and its trimmed ref into a browse request', async () => {
+    const { result } = withSetup(() => useMemory())
+    await vi.waitUntil(() => !result.loading.value)
+    await result.setScope({ scopeKind: 'project', scopeRef: '  /tmp/demo  ' })
+
+    await result.browseSpace('s1')
+
+    expect(urlOf(vi.mocked(globalThis.fetch).mock.calls.length - 1))
+      .toBe('/api/memory/entries?scope=project&scopeRef=%2Ftmp%2Fdemo&spaceId=s1')
+  })
+
+  it('holds a browse the same way it holds a search: held is true and no fetch fires', async () => {
+    const { result } = withSetup(() => useMemory())
+    await vi.waitUntil(() => !result.loading.value)
+    await result.setScope({ scopeKind: 'project', scopeRef: '' })
+    const callsAfterSetScope = vi.mocked(globalThis.fetch).mock.calls.length
+
+    await result.browseSpace('s1')
+
+    expect(vi.mocked(globalThis.fetch).mock.calls.length).toBe(callsAfterSetScope)
+    expect(result.entries.value).toEqual([])
+  })
+
+  // A refused browse must not license "this space is empty" — only a request
+  // that answered with rows does, same rule as the search path.
+  it('treats a 403 on browse as a denial without claiming the space is empty', async () => {
+    const { result } = withSetup(() => useMemory())
+    await vi.waitUntil(() => !result.loading.value)
+    vi.mocked(globalThis.fetch).mockResolvedValue(jsonResponse(403, { error: 'capability memory.read denied in scope global' }))
+
+    await result.browseSpace('s1')
+
+    expect(result.searchDenied.value).toContain('memory.read')
+    expect(result.entries.value).toEqual([])
+    expect(result.searched.value).toBe(false)
+    expect(result.error.value).toBeNull()
+  })
+
+  // Browse and search write the same `entries` ref, so they share one batch
+  // counter. Two counters would let each supersede only its own kind and the
+  // loser would still land.
+  it('drops a browse that answers after a search has started', async () => {
+    const { result } = withSetup(() => useMemory())
+    await vi.waitUntil(() => !result.loading.value)
+    let release!: (res: Response) => void
+    vi.mocked(globalThis.fetch).mockReturnValueOnce(new Promise<Response>((resolve) => {
+      release = resolve
+    }))
+
+    const pending = result.browseSpace('s1')
+    vi.mocked(globalThis.fetch).mockResolvedValue(jsonResponse(200, []))
+    await result.searchEntries()
+
+    release(jsonResponse(200, [HIT]))
+    await pending
+
+    expect(result.entries.value).toEqual([])
+    expect(result.entriesView.value).toBe('search')
+    expect(result.browsedSpaceId.value).toBeNull()
+  })
+
+  it('drops a browse that answers after the view was left', async () => {
+    const { result } = withSetup(() => useMemory())
+    await vi.waitUntil(() => !result.loading.value)
+    let release!: (res: Response) => void
+    vi.mocked(globalThis.fetch).mockReturnValueOnce(new Promise<Response>((resolve) => {
+      release = resolve
+    }))
+
+    const pending = result.browseSpace('s1')
+    result.leaveBrowse()
+
+    release(jsonResponse(200, [HIT]))
+    await pending
+
+    expect(result.entries.value).toEqual([])
+    expect(result.entriesView.value).toBe('search')
+    expect(result.searching.value).toBe(false)
+  })
+
+  // The reset that a mutation run found unpinned: without it a "Browsing X"
+  // banner for a space in the scope just left survives under the new heading.
+  it('clears the browse view and the search error when the scope changes', async () => {
+    const { result } = withSetup(() => useMemory())
+    await vi.waitUntil(() => !result.loading.value)
+    vi.mocked(globalThis.fetch).mockResolvedValue(jsonResponse(500, { error: 'search boom' }))
+    await result.searchEntries()
+    expect(result.searchError.value).toBe('search boom')
+
+    vi.mocked(globalThis.fetch).mockResolvedValue(jsonResponse(200, [HIT]))
+    await result.browseSpace('s1')
+    expect(result.entriesView.value).toBe('browse')
+    expect(result.browsedSpaceId.value).toBe('s1')
+
+    vi.mocked(globalThis.fetch).mockResolvedValue(jsonResponse(200, []))
+    await result.setScope({ scopeKind: 'project', scopeRef: '/tmp/demo' })
+
+    expect(result.searchError.value).toBeNull()
+    expect(result.entriesView.value).toBe('search')
+    expect(result.browsedSpaceId.value).toBeNull()
+  })
 })

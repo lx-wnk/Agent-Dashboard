@@ -43,6 +43,93 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Get("/api/capabilities", apierr.ErrorMiddleware(h.listCapabilities))
 }
 
+// grantResponse is the API response shape for one grant. ent.Grant's tags
+// carry omitempty and snake_case storage names, so encoding the entity
+// directly dropped limitCount:0 (unlimited) and contextRef:"" (global scope)
+// while every other field answered under its column name instead of camelCase.
+type grantResponse struct {
+	ID                 string     `json:"id"`
+	CapabilityName     string     `json:"capabilityName"`
+	ContextKind        string     `json:"contextKind"`
+	ContextRef         string     `json:"contextRef"`
+	Pattern            string     `json:"pattern"`
+	Mode               string     `json:"mode"`
+	LimitCount         int        `json:"limitCount"`
+	LimitWindowSeconds int        `json:"limitWindowSeconds"`
+	ExpiresAt          *time.Time `json:"expiresAt"`
+	GrantedBy          string     `json:"grantedBy"`
+	GrantedAt          time.Time  `json:"grantedAt"`
+	RevokedAt          *time.Time `json:"revokedAt"`
+	RevokedBy          string     `json:"revokedBy"`
+	Reason             string     `json:"reason"`
+	NodeID             string     `json:"nodeId"`
+}
+
+func toGrantResponse(g *ent.Grant) grantResponse {
+	return grantResponse{
+		ID:                 g.ID,
+		CapabilityName:     g.CapabilityName,
+		ContextKind:        g.ContextKind,
+		ContextRef:         g.ContextRef,
+		Pattern:            g.Pattern,
+		Mode:               g.Mode,
+		LimitCount:         g.LimitCount,
+		LimitWindowSeconds: g.LimitWindowSeconds,
+		ExpiresAt:          g.ExpiresAt,
+		GrantedBy:          g.GrantedBy,
+		GrantedAt:          g.GrantedAt,
+		RevokedAt:          g.RevokedAt,
+		RevokedBy:          g.RevokedBy,
+		Reason:             g.Reason,
+		NodeID:             g.NodeID,
+	}
+}
+
+func toGrantResponses(rows []*ent.Grant) []grantResponse {
+	resp := make([]grantResponse, len(rows))
+	for i, g := range rows {
+		resp[i] = toGrantResponse(g)
+	}
+	return resp
+}
+
+// capabilityResponse is the API response shape for one catalogue entry —
+// camelCased and, unlike ent.Capability's tags, without omitempty so a
+// false requiresPattern/reversible still round-trips.
+type capabilityResponse struct {
+	ID              string   `json:"id"`
+	Name            string   `json:"name"`
+	Class           string   `json:"class"`
+	EnforceableBy   []string `json:"enforceableBy"`
+	RequiresPattern bool     `json:"requiresPattern"`
+	Reversible      bool     `json:"reversible"`
+	Description     string   `json:"description"`
+}
+
+func toCapabilityResponse(c *ent.Capability) capabilityResponse {
+	enforceableBy := c.EnforceableBy
+	if enforceableBy == nil {
+		enforceableBy = []string{}
+	}
+	return capabilityResponse{
+		ID:              c.ID,
+		Name:            c.Name,
+		Class:           c.Class,
+		EnforceableBy:   enforceableBy,
+		RequiresPattern: c.RequiresPattern,
+		Reversible:      c.Reversible,
+		Description:     c.Description,
+	}
+}
+
+func toCapabilityResponses(rows []*ent.Capability) []capabilityResponse {
+	resp := make([]capabilityResponse, len(rows))
+	for i, c := range rows {
+		resp[i] = toCapabilityResponse(c)
+	}
+	return resp
+}
+
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) error {
 	capFilter := r.URL.Query().Get("capability")
 	var rows []*ent.Grant
@@ -59,11 +146,8 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) error {
 	// so both query paths answer newest-first, matching `agent-dashboard grants list`
 	// (cmd_grants.go sorts the same way regardless of which repo method it called).
 	sort.Slice(rows, func(i, j int) bool { return rows[i].GrantedAt.After(rows[j].GrantedAt) })
-	if rows == nil {
-		rows = []*ent.Grant{}
-	}
-	w.Header().Set("Content-Type", "application/json")
-	return json.NewEncoder(w).Encode(rows)
+	apierr.WriteJSON(w, http.StatusOK, toGrantResponses(rows))
+	return nil
 }
 
 func (h *Handler) listCapabilities(w http.ResponseWriter, r *http.Request) error {
@@ -71,11 +155,8 @@ func (h *Handler) listCapabilities(w http.ResponseWriter, r *http.Request) error
 	if err != nil {
 		return fmt.Errorf("grants.listCapabilities: %w", err)
 	}
-	if rows == nil {
-		rows = []*ent.Capability{}
-	}
-	w.Header().Set("Content-Type", "application/json")
-	return json.NewEncoder(w).Encode(rows)
+	apierr.WriteJSON(w, http.StatusOK, toCapabilityResponses(rows))
+	return nil
 }
 
 // createGrantRequest is the POST /api/grants body. Pattern is a pointer so a
@@ -175,9 +256,8 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return fmt.Errorf("grants.create: %w", err)
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	return json.NewEncoder(w).Encode(row)
+	apierr.WriteJSON(w, http.StatusCreated, toGrantResponse(row))
+	return nil
 }
 
 func (h *Handler) revoke(w http.ResponseWriter, r *http.Request) error {
