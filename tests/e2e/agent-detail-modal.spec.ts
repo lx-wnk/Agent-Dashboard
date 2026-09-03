@@ -37,6 +37,11 @@ async function stubAgents(page: Page) {
 
 test.describe('agent detail modal', () => {
   test.beforeEach(async ({ page }) => {
+    // The agent card this suite clicks lives on the dashboard view, not the
+    // cockpit landing view — pin the landing view the same way dashboard.spec.ts does.
+    await page.addInitScript(() => {
+      localStorage.setItem('agent-active-view', 'dashboard')
+    })
     await stubAuthDisabled(page)
     await stubAgents(page)
     // The modal's chat stream polls these on mount; stub them so the panel stays

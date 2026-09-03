@@ -286,7 +286,7 @@ onMounted(() => usageComposable.start())
               + New Task
             </button>
             <button
-              v-else-if="activeView === 'dashboard'"
+              v-else-if="activeView === 'dashboard' || activeView === 'cockpit'"
               type="button"
               class="bg-accent text-white rounded-lg px-3 py-1.5 text-[13px] font-semibold hover:brightness-110 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
               @click="showSpawnDialog = true"
