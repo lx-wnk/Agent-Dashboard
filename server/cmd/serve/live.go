@@ -80,7 +80,7 @@ func runLive(ctx context.Context, args []string) error {
 		return fmt.Errorf("live: resolve binary: %w", err)
 	}
 
-	mcpJSON, err := channelconfig.ConfigJSON(binPath)
+	mcpJSON, err := channelconfig.ConfigJSON(binPath, nil)
 	if err != nil {
 		return fmt.Errorf("live: build mcp config: %w", err)
 	}

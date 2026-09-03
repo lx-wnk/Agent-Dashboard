@@ -11,14 +11,28 @@ import (
 	"strconv"
 )
 
-// mcpServerEntry mirrors the claude CLI's mcpServers JSON shape.
+// mcpServerEntry mirrors the claude CLI's mcpServers JSON shape. A stdio
+// server sets Command/Args; an HTTP server sets Type/URL/Headers. omitempty on
+// every field keeps the stdio entry byte-identical to what this package wrote
+// before the HTTP form existed.
 type mcpServerEntry struct {
-	Command string   `json:"command"`
-	Args    []string `json:"args,omitempty"`
+	Command string            `json:"command,omitempty"`
+	Args    []string          `json:"args,omitempty"`
+	Type    string            `json:"type,omitempty"`
+	URL     string            `json:"url,omitempty"`
+	Headers map[string]string `json:"headers,omitempty"`
 }
 
 type mcpConfig struct {
 	MCPServers map[string]mcpServerEntry `json:"mcpServers"`
+}
+
+// TaskAPI describes the dashboard's own MCP endpoint and the credential the
+// spawned agent presents to it. Both fields are required together: an entry
+// with a URL and no token would look configured and fail every call 401.
+type TaskAPI struct {
+	URL   string
+	Token string
 }
 
 // DiscoveryDir is the subdirectory under $HOME where the channel bridge writes
@@ -47,15 +61,24 @@ func DiscoveryPtyFile(home string, pid int) string {
 
 // buildConfig returns the mcpConfig struct for the given binary path.
 // This is the single definition of the channel MCP config shape.
-func buildConfig(binaryPath string) mcpConfig {
-	return mcpConfig{
-		MCPServers: map[string]mcpServerEntry{
-			"dashboard-channel": {
-				Command: binaryPath,
-				Args:    []string{SubcommandChannel},
-			},
+func buildConfig(binaryPath string, taskAPI *TaskAPI) (mcpConfig, error) {
+	servers := map[string]mcpServerEntry{
+		"dashboard-channel": {
+			Command: binaryPath,
+			Args:    []string{SubcommandChannel},
 		},
 	}
+	if taskAPI != nil {
+		if taskAPI.URL == "" || taskAPI.Token == "" {
+			return mcpConfig{}, fmt.Errorf("channelconfig: TaskAPI needs both a URL and a token")
+		}
+		servers["dashboard-tasks"] = mcpServerEntry{
+			Type:    "http",
+			URL:     taskAPI.URL,
+			Headers: map[string]string{"Authorization": "Bearer " + taskAPI.Token},
+		}
+	}
+	return mcpConfig{MCPServers: servers}, nil
 }
 
 // ConfigJSON returns the inline JSON string for the dashboard-channel MCP
@@ -65,8 +88,11 @@ func buildConfig(binaryPath string) mcpConfig {
 // Example output:
 //
 //	{"mcpServers":{"dashboard-channel":{"command":"/path/to/agent-dashboard","args":["channel"]}}}
-func ConfigJSON(binaryPath string) (string, error) {
-	cfg := buildConfig(binaryPath)
+func ConfigJSON(binaryPath string, taskAPI *TaskAPI) (string, error) {
+	cfg, err := buildConfig(binaryPath, taskAPI)
+	if err != nil {
+		return "", err
+	}
 	data, err := json.Marshal(cfg)
 	if err != nil {
 		return "", fmt.Errorf("channelconfig: ConfigJSON marshal: %w", err)
@@ -79,8 +105,11 @@ func ConfigJSON(binaryPath string) (string, error) {
 //
 // binaryPath is the absolute path to the agent-dashboard binary.
 // The caller is responsible for deleting the returned file path.
-func WriteTempConfig(binaryPath string) (path string, err error) {
-	cfg := buildConfig(binaryPath)
+func WriteTempConfig(binaryPath string, taskAPI *TaskAPI) (path string, err error) {
+	cfg, err := buildConfig(binaryPath, taskAPI)
+	if err != nil {
+		return "", err
+	}
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return "", fmt.Errorf("channelconfig: marshal: %w", err)
@@ -95,6 +124,10 @@ func WriteTempConfig(binaryPath string) (path string, err error) {
 		return "", fmt.Errorf("channelconfig: create temp file: %w", err)
 	}
 	defer f.Close()
+	if err := f.Chmod(0o600); err != nil {
+		_ = os.Remove(f.Name())
+		return "", fmt.Errorf("channelconfig: chmod temp file: %w", err)
+	}
 	if _, err := f.Write(data); err != nil {
 		_ = os.Remove(f.Name())
 		return "", fmt.Errorf("channelconfig: write temp file: %w", err)

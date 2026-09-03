@@ -608,7 +608,7 @@ func SpawnStageAgent(opts SpawnAgentOptions) (SpawnResult, error) {
 	var channelCfgPath string
 	if opts.EnableChannel {
 		if selfBin, binErr := channelconfig.SelfBinaryPath(); binErr == nil {
-			if cfgPath, cfgErr := channelconfig.WriteTempConfig(selfBin); cfgErr == nil {
+			if cfgPath, cfgErr := channelconfig.WriteTempConfig(selfBin, nil); cfgErr == nil {
 				channelCfgPath = cfgPath
 			} else {
 				slog.Warn("channelconfig: failed to write temp config — agent runs without channel bridge", "err", cfgErr)
