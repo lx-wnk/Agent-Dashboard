@@ -20,7 +20,7 @@ func TestSweepExpiredKeys_BootSweepRemovesExpiredEphemeralKeys(t *testing.T) {
 	ctx := context.Background()
 
 	past := time.Now().Add(-time.Hour)
-	_, err = keys.Create(ctx, repo.CreateApiKeyInput{
+	row, err := keys.Create(ctx, repo.CreateApiKeyInput{
 		Name: "old", Hash: "old", Scopes: mcp.StageRunScopes,
 		Kind: repo.ApiKeyKindStageRun, StageRunID: "sr-1", ExpiresAt: &past,
 	})
@@ -30,6 +30,12 @@ func TestSweepExpiredKeys_BootSweepRemovesExpiredEphemeralKeys(t *testing.T) {
 
 	// interval <= 0 runs the boot sweep only and returns.
 	mcp.SweepExpiredKeys(ctx, keys, 0)
+
+	// List filters to kind = "user" on its own, so it cannot tell a working
+	// sweep from no sweep at all — GetByID has no such filter and is the one
+	// assertion that actually distinguishes "deleted" from "merely filtered".
+	_, err = keys.GetByID(ctx, row.ID)
+	require.Error(t, err, "the expired stage-run key must be gone from the table, not merely filtered out of List")
 
 	remaining, err := keys.List(ctx)
 	require.NoError(t, err)
