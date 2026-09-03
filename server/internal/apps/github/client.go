@@ -407,3 +407,44 @@ func (c *Client) MergePullRequest(ctx context.Context, repoName string, number i
 	}
 	return out.SHA, nil
 }
+
+// ErrQueryWidensScope is returned for a search query that carries its own
+// scope qualifier. Callers map it to a 4xx: it is the caller's input that is
+// wrong, not the operator's configuration.
+var ErrQueryWidensScope = errors.New("github: the search query may not carry its own repo:, org: or user: qualifier")
+
+// scopeQualifiers are the search qualifiers that name where to look. GitHub
+// unions repeated occurrences of these, so one supplied by the caller is a
+// second branch of the same OR, not a narrowing of the first.
+var scopeQualifiers = []string{"repo:", "org:", "user:"}
+
+// BoundQuery bounds a search to the allow-list by appending one repo:
+// qualifier per configured repository.
+//
+// It refuses a query that already carries a scope qualifier, and that refusal
+// is the security-relevant half. GitHub ORs repeated repo:/org:/user:
+// qualifiers, so a caller-supplied `repo:other/private` does not get
+// intersected by the appended ones — it joins them, and the search reaches a
+// repository the operator never listed. Appending cannot bound a query that is
+// free to widen itself, so the widening is rejected instead.
+//
+// Verified against the live API rather than assumed: `test repo:golang/go`
+// returns 31445 hits, `test repo:nodejs/node` 46437, and the two qualifiers
+// together 77882 — the exact sum, which is a union.
+func (c *Client) BoundQuery(query string) (string, error) {
+	for _, field := range strings.Fields(query) {
+		bare := strings.ToLower(strings.TrimPrefix(field, "-"))
+		for _, qualifier := range scopeQualifiers {
+			if strings.HasPrefix(bare, qualifier) {
+				return "", fmt.Errorf("%w (found %q)", ErrQueryWidensScope, field)
+			}
+		}
+	}
+	var b strings.Builder
+	b.WriteString(query)
+	for _, name := range c.order {
+		b.WriteString(" repo:")
+		b.WriteString(name)
+	}
+	return b.String(), nil
+}

@@ -140,10 +140,12 @@ func registerGitHubSearch(registry mcp.ToolRegistry, d GitHubDeps) {
 			}
 			// Bound the query to the allow-list before it leaves, the same way
 			// the HTTP route does — a search must never report a repository the
-			// operator did not list.
-			bounded := query
-			for _, name := range d.Client.Repos() {
-				bounded += " repo:" + name
+			// operator did not list. BoundQuery is the single owner of that
+			// rule; it also refuses a query that carries its own scope
+			// qualifier, which appending alone cannot bound.
+			bounded, err := d.Client.BoundQuery(query)
+			if err != nil {
+				return nil, mcp.Fail("github_search: " + err.Error())
 			}
 			hits, err := d.Client.SearchIssues(ctx, bounded)
 			if err != nil {

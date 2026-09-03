@@ -206,7 +206,11 @@ func (h *Handler) search(w http.ResponseWriter, r *http.Request) error {
 	if err := h.allow(r, githubapp.CapabilitySearch, ""); err != nil {
 		return err
 	}
-	hits, err := h.client.SearchIssues(r.Context(), narrowToAllowedRepos(query, h.client.Repos()))
+	bounded, err := h.client.BoundQuery(query)
+	if err != nil {
+		return apierr.NewAppError(http.StatusBadRequest, err.Error())
+	}
+	hits, err := h.client.SearchIssues(r.Context(), bounded)
 	if err != nil {
 		return githubStatusError(err)
 	}
@@ -216,20 +220,6 @@ func (h *Handler) search(w http.ResponseWriter, r *http.Request) error {
 	}
 	apierr.WriteJSON(w, http.StatusOK, out)
 	return nil
-}
-
-// narrowToAllowedRepos appends a repo: qualifier per configured repository, so
-// a search can never report a repository the operator did not list. GitHub ORs
-// repeated repo: qualifiers, so this widens nothing — it bounds the query to
-// the same set the allow-list bounds every other call to.
-func narrowToAllowedRepos(query string, repos []string) string {
-	var b strings.Builder
-	b.WriteString(query)
-	for _, name := range repos {
-		b.WriteString(" repo:")
-		b.WriteString(name)
-	}
-	return b.String()
 }
 
 type repoActionRequest struct {

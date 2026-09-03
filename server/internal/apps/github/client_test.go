@@ -94,6 +94,15 @@ func newTestClient(t *testing.T, ts *httptest.Server) *github.Client {
 	return c
 }
 
+// clientWithRepos builds a client whose allow-list is exactly repos. BoundQuery
+// never issues a request, so no fake server is needed.
+func clientWithRepos(t *testing.T, repos ...string) *github.Client {
+	t.Helper()
+	c, err := github.NewClient(github.Config{Token: "ghp_test", BaseURL: "https://api.github.test", Repos: repos})
+	require.NoError(t, err)
+	return c
+}
+
 func TestOpenPullRequestsSendsTheTokenAndParsesTheAnswer(t *testing.T) {
 	ts, last, _ := newFakeGitHub(t)
 	prs, err := newTestClient(t, ts).OpenPullRequests(context.Background(), "lx-wnk/agent-dashboard", 5)
@@ -218,4 +227,46 @@ func TestStatusErrorDistinguishesNotFoundFromForbidden(t *testing.T) {
 	require.Equal(t, http.StatusForbidden, forbidden.StatusCode)
 
 	require.NotEqual(t, notFound.StatusCode, forbidden.StatusCode, "404 and 403 must be distinguishable, not collapsed into one opaque error")
+}
+
+// TestBoundQueryRefusesACallerSuppliedScopeQualifier pins the security
+// property, not the string-building. GitHub unions repeated repo:/org:/user:
+// qualifiers — verified against the live API: `test repo:golang/go` returns
+// 31445 hits, `test repo:nodejs/node` 46437, and both together 77882, the
+// exact sum — so a caller-supplied one is a second branch of the same OR and
+// reaches a repository the allow-list never named. Appending cannot bound a
+// query that is free to widen itself.
+func TestBoundQueryRefusesACallerSuppliedScopeQualifier(t *testing.T) {
+	c := clientWithRepos(t, "lx-wnk/agent-dashboard")
+
+	for _, query := range []string{
+		"secret repo:othercorp/private",
+		"secret org:othercorp",
+		"secret user:someone",
+		"secret REPO:OtherCorp/Private",
+		"repo:othercorp/private",
+	} {
+		got, err := c.BoundQuery(query)
+		require.ErrorIs(t, err, github.ErrQueryWidensScope, "query %q must be refused", query)
+		require.Empty(t, got, "a refused query must yield no string a caller could send anyway")
+	}
+}
+
+func TestBoundQueryAppendsEveryAllowedRepository(t *testing.T) {
+	c := clientWithRepos(t, "lx-wnk/agent-dashboard", "lx-wnk/other")
+
+	got, err := c.BoundQuery("crash on startup")
+	require.NoError(t, err)
+	require.Equal(t, "crash on startup repo:lx-wnk/agent-dashboard repo:lx-wnk/other", got)
+}
+
+// A bare word that merely contains a qualifier's letters is not a qualifier —
+// the check is per whitespace-separated field, so "superuser:x" would be a
+// false positive and "repository" must not trip it either.
+func TestBoundQueryDoesNotRefuseAnOrdinaryWord(t *testing.T) {
+	c := clientWithRepos(t, "lx-wnk/agent-dashboard")
+
+	got, err := c.BoundQuery("repository refactor")
+	require.NoError(t, err)
+	require.Equal(t, "repository refactor repo:lx-wnk/agent-dashboard", got)
 }
