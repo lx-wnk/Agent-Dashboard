@@ -139,11 +139,18 @@ func TestMergeIsAllowedWithAnExplicitGlobalGrant(t *testing.T) {
 }
 
 // TestRepoOutsideTheAllowListIsRefusedBeforeTheGate is spec §6 row 3 and
-// decision D4: no capability question is asked at all. Proven by granting
-// merge globally and still being refused.
+// decision D4: no capability question is asked at all.
+//
+// Deliberately grants NO capability, rather than granting merge globally: a
+// "*" pattern grant matches "evil/repo" too (capability.Match treats a
+// trailing "*" as a prefix check against everything), so if the gate were
+// consulted it would answer allow — and the allow-list check, wherever it
+// ran, would still produce the same 403 "allow-list" refusal either way.
+// With no grant at all, a gate-first bug is distinguishable: the gate alone
+// would deny with "capability denied" (class default), a different message
+// than the allow-list's, and this test would catch the swap.
 func TestRepoOutsideTheAllowListIsRefusedBeforeTheGate(t *testing.T) {
-	h, grants, called, ctx := newEnv(t)
-	allowGlobally(t, grants, ctx, githubapp.CapabilityMerge)
+	h, _, called, _ := newEnv(t)
 	rec := do(t, h, http.MethodPost, "/api/github/merge", `{"repo":"evil/repo","number":1}`)
 	require.Equal(t, http.StatusForbidden, rec.Code)
 	require.Contains(t, rec.Body.String(), "allow-list")
@@ -210,6 +217,7 @@ func TestUpstreamNotFoundMapsTo404(t *testing.T) {
 	allowGlobally(t, grants, ctx, githubapp.CapabilityMerge)
 	rec := do(t, h, http.MethodPost, "/api/github/merge", `{"repo":"`+testRepo+`","number":42}`)
 	require.Equal(t, http.StatusNotFound, rec.Code)
+	require.NotContains(t, rec.Body.String(), "ghp_supersecret")
 }
 
 // TestUpstreamForbiddenReadsDifferentlyFromCapabilityDenial proves the second
@@ -226,6 +234,7 @@ func TestUpstreamForbiddenReadsDifferentlyFromCapabilityDenial(t *testing.T) {
 	require.Equal(t, http.StatusForbidden, rec.Code)
 	require.NotContains(t, rec.Body.String(), "capability denied")
 	require.Contains(t, rec.Body.String(), "github refused")
+	require.NotContains(t, rec.Body.String(), "ghp_supersecret")
 }
 
 // TestUpstreamServerErrorMapsToBadGateway proves the third StatusError case:
@@ -239,6 +248,7 @@ func TestUpstreamServerErrorMapsToBadGateway(t *testing.T) {
 	allowGlobally(t, grants, ctx, githubapp.CapabilityMerge)
 	rec := do(t, h, http.MethodPost, "/api/github/merge", `{"repo":"`+testRepo+`","number":42}`)
 	require.Equal(t, http.StatusBadGateway, rec.Code)
+	require.NotContains(t, rec.Body.String(), "ghp_supersecret")
 }
 
 // TestTransportFailureMapsToServiceUnavailable proves a failure that never
