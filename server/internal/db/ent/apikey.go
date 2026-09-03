@@ -26,6 +26,12 @@ type ApiKey struct {
 	Scopes []string `json:"scopes,omitempty"`
 	// Active holds the value of the "active" field.
 	Active bool `json:"active,omitempty"`
+	// Kind holds the value of the "kind" field.
+	Kind string `json:"kind,omitempty"`
+	// StageRunID holds the value of the "stage_run_id" field.
+	StageRunID string `json:"stage_run_id,omitempty"`
+	// ExpiresAt holds the value of the "expires_at" field.
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// LastUsedAt holds the value of the "last_used_at" field.
@@ -42,9 +48,9 @@ func (*ApiKey) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case apikey.FieldActive:
 			values[i] = new(sql.NullBool)
-		case apikey.FieldID, apikey.FieldName, apikey.FieldKeyHash:
+		case apikey.FieldID, apikey.FieldName, apikey.FieldKeyHash, apikey.FieldKind, apikey.FieldStageRunID:
 			values[i] = new(sql.NullString)
-		case apikey.FieldCreatedAt, apikey.FieldLastUsedAt:
+		case apikey.FieldExpiresAt, apikey.FieldCreatedAt, apikey.FieldLastUsedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -92,6 +98,25 @@ func (_m *ApiKey) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field active", values[i])
 			} else if value.Valid {
 				_m.Active = value.Bool
+			}
+		case apikey.FieldKind:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field kind", values[i])
+			} else if value.Valid {
+				_m.Kind = value.String
+			}
+		case apikey.FieldStageRunID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field stage_run_id", values[i])
+			} else if value.Valid {
+				_m.StageRunID = value.String
+			}
+		case apikey.FieldExpiresAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field expires_at", values[i])
+			} else if value.Valid {
+				_m.ExpiresAt = new(time.Time)
+				*_m.ExpiresAt = value.Time
 			}
 		case apikey.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -152,6 +177,17 @@ func (_m *ApiKey) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("active=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Active))
+	builder.WriteString(", ")
+	builder.WriteString("kind=")
+	builder.WriteString(_m.Kind)
+	builder.WriteString(", ")
+	builder.WriteString("stage_run_id=")
+	builder.WriteString(_m.StageRunID)
+	builder.WriteString(", ")
+	if v := _m.ExpiresAt; v != nil {
+		builder.WriteString("expires_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
 	builder.WriteString(", ")
 	builder.WriteString("created_at=")
 	builder.WriteString(_m.CreatedAt.Format(time.ANSIC))

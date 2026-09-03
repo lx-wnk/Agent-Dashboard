@@ -1137,6 +1137,9 @@ type ApiKeyMutation struct {
 	scopes        *[]string
 	appendscopes  []string
 	active        *bool
+	kind          *string
+	stage_run_id  *string
+	expires_at    *time.Time
 	created_at    *time.Time
 	last_used_at  *time.Time
 	clearedFields map[string]struct{}
@@ -1408,6 +1411,127 @@ func (m *ApiKeyMutation) ResetActive() {
 	m.active = nil
 }
 
+// SetKind sets the "kind" field.
+func (m *ApiKeyMutation) SetKind(s string) {
+	m.kind = &s
+}
+
+// Kind returns the value of the "kind" field in the mutation.
+func (m *ApiKeyMutation) Kind() (r string, exists bool) {
+	v := m.kind
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldKind returns the old "kind" field's value of the ApiKey entity.
+// If the ApiKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ApiKeyMutation) OldKind(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldKind is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldKind requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldKind: %w", err)
+	}
+	return oldValue.Kind, nil
+}
+
+// ResetKind resets all changes to the "kind" field.
+func (m *ApiKeyMutation) ResetKind() {
+	m.kind = nil
+}
+
+// SetStageRunID sets the "stage_run_id" field.
+func (m *ApiKeyMutation) SetStageRunID(s string) {
+	m.stage_run_id = &s
+}
+
+// StageRunID returns the value of the "stage_run_id" field in the mutation.
+func (m *ApiKeyMutation) StageRunID() (r string, exists bool) {
+	v := m.stage_run_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStageRunID returns the old "stage_run_id" field's value of the ApiKey entity.
+// If the ApiKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ApiKeyMutation) OldStageRunID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStageRunID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStageRunID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStageRunID: %w", err)
+	}
+	return oldValue.StageRunID, nil
+}
+
+// ResetStageRunID resets all changes to the "stage_run_id" field.
+func (m *ApiKeyMutation) ResetStageRunID() {
+	m.stage_run_id = nil
+}
+
+// SetExpiresAt sets the "expires_at" field.
+func (m *ApiKeyMutation) SetExpiresAt(t time.Time) {
+	m.expires_at = &t
+}
+
+// ExpiresAt returns the value of the "expires_at" field in the mutation.
+func (m *ApiKeyMutation) ExpiresAt() (r time.Time, exists bool) {
+	v := m.expires_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldExpiresAt returns the old "expires_at" field's value of the ApiKey entity.
+// If the ApiKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ApiKeyMutation) OldExpiresAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldExpiresAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldExpiresAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldExpiresAt: %w", err)
+	}
+	return oldValue.ExpiresAt, nil
+}
+
+// ClearExpiresAt clears the value of the "expires_at" field.
+func (m *ApiKeyMutation) ClearExpiresAt() {
+	m.expires_at = nil
+	m.clearedFields[apikey.FieldExpiresAt] = struct{}{}
+}
+
+// ExpiresAtCleared returns if the "expires_at" field was cleared in this mutation.
+func (m *ApiKeyMutation) ExpiresAtCleared() bool {
+	_, ok := m.clearedFields[apikey.FieldExpiresAt]
+	return ok
+}
+
+// ResetExpiresAt resets all changes to the "expires_at" field.
+func (m *ApiKeyMutation) ResetExpiresAt() {
+	m.expires_at = nil
+	delete(m.clearedFields, apikey.FieldExpiresAt)
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (m *ApiKeyMutation) SetCreatedAt(t time.Time) {
 	m.created_at = &t
@@ -1527,7 +1651,7 @@ func (m *ApiKeyMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ApiKeyMutation) Fields() []string {
-	fields := make([]string, 0, 6)
+	fields := make([]string, 0, 9)
 	if m.name != nil {
 		fields = append(fields, apikey.FieldName)
 	}
@@ -1539,6 +1663,15 @@ func (m *ApiKeyMutation) Fields() []string {
 	}
 	if m.active != nil {
 		fields = append(fields, apikey.FieldActive)
+	}
+	if m.kind != nil {
+		fields = append(fields, apikey.FieldKind)
+	}
+	if m.stage_run_id != nil {
+		fields = append(fields, apikey.FieldStageRunID)
+	}
+	if m.expires_at != nil {
+		fields = append(fields, apikey.FieldExpiresAt)
 	}
 	if m.created_at != nil {
 		fields = append(fields, apikey.FieldCreatedAt)
@@ -1562,6 +1695,12 @@ func (m *ApiKeyMutation) Field(name string) (ent.Value, bool) {
 		return m.Scopes()
 	case apikey.FieldActive:
 		return m.Active()
+	case apikey.FieldKind:
+		return m.Kind()
+	case apikey.FieldStageRunID:
+		return m.StageRunID()
+	case apikey.FieldExpiresAt:
+		return m.ExpiresAt()
 	case apikey.FieldCreatedAt:
 		return m.CreatedAt()
 	case apikey.FieldLastUsedAt:
@@ -1583,6 +1722,12 @@ func (m *ApiKeyMutation) OldField(ctx context.Context, name string) (ent.Value, 
 		return m.OldScopes(ctx)
 	case apikey.FieldActive:
 		return m.OldActive(ctx)
+	case apikey.FieldKind:
+		return m.OldKind(ctx)
+	case apikey.FieldStageRunID:
+		return m.OldStageRunID(ctx)
+	case apikey.FieldExpiresAt:
+		return m.OldExpiresAt(ctx)
 	case apikey.FieldCreatedAt:
 		return m.OldCreatedAt(ctx)
 	case apikey.FieldLastUsedAt:
@@ -1623,6 +1768,27 @@ func (m *ApiKeyMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetActive(v)
+		return nil
+	case apikey.FieldKind:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetKind(v)
+		return nil
+	case apikey.FieldStageRunID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStageRunID(v)
+		return nil
+	case apikey.FieldExpiresAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetExpiresAt(v)
 		return nil
 	case apikey.FieldCreatedAt:
 		v, ok := value.(time.Time)
@@ -1668,6 +1834,9 @@ func (m *ApiKeyMutation) AddField(name string, value ent.Value) error {
 // mutation.
 func (m *ApiKeyMutation) ClearedFields() []string {
 	var fields []string
+	if m.FieldCleared(apikey.FieldExpiresAt) {
+		fields = append(fields, apikey.FieldExpiresAt)
+	}
 	if m.FieldCleared(apikey.FieldLastUsedAt) {
 		fields = append(fields, apikey.FieldLastUsedAt)
 	}
@@ -1685,6 +1854,9 @@ func (m *ApiKeyMutation) FieldCleared(name string) bool {
 // error if the field is not defined in the schema.
 func (m *ApiKeyMutation) ClearField(name string) error {
 	switch name {
+	case apikey.FieldExpiresAt:
+		m.ClearExpiresAt()
+		return nil
 	case apikey.FieldLastUsedAt:
 		m.ClearLastUsedAt()
 		return nil
@@ -1707,6 +1879,15 @@ func (m *ApiKeyMutation) ResetField(name string) error {
 		return nil
 	case apikey.FieldActive:
 		m.ResetActive()
+		return nil
+	case apikey.FieldKind:
+		m.ResetKind()
+		return nil
+	case apikey.FieldStageRunID:
+		m.ResetStageRunID()
+		return nil
+	case apikey.FieldExpiresAt:
+		m.ResetExpiresAt()
 		return nil
 	case apikey.FieldCreatedAt:
 		m.ResetCreatedAt()

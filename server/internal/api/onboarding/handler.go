@@ -155,7 +155,7 @@ func (h *Handler) upsertOnboardingKey(ctx context.Context, hash string) error {
 			return nil
 		}
 	}
-	if _, err := h.apiKeyRepo.Create(ctx, onboardingKey, hash, onboardingScopes); err != nil {
+	if _, err := h.apiKeyRepo.Create(ctx, repo.CreateApiKeyInput{Name: onboardingKey, Hash: hash, Scopes: onboardingScopes}); err != nil {
 		return fmt.Errorf("create key: %w", err)
 	}
 	return nil

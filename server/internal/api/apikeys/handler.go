@@ -101,7 +101,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) error {
 		return fmt.Errorf("apikeys.Create: %w", err)
 	}
 
-	key, err := h.repo.Create(r.Context(), body.Name, hash, body.Scopes)
+	key, err := h.repo.Create(r.Context(), repo.CreateApiKeyInput{Name: body.Name, Hash: hash, Scopes: body.Scopes})
 	if err != nil {
 		return fmt.Errorf("apikeys.Create: %w", err)
 	}

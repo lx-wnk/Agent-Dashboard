@@ -49,7 +49,7 @@ func buildIngressRouter(t *testing.T, rawToken string) http.Handler {
 
 	keyRepo := repo.NewApiKeyRepo(c)
 	hash := mcp.HashToken(rawToken)
-	if _, err := keyRepo.Create(context.Background(), "test-ingress-key", hash, []string{"pipeline:control"}); err != nil {
+	if _, err := keyRepo.Create(context.Background(), repo.CreateApiKeyInput{Name: "test-ingress-key", Hash: hash, Scopes: []string{"pipeline:control"}}); err != nil {
 		t.Fatalf("seed api key: %v", err)
 	}
 

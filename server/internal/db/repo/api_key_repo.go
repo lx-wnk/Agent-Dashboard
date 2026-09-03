@@ -11,15 +11,41 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/apikey"
 )
 
+// API key kinds. A user key is one a person created and manages; a stage_run
+// key is minted by the pipeline for one agent process and swept when it expires.
+const (
+	ApiKeyKindUser     = "user"
+	ApiKeyKindStageRun = "stage_run"
+)
+
+// CreateApiKeyInput is the named input for Create. Named rather than
+// positional because the call now has more than four parameters, which is
+// where this codebase's convention switches. A zero Kind means ApiKeyKindUser.
+type CreateApiKeyInput struct {
+	Name       string
+	Hash       string
+	Scopes     []string
+	Kind       string
+	StageRunID string
+	ExpiresAt  *time.Time
+}
+
 // ApiKeyRepo manages API key persistence.
 type ApiKeyRepo interface {
-	Create(ctx context.Context, name, hash string, scopes []string) (*ent.ApiKey, error)
+	Create(ctx context.Context, in CreateApiKeyInput) (*ent.ApiKey, error)
 	GetByHash(ctx context.Context, hash string) (*ent.ApiKey, error)
 	GetByID(ctx context.Context, id string) (*ent.ApiKey, error)
 	List(ctx context.Context) ([]*ent.ApiKey, error)
 	Delete(ctx context.Context, id string) error
 	TouchLastUsed(ctx context.Context, id string) error
 	Rotate(ctx context.Context, id, newHash string) (*ent.ApiKey, error)
+	// RevokeForStageRun deactivates every key issued for stageRunID and
+	// returns how many rows it touched.
+	RevokeForStageRun(ctx context.Context, stageRunID string) (int, error)
+	// DeleteExpired hard-deletes stage_run keys whose expires_at is before
+	// the given instant. User keys are never deleted here: they are soft-
+	// deleted through Delete so their hash stays available for audit.
+	DeleteExpired(ctx context.Context, before time.Time) (int, error)
 }
 
 type entApiKeyRepo struct {
@@ -31,16 +57,24 @@ func NewApiKeyRepo(client *ent.Client) ApiKeyRepo {
 	return &entApiKeyRepo{client: client}
 }
 
-func (r *entApiKeyRepo) Create(ctx context.Context, name, hash string, scopes []string) (*ent.ApiKey, error) {
+func (r *entApiKeyRepo) Create(ctx context.Context, in CreateApiKeyInput) (*ent.ApiKey, error) {
+	scopes := in.Scopes
 	if scopes == nil {
 		scopes = []string{}
 	}
-	k, err := r.client.ApiKey.Create().
+	kind := in.Kind
+	if kind == "" {
+		kind = ApiKeyKindUser
+	}
+	q := r.client.ApiKey.Create().
 		SetID(uuid.New().String()).
-		SetName(name).
-		SetKeyHash(hash).
+		SetName(in.Name).
+		SetKeyHash(in.Hash).
 		SetScopes(scopes).
-		Save(ctx)
+		SetKind(kind).
+		SetStageRunID(in.StageRunID).
+		SetNillableExpiresAt(in.ExpiresAt)
+	k, err := q.Save(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("apikey.Create: %w", err)
 	}
@@ -55,9 +89,19 @@ func (r *entApiKeyRepo) GetByID(ctx context.Context, id string) (*ent.ApiKey, er
 	return k, nil
 }
 
+// GetByHash resolves a usable key: active, and either without an expiry or
+// not yet expired. The expiry rule lives here rather than at the call site so
+// no future caller can forget it — "usable" is decided in one place.
 func (r *entApiKeyRepo) GetByHash(ctx context.Context, hash string) (*ent.ApiKey, error) {
 	k, err := r.client.ApiKey.Query().
-		Where(apikey.KeyHash(hash), apikey.Active(true)).
+		Where(
+			apikey.KeyHash(hash),
+			apikey.Active(true),
+			apikey.Or(
+				apikey.ExpiresAtIsNil(),
+				apikey.ExpiresAtGT(time.Now()),
+			),
+		).
 		Only(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("apikey.GetByHash: %w", err)
@@ -65,15 +109,42 @@ func (r *entApiKeyRepo) GetByHash(ctx context.Context, hash string) (*ent.ApiKey
 	return k, nil
 }
 
+// List returns the keys a person manages. Ephemeral stage_run keys are
+// excluded: one row per stage run per retry would turn this list into a log.
 func (r *entApiKeyRepo) List(ctx context.Context) ([]*ent.ApiKey, error) {
 	keys, err := r.client.ApiKey.Query().
-		Where(apikey.Active(true)).
+		Where(apikey.Active(true), apikey.KindEQ(ApiKeyKindUser)).
 		Order(apikey.ByCreatedAt()).
 		All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("apikey.List: %w", err)
 	}
 	return keys, nil
+}
+
+func (r *entApiKeyRepo) RevokeForStageRun(ctx context.Context, stageRunID string) (int, error) {
+	n, err := r.client.ApiKey.Update().
+		Where(apikey.StageRunIDEQ(stageRunID), apikey.Active(true)).
+		SetActive(false).
+		Save(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("apikey.RevokeForStageRun: %w", err)
+	}
+	return n, nil
+}
+
+func (r *entApiKeyRepo) DeleteExpired(ctx context.Context, before time.Time) (int, error) {
+	n, err := r.client.ApiKey.Delete().
+		Where(
+			apikey.KindEQ(ApiKeyKindStageRun),
+			apikey.ExpiresAtNotNil(),
+			apikey.ExpiresAtLT(before),
+		).
+		Exec(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("apikey.DeleteExpired: %w", err)
+	}
+	return n, nil
 }
 
 func (r *entApiKeyRepo) Delete(ctx context.Context, id string) error {

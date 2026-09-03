@@ -55,6 +55,48 @@ func (_c *ApiKeyCreate) SetNillableActive(v *bool) *ApiKeyCreate {
 	return _c
 }
 
+// SetKind sets the "kind" field.
+func (_c *ApiKeyCreate) SetKind(v string) *ApiKeyCreate {
+	_c.mutation.SetKind(v)
+	return _c
+}
+
+// SetNillableKind sets the "kind" field if the given value is not nil.
+func (_c *ApiKeyCreate) SetNillableKind(v *string) *ApiKeyCreate {
+	if v != nil {
+		_c.SetKind(*v)
+	}
+	return _c
+}
+
+// SetStageRunID sets the "stage_run_id" field.
+func (_c *ApiKeyCreate) SetStageRunID(v string) *ApiKeyCreate {
+	_c.mutation.SetStageRunID(v)
+	return _c
+}
+
+// SetNillableStageRunID sets the "stage_run_id" field if the given value is not nil.
+func (_c *ApiKeyCreate) SetNillableStageRunID(v *string) *ApiKeyCreate {
+	if v != nil {
+		_c.SetStageRunID(*v)
+	}
+	return _c
+}
+
+// SetExpiresAt sets the "expires_at" field.
+func (_c *ApiKeyCreate) SetExpiresAt(v time.Time) *ApiKeyCreate {
+	_c.mutation.SetExpiresAt(v)
+	return _c
+}
+
+// SetNillableExpiresAt sets the "expires_at" field if the given value is not nil.
+func (_c *ApiKeyCreate) SetNillableExpiresAt(v *time.Time) *ApiKeyCreate {
+	if v != nil {
+		_c.SetExpiresAt(*v)
+	}
+	return _c
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (_c *ApiKeyCreate) SetCreatedAt(v time.Time) *ApiKeyCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -132,6 +174,14 @@ func (_c *ApiKeyCreate) defaults() {
 		v := apikey.DefaultActive
 		_c.mutation.SetActive(v)
 	}
+	if _, ok := _c.mutation.Kind(); !ok {
+		v := apikey.DefaultKind
+		_c.mutation.SetKind(v)
+	}
+	if _, ok := _c.mutation.StageRunID(); !ok {
+		v := apikey.DefaultStageRunID
+		_c.mutation.SetStageRunID(v)
+	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		v := apikey.DefaultCreatedAt()
 		_c.mutation.SetCreatedAt(v)
@@ -151,6 +201,12 @@ func (_c *ApiKeyCreate) check() error {
 	}
 	if _, ok := _c.mutation.Active(); !ok {
 		return &ValidationError{Name: "active", err: errors.New(`ent: missing required field "ApiKey.active"`)}
+	}
+	if _, ok := _c.mutation.Kind(); !ok {
+		return &ValidationError{Name: "kind", err: errors.New(`ent: missing required field "ApiKey.kind"`)}
+	}
+	if _, ok := _c.mutation.StageRunID(); !ok {
+		return &ValidationError{Name: "stage_run_id", err: errors.New(`ent: missing required field "ApiKey.stage_run_id"`)}
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "ApiKey.created_at"`)}
@@ -206,6 +262,18 @@ func (_c *ApiKeyCreate) createSpec() (*ApiKey, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Active(); ok {
 		_spec.SetField(apikey.FieldActive, field.TypeBool, value)
 		_node.Active = value
+	}
+	if value, ok := _c.mutation.Kind(); ok {
+		_spec.SetField(apikey.FieldKind, field.TypeString, value)
+		_node.Kind = value
+	}
+	if value, ok := _c.mutation.StageRunID(); ok {
+		_spec.SetField(apikey.FieldStageRunID, field.TypeString, value)
+		_node.StageRunID = value
+	}
+	if value, ok := _c.mutation.ExpiresAt(); ok {
+		_spec.SetField(apikey.FieldExpiresAt, field.TypeTime, value)
+		_node.ExpiresAt = &value
 	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(apikey.FieldCreatedAt, field.TypeTime, value)
@@ -312,6 +380,48 @@ func (u *ApiKeyUpsert) SetActive(v bool) *ApiKeyUpsert {
 // UpdateActive sets the "active" field to the value that was provided on create.
 func (u *ApiKeyUpsert) UpdateActive() *ApiKeyUpsert {
 	u.SetExcluded(apikey.FieldActive)
+	return u
+}
+
+// SetKind sets the "kind" field.
+func (u *ApiKeyUpsert) SetKind(v string) *ApiKeyUpsert {
+	u.Set(apikey.FieldKind, v)
+	return u
+}
+
+// UpdateKind sets the "kind" field to the value that was provided on create.
+func (u *ApiKeyUpsert) UpdateKind() *ApiKeyUpsert {
+	u.SetExcluded(apikey.FieldKind)
+	return u
+}
+
+// SetStageRunID sets the "stage_run_id" field.
+func (u *ApiKeyUpsert) SetStageRunID(v string) *ApiKeyUpsert {
+	u.Set(apikey.FieldStageRunID, v)
+	return u
+}
+
+// UpdateStageRunID sets the "stage_run_id" field to the value that was provided on create.
+func (u *ApiKeyUpsert) UpdateStageRunID() *ApiKeyUpsert {
+	u.SetExcluded(apikey.FieldStageRunID)
+	return u
+}
+
+// SetExpiresAt sets the "expires_at" field.
+func (u *ApiKeyUpsert) SetExpiresAt(v time.Time) *ApiKeyUpsert {
+	u.Set(apikey.FieldExpiresAt, v)
+	return u
+}
+
+// UpdateExpiresAt sets the "expires_at" field to the value that was provided on create.
+func (u *ApiKeyUpsert) UpdateExpiresAt() *ApiKeyUpsert {
+	u.SetExcluded(apikey.FieldExpiresAt)
+	return u
+}
+
+// ClearExpiresAt clears the value of the "expires_at" field.
+func (u *ApiKeyUpsert) ClearExpiresAt() *ApiKeyUpsert {
+	u.SetNull(apikey.FieldExpiresAt)
 	return u
 }
 
@@ -437,6 +547,55 @@ func (u *ApiKeyUpsertOne) SetActive(v bool) *ApiKeyUpsertOne {
 func (u *ApiKeyUpsertOne) UpdateActive() *ApiKeyUpsertOne {
 	return u.Update(func(s *ApiKeyUpsert) {
 		s.UpdateActive()
+	})
+}
+
+// SetKind sets the "kind" field.
+func (u *ApiKeyUpsertOne) SetKind(v string) *ApiKeyUpsertOne {
+	return u.Update(func(s *ApiKeyUpsert) {
+		s.SetKind(v)
+	})
+}
+
+// UpdateKind sets the "kind" field to the value that was provided on create.
+func (u *ApiKeyUpsertOne) UpdateKind() *ApiKeyUpsertOne {
+	return u.Update(func(s *ApiKeyUpsert) {
+		s.UpdateKind()
+	})
+}
+
+// SetStageRunID sets the "stage_run_id" field.
+func (u *ApiKeyUpsertOne) SetStageRunID(v string) *ApiKeyUpsertOne {
+	return u.Update(func(s *ApiKeyUpsert) {
+		s.SetStageRunID(v)
+	})
+}
+
+// UpdateStageRunID sets the "stage_run_id" field to the value that was provided on create.
+func (u *ApiKeyUpsertOne) UpdateStageRunID() *ApiKeyUpsertOne {
+	return u.Update(func(s *ApiKeyUpsert) {
+		s.UpdateStageRunID()
+	})
+}
+
+// SetExpiresAt sets the "expires_at" field.
+func (u *ApiKeyUpsertOne) SetExpiresAt(v time.Time) *ApiKeyUpsertOne {
+	return u.Update(func(s *ApiKeyUpsert) {
+		s.SetExpiresAt(v)
+	})
+}
+
+// UpdateExpiresAt sets the "expires_at" field to the value that was provided on create.
+func (u *ApiKeyUpsertOne) UpdateExpiresAt() *ApiKeyUpsertOne {
+	return u.Update(func(s *ApiKeyUpsert) {
+		s.UpdateExpiresAt()
+	})
+}
+
+// ClearExpiresAt clears the value of the "expires_at" field.
+func (u *ApiKeyUpsertOne) ClearExpiresAt() *ApiKeyUpsertOne {
+	return u.Update(func(s *ApiKeyUpsert) {
+		s.ClearExpiresAt()
 	})
 }
 
@@ -732,6 +891,55 @@ func (u *ApiKeyUpsertBulk) SetActive(v bool) *ApiKeyUpsertBulk {
 func (u *ApiKeyUpsertBulk) UpdateActive() *ApiKeyUpsertBulk {
 	return u.Update(func(s *ApiKeyUpsert) {
 		s.UpdateActive()
+	})
+}
+
+// SetKind sets the "kind" field.
+func (u *ApiKeyUpsertBulk) SetKind(v string) *ApiKeyUpsertBulk {
+	return u.Update(func(s *ApiKeyUpsert) {
+		s.SetKind(v)
+	})
+}
+
+// UpdateKind sets the "kind" field to the value that was provided on create.
+func (u *ApiKeyUpsertBulk) UpdateKind() *ApiKeyUpsertBulk {
+	return u.Update(func(s *ApiKeyUpsert) {
+		s.UpdateKind()
+	})
+}
+
+// SetStageRunID sets the "stage_run_id" field.
+func (u *ApiKeyUpsertBulk) SetStageRunID(v string) *ApiKeyUpsertBulk {
+	return u.Update(func(s *ApiKeyUpsert) {
+		s.SetStageRunID(v)
+	})
+}
+
+// UpdateStageRunID sets the "stage_run_id" field to the value that was provided on create.
+func (u *ApiKeyUpsertBulk) UpdateStageRunID() *ApiKeyUpsertBulk {
+	return u.Update(func(s *ApiKeyUpsert) {
+		s.UpdateStageRunID()
+	})
+}
+
+// SetExpiresAt sets the "expires_at" field.
+func (u *ApiKeyUpsertBulk) SetExpiresAt(v time.Time) *ApiKeyUpsertBulk {
+	return u.Update(func(s *ApiKeyUpsert) {
+		s.SetExpiresAt(v)
+	})
+}
+
+// UpdateExpiresAt sets the "expires_at" field to the value that was provided on create.
+func (u *ApiKeyUpsertBulk) UpdateExpiresAt() *ApiKeyUpsertBulk {
+	return u.Update(func(s *ApiKeyUpsert) {
+		s.UpdateExpiresAt()
+	})
+}
+
+// ClearExpiresAt clears the value of the "expires_at" field.
+func (u *ApiKeyUpsertBulk) ClearExpiresAt() *ApiKeyUpsertBulk {
+	return u.Update(func(s *ApiKeyUpsert) {
+		s.ClearExpiresAt()
 	})
 }
 
