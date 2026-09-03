@@ -26,6 +26,16 @@ function expectOnly(wrapper: ReturnType<typeof mount>, state: string) {
 }
 
 describe('gitHubPanel', () => {
+  // The other cases all assert loading is ABSENT after the fetch settles, so a
+  // panel that never enters the loading state would pass every one of them —
+  // and would flash the empty state while the request is still in flight.
+  it('shows loading while the request is still in flight', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})))
+    const wrapper = mount(GitHubPanel)
+    await flushPromises()
+    expectOnly(wrapper, 'loading')
+  })
+
   it('reports a 503 as not configured, never as an empty repository list', async () => {
     stubFetch(503, { error: 'github is not configured' })
     expectOnly(await mountPanel(), 'notAsked')
