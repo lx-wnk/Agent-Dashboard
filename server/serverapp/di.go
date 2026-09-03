@@ -634,11 +634,14 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	// handler's create core, so it must be built after taskHandler. nil when no DB.
 	sched, schedulesHandler := provideScheduler(entClient, taskHandler, taskBroadcaster, routerConfig.BypassAuth)
 
-	// The only three callers that may block a live request on a human
-	// decision: the memory MCP tools below, the obsidian MCP tools below
-	// them (both have an agent waiting on the tool response), and the HTTP
-	// memory handler further down (a browser request has a human on the
-	// other end). The pipeline's memory push (di_pipeline.go) and the
+	// The six callers that may block a live request on a human decision: the
+	// memory, obsidian and github MCP tools below (an agent waits on the tool
+	// response), and the HTTP memory, resources and github handlers further
+	// down (a browser request has a human on the other end). Count them by
+	// grepping askerArg and memAsker in this file and di_mcp.go — the number
+	// has been stale twice, both times because a new caller was added without
+	// anyone revisiting a sentence in another file.
+	// The pipeline's memory push (di_pipeline.go) and the
 	// obsidian trigger's Gate (obsidianHandler, built further down in this
 	// function — distinct from the obsidian MCP tools, which share this
 	// asker) both construct their own memory.Gate with no Asker instead of
