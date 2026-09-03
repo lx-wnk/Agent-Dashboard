@@ -25,9 +25,12 @@ Scopes are hierarchical — a higher scope implies all lower ones.
 | `memory:write` | Write entries to the system memory store |
 | `obsidian:read` | Read and search notes in the configured Obsidian vault |
 | `obsidian:write` | Create, overwrite, or delete a note in the configured Obsidian vault (implies `obsidian:read`) |
+| `github:read` | List open pull requests and search issues/pull requests in the configured GitHub repositories |
+| `github:write` | Post a comment on a GitHub issue or pull request (implies `github:read`; does **not** imply `github:merge`) |
+| `github:merge` | Merge a GitHub pull request (implies `github:read`; does **not** imply `github:write`) |
 | `keys:manage` | Full access including API key management |
 
-## Tools (47)
+## Tools (51)
 
 **`tasks:read`** — `list_tasks`, `get_task`, `list_stage_runs`, `list_audit`, `list_permission_requests`, `list_projects`, `list_spawners`, `list_schedules`
 
@@ -45,6 +48,12 @@ Scopes are hierarchical — a higher scope implies all lower ones.
 
 **`obsidian:write`** — `obsidian_write`, `obsidian_delete`
 
+**`github:read`** — `github_read`, `github_search`
+
+**`github:write`** — `github_comment`
+
+**`github:merge`** — `github_merge`
+
 **`keys:manage`** — `list_api_keys`, `create_api_key`, `revoke_api_key`
 
 The four `obsidian_*` tools reach the vault configured under **Settings → Obsidian**
@@ -52,6 +61,16 @@ The four `obsidian_*` tools reach the vault configured under **Settings → Obsi
 `obsidian.vaultRoot`, and `obsidian.apiKey` are a required trio), none of the four are registered at
 all rather than being registered and always failing. `obsidian_write` and `obsidian_delete` are
 irreversible: a write overwrites any existing note at that path, and a delete cannot be undone.
+
+The four `github_*` tools reach the repositories configured under **Settings → GitHub**
+(`server/internal/apps/github`); when `github.token`/`github.repos` are not both set, none of the
+four are registered, for the same reason. `github:write` implies `github:read` but deliberately
+**not** `github:merge`, and `github:merge` implies `github:read` but deliberately not `github:write`
+— a key that may comment must not be able to merge by accident, and a key that may merge has no
+business editing discussions. That scope check is the coarser net above the capability gate:
+`github_merge` still needs its own `github.merge` grant, and that capability's class (`spend`)
+denies it outright with no grant at all, regardless of scope — see
+[Security](security.md#githubs-token-and-repository-boundary).
 
 ### Attaching a task to a project
 
