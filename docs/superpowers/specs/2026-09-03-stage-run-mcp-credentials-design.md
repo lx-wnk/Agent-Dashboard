@@ -71,19 +71,41 @@ a contradiction with D4, and a second crypto surface next to the hash table that
 key list free of ephemeral rows — is bought for a `kind` column instead of a second auth path
 through `McpAuthMiddleware`.
 
-### D3 — Every issued key gets the same scope set
+### D3 — Every issued key gets the same, fixed, narrow scope set
 
-`tasks:read`, `tasks:write`, `pipeline:control`, `agent:coord`, `memory:read`, `memory:write`,
-`obsidian:read`, `obsidian:write` — deliberately **not** `keys:manage`, because an agent that can
-mint keys can mint one without a stage run and escape its own attribution.
+`tasks:read`, `agent:coord`, `memory:read`, `memory:write`, `obsidian:read`, `obsidian:write` —
+six scopes.
 
-Narrowing is the capability gate's job, per capability and per value. A second, parallel
-narrowing through scopes would be two places holding one decision, and they would drift.
+Only the memory and Obsidian MCP tools (`memory_search`/`memory_write`,
+`server/internal/mcp/tools/memory.go`; the four `obsidian_*` tools,
+`server/internal/mcp/tools/obsidian.go`) resolve a call through `capability.Decide`. Every other
+MCP tool is gated by its scope alone (`mcp.ToolScopeMap`, `server/internal/mcp/auth.go`). So a
+scope handed out here is a capability granted outright to the tools it unlocks — the gate will
+not narrow it later, because for every tool but those two there is no gate in the call path at
+all.
+
+That is why `pipeline:control` and `tasks:write` are excluded, not merely trimmed for caution:
+`pipeline:control` reaches `grant_permission`, `resolve_permission_request` and
+`approve_all_pending` on scope alone, which would let a spawned agent approve its own spec and
+resolve its own permission requests; `tasks:write` reaches `manage_task`'s `grant_permissions`
+action, which would let it widen its own permissions. `keys:manage` stays excluded for the
+neighbouring reason: an agent that can mint keys can mint one without a stage run and escape its
+own attribution.
 
 *Rejected:* a minimal set plus opt-in per spawner — new configuration surface, and an agent
 loses tools silently when nobody remembers to grant them. *Rejected:* deriving scopes from
 `task.autonomy` — that field steers permission approval today; giving it a second meaning makes
 both harder to reason about.
+
+**Corrected 2026-09-03.** The original version of this decision included `pipeline:control` and
+`tasks:write`, and argued the opposite of what is written above: "narrowing is the capability
+gate's job, per capability and per value," so granting scopes broadly and trusting the gate to
+cut them down later was safe. That was false for every MCP tool except the memory and Obsidian
+ones — the gate that sentence relied on does not sit in those tools' call path at all — and a
+whole-branch review caught it as a privilege escalation before this branch shipped: a spawned,
+`spec_gated` agent could reach `approve_spec` and `resolve_permission_request` on scope alone.
+The record is kept rather than silently rewritten, because a decision that was wrong and got
+caught is worth more to the next reader than one that reads as if it was always right.
 
 ### D4 — Two independent expiries
 
@@ -254,7 +276,7 @@ spawn's log output, because the config path and the arg list are both logged tod
 
 | Risk | Mitigation |
 |---|---|
-| A leaked stage-run token has broad MCP reach until the gate refuses (D3) | Short `expires_at`, revoke on terminal state, no `keys:manage` scope, loopback-only binding as today |
+| A leaked stage-run token reaches every tool its scopes unlock — for most tools that is the whole mitigation, since only memory and Obsidian calls pass through the gate afterward (D3) | The scope set itself is deliberately narrow (six scopes, `pipeline:control`/`tasks:write`/`keys:manage` excluded); short `expires_at`; revoke on terminal state; loopback-only binding as today |
 | Key-table growth: one row per stage run per retry | Sweep deletes expired ephemeral rows (4.5); the list filters them out (4.6) |
 | A per-call join on the hot path | One indexed read, cached per request; measure before adding anything cleverer |
-| Two truths about "what may this agent do" — scopes and grants | D3 keeps scopes fixed so there is one narrowing decision, not two |
+| Two truths about "what may this agent do" — scopes and grants, for the tools that reach the gate at all | D3's scope set is the single narrowing decision for every tool the gate never sees; grants only add a second, independent narrowing for the memory and Obsidian tools specifically |
