@@ -84,3 +84,21 @@ func TestStageKeyIssuer_TwoIssuesGiveDifferentTokens(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEqual(t, a, b, "a retry must not reuse the previous run's token")
 }
+
+// keys.List only ever returns kind=user rows (see api_key_repo.go), so it
+// cannot see a stray stage_run row and would pass even with the guard
+// deleted. Counting through the ent client directly is the honest check:
+// it counts every ApiKey row regardless of kind.
+func TestStageKeyIssuer_RefusesEmptyStageRunID(t *testing.T) {
+	bundle, err := db.Open(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+	issuer := mcp.StageKeyIssuer{Keys: repo.NewApiKeyRepo(bundle.Client)}
+
+	_, err = issuer.Issue(context.Background(), "", time.Minute)
+	require.Error(t, err, "a key with no stage run would be unattributable and unrevocable")
+
+	count, err := bundle.Client.ApiKey.Query().Count(context.Background())
+	require.NoError(t, err)
+	require.Zero(t, count, "the guard must refuse before it mints — no row of any kind should exist")
+}
