@@ -29,6 +29,7 @@ import (
 	coordapi "github.com/lx-wnk/agent-dashboard/server/internal/api/coord"
 	apicost "github.com/lx-wnk/agent-dashboard/server/internal/api/cost"
 	apieval "github.com/lx-wnk/agent-dashboard/server/internal/api/eval"
+	apigithub "github.com/lx-wnk/agent-dashboard/server/internal/api/github"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/grants"
 	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/hooks"
@@ -719,6 +720,25 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		}, obsidianSpaceID)
 	}
 
+	// GitHub — /api/github/*. Built WITH askerArg, unlike obsidianHandler
+	// just above: obsidianHandler's route only starts an unattended batch
+	// run (IndexNotes), while these four routes are the direct request the
+	// browser is blocked on, the same shape memoryHandler and
+	// resourcesHandler above already gate with askerArg — a human is on the
+	// other end of it, so an "ask" decision may legitimately hold for their
+	// answer. github.merge never reaches the asker at all: its "spend" class
+	// resolves to deny in Decide, and ServerEnforcer returns ErrDenied
+	// before the ask branch runs.
+	var githubHandler *apigithub.Handler
+	if entClient != nil {
+		githubHandler = apigithub.NewHandler(githubClient, memory.Gate{
+			Capabilities: repo.NewCapabilityRepo(entClient),
+			Grants:       repo.NewGrantRepo(entClient),
+			GrantUsage:   grantUsageRepo,
+			Asker:        askerArg,
+		})
+	}
+
 	// Eval / drift-detection subsystem. The onDrift callback is the only outward
 	// hook — eval/ stays notifications-agnostic; wiring lives here in the root.
 	var evalService *eval.Service
@@ -938,6 +958,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		MemoryHandler:          memoryHandler,
 		ResourcesHandler:       resourcesHandler,
 		ObsidianHandler:        obsidianHandler,
+		GitHubHandler:          githubHandler,
 		RefineHandler:          refineHandler,
 		PlanHandler:            planHandler,
 		AnalyticsHandler:       analyticsHandler,

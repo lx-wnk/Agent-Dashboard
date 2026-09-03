@@ -14,6 +14,7 @@ import (
 
 	apianalytics "github.com/lx-wnk/agent-dashboard/server/internal/api/analytics"
 	apicost "github.com/lx-wnk/agent-dashboard/server/internal/api/cost"
+	apigithub "github.com/lx-wnk/agent-dashboard/server/internal/api/github"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/grants"
 	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
 	apimemory "github.com/lx-wnk/agent-dashboard/server/internal/api/memory"
@@ -154,6 +155,14 @@ func buildBypassRouter(t *testing.T) http.Handler {
 			},
 			"obsidian",
 		),
+		// client is nil here — this router mirrors an unconfigured GitHub
+		// application, the common case in production too — so every
+		// /api/github/* route answers 503 before ever reaching the gate.
+		GitHubHandler: apigithub.NewHandler(nil, memory.Gate{
+			Capabilities: repo.NewCapabilityRepo(c),
+			Grants:       repo.NewGrantRepo(c),
+			GrantUsage:   repo.NewGrantUsageRepo(c, bundle.WriteClient),
+		}),
 		RefineHandler: refineapi.NewHandler(refineapi.Deps{
 			Turns:     repo.NewRefinementTurnRepo(c),
 			Tasks:     repo.NewTaskRepo(c),

@@ -38,6 +38,8 @@ GET /api/config/file
 GET /api/config/memory
 GET /api/config/skills
 GET /api/cost/summary
+GET /api/github/search
+GET /api/github/summary
 GET /api/grants
 GET /api/history/import/status
 GET /api/hooks/pending
@@ -115,6 +117,8 @@ POST /api/agents/{pid}/upload-image
 POST /api/analytics/patterns/refresh
 POST /api/auth/logout
 POST /api/auth/session
+POST /api/github/comment
+POST /api/github/merge
 POST /api/grants
 POST /api/history/import
 POST /api/hooks/event

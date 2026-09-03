@@ -27,6 +27,7 @@ import (
 	coordapi "github.com/lx-wnk/agent-dashboard/server/internal/api/coord"
 	apicost "github.com/lx-wnk/agent-dashboard/server/internal/api/cost"
 	apieval "github.com/lx-wnk/agent-dashboard/server/internal/api/eval"
+	apigithub "github.com/lx-wnk/agent-dashboard/server/internal/api/github"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/grants"
 	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/hooks"
@@ -176,6 +177,7 @@ type RouterDeps struct {
 	MemoryHandler          *apimemory.Handler
 	ResourcesHandler       *resources.Handler
 	ObsidianHandler        *apiobsidian.Handler
+	GitHubHandler          *apigithub.Handler
 	RefineHandler          *refineapi.Handler
 	PlanHandler            *planapi.Handler
 	AnalyticsHandler       *apianalytics.Handler
@@ -436,6 +438,13 @@ func NewRouter(deps RouterDeps) http.Handler {
 		// hook/MCP bearer-token bypass group.
 		if deps.ObsidianHandler != nil {
 			deps.ObsidianHandler.Mount(r)
+		}
+
+		// GitHub's four routes stay session-authenticated like every other
+		// write path in this group: two of them reach a third party in the
+		// user's name, and one of them merges.
+		if deps.GitHubHandler != nil {
+			deps.GitHubHandler.Mount(r)
 		}
 
 		if deps.RefineHandler != nil {
