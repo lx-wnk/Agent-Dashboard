@@ -2,7 +2,6 @@
 import type { Agent, PipelineTask } from './types'
 import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useAgents } from '@/features/agents/composables/useAgents'
-import DashboardView from '@/features/cockpit/components/DashboardView.vue'
 import BacklogForm from '@/features/pipeline/components/BacklogForm.vue'
 import { useTasks } from '@/features/pipeline/composables/useTasks'
 import ApiKeySettings from '@/features/settings/components/ApiKeySettings.vue'
@@ -39,6 +38,10 @@ import { formatCost } from './utils/format'
 const AgentModal = defineAsyncComponent(() => import('@/features/agents/components/AgentModal.vue'))
 // F-PERF-019: top-level heavy views loaded on demand — each becomes its own chunk
 const CockpitView = defineAsyncComponent(() => import('@/features/cockpit/components/CockpitView.vue'))
+// Async since the cockpit took over as the landing view: the dashboard is no
+// longer on the first-paint path, and a static import keeps its whole subtree
+// in the entry chunk, which has a size budget CI enforces.
+const DashboardView = defineAsyncComponent(() => import('@/features/cockpit/components/DashboardView.vue'))
 const CostAnalyticsView = defineAsyncComponent(() => import('@/features/analytics/components/CostAnalyticsView.vue'))
 const EvalView = defineAsyncComponent(() => import('@/features/analytics/components/EvalView.vue'))
 const PipelineBoard = defineAsyncComponent(() => import('@/features/pipeline/components/PipelineBoard.vue'))

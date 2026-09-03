@@ -13,7 +13,6 @@ import { useServerConfig } from '@/composables/useServerConfig'
 import { useTheme } from '@/composables/useTheme'
 import { toast } from '@/composables/useToast'
 import { useUser } from '@/composables/useUser'
-import GitHubSettings from '@/features/settings/components/GitHubSettings.vue'
 import GrantSettings from '@/features/settings/components/GrantSettings.vue'
 import ObsidianSettings from '@/features/settings/components/ObsidianSettings.vue'
 import PipelineConfigSettings from '@/features/settings/components/PipelineConfigSettings.vue'
@@ -27,6 +26,9 @@ import { buildMcpAddCommand, buildMcpJsonConfig } from '@/utils/mcpCommand'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: [] }>()
+// Lazy like its neighbours below: one settings section renders at a time behind
+// a modal, and a static import puts it in the entry chunk, which has a budget.
+const GitHubSettings = defineAsyncComponent(() => import('@/features/settings/components/GitHubSettings.vue'))
 const NotificationSettings = defineAsyncComponent(() => import('@/features/settings/components/NotificationSettings.vue'))
 const PluginSettings = defineAsyncComponent(() => import('@/features/plugins').then(m => m.PluginSettings))
 const ProviderSettings = defineAsyncComponent(() => import('@/features/settings/components/ProviderSettings.vue'))
