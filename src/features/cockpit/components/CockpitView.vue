@@ -1,14 +1,11 @@
 <script setup lang="ts">
-import { defineAsyncComponent } from 'vue'
 import AgentsPanel from './AgentsPanel.vue'
 import MemoryPanel from './MemoryPanel.vue'
 import PipelinePanel from './PipelinePanel.vue'
 import RoutinesPanel from './RoutinesPanel.vue'
 
-// GitHub is the only panel that reaches a third party; loading it on demand
-// keeps its composable out of the first-load chunk, matching how App.vue
-// splits the heavy views.
-const GitHubPanel = defineAsyncComponent(() => import('./GitHubPanel.vue'))
+// A fifth panel (GitHub, Task 8) slots in here later — the grid below does not
+// assume a fixed panel count, it just reflows whatever children it has.
 </script>
 
 <template>
@@ -17,6 +14,5 @@ const GitHubPanel = defineAsyncComponent(() => import('./GitHubPanel.vue'))
     <PipelinePanel />
     <RoutinesPanel />
     <MemoryPanel />
-    <GitHubPanel />
   </div>
 </template>
