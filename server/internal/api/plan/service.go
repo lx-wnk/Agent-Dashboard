@@ -4,6 +4,7 @@ package plan
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
@@ -16,6 +17,10 @@ type ApproveDeps struct {
 	Tasks     repo.TaskRepo
 	StageRuns repo.StageRunRepo
 	Advance   func(ctx context.Context, taskID string) error
+	// Revoke invalidates the plan_review stage run's MCP credentials once it is
+	// marked done — its agent is gone by then. Nil disables revocation; a
+	// failure logs and never blocks the approval.
+	Revoke func(ctx context.Context, stageRunID string) error
 }
 
 // RejectDeps are the dependencies required by RejectPlan.
@@ -92,6 +97,11 @@ func ApprovePlan(ctx context.Context, d ApproveDeps, taskID string) (*ent.Task, 
 				Status:  &done,
 				EndedAt: &now,
 			})
+			if d.Revoke != nil {
+				if rerr := d.Revoke(ctx, sr.ID); rerr != nil {
+					slog.Warn("plan: revoking stage-run credentials failed", "stageRun", sr.ID, "err", rerr)
+				}
+			}
 		}
 	}
 

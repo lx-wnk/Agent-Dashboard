@@ -358,6 +358,7 @@ func TestApplyTransition_CommitFails_DoesNotRevoke(t *testing.T) {
 
 	_, applyErr := orch.ApplyTransitionForTest(ctx, task, sr, pipeline.DoneTransition{})
 	require.Error(t, applyErr)
+	require.ErrorIs(t, applyErr, errInjectedCommit)
 
 	require.Empty(t, revokes.all(), "a rolled-back transition must not revoke the run's credentials")
 }

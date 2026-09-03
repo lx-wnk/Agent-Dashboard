@@ -51,12 +51,8 @@ func (s *stageRunService) Update(ctx context.Context, id string, input repo.Upda
 }
 
 // revokeCredentials invalidates id's MCP credentials via revoke, logging
-// (never returning) any failure. It is the single place that turns "this
-// stage run just reached a terminal status" into a revoke call, shared by
-// Update above and by applyTransitionWrites' post-commit hooks (transitions.go)
-// — the state-machine's own terminal writes go through a transaction-scoped
-// repo, not this service, so they call this helper directly once their write
-// has committed rather than routing through Update.
+// (never returning) any failure. Shared by Update above and by
+// applyTransitionWrites' post-commit hooks (transitions.go).
 func (s *stageRunService) revokeCredentials(ctx context.Context, id string) {
 	if s.revoke == nil {
 		return

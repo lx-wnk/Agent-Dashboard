@@ -583,8 +583,7 @@ func (l *stderrLogger) Write(b []byte) (int, error) {
 
 // buildTaskAPI returns the channelconfig.TaskAPI entry for opts, or nil when
 // no credential was minted or no dashboard URL is configured — the written
-// config then gets no dashboard-tasks server and the agent keeps only the
-// channel bridge, exactly as it did before this field existed.
+// config then gets no dashboard-tasks server.
 func buildTaskAPI(opts SpawnAgentOptions) *channelconfig.TaskAPI {
 	if opts.TaskAPIToken == "" || opts.MCPUrl == "" {
 		return nil

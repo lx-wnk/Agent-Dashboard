@@ -18,6 +18,7 @@ type HandlerDeps struct {
 	StageRuns repo.StageRunRepo
 	Advance   func(ctx context.Context, taskID string) error
 	Requeue   func(ctx context.Context, taskID, prompt string) error
+	Revoke    func(ctx context.Context, stageRunID string) error
 }
 
 // Handler handles /api/plan routes.
@@ -46,6 +47,7 @@ func (h *Handler) approve(w http.ResponseWriter, r *http.Request) {
 		Tasks:     h.deps.Tasks,
 		StageRuns: h.deps.StageRuns,
 		Advance:   h.deps.Advance,
+		Revoke:    h.deps.Revoke,
 	}, taskID)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)

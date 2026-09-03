@@ -195,9 +195,6 @@ func (o *PipelineOrchestrator) applyTransitionWrites(
 			}); err != nil {
 				return nil, nil, nil, fmt.Errorf("applyTransition.iterate.updateRun: %w", err)
 			}
-			// The completed iteration's own credential is revoked too — a new
-			// run (below) gets its own on next spawn, but this run's agent is
-			// done and gets no further calls.
 			postCommit = append(postCommit, func() { o.stageRuns.revokeCredentials(ctx, sr.ID) })
 			newSR, err := srRepo.Create(ctx, repo.CreateStageRunInput{
 				TaskID:      task.ID,

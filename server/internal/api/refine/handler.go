@@ -28,6 +28,9 @@ type Deps struct {
 	// the concept stage. Injected from the composition root so this package has
 	// no runtime dependency on the pipeline orchestrator.
 	Advance func(ctx context.Context, taskID string) error
+	// Revoke invalidates the concept stage run's MCP credentials once Confirm
+	// marks it done. Nil disables revocation.
+	Revoke  func(ctx context.Context, stageRunID string) error
 	Spawner func(ctx context.Context, cfg refine.SpawnConfig, sp *ent.Spawner) (<-chan string, error)
 	// ResolveSpawner returns the effective spawner row for the given task. If nil,
 	// the handler falls back to passing nil to the Spawner function (which then
@@ -242,6 +245,7 @@ func (h *Handler) confirm(w http.ResponseWriter, r *http.Request) {
 		Tasks:     h.deps.Tasks,
 		StageRuns: h.deps.StageRuns,
 		Advance:   h.deps.Advance,
+		Revoke:    h.deps.Revoke,
 	}, taskID)
 	if err != nil {
 		jsonError(w, "confirmed but could not fetch updated task", http.StatusInternalServerError)

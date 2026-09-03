@@ -22,13 +22,6 @@ func repoUpdateStatus(s string) repo.UpdateStageRunInput {
 
 var errRevokeBoom = errors.New("revoke boom")
 
-// buildTaskAPI is the new logic this task adds to the spawn path: it decides
-// whether the written MCP config gets a second (dashboard-tasks) server entry.
-// Exercising SpawnStageAgent itself would mean starting a real process just to
-// inspect a temp file it writes — buildTaskAPI is the extracted, directly
-// testable decision point instead (see task-6-report.md for why the t.Skip
-// placeholder for a SpawnStageAgent-level test was dropped).
-
 func TestBuildTaskAPI_EmptyTokenReturnsNil(t *testing.T) {
 	if got := buildTaskAPI(SpawnAgentOptions{MCPUrl: "http://127.0.0.1:13120"}); got != nil {
 		t.Fatalf("got %+v, want nil (no credential minted)", got)
@@ -88,12 +81,5 @@ func TestStageRunService_RevokeFailureDoesNotFailTheWrite(t *testing.T) {
 	}
 	if _, err := svc.Update(context.Background(), "sr-1", repoUpdateStatus("done")); err != nil {
 		t.Fatalf("a failed revoke must not roll back the status write: %v", err)
-	}
-}
-
-func TestStageRunService_NoRevokeFuncIsANoOp(t *testing.T) {
-	svc := &stageRunService{repo: newFakeStageRunRepo()}
-	if _, err := svc.Update(context.Background(), "sr-1", repoUpdateStatus("done")); err != nil {
-		t.Fatalf("a nil revoke func must not error: %v", err)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -492,6 +493,62 @@ func TestSpawnStageAgent_CQ06_FailsLoudUnderRestrictiveAutonomy(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "writeSettingsFile:",
 		"restrictive autonomy must fail loud on a writeSettingsFile error instead of spawning with no allow-list")
+}
+
+// TestSpawnStageAgent_TaskAPITokenReachesWrittenConfig closes the gap
+// buildTaskAPI's own unit tests leave open: they cover the pure decision of
+// whether a dashboard-tasks entry gets built, but SpawnStageAgent could still
+// silently drop the result on the floor (e.g. reverting to
+// WriteTempConfig(selfBin, nil)) without failing any of them. This drives the
+// real function end to end with a real (near-instant) child process and reads
+// the config file it actually wrote.
+func TestSpawnStageAgent_TaskAPITokenReachesWrittenConfig(t *testing.T) {
+	dir := filepath.Join(os.TempDir(), "dashboard-"+strconv.Itoa(os.Getuid()))
+	before, _ := os.ReadDir(dir) // ignore error — dir may not exist yet
+	beforeSet := make(map[string]bool, len(before))
+	for _, e := range before {
+		beforeSet[e.Name()] = true
+	}
+
+	opts := pipeline.SpawnAgentOptions{
+		Task:          &ent.Task{ID: "t-reach", Cwd: t.TempDir(), Autonomy: "full"},
+		StageRun:      &ent.StageRun{ID: "r-reach"},
+		EnableChannel: true,
+		TaskAPIToken:  "reachtest-tok",
+		MCPUrl:        "http://127.0.0.1:13120",
+		Spawner:       &ent.Spawner{Command: "/usr/bin/true"},
+	}
+	result, err := pipeline.SpawnStageAgent(opts)
+	require.NoError(t, err)
+	t.Cleanup(result.Cleanup)
+	if p, perr := os.FindProcess(result.PID); perr == nil {
+		_, _ = p.Wait() // reap the child so it doesn't linger as a zombie
+	}
+
+	after, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	var newFile string
+	for _, e := range after {
+		if !beforeSet[e.Name()] {
+			newFile = filepath.Join(dir, e.Name())
+			break
+		}
+	}
+	require.NotEmpty(t, newFile, "SpawnStageAgent must have written a new channel config file")
+
+	data, err := os.ReadFile(newFile)
+	require.NoError(t, err)
+
+	var parsed struct {
+		MCPServers map[string]struct {
+			Headers map[string]string `json:"headers"`
+		} `json:"mcpServers"`
+	}
+	require.NoError(t, json.Unmarshal(data, &parsed))
+	tasksEntry, ok := parsed.MCPServers["dashboard-tasks"]
+	require.True(t, ok, "config must carry a dashboard-tasks entry when TaskAPIToken is set")
+	require.Equal(t, "Bearer reachtest-tok", tasksEntry.Headers["Authorization"],
+		"the minted token must reach the written config, not just buildTaskAPI's return value")
 }
 
 func TestSpawnStageAgent_CQ06_WarnsAndContinuesUnderAllowAllAutonomy(t *testing.T) {

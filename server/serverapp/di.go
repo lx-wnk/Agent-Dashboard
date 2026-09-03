@@ -64,6 +64,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/eval"
 	histsvc "github.com/lx-wnk/agent-dashboard/server/internal/history"
 	"github.com/lx-wnk/agent-dashboard/server/internal/hookstore"
+	mcppkg "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
 	"github.com/lx-wnk/agent-dashboard/server/internal/memory"
 	"github.com/lx-wnk/agent-dashboard/server/internal/merger"
 	"github.com/lx-wnk/agent-dashboard/server/internal/parser"
@@ -722,6 +723,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 				_, err := orch.ProgressTask(ctx, taskID, nil)
 				return err
 			},
+			Revoke: mcppkg.StageKeyIssuer{Keys: repo.NewApiKeyRepo(entClient)}.Revoke,
 			ResolveSpawner: func(ctx context.Context, taskID string) (*ent.Spawner, services.SpawnerSource, error) {
 				if spawnerResolver == nil {
 					return nil, services.SpawnerSourceDefault, nil
@@ -747,6 +749,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 				_, err := orch.RequeueForUser(ctx, taskID, prompt)
 				return err
 			},
+			Revoke: mcppkg.StageKeyIssuer{Keys: repo.NewApiKeyRepo(entClient)}.Revoke,
 		})
 	}
 

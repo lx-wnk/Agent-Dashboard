@@ -173,8 +173,8 @@ type StageContext struct {
 	// IssueTaskAPIKey mints the MCP credential a spawned stage agent presents
 	// to the dashboard's own /api/mcp endpoint. Nil disables issuance: the
 	// spawn then gets no dashboard-tasks config entry and keeps only the
-	// channel bridge, which is what every spawn did before this existed. A
-	// mint failure is likewise non-fatal — see stage_handlers.go's caller.
+	// channel bridge. A mint failure is likewise non-fatal — see
+	// stage_handlers.go's caller.
 	IssueTaskAPIKey func(ctx context.Context, stageRunID string, stageTimeout time.Duration) (string, error)
 }
 

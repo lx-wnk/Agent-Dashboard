@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
@@ -239,6 +240,63 @@ func TestPlanReviewBuilder_NoFeedbackIsDefensive(t *testing.T) {
 	}
 	bundle := pipeline.PlanReviewBuilderForTest(ctx)
 	require.NotEmpty(t, bundle.UserPrompt, "prompt must be non-empty even without feedback")
+}
+
+// TestAgentStageHandler_IssueTaskAPIKeyErrorIsNotFatal proves the rule from
+// stage_handlers.go: a credential-mint failure must not kill the spawn — the
+// agent runs with the channel bridge alone (TaskAPIToken empty) instead.
+func TestAgentStageHandler_IssueTaskAPIKeyErrorIsNotFatal(t *testing.T) {
+	var captured pipeline.SpawnAgentOptions
+	spawnFn := func(opts pipeline.SpawnAgentOptions) (pipeline.SpawnResult, error) {
+		captured = opts
+		return pipeline.SpawnResult{PID: 123}, nil
+	}
+	handler := pipeline.NewAgentStageHandlerForTest("implementation", spawnFn)
+
+	ctx := &pipeline.StageContext{
+		Ctx:               context.Background(),
+		Task:              &ent.Task{Title: "Fix the retry loop", Cwd: "/tmp/proj-key-err", StageTimeoutSeconds: 1800},
+		StageRun:          &ent.StageRun{Stage: "implementation", ID: "sr-key-err"},
+		RecordAudit:       func(string, map[string]any) {},
+		RequestPermission: func(string, string, string) *ent.PermissionRequest { return nil },
+		IssueTaskAPIKey: func(context.Context, string, time.Duration) (string, error) {
+			return "", errors.New("mint boom")
+		},
+	}
+
+	_, err := handler.Execute(ctx)
+	require.NoError(t, err, "a credential-mint failure must not fail the spawn")
+	require.Empty(t, captured.TaskAPIToken, "a failed mint must leave TaskAPIToken empty")
+}
+
+// TestAgentStageHandler_IssueTaskAPIKeySuccessReachesSpawnOptions proves the
+// minted token actually reaches SpawnAgentOptions.TaskAPIToken, with the
+// stage run's own ID passed to the issuer.
+func TestAgentStageHandler_IssueTaskAPIKeySuccessReachesSpawnOptions(t *testing.T) {
+	var captured pipeline.SpawnAgentOptions
+	spawnFn := func(opts pipeline.SpawnAgentOptions) (pipeline.SpawnResult, error) {
+		captured = opts
+		return pipeline.SpawnResult{PID: 123}, nil
+	}
+	handler := pipeline.NewAgentStageHandlerForTest("implementation", spawnFn)
+
+	var gotStageRunID string
+	ctx := &pipeline.StageContext{
+		Ctx:               context.Background(),
+		Task:              &ent.Task{Title: "Fix the retry loop", Cwd: "/tmp/proj-key-ok", StageTimeoutSeconds: 1800},
+		StageRun:          &ent.StageRun{Stage: "implementation", ID: "sr-key-ok"},
+		RecordAudit:       func(string, map[string]any) {},
+		RequestPermission: func(string, string, string) *ent.PermissionRequest { return nil },
+		IssueTaskAPIKey: func(_ context.Context, stageRunID string, _ time.Duration) (string, error) {
+			gotStageRunID = stageRunID
+			return "tok", nil
+		},
+	}
+
+	_, err := handler.Execute(ctx)
+	require.NoError(t, err)
+	require.Equal(t, "tok", captured.TaskAPIToken)
+	require.Equal(t, "sr-key-ok", gotStageRunID)
 }
 
 // TestAgentStageHandler_MemoryBlockInNativeUserPromptNotSystemPrompt is the
