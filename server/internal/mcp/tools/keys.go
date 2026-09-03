@@ -85,7 +85,7 @@ func registerCreateAPIKey(registry mcp.ToolRegistry, d KeyDeps) {
 					"type": "array",
 					"items": map[string]any{
 						"type": "string",
-						"enum": []string{"tasks:read", "tasks:write", "pipeline:control", "keys:manage", "memory:read", "memory:write", "obsidian:read", "obsidian:write"},
+						"enum": []string{"tasks:read", "tasks:write", "pipeline:control", "keys:manage", "memory:read", "memory:write", "obsidian:read", "obsidian:write", "github:read", "github:write", "github:merge"},
 					},
 					"description": "List of scopes to grant to this key",
 				},

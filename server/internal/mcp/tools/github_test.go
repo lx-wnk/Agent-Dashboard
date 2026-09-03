@@ -190,16 +190,59 @@ func TestGitHubToolsRefuseARepoOutsideTheAllowListBeforeTheGate(t *testing.T) {
 }
 
 // TestGitHubToolErrorsNeverCarryTheToken is spec §6 row 5 on the MCP surface.
+//
+// Every capability is granted, so the gate allows every call and each handler
+// actually reaches d.Client — an ungranted call would be denied before the
+// client ever runs, and the local, gate-built strings that produces (the
+// allow-list message, the capability-denial reason) are structurally
+// incapable of containing a token, proving nothing about this property. The
+// upstream test server answers every request with a non-2xx status, so each
+// handler returns the client-wrapped error built from a *githubapp.StatusError
+// via mcp.Fail("github_x: " + err.Error()) — the exact path a real upstream
+// error message travels down to an MCP caller.
 func TestGitHubToolErrorsNeverCarryTheToken(t *testing.T) {
-	deps, _, _, ctx := newGitHubDepsForTest(t)
+	bundle, err := db.Open(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+
+	caps := repo.NewCapabilityRepo(bundle.Client)
+	resources := repo.NewResourceRepo(bundle.Client)
+	grants := repo.NewGrantRepo(bundle.Client)
+	ctx := context.Background()
+	require.NoError(t, githubapp.Register(ctx, resources, caps))
+	for _, capName := range []string{githubapp.CapabilityRead, githubapp.CapabilitySearch, githubapp.CapabilityComment, githubapp.CapabilityMerge} {
+		grantGitHub(t, grants, ctx, capName)
+	}
+
+	// The upstream message text below never contains the token — the client
+	// never sends it back a token to echo, and this handler stands in for
+	// GitHub's own API. See the RED/GREEN proof in the task report: with
+	// "ghp_supersecret" planted in this message, the assertions below fail;
+	// removed, they pass — proving this test actually inspects the string a
+	// token could appear in, unlike the version it replaces.
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]any{"message": "upstream refused the request"})
+	}))
+	t.Cleanup(upstream.Close)
+
+	client, err := githubapp.NewClient(githubapp.Config{
+		Token: "ghp_supersecret", BaseURL: upstream.URL,
+		Repos: []string{ghTestRepo}, AllowLoopback: true,
+	})
+	require.NoError(t, err)
+
+	deps := GitHubDeps{Client: client, Gate: memory.Gate{
+		Capabilities: caps, Grants: grants,
+		GrantUsage: repo.NewGrantUsageRepo(bundle.Client, bundle.WriteClient),
+	}}
 	registry := mcp.ToolRegistry{}
 	RegisterGitHubTools(registry, deps)
 
 	for _, name := range []string{"github_read", "github_search", "github_comment", "github_merge"} {
 		_, err := registry[name].Handler(ctx, map[string]any{"repo": ghTestRepo, "number": float64(1), "body": "x", "query": "x"})
-		if err != nil {
-			require.NotContains(t, err.Error(), "ghp_supersecret", "%s leaked the token", name)
-		}
+		require.Errorf(t, err, "%s: expected the upstream 403 to surface as a client error", name)
+		require.NotContains(t, err.Error(), "ghp_supersecret", "%s leaked the token", name)
 	}
 }
 
