@@ -102,6 +102,13 @@ func (h *Handler) allow(r *http.Request, capName, repoName string) error {
 // 503, since the token itself never rides in that error (see
 // githubapp.Client.do's own doc comment).
 func githubStatusError(err error) error {
+	// An allow-list refusal is this server's own decision, not GitHub's. Without
+	// this it would fall past the errors.As below to the 503 line and read as
+	// "could not reach github" — a refusal reported as an outage, which the
+	// cockpit then draws as "not configured".
+	if errors.Is(err, githubapp.ErrRepoNotAllowed) {
+		return apierr.NewAppError(http.StatusForbidden, err.Error())
+	}
 	var statusErr *githubapp.StatusError
 	if errors.As(err, &statusErr) {
 		switch statusErr.StatusCode {
@@ -109,6 +116,12 @@ func githubStatusError(err error) error {
 			return apierr.NewAppError(http.StatusNotFound, statusErr.Error())
 		case http.StatusForbidden:
 			return apierr.NewAppError(http.StatusForbidden, "github refused the request: "+statusErr.Error())
+		// A 401 is a token problem — revoked, expired, mistyped — which is the
+		// most likely real failure of all. Relaying it as 502 would say "GitHub
+		// is broken" about a setting the operator can fix, so it takes the same
+		// 503 the unconfigured case takes: both mean configure it, not repair it.
+		case http.StatusUnauthorized:
+			return apierr.NewAppError(http.StatusServiceUnavailable, "github rejected the configured token (HTTP 401): check github.token")
 		default:
 			return apierr.NewAppError(http.StatusBadGateway, statusErr.Error())
 		}

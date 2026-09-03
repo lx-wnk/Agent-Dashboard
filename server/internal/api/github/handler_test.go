@@ -334,3 +334,23 @@ func TestTransportFailureMapsToServiceUnavailable(t *testing.T) {
 	require.Equal(t, http.StatusServiceUnavailable, rec.Code)
 	require.NotContains(t, rec.Body.String(), "ghp_supersecret")
 }
+
+// A revoked or expired token is the most likely real failure of the whole
+// integration, and it is a configuration problem. Relayed as 502 it would read
+// as "GitHub is broken"; the frontend renders 502 as `failed` ("repair it") and
+// 503 as `notAsked` ("configure it"), so the status is the whole message.
+func TestUpstreamUnauthorizedReadsAsAConfigurationProblem(t *testing.T) {
+	h, grants, ctx := newEnvWithUpstream(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"message":"Bad credentials"}`))
+	})
+	for _, c := range githubapp.Capabilities() {
+		allowGlobally(t, grants, ctx, c.Name)
+	}
+
+	rec := do(t, h, http.MethodGet, "/api/github/search?q=x", "")
+
+	require.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	require.Contains(t, rec.Body.String(), "github.token", "the answer must name the setting to fix")
+	require.NotContains(t, rec.Body.String(), "ghp_supersecret")
+}
