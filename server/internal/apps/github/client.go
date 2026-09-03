@@ -23,6 +23,26 @@ import (
 // any request was made.
 var ErrRepoNotAllowed = errors.New("github: repository is not in the configured allow-list")
 
+// StatusError is a non-2xx response from the GitHub API. It carries the code
+// so a caller can distinguish absence from refusal — an HTTP route and an MCP
+// tool have to answer those two differently, and a caller that has to parse a
+// message to tell them apart will get it wrong.
+//
+// Message is GitHub's own response body text (or, absent one, resp.Status).
+// It can never carry the request's token: it originates from the server's
+// response, not from anything this client sent, and is size-limited before
+// decoding (see do()).
+type StatusError struct {
+	StatusCode int
+	Method     string
+	Path       string
+	Message    string
+}
+
+func (e *StatusError) Error() string {
+	return fmt.Sprintf("github: %s %s: unexpected status %d: %s", e.Method, e.Path, e.StatusCode, e.Message)
+}
+
 // ParseRepos splits a comma-separated github.repos setting into owner/name
 // pairs, refusing anything that is not exactly one owner and one name. An
 // empty string parses to an empty list, which is how the application is
@@ -220,7 +240,7 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 		if apiErr.Message == "" {
 			apiErr.Message = resp.Status
 		}
-		return fmt.Errorf("github: %s %s: %d %s", method, path, resp.StatusCode, apiErr.Message)
+		return &StatusError{StatusCode: resp.StatusCode, Method: method, Path: path, Message: apiErr.Message}
 	}
 	if out == nil {
 		return nil

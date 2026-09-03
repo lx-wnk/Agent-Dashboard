@@ -191,3 +191,31 @@ func TestNewClientRequiresLoopbackOptOut(t *testing.T) {
 	_, err = c.OpenPullRequests(context.Background(), "lx-wnk/agent-dashboard", 5)
 	require.Error(t, err)
 }
+
+// TestStatusErrorDistinguishesNotFoundFromForbidden proves a caller can tell
+// "no such repository/PR" (404) apart from "token lacks scope" (403) via
+// errors.As, instead of parsing the error string — the distinction Task 5/6
+// need to turn into honest HTTP status codes and MCP tool errors.
+func TestStatusErrorDistinguishesNotFoundFromForbidden(t *testing.T) {
+	status := http.StatusNotFound
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(status)
+		_ = json.NewEncoder(w).Encode(map[string]any{"message": "test message"})
+	}))
+	t.Cleanup(ts.Close)
+	c, err := github.NewClient(github.Config{Token: "t", BaseURL: ts.URL, Repos: []string{"lx-wnk/agent-dashboard"}, AllowLoopback: true})
+	require.NoError(t, err)
+
+	_, err = c.OpenPullRequests(context.Background(), "lx-wnk/agent-dashboard", 5)
+	var notFound *github.StatusError
+	require.ErrorAs(t, err, &notFound)
+	require.Equal(t, http.StatusNotFound, notFound.StatusCode)
+
+	status = http.StatusForbidden
+	_, err = c.OpenPullRequests(context.Background(), "lx-wnk/agent-dashboard", 5)
+	var forbidden *github.StatusError
+	require.ErrorAs(t, err, &forbidden)
+	require.Equal(t, http.StatusForbidden, forbidden.StatusCode)
+
+	require.NotEqual(t, notFound.StatusCode, forbidden.StatusCode, "404 and 403 must be distinguishable, not collapsed into one opaque error")
+}
