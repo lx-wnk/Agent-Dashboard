@@ -13,6 +13,7 @@ import { useServerConfig } from '@/composables/useServerConfig'
 import { useTheme } from '@/composables/useTheme'
 import { toast } from '@/composables/useToast'
 import { useUser } from '@/composables/useUser'
+import GitHubSettings from '@/features/settings/components/GitHubSettings.vue'
 import GrantSettings from '@/features/settings/components/GrantSettings.vue'
 import ObsidianSettings from '@/features/settings/components/ObsidianSettings.vue'
 import PipelineConfigSettings from '@/features/settings/components/PipelineConfigSettings.vue'
@@ -45,7 +46,7 @@ function reopenOnboarding() {
 }
 
 // --- Nav ---
-type Section = 'appearance' | 'apiKeys' | 'grants' | 'registry' | 'memory' | 'remotes' | 'permissionPresets' | 'analytics' | 'systemPrompts' | 'plugins' | 'notifications' | 'providers' | 'tracker' | 'projects' | 'spawners' | 'pipelineConfig' | 'server' | 'obsidian'
+type Section = 'appearance' | 'apiKeys' | 'grants' | 'registry' | 'memory' | 'remotes' | 'permissionPresets' | 'analytics' | 'systemPrompts' | 'plugins' | 'notifications' | 'providers' | 'tracker' | 'projects' | 'spawners' | 'pipelineConfig' | 'server' | 'obsidian' | 'github'
 const activeSection = ref<Section>('appearance')
 
 // Nav model — drives the sidebar list. requiresAuth items only show when auth is on.
@@ -56,6 +57,7 @@ const SECTIONS: readonly { id: Section, icon: string, label: string, requiresAut
   { id: 'registry', icon: '▤', label: 'Registry' },
   { id: 'memory', icon: '🧠', label: 'Memory' },
   { id: 'obsidian', icon: '🗒', label: 'Obsidian' },
+  { id: 'github', icon: '⑂', label: 'GitHub' },
   { id: 'remotes', icon: '⌂', label: 'My Remotes', requiresAuth: true },
   { id: 'permissionPresets', icon: '⚿', label: 'Permissions' },
   { id: 'analytics', icon: '📊', label: 'Analytics' },
@@ -651,6 +653,11 @@ const { isImporting, importStatus, start: startImport } = useHistoryImport()
         <!-- Obsidian -->
         <section v-else-if="activeSection === 'obsidian'">
           <ObsidianSettings />
+        </section>
+
+        <!-- GitHub -->
+        <section v-else-if="activeSection === 'github'">
+          <GitHubSettings />
         </section>
 
         <!-- Remotes -->
