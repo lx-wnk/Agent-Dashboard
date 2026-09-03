@@ -188,15 +188,60 @@ func TestSummaryAndSearchAndCommentEachGateOnTheirOwnCapability(t *testing.T) {
 }
 
 // TestNoResponseEverCarriesTheToken is spec §6 row 5, on the HTTP surface.
+//
+// It drives the FAILURE paths on purpose. A token can only escape through a
+// string this server builds about a request it made, and a 200 builds none —
+// an earlier version of this test asked only for successful answers and passed
+// even with the route deleted from Mount, since a 404 with an empty body
+// contains no token either. Each case therefore asserts the error it provoked
+// actually happened before asserting the token is absent from it.
 func TestNoResponseEverCarriesTheToken(t *testing.T) {
-	h, grants, _, ctx := newEnv(t)
-	for _, c := range githubapp.Capabilities() {
-		allowGlobally(t, grants, ctx, c.Name)
-	}
-	for _, target := range []string{"/api/github/summary", "/api/github/search?q=x"} {
-		rec := do(t, h, http.MethodGet, target, "")
-		require.NotContains(t, rec.Body.String(), "ghp_supersecret", "%s leaked the token", target)
-	}
+	t.Run("an upstream error whose body is echoed back", func(t *testing.T) {
+		h, grants, ctx := newEnvWithUpstream(t, func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"message":"Resource not accessible by personal access token"}`))
+		})
+		for _, c := range githubapp.Capabilities() {
+			allowGlobally(t, grants, ctx, c.Name)
+		}
+		rec := do(t, h, http.MethodGet, "/api/github/search?q=x", "")
+
+		require.Equal(t, http.StatusForbidden, rec.Code, "the upstream failure must reach the client, or this test guards nothing")
+		require.Contains(t, rec.Body.String(), "Resource not accessible", "the upstream message must be echoed, or there is no string to leak into")
+		require.NotContains(t, rec.Body.String(), "ghp_supersecret")
+	})
+
+	t.Run("a transport failure whose cause is concatenated into the message", func(t *testing.T) {
+		h, grants, ctx := newEnvWithUpstream(t, func(w http.ResponseWriter, _ *http.Request) {
+			// Hijack and drop the connection: the client sees a transport
+			// error, not a status, which is the other message-building path.
+			hijacker, ok := w.(http.Hijacker)
+			require.True(t, ok)
+			conn, _, err := hijacker.Hijack()
+			require.NoError(t, err)
+			_ = conn.Close()
+		})
+		for _, c := range githubapp.Capabilities() {
+			allowGlobally(t, grants, ctx, c.Name)
+		}
+		rec := do(t, h, http.MethodGet, "/api/github/search?q=x", "")
+
+		require.Equal(t, http.StatusServiceUnavailable, rec.Code)
+		require.Contains(t, rec.Body.String(), "could not reach github", "the transport path must be the one taken")
+		require.NotContains(t, rec.Body.String(), "ghp_supersecret")
+	})
+
+	t.Run("the success path", func(t *testing.T) {
+		h, grants, _, ctx := newEnv(t)
+		for _, c := range githubapp.Capabilities() {
+			allowGlobally(t, grants, ctx, c.Name)
+		}
+		for _, target := range []string{"/api/github/summary", "/api/github/search?q=x"} {
+			rec := do(t, h, http.MethodGet, target, "")
+			require.Equal(t, http.StatusOK, rec.Code, "%s: %s", target, rec.Body.String())
+			require.NotContains(t, rec.Body.String(), "ghp_supersecret", "%s leaked the token", target)
+		}
+	})
 }
 
 func TestUnconfiguredAnswers503NotAnEmptyList(t *testing.T) {
