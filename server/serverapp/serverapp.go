@@ -15,6 +15,7 @@ import (
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/agentbroadcast"
 	"github.com/lx-wnk/agent-dashboard/server/internal/config"
+	"github.com/lx-wnk/agent-dashboard/server/internal/mcp"
 	"github.com/lx-wnk/agent-dashboard/server/internal/parser"
 	"github.com/lx-wnk/agent-dashboard/server/internal/restart"
 )
@@ -110,6 +111,16 @@ func runComponents(runCtx context.Context, cancel context.CancelFunc, comps *Ser
 	if comps.Eval != nil {
 		g.Go(func() error {
 			comps.Eval.RunLoop(gCtx, time.Duration(comps.Settings.Int("eval.scanIntervalMs"))*time.Millisecond)
+			return nil
+		})
+	}
+
+	if comps.ApiKeyRepo != nil {
+		g.Go(func() error {
+			// One hour: these rows are already unusable the moment they expire
+			// (GetByHash refuses them), so the sweep is housekeeping, not
+			// enforcement.
+			mcp.SweepExpiredKeys(gCtx, comps.ApiKeyRepo, time.Hour)
 			return nil
 		})
 	}

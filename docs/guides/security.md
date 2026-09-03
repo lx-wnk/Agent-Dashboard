@@ -53,13 +53,58 @@ a second level to rank against for memory today; and a third, `routine`, for
 the subset of those calls that a routine started: a task materialized by a
 schedule carries that schedule's id in `task.routine_id`, and the pipeline's
 memory push passes it to `memory.Gate.Authorize` as an extra context, so a
-grant made with `--scope routine:<schedule id>` decides that push. It is
-still only the push — an MCP tool call cannot be attributed to a routine,
-because the MCP token an agent is spawned with (`DASHBOARD_MCP_TOKEN`, one
-value from config for every task) identifies no task, so `obsidian_write`
-and the memory tools resolve without a routine context. Agent session and
-task still have no `grants`-table reader, and `SpawnEnforcer` still bypasses
-the table entirely via the mechanism above.
+grant made with `--scope routine:<schedule id>` decides that push. **It is no longer only the push.** Every pipeline stage run is now spawned
+with a second, ephemeral `dashboard-tasks` MCP server entry alongside
+`dashboard-channel` — a per-stage-run bearer credential
+(`server/internal/mcp/stagekey.go`, `StageKeyIssuer.Issue`), distinct from
+`DASHBOARD_MCP_TOKEN`. That env var is still a single value taken from
+config and handed to every spawn — it has not changed and still identifies
+no task — but it was never the credential that reaches `/api/mcp` in the
+first place: it belongs to the channel bridge alone
+(`server/internal/channel/bridge.go:55`), authenticating the three callback
+tools (`dashboard_reply`, `request_permission`, `set_stage_output`), a
+different endpoint from the one the Decider's grants govern. The stage-run
+key's row carries `stage_run_id`, and `mcp.CallerResolver.Contexts`
+(`server/internal/mcp/caller.go`) resolves it through
+`stage_run.task_id → task.routine_id` into the same `[{task, <id>},
+{routine, <id>}]` pair the memory push builds, passed to `Gate.Authorize` as
+extra context on every call. It is wired into the memory MCP tools
+(`memory_search`, `memory_write`) and the four `obsidian_*` tools
+(`server/internal/mcp/tools/memory.go`, `.../tools/obsidian.go`) — the tools
+that already run through the capability gate — so a `task:` or `routine:`
+grant now decides those calls too, not just the automatic push.
+
+A stage-run key carries two independent expiries, because either one alone
+leaves a hole. The orchestrator revokes it (`active = false`, via
+`RevokeForStageRun`) the moment its stage run reaches a terminal state; and
+independently, the row's `expires_at` (the stage's timeout plus a
+five-minute buffer, `mcp.StageKeyTTLBuffer`) is enforced by `GetByHash`
+(`server/internal/db/repo/api_key_repo.go`) itself, refusing an expired row
+with the same "Invalid or revoked API key" message an unknown token gets —
+an expired key never reaches a tool handler, and a distinct message would
+tell an attacker the token was once real. The buffer covers a server that
+dies between spawn and the orchestrator recording the transition; without it
+that stuck run's key stays valid forever (the same class of gap as
+`lesson_worktree_failure_silent_stall`). A background sweep
+(`server/internal/mcp/sweep.go`, `SweepExpiredKeys`, started alongside the
+cost-history importer and the drift-detection scanner) hard-deletes expired
+rows hourly — they are deleted, not tombstoned, because they carry no audit
+value beyond the stage run's own record.
+
+Every issued key gets the same fixed scope set — `tasks:read`, `tasks:write`,
+`pipeline:control`, `agent:coord`, `memory:read`, `memory:write`,
+`obsidian:read`, `obsidian:write` — deliberately **not** `keys:manage`: an
+agent able to mint its own keys could mint one with no stage run and escape
+its own attribution. Narrowing beyond that fixed set is the capability
+gate's job, per capability and per value, so a second narrowing through
+scopes would be two places holding one decision.
+
+Agent session still has no `grants`-table reader — an interactive session
+started by hand keeps using the machine-wide key and resolves with no task
+context, so the `agent_session` context level stays without a producer.
+`SpawnEnforcer` still bypasses the `grants` table entirely via the mechanism
+above; that allow-list reading real grants instead of synthesizing them from
+`task_permissions` remains a separate, unstarted change.
 
 A capability also declares which enforcement points it can be applied at,
 and a resolved decision carries that same list forward — but the two wired
