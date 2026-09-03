@@ -412,10 +412,15 @@ export async function removeTaskDependency(taskId: string, depId: string): Promi
 }
 
 export function useTasks(options?: { autoStart?: boolean }) {
-  if (options?.autoStart !== false)
+  const owns = options?.autoStart !== false
+  if (owns)
     sse.startStream()
-
-  onUnmounted(sse.stopStream)
+  // Only a caller that started the stream may stop it. A consumer passing
+  // autoStart: false never incremented the shared subscriber count, so an
+  // unconditional teardown would decrement a count it never raised and, at
+  // zero, close the connection for every other consumer.
+  if (owns)
+    onUnmounted(sse.stopStream)
 
   function selectTask(task: PipelineTask | null) {
     selectedTask.value = task
