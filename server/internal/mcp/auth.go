@@ -102,6 +102,10 @@ type mcpAuthKey struct{}
 type MCPAuthInfo struct {
 	KeyID  string
 	Scopes map[string]bool
+	// StageRunID names the pipeline stage run this key was issued for, empty
+	// for a key a person created. CallerResolver turns it into the capability
+	// contexts the request resolves against.
+	StageRunID string
 }
 
 // AuthFromContext retrieves MCPAuthInfo from ctx; returns nil if absent.
@@ -164,8 +168,9 @@ func McpAuthMiddleware(keyRepo repo.ApiKeyRepo) func(http.Handler) http.Handler 
 				go func() { _ = keyRepo.TouchLastUsed(context.Background(), key.ID) }() //nolint:errcheck,gosec
 			}
 			info := &MCPAuthInfo{
-				KeyID:  key.ID,
-				Scopes: ResolveScopes(key.Scopes),
+				KeyID:      key.ID,
+				Scopes:     ResolveScopes(key.Scopes),
+				StageRunID: key.StageRunID,
 			}
 			next.ServeHTTP(w, r.WithContext(ContextWithAuth(r.Context(), info)))
 		})
