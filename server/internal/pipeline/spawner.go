@@ -16,6 +16,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/envsec"
+	"github.com/lx-wnk/agent-dashboard/server/internal/mcp"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pathutil"
 	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
 	"github.com/lx-wnk/agent-dashboard/server/internal/taskcontrol"
@@ -52,6 +53,10 @@ type SpawnAgentOptions struct {
 	ResumeSessionID string
 	MCPToken        string
 	MCPUrl          string
+	// TaskAPIToken is the stage-run credential the agent presents to the
+	// dashboard's own MCP endpoint. Empty means the config gets no such entry
+	// and the agent reaches only the channel bridge.
+	TaskAPIToken string
 	// Spawner is the resolved DB spawner row that controls which executable
 	// is launched and which extra env vars are seeded. When nil the spawner
 	// behaves identically to the legacy `claude` CLI path. The built-in
@@ -576,6 +581,17 @@ func (l *stderrLogger) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
+// buildTaskAPI returns the channelconfig.TaskAPI entry for opts, or nil when
+// no credential was minted or no dashboard URL is configured — the written
+// config then gets no dashboard-tasks server and the agent keeps only the
+// channel bridge, exactly as it did before this field existed.
+func buildTaskAPI(opts SpawnAgentOptions) *channelconfig.TaskAPI {
+	if opts.TaskAPIToken == "" || opts.MCPUrl == "" {
+		return nil
+	}
+	return &channelconfig.TaskAPI{URL: opts.MCPUrl + mcp.EndpointPath, Token: opts.TaskAPIToken}
+}
+
 // IsGitPushAllowed reports whether the task may run `git push`: true when the
 // task opts in via metadata["allowGitPush"], or when the global setting
 // (git.allowPush) is enabled.
@@ -608,7 +624,7 @@ func SpawnStageAgent(opts SpawnAgentOptions) (SpawnResult, error) {
 	var channelCfgPath string
 	if opts.EnableChannel {
 		if selfBin, binErr := channelconfig.SelfBinaryPath(); binErr == nil {
-			if cfgPath, cfgErr := channelconfig.WriteTempConfig(selfBin, nil); cfgErr == nil {
+			if cfgPath, cfgErr := channelconfig.WriteTempConfig(selfBin, buildTaskAPI(opts)); cfgErr == nil {
 				channelCfgPath = cfgPath
 			} else {
 				slog.Warn("channelconfig: failed to write temp config — agent runs without channel bridge", "err", cfgErr)

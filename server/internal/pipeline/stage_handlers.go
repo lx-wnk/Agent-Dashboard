@@ -5,8 +5,10 @@ import (
 
 	"fmt"
 	"github.com/lx-wnk/agent-dashboard/server/internal/acp"
+	"log/slog"
 	"maps"
 	"strings"
+	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
@@ -172,6 +174,20 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 		}
 	}
 
+	// A credential that cannot be minted is not a reason to refuse the spawn:
+	// the agent then runs with the channel bridge alone, which is what every
+	// spawn did before this existed.
+	taskAPIToken := ""
+	if ctx.IssueTaskAPIKey != nil {
+		timeout := time.Duration(ctx.Task.StageTimeoutSeconds) * time.Second
+		if tok, err := ctx.IssueTaskAPIKey(ctx.Ctx, ctx.StageRun.ID, timeout); err != nil {
+			slog.Warn("pipeline: issuing the stage-run MCP credential failed — agent runs without task API access",
+				"stageRun", ctx.StageRun.ID, "err", err)
+		} else {
+			taskAPIToken = tok
+		}
+	}
+
 	result, err := h.spawnFn(SpawnAgentOptions{
 		Task:            ctx.Task,
 		StageRun:        ctx.StageRun,
@@ -182,6 +198,7 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 		ResumeSessionID: ctx.ResumeSessionID,
 		MCPToken:        ctx.MCPToken,
 		MCPUrl:          ctx.MCPUrl,
+		TaskAPIToken:    taskAPIToken,
 		Spawner:         resolved,
 		Model:           nativeModel,
 		Effort:          nativeEffort,

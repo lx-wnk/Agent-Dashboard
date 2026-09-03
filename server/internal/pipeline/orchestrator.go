@@ -195,7 +195,7 @@ func NewOrchestrator(opts OrchestratorOptions) (*PipelineOrchestrator, error) {
 		detectCompletion: DetectCompletion,
 		configCache:      cc,
 		modelResolver:    newModelResolver(cc, opts.ConfigRepo),
-		stageRuns:        newStageRunService(opts.StageRunRepo),
+		stageRuns:        newStageRunService(opts.StageRunRepo, opts.RevokeTaskAPIKeys),
 		scheduler:        newScheduler(cc, opts.TaskRepo, opts.StageRunRepo, opts.DepRepo),
 		httpPool:         newHTTPPool(cc),
 		httpResultCh:     make(chan httpSpawnResult, defaultMaxParallel*2),
