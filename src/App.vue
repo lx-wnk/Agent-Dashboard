@@ -1,15 +1,11 @@
 <script setup lang="ts">
 import type { Agent, PipelineTask } from './types'
 import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import AgentCardGrid from '@/features/agents/components/AgentCardGrid.vue'
-import AgentTable from '@/features/agents/components/AgentTable.vue'
-import AgentTriageBand from '@/features/agents/components/AgentTriageBand.vue'
-import EmptyAgentState from '@/features/agents/components/EmptyAgentState.vue'
 import { useAgents } from '@/features/agents/composables/useAgents'
+import DashboardView from '@/features/cockpit/components/DashboardView.vue'
 import BacklogForm from '@/features/pipeline/components/BacklogForm.vue'
 import { useTasks } from '@/features/pipeline/composables/useTasks'
 import ApiKeySettings from '@/features/settings/components/ApiKeySettings.vue'
-import AutoApprovingStrip from './components/AutoApprovingStrip.vue'
 import LoginPage from './components/LoginPage.vue'
 import OnboardingFlow from './components/onboarding/OnboardingFlow.vue'
 import ServerReconnectOverlay from './components/ServerReconnectOverlay.vue'
@@ -18,8 +14,6 @@ import AppShell from './components/shell/AppShell.vue'
 import AppSidebar from './components/shell/AppSidebar.vue'
 import AppStatusBar from './components/shell/AppStatusBar.vue'
 import AppTopbar from './components/shell/AppTopbar.vue'
-import ChannelScriptCallout from './components/shell/ChannelScriptCallout.vue'
-import DashboardToolbar from './components/shell/DashboardToolbar.vue'
 import SkeletonCard from './components/shell/SkeletonCard.vue'
 import SpawnDialog from './components/SpawnDialog.vue'
 import SpotlightSearch from './components/SpotlightSearch.vue'
@@ -27,23 +21,19 @@ import ToastHost from './components/ToastHost.vue'
 import AppModal from './components/ui/AppModal.vue'
 import AppModalHeader from './components/ui/AppModalHeader.vue'
 import { useInstallPrompt } from './composables/useInstallPrompt'
-import { useNow } from './composables/useNow'
 import { useOnboarding } from './composables/useOnboarding'
 import { usePendingPermissions } from './composables/usePendingPermissions'
 import { usePermissionResolve } from './composables/usePermissionResolve'
 import { usePWA } from './composables/usePWA'
 import { useServerConfig } from './composables/useServerConfig'
 import { useSidebar } from './composables/useSidebar'
-import { useSpawners } from './composables/useSpawners'
 import { useTheme } from './composables/useTheme'
 import { toast } from './composables/useToast'
 import { useTodayCost } from './composables/useTodayCost'
 import { useUsage } from './composables/useUsage'
 import { useUser } from './composables/useUser'
 import { useViewState } from './composables/useViewState'
-import { groupAgents, sortAgents } from './utils/agentGroup'
 import { formatCost } from './utils/format'
-import { friendlyProjectName } from './utils/friendlyProjectName'
 
 // PERF-BUNDLE1: AgentModal is only ever rendered on agent selection — split into its own chunk
 const AgentModal = defineAsyncComponent(() => import('@/features/agents/components/AgentModal.vue'))
@@ -75,7 +65,7 @@ const { needsRefresh, updateSW } = usePWA()
 const { canInstall, promptInstall } = useInstallPrompt()
 const { theme, toggleTheme } = useTheme()
 
-const { activeView, dashboardLayout, dashboardSort, dashboardGroup, setDashboardGroup, dashboardProject, dashboardSpawner } = useViewState()
+const { activeView, dashboardLayout } = useViewState()
 const { handleShortcut: handleSidebarShortcut } = useSidebar()
 const { resolveAgent, approveAll } = usePermissionResolve()
 
@@ -84,7 +74,7 @@ onMounted(() => {
   void loadServerConfig()
 })
 
-const { agents, costTrend, filteredAgents, attentionAgents, attentionCount, pendingCapabilityDecisions, selectedAgent, isLoading, error, searchQuery, selectAgent, dismissAgent, selectAgentWhenAvailable, startStream: startAgents } = useAgents({ autoStart: false })
+const { agents, costTrend, filteredAgents, attentionAgents, attentionCount, pendingCapabilityDecisions, selectedAgent, isLoading, error, selectAgent, selectAgentWhenAvailable, startStream: startAgents } = useAgents({ autoStart: false })
 const { tasks, selectedTask, selectTask, startStream: startTasks } = useTasks({ autoStart: false })
 const { items: permissionItems, approve: approvePermission, deny: denyPermission } = usePendingPermissions(tasks)
 const combinedAttentionCount = computed(() => attentionCount.value + permissionItems.value.length + pendingCapabilityDecisions.value.length)
@@ -132,32 +122,6 @@ const costDelta = computed(() => {
 })
 
 const todayCostLabel = computed(() => (todayUsd.value === null ? '—' : formatCost(todayUsd.value)))
-
-const { nowMs } = useNow()
-
-const { spawners } = useSpawners()
-
-// Dashboard roster: project + spawner filter → sort → optional grouping. Project
-// options list every known project (pre-filter) so the dropdown stays stable.
-const rosterAgents = computed(() => {
-  let base = filteredAgents.value
-  if (dashboardProject.value !== 'all')
-    base = base.filter(a => a.projectName === dashboardProject.value)
-  if (dashboardSpawner.value !== 'all')
-    base = base.filter(a => a.spawnerId === dashboardSpawner.value)
-  return sortAgents(base, dashboardSort.value, nowMs.value)
-})
-const rosterGroups = computed(() => groupAgents(rosterAgents.value, dashboardGroup.value))
-const projectOptions = computed(() => [
-  { value: 'all', label: 'All projects' },
-  ...[...new Set(agents.value.map(a => a.projectName))].sort().map(n => ({ value: n, label: friendlyProjectName(n) })),
-])
-const spawnerOptions = computed(() => [
-  { value: 'all', label: 'All spawners' },
-  ...spawners.value.map(s => ({ value: s.id, label: s.name })),
-])
-
-const autoApprovingStrip = ref<InstanceType<typeof AutoApprovingStrip> | null>(null)
 
 const showSpawnDialog = ref(false)
 const activeConceptTask = ref<PipelineTask | null>(null)
@@ -340,46 +304,13 @@ onMounted(() => usageComposable.start())
           Error: {{ error }}
         </p>
 
-        <template v-else-if="activeView === 'dashboard'">
-          <AgentTriageBand
-            :agents="attentionAgents"
-            :permission-items="permissionItems"
-            :capability-decisions="pendingCapabilityDecisions"
-            :focused-session-id="focusedSessionId"
-            @select="selectAgent"
-            @remembered="autoApprovingStrip?.load()"
-            @approve="(taskId, ids, remember) => approvePermission(taskId, ids, remember)"
-            @deny="(taskId, ids) => denyPermission(taskId, ids)"
-          />
-          <AutoApprovingStrip ref="autoApprovingStrip" />
-          <DashboardToolbar
-            :layout="dashboardLayout"
-            :spawner="dashboardSpawner"
-            :project="dashboardProject"
-            :sort-by="dashboardSort"
-            :group-by="dashboardGroup"
-            :search-query="searchQuery"
-            :project-options="projectOptions"
-            :spawner-options="spawnerOptions"
-            :total-count="agents.length"
-            :shown-count="rosterAgents.length"
-            @update:layout="dashboardLayout = $event"
-            @update:spawner="dashboardSpawner = $event"
-            @update:project="dashboardProject = $event"
-            @update:sort-by="dashboardSort = $event"
-            @update:group-by="setDashboardGroup($event)"
-            @update:search-query="searchQuery = $event"
-          />
-          <template v-if="dashboardLayout === 'list'">
-            <EmptyAgentState v-if="rosterAgents.length === 0" :search-query="searchQuery" />
-            <AgentTable v-else :agents="rosterAgents" :groups="rosterGroups" @select="selectAgent" />
-          </template>
-          <template v-else>
-            <EmptyAgentState v-if="rosterAgents.length === 0" :search-query="searchQuery" />
-            <AgentCardGrid v-else :agents="rosterAgents" :groups="rosterGroups" :group-by="dashboardGroup" @select="selectAgent" @dismiss="dismissAgent" />
-          </template>
-          <ChannelScriptCallout />
-        </template>
+        <DashboardView
+          v-else-if="activeView === 'dashboard'"
+          :permission-items="permissionItems"
+          :focused-session-id="focusedSessionId"
+          @approve="(taskId, ids, remember) => approvePermission(taskId, ids, remember)"
+          @deny="(taskId, ids) => denyPermission(taskId, ids)"
+        />
 
         <PipelineBoard
           v-else-if="activeView === 'pipeline'"
