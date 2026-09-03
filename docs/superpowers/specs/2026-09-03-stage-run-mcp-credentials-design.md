@@ -150,9 +150,18 @@ In the pipeline spawner, immediately before the `--mcp-config` is written
                      "headers":{"Authorization":"Bearer mcp_…"}}}}
 ```
 
-The file is already created in a per-user `0700` directory and deleted after the spawn
-(`channelconfig.go:88-93`, `spawner.go:626`) — the same posture the settings file has. The token
-gets no new home on disk.
+The file is written `0600` inside a per-user `0700` directory (`channelconfig.go:119-131`) — the
+same posture the settings file has. It is **not** currently removed after the spawn:
+`SpawnStageAgent` returns a `SpawnResult.Cleanup` closure that does remove it
+(`spawner.go:650-661`), but nothing in production calls `Cleanup` — the hook was already dead
+before this branch (`grep -rn "Cleanup" server --include='*.go'` finds only
+`serverapp.go`'s unrelated `comps.Cleanup()`). So one file per stage run accumulates under
+`$TMPDIR/dashboard-<uid>/dashboard-channel-mcp-*.json`, and each now carries
+`Authorization: Bearer mcp_…` alongside the channel config it always held. Two things bound the
+exposure without removing the file: the credential inside it is revoked at the stage run's
+terminal write (4.5) regardless of whether the file is ever cleaned up, and it expires on its own
+schedule even if revocation is missed. Wiring `Cleanup` into production is out of scope for this
+change — see §5.
 
 Issuance failure is **not** fatal to the spawn: the entry is omitted, a warning is logged, and
 the agent runs with the channel bridge alone, which is exactly today's behaviour. A spawn that
@@ -211,6 +220,13 @@ not in a list that would otherwise grow by one row per retry.
 - **The `agent_session` context level**, which stays without a producer.
 - **The channel bridge's own token.** `DASHBOARD_MCP_TOKEN` keeps identifying the dashboard to
   its callback bridge. Renaming or splitting it is a different cleanup.
+- **Wiring `SpawnResult.Cleanup` into production** (4.3). It already removes the temp MCP config
+  file and settings file when called, but nothing calls it — that gap predates this branch. Now
+  that the file can carry a bearer credential, leaving it unremoved is a marginally worse version
+  of a pre-existing gap, not a new one this change should absorb fixing. It is bounded on its own:
+  the credential inside is revoked at the stage run's terminal write and expires regardless of
+  whether the file is ever deleted, so the file going unremoved is not itself a live-credential
+  exposure. Wiring `Cleanup` in is a separate, single-purpose change against the existing gap.
 
 ---
 

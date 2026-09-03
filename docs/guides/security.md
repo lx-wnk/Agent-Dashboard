@@ -91,13 +91,24 @@ cost-history importer and the drift-detection scanner) hard-deletes expired
 rows hourly — they are deleted, not tombstoned, because they carry no audit
 value beyond the stage run's own record.
 
-Every issued key gets the same fixed scope set — `tasks:read`, `tasks:write`,
-`pipeline:control`, `agent:coord`, `memory:read`, `memory:write`,
-`obsidian:read`, `obsidian:write` — deliberately **not** `keys:manage`: an
+Every issued key gets the same fixed scope set — `tasks:read`, `agent:coord`,
+`memory:read`, `memory:write`, `obsidian:read`, `obsidian:write`. That set is
+narrower than the first draft, which also included `pipeline:control` and
+`tasks:write`. **The scope set is the actual boundary for everything except
+memory and Obsidian.** Only `memory_search`/`memory_write`
+(`server/internal/mcp/tools/memory.go`) and the four `obsidian_*` tools
+(`server/internal/mcp/tools/obsidian.go`) call `Gate.Authorize` and resolve
+against the capability gate's grants; every other MCP tool checks nothing
+beyond `ToolScopeMap` (`server/internal/mcp/auth.go`) — a scope in the set
+above hands out that scope's tools outright, with no gate to narrow it
+later. `pipeline:control` reaches `grant_permission`,
+`resolve_permission_request` and `approve_all_pending` on scope alone, which
+would let a `spec_gated` agent approve its own spec and resolve its own
+permission requests; `tasks:write` reaches `manage_task`'s
+`grant_permissions` action, which lets a caller widen its own permissions.
+Both are excluded for that reason. `keys:manage` is excluded the same way an
 agent able to mint its own keys could mint one with no stage run and escape
-its own attribution. Narrowing beyond that fixed set is the capability
-gate's job, per capability and per value, so a second narrowing through
-scopes would be two places holding one decision.
+its own attribution.
 
 Agent session still has no `grants`-table reader — an interactive session
 started by hand keeps using the machine-wide key and resolves with no task

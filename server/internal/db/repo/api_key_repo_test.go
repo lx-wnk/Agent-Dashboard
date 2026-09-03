@@ -188,6 +188,32 @@ func TestApiKey_RevokeForStageRun(t *testing.T) {
 	require.NoError(t, err, "another stage run's key must survive")
 }
 
+// A user key carries stage_run_id = "" like every other user key, so an
+// empty stageRunID must never reach the update — it would deactivate every
+// user key in the table. stagekey.go already guards its one caller, but the
+// guarantee belongs at the repo boundary too.
+func TestApiKey_RevokeForStageRun_EmptyIDTouchesNothing(t *testing.T) {
+	bundle, err := db.Open(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+	r := repo.NewApiKeyRepo(bundle.Client)
+	ctx := context.Background()
+
+	_, err = r.Create(ctx, repo.CreateApiKeyInput{Name: "human-1", Hash: "u1", Scopes: []string{"tasks:read"}})
+	require.NoError(t, err)
+	_, err = r.Create(ctx, repo.CreateApiKeyInput{Name: "human-2", Hash: "u2", Scopes: []string{"tasks:read"}})
+	require.NoError(t, err)
+
+	n, err := r.RevokeForStageRun(ctx, "")
+	require.NoError(t, err)
+	require.Zero(t, n, "an empty stageRunID must touch no rows")
+
+	_, err = r.GetByHash(ctx, "u1")
+	require.NoError(t, err, "a user key must survive a call with no stage run id")
+	_, err = r.GetByHash(ctx, "u2")
+	require.NoError(t, err, "a user key must survive a call with no stage run id")
+}
+
 func TestApiKey_DeleteExpiredRemovesOnlyEphemeralRows(t *testing.T) {
 	bundle, err := db.Open(":memory:")
 	require.NoError(t, err)

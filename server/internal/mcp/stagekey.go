@@ -10,13 +10,19 @@ import (
 
 // StageRunScopes is the fixed transport scope set every stage-run key gets.
 //
-// It deliberately omits keys:manage — an agent able to mint keys could mint
-// one with no stage run and escape its own attribution. Everything else is
-// granted because narrowing is the capability gate's job, per capability and
-// per value; a second narrowing through scopes would be two places holding
-// one decision, and they would drift.
+// It is deliberately narrow, and narrower than the first draft. Only the
+// memory and obsidian tools resolve through capability.Decide; every other
+// MCP tool is gated by its scope alone. So a scope handed out here is a
+// capability granted outright, not one the gate will narrow later —
+// "pipeline:control" would let a spawned agent approve its own spec and
+// resolve its own permission requests, and "tasks:write" would let it widen
+// its own permissions through manage_task. Neither is something an agent
+// should be able to do to itself.
+//
+// keys:manage is excluded for the same family of reason: an agent able to
+// mint keys could mint one with no stage run and escape its own attribution.
 var StageRunScopes = []string{
-	"tasks:read", "tasks:write", "pipeline:control", "agent:coord",
+	"tasks:read", "agent:coord",
 	"memory:read", "memory:write", "obsidian:read", "obsidian:write",
 }
 

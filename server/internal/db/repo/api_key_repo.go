@@ -122,7 +122,15 @@ func (r *entApiKeyRepo) List(ctx context.Context) ([]*ent.ApiKey, error) {
 	return keys, nil
 }
 
+// RevokeForStageRun deactivates every key whose stage_run_id equals
+// stageRunID. A user key carries stage_run_id = "" like every other user
+// key, so an empty stageRunID would match all of them; guarded here rather
+// than trusted to the caller, since the boundary is where that guarantee
+// belongs.
 func (r *entApiKeyRepo) RevokeForStageRun(ctx context.Context, stageRunID string) (int, error) {
+	if stageRunID == "" {
+		return 0, nil
+	}
 	n, err := r.client.ApiKey.Update().
 		Where(apikey.StageRunIDEQ(stageRunID), apikey.Active(true)).
 		SetActive(false).

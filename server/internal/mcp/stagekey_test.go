@@ -53,6 +53,27 @@ func TestStageKeyIssuer_NeverGrantsKeysManage(t *testing.T) {
 	require.Contains(t, row.Scopes, "obsidian:write")
 }
 
+// Only the memory and obsidian tools resolve through capability.Decide;
+// every other MCP tool is gated by its scope alone, so a scope handed out
+// here is a capability granted outright, not narrowed later. This test pins
+// the exclusions by name — deleting an assertion here should require
+// deleting the reason it names, not just widening StageRunScopes in passing.
+func TestStageKeyIssuer_NeverGrantsEscalationScopes(t *testing.T) {
+	issuer, keys, ctx := newIssuer(t)
+
+	token, err := issuer.Issue(ctx, "sr-1", time.Minute)
+	require.NoError(t, err)
+	row, err := keys.GetByHash(ctx, mcp.HashToken(token))
+	require.NoError(t, err)
+
+	require.NotContains(t, row.Scopes, "pipeline:control",
+		"pipeline:control reaches grant_permission, resolve_permission_request and approve_all_pending on scope alone — a spec_gated agent must not approve its own spec")
+	require.NotContains(t, row.Scopes, "tasks:write",
+		"tasks:write reaches manage_task's grant_permissions action, which lets a caller widen its own permissions")
+	require.NotContains(t, row.Scopes, "keys:manage",
+		"keys:manage lets a caller mint a key with no stage run, escaping its own attribution")
+}
+
 func TestStageKeyIssuer_RevokeStopsTheKey(t *testing.T) {
 	issuer, keys, ctx := newIssuer(t)
 

@@ -204,10 +204,17 @@ Preparing the first public release.
   `Gate.Authorize` as extra context, so a `--scope task:<id>` or `--scope routine:<id>`
   grant decides those calls the same way the automatic memory push already did — no other
   MCP tool goes through the capability gate today, so this is the two tool families that
-  do. Every issued key gets one fixed scope set — `tasks:read`, `tasks:write`,
-  `pipeline:control`, `agent:coord`, `memory:read`, `memory:write`, `obsidian:read`,
-  `obsidian:write` — deliberately **not** `keys:manage`, so a spawned agent can never mint
-  a key of its own and escape its own attribution. It carries two independent expiries:
+  do. Every issued key gets one fixed scope set — `tasks:read`, `agent:coord`,
+  `memory:read`, `memory:write`, `obsidian:read`, `obsidian:write` — six scopes, deliberately
+  **not** eight. An earlier draft also included `pipeline:control` and `tasks:write`, but since
+  no other MCP tool resolves through the gate, either one would have been a capability granted
+  outright rather than one the gate narrows later: `pipeline:control` reaches
+  `grant_permission`, `resolve_permission_request` and `approve_all_pending` on scope alone,
+  letting a spawned agent approve its own spec and resolve its own permission requests, and
+  `tasks:write` reaches `manage_task`'s `grant_permissions` action, letting it widen its own
+  permissions. `keys:manage` is excluded for the same family of reason: a spawned agent able to
+  mint its own keys could mint one with no stage run and escape its own attribution. It carries
+  two independent expiries:
   the orchestrator revokes it (`RevokeForStageRun`, `active = false`) the moment its stage
   run reaches a terminal state, and independently `expires_at` (the stage's timeout plus a
   five-minute buffer, `mcp.StageKeyTTLBuffer`) is enforced by `ApiKeyRepo.GetByHash` itself
