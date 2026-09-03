@@ -9,6 +9,15 @@ onMounted(() => void fetchSummary())
 
 const pullRequests = computed(() => repos.value.flatMap(r => r.pullRequests.map(pr => ({ ...pr, repo: r.repo }))))
 
+// The route answers 200 with what it could reach and names what it could not,
+// so one rate-limited repository does not blank the others. A repository that
+// failed contributes no pull requests, so without this list it is
+// indistinguishable from one that simply has none — a failure drawn as an
+// empty answer, the exact defect panelState.ts exists to prevent.
+const repoFailures = computed(() =>
+  repos.value.filter(r => r.error).map(r => `${r.repo}: ${r.error}`),
+)
+
 // The order matters and is the whole five-state rule: a refusal is checked
 // before an empty answer, so a denied read can never be drawn as "no open
 // pull requests", and "not configured" is checked before both, so an
@@ -22,18 +31,34 @@ const state = computed<PanelState>(() => {
     return 'denied'
   if (error.value)
     return 'failed'
-  return pullRequests.value.length === 0 ? 'empty' : 'ready'
+  if (pullRequests.value.length > 0)
+    return 'ready'
+  // Nothing came back AND something broke: that is a failure, not an empty
+  // answer. Only a clean run with no pull requests is 'empty'.
+  return repoFailures.value.length > 0 ? 'failed' : 'empty'
 })
 
 const message = computed(() => {
   if (unconfigured.value)
     return 'Set github.token and github.repos in Settings → GitHub to switch this on.'
-  return denied.value ?? error.value ?? 'No open pull request in the configured repositories.'
+  if (denied.value)
+    return denied.value
+  return error.value
+    ?? (repoFailures.value.length > 0 ? repoFailures.value.join('; ') : undefined)
+    ?? 'No open pull request in the configured repositories.'
 })
 </script>
 
 <template>
   <CockpitPanel id="github" title="GitHub" :state="state" :message="message">
+    <p
+      v-if="repoFailures.length > 0"
+      data-testid="cockpit-github-partial-failure"
+      class="text-[12px] rounded-md px-3 py-2 mb-2 bg-warning-soft text-warning-text"
+      role="alert"
+    >
+      {{ repoFailures.join('; ') }}
+    </p>
     <ul class="flex flex-col gap-1.5">
       <li
         v-for="pr in pullRequests.slice(0, 8)"
