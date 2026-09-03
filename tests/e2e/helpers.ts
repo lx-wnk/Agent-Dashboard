@@ -94,6 +94,13 @@ export async function selectListboxOption(page: Page, trigger: Locator, optionNa
     await trigger.click()
     await listbox.waitFor({ state: 'visible' })
   }
-  await listbox.getByRole('option', { name: optionName }).click()
+  // The options can arrive after the panel opens: a picker whose list is filled
+  // by an in-flight fetch (SpawnDialog's project list is the known case) renders
+  // an empty listbox first. Wait for the named option explicitly, on a budget well
+  // under the test timeout, so a missing option fails here naming itself instead of
+  // consuming the whole 30s and surfacing as an error from the cleanup block.
+  const option = listbox.getByRole('option', { name: optionName })
+  await option.waitFor({ state: 'visible', timeout: 10_000 })
+  await option.click()
   await listbox.waitFor({ state: 'detached' })
 }
