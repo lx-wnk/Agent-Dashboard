@@ -2,10 +2,10 @@ import type { AgentGroup, AgentSort } from '../utils/agentGroup'
 import { ref, watch } from 'vue'
 import { AGENT_GROUP_OPTIONS, AGENT_SORT_OPTIONS, resolveGroup } from '../utils/agentGroup'
 
-export type ActiveView = 'dashboard' | 'workflows' | 'pipeline' | 'cost' | 'schedules' | 'eval'
+export type ActiveView = 'cockpit' | 'dashboard' | 'workflows' | 'pipeline' | 'cost' | 'schedules' | 'eval'
 export type DashboardLayout = 'cards' | 'list'
 
-const ACTIVE_VIEWS: ActiveView[] = ['dashboard', 'workflows', 'pipeline', 'cost', 'schedules', 'eval']
+const ACTIVE_VIEWS: ActiveView[] = ['cockpit', 'dashboard', 'workflows', 'pipeline', 'cost', 'schedules', 'eval']
 const AGENT_SORT_VALUES: AgentSort[] = AGENT_SORT_OPTIONS.map(o => o.value)
 const AGENT_GROUP_VALUES: AgentGroup[] = AGENT_GROUP_OPTIONS.map(o => o.value)
 
@@ -22,10 +22,10 @@ function readInitial(): { view: ActiveView, layout: DashboardLayout } {
     view = stored as ActiveView
   }
   else {
-    view = 'dashboard'
+    view = 'cockpit'
     if (stored) {
       // stored value is no longer valid — overwrite to stop the guard firing every load
-      ls?.setItem('agent-active-view', 'dashboard')
+      ls?.setItem('agent-active-view', 'cockpit')
     }
 
     if (!stored && legacy) {

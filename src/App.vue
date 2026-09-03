@@ -38,6 +38,7 @@ import { formatCost } from './utils/format'
 // PERF-BUNDLE1: AgentModal is only ever rendered on agent selection — split into its own chunk
 const AgentModal = defineAsyncComponent(() => import('@/features/agents/components/AgentModal.vue'))
 // F-PERF-019: top-level heavy views loaded on demand — each becomes its own chunk
+const CockpitView = defineAsyncComponent(() => import('@/features/cockpit/components/CockpitView.vue'))
 const CostAnalyticsView = defineAsyncComponent(() => import('@/features/analytics/components/CostAnalyticsView.vue'))
 const EvalView = defineAsyncComponent(() => import('@/features/analytics/components/EvalView.vue'))
 const PipelineBoard = defineAsyncComponent(() => import('@/features/pipeline/components/PipelineBoard.vue'))
@@ -303,6 +304,8 @@ onMounted(() => usageComposable.start())
         <p v-else-if="error" class="text-center py-12 text-danger-text">
           Error: {{ error }}
         </p>
+
+        <CockpitView v-else-if="activeView === 'cockpit'" />
 
         <DashboardView
           v-else-if="activeView === 'dashboard'"
