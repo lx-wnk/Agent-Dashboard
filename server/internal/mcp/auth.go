@@ -52,6 +52,10 @@ var ToolScopeMap = map[string]string{
 	// obsidian:read / obsidian:write
 	"obsidian_read": "obsidian:read", "obsidian_search": "obsidian:read",
 	"obsidian_write": "obsidian:write", "obsidian_delete": "obsidian:write",
+	// github:read / github:write / github:merge
+	"github_read": "github:read", "github_search": "github:read",
+	"github_comment": "github:write",
+	"github_merge":   "github:merge",
 }
 
 var scopeImplies = map[string][]string{
@@ -63,9 +67,17 @@ var scopeImplies = map[string][]string{
 	"obsidian:read":    {},
 	"obsidian:write":   {"obsidian:read"},
 	"pipeline:control": {"tasks:read", "agent:coord"},
+	"github:read":      {},
+	"github:write":     {"github:read"},
+	// merge implies read, deliberately NOT write: a key that may comment must
+	// not be able to merge, and a key that may merge has no business editing
+	// discussions. The capability gate is what actually decides a merge; this
+	// is the coarser net above it.
+	"github:merge": {"github:read"},
 	"keys:manage": {
 		"tasks:read", "tasks:write", "pipeline:control", "agent:coord",
 		"memory:read", "memory:write", "obsidian:read", "obsidian:write",
+		"github:read", "github:write", "github:merge",
 	},
 }
 
