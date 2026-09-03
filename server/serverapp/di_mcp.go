@@ -46,6 +46,8 @@ func provideMCPHandler(
 	lockRepo := repo.NewCoordLockRepo(client)
 	turnsRepo := repo.NewRefinementTurnRepo(client)
 
+	caller := mcp.CallerResolver{StageRuns: srRepo, Tasks: taskRepo}
+
 	broadcast := func(taskID string) {
 		tb.Broadcast(sse.TaskEvent{Type: "task_changed", TaskID: taskID, Payload: map[string]string{}})
 	}
@@ -120,6 +122,7 @@ func provideMCPHandler(
 	mcptools.RegisterMemoryTools(registry, mcptools.MemoryDeps{
 		Repo:      memRepo,
 		Retriever: memRetriever,
+		Caller:    caller,
 		Gate: memory.Gate{
 			Capabilities: repo.NewCapabilityRepo(client),
 			Grants:       repo.NewGrantRepo(client),
@@ -136,6 +139,7 @@ func provideMCPHandler(
 	// unconfigured).
 	mcptools.RegisterObsidianTools(registry, mcptools.ObsidianDeps{
 		Client: obsidianClient,
+		Caller: caller,
 		Gate: memory.Gate{
 			Capabilities: repo.NewCapabilityRepo(client),
 			Grants:       repo.NewGrantRepo(client),

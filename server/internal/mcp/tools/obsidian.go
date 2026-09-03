@@ -22,6 +22,11 @@ import (
 type ObsidianDeps struct {
 	Client *obsidian.Client
 	Gate   memory.Gate
+	// Caller resolves the stage run on the request's credential into the task
+	// and routine capability contexts the grant chain is ranked against. The
+	// zero value resolves to nothing, which is exactly how a machine-wide key
+	// behaves.
+	Caller mcp.CallerResolver
 }
 
 // obsidianScope is the context every Authorize call below runs against. The
@@ -75,7 +80,7 @@ func registerObsidianRead(registry mcp.ToolRegistry, d ObsidianDeps) {
 			}
 			// The note path is the capability value, so a grant can be
 			// narrowed to a subtree by pattern instead of the vault as a whole.
-			if err := d.Gate.Authorize(ctx, obsidian.CapabilityRead, notePath, obsidianScope()); err != nil {
+			if err := d.Gate.Authorize(ctx, obsidian.CapabilityRead, notePath, obsidianScope(), d.Caller.Contexts(ctx)...); err != nil {
 				return nil, mcp.Fail("obsidian_read: " + err.Error())
 			}
 			content, err := d.Client.Read(ctx, notePath)
@@ -113,7 +118,7 @@ func registerObsidianSearch(registry mcp.ToolRegistry, d ObsidianDeps) {
 			// prefix branch: every string carries the empty prefix), which is
 			// what README's `grants add obsidian.search --pattern '*'` relies
 			// on. Matches IndexNotes' own use of "" for the same capability.
-			if err := d.Gate.Authorize(ctx, obsidian.CapabilitySearch, "", obsidianScope()); err != nil {
+			if err := d.Gate.Authorize(ctx, obsidian.CapabilitySearch, "", obsidianScope(), d.Caller.Contexts(ctx)...); err != nil {
 				return nil, mcp.Fail("obsidian_search: " + err.Error())
 			}
 			// SearchUnderRoot, never Search: Client.Search is vault-wide, so
@@ -157,7 +162,7 @@ func registerObsidianWrite(registry mcp.ToolRegistry, d ObsidianDeps) {
 			if err != nil {
 				return nil, mcp.Fail("obsidian_write: " + err.Error())
 			}
-			if err := d.Gate.Authorize(ctx, obsidian.CapabilityWrite, notePath, obsidianScope()); err != nil {
+			if err := d.Gate.Authorize(ctx, obsidian.CapabilityWrite, notePath, obsidianScope(), d.Caller.Contexts(ctx)...); err != nil {
 				return nil, mcp.Fail("obsidian_write: " + err.Error())
 			}
 			if err := d.Client.Write(ctx, notePath, content); err != nil {
@@ -190,7 +195,7 @@ func registerObsidianDelete(registry mcp.ToolRegistry, d ObsidianDeps) {
 			if err != nil {
 				return nil, mcp.Fail("obsidian_delete: " + err.Error())
 			}
-			if err := d.Gate.Authorize(ctx, obsidian.CapabilityDelete, notePath, obsidianScope()); err != nil {
+			if err := d.Gate.Authorize(ctx, obsidian.CapabilityDelete, notePath, obsidianScope(), d.Caller.Contexts(ctx)...); err != nil {
 				return nil, mcp.Fail("obsidian_delete: " + err.Error())
 			}
 			if err := d.Client.Delete(ctx, notePath); err != nil {
