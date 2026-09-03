@@ -51,6 +51,7 @@ import (
 	apiusage "github.com/lx-wnk/agent-dashboard/server/internal/api/usage"
 	apivisualizations "github.com/lx-wnk/agent-dashboard/server/internal/api/visualizations"
 	apiwp "github.com/lx-wnk/agent-dashboard/server/internal/api/wphandler"
+	"github.com/lx-wnk/agent-dashboard/server/internal/apps/github"
 	"github.com/lx-wnk/agent-dashboard/server/internal/apps/obsidian"
 	"github.com/lx-wnk/agent-dashboard/server/internal/askgate"
 	authpkg "github.com/lx-wnk/agent-dashboard/server/internal/auth"
@@ -158,7 +159,10 @@ type ServerComponents struct {
 	// Obsidian is nil when the vault is unconfigured or no database is
 	// present; see buildObsidianClient (di_obsidian.go).
 	Obsidian *obsidian.Client
-	Cleanup  func()
+	// GitHub is nil when unconfigured or no database is present; see
+	// buildGitHubClient (di_github.go).
+	GitHub  *github.Client
+	Cleanup func()
 }
 
 // ln is the address already bound by Listen, or nil to let the HTTP server
@@ -307,6 +311,11 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	// also being the first run that has to create it.
 	var obsidianClient *obsidian.Client
 	var obsidianSpaceID string
+	// githubClient is nil when GitHub is unconfigured (buildGitHubClient's own
+	// doc comment covers why that is not an error) and stays nil without a
+	// database, since Register and the capability catalogue it depends on need
+	// entClient too.
+	var githubClient *github.Client
 	if entClient != nil {
 		memRepo = repo.NewMemoryRepo(entClient, bundle.WriteClient)
 		memRetriever = memory.NewRetriever(bundle.DB, memRepo)
@@ -352,6 +361,14 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 			return nil, fmt.Errorf("obsidian: register application: %w", err)
 		}
 
+		// GitHub is the second builtin Application, and the reason this slice
+		// exists: it goes through the same Register, the same capability
+		// catalogue and the same encrypted-settings path Obsidian does. If it
+		// ever needs a kernel change Obsidian did not, that is the finding.
+		if err := github.Register(ctx, resourceRepo, capabilityRepo); err != nil {
+			return nil, fmt.Errorf("github: register application: %w", err)
+		}
+
 		// IndexNotes takes a spaceID and memory spaces are never
 		// auto-created (repo.MemoryRepo.CreateSpace is always caller-driven)
 		// — without this, the trigger below would 500 on a fresh install
@@ -370,6 +387,11 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		obsidianClient, err = buildObsidianClient(ctx, settingsSvc)
 		if err != nil {
 			return nil, fmt.Errorf("obsidian: build client: %w", err)
+		}
+
+		githubClient, err = buildGitHubClient(ctx, settingsSvc)
+		if err != nil {
+			return nil, fmt.Errorf("github: build client: %w", err)
 		}
 
 		if rows, err := capabilityRepo.List(ctx); err != nil {
@@ -953,6 +975,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		Eval:                evalService,
 		Settings:            settingsSvc,
 		Obsidian:            obsidianClient,
+		GitHub:              githubClient,
 		Cleanup:             cleanup,
 	}, nil
 }
