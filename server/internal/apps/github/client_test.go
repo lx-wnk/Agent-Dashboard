@@ -1,0 +1,193 @@
+package github_test
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/lx-wnk/agent-dashboard/server/internal/apps/github"
+)
+
+func TestParseReposAcceptsOwnerNamePairsAndRejectsEverythingElse(t *testing.T) {
+	got, err := github.ParseRepos(" lx-wnk/agent-dashboard , golang/go ")
+	require.NoError(t, err)
+	require.Equal(t, []string{"lx-wnk/agent-dashboard", "golang/go"}, got)
+
+	empty, err := github.ParseRepos("")
+	require.NoError(t, err)
+	require.Empty(t, empty)
+
+	for _, bad := range []string{"agent-dashboard", "a/b/c", "/name", "owner/", "own er/name"} {
+		_, err := github.ParseRepos(bad)
+		require.Errorf(t, err, "ParseRepos(%q) must refuse a malformed entry", bad)
+	}
+}
+
+// TestParseReposRefusesPathTraversalShapedEntries is D4 at the parse level:
+// a repository name that could be read two ways must be refused outright,
+// never silently normalised into something else — the same lesson that
+// produced obsidian.resolveVaultPath. "../" is not a valid owner/name
+// character, so it fails the segment check rather than being cleaned into a
+// different, possibly-allowed repository.
+func TestParseReposRefusesPathTraversalShapedEntries(t *testing.T) {
+	for _, bad := range []string{"../secret/repo", "owner/../other", "owner/..", "../..", "owner/name/../other"} {
+		_, err := github.ParseRepos(bad)
+		require.Errorf(t, err, "ParseRepos(%q) must refuse a path-traversal-shaped entry, not normalise it", bad)
+	}
+}
+
+// newFakeGitHub serves the four endpoints the client calls and records the
+// last request it saw, so a test can prove both what was sent and that
+// nothing was sent at all.
+func newFakeGitHub(t *testing.T) (*httptest.Server, *http.Request, *bool) {
+	t.Helper()
+	var last http.Request
+	called := false
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/lx-wnk/agent-dashboard/pulls", func(w http.ResponseWriter, r *http.Request) {
+		called, last = true, *r
+		_ = json.NewEncoder(w).Encode([]map[string]any{{
+			"number": 42, "title": "Add the cockpit", "draft": false,
+			"html_url":   "https://github.com/lx-wnk/agent-dashboard/pull/42",
+			"updated_at": "2026-09-01T10:00:00Z",
+			"user":       map[string]any{"login": "lx-wnk"},
+		}})
+	})
+	mux.HandleFunc("/search/issues", func(w http.ResponseWriter, r *http.Request) {
+		called, last = true, *r
+		_ = json.NewEncoder(w).Encode(map[string]any{"items": []map[string]any{{
+			"number": 7, "title": "Flaky test",
+			"html_url":       "https://github.com/lx-wnk/agent-dashboard/issues/7",
+			"repository_url": "https://api.github.com/repos/lx-wnk/agent-dashboard",
+		}}})
+	})
+	mux.HandleFunc("/repos/lx-wnk/agent-dashboard/issues/42/comments", func(w http.ResponseWriter, r *http.Request) {
+		called, last = true, *r
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{"html_url": "https://github.com/lx-wnk/agent-dashboard/pull/42#issuecomment-1"})
+	})
+	mux.HandleFunc("/repos/lx-wnk/agent-dashboard/pulls/42/merge", func(w http.ResponseWriter, r *http.Request) {
+		called, last = true, *r
+		_ = json.NewEncoder(w).Encode(map[string]any{"merged": true, "sha": "deadbeef"})
+	})
+	ts := httptest.NewServer(mux)
+	t.Cleanup(ts.Close)
+	return ts, &last, &called
+}
+
+func newTestClient(t *testing.T, ts *httptest.Server) *github.Client {
+	t.Helper()
+	c, err := github.NewClient(github.Config{
+		Token:   "ghp_test",
+		BaseURL: ts.URL,
+		Repos:   []string{"lx-wnk/agent-dashboard"},
+		// The fake server listens on loopback, which validation.SafeDialContext
+		// refuses by design. Tests opt out of the guard; production never does.
+		AllowLoopback: true,
+	})
+	require.NoError(t, err)
+	return c
+}
+
+func TestOpenPullRequestsSendsTheTokenAndParsesTheAnswer(t *testing.T) {
+	ts, last, _ := newFakeGitHub(t)
+	prs, err := newTestClient(t, ts).OpenPullRequests(context.Background(), "lx-wnk/agent-dashboard", 5)
+	require.NoError(t, err)
+	require.Len(t, prs, 1)
+	require.Equal(t, 42, prs[0].Number)
+	require.Equal(t, "Add the cockpit", prs[0].Title)
+	require.Equal(t, "lx-wnk", prs[0].Author)
+	require.Equal(t, "Bearer ghp_test", last.Header.Get("Authorization"))
+	require.Equal(t, "open", last.URL.Query().Get("state"))
+	require.Equal(t, "5", last.URL.Query().Get("per_page"))
+}
+
+// TestEveryRepoScopedCallRefusesARepoOutsideTheAllowList is D4 at the client
+// level: the allow-list is a property of the configured client, so it holds
+// even for a caller that reached the client without asking the gate.
+func TestEveryRepoScopedCallRefusesARepoOutsideTheAllowList(t *testing.T) {
+	ts, _, called := newFakeGitHub(t)
+	c := newTestClient(t, ts)
+	ctx := context.Background()
+
+	_, err := c.OpenPullRequests(ctx, "evil/repo", 5)
+	require.ErrorIs(t, err, github.ErrRepoNotAllowed)
+	_, err = c.Comment(ctx, "evil/repo", 1, "hi")
+	require.ErrorIs(t, err, github.ErrRepoNotAllowed)
+	_, err = c.MergePullRequest(ctx, "evil/repo", 1, "squash")
+	require.ErrorIs(t, err, github.ErrRepoNotAllowed)
+
+	require.False(t, *called, "no request may reach GitHub for a repository outside the allow-list")
+	require.False(t, c.AllowsRepo("evil/repo"))
+	require.True(t, c.AllowsRepo("lx-wnk/agent-dashboard"))
+}
+
+func TestCommentAndMergeReturnTheirResultURLs(t *testing.T) {
+	ts, last, _ := newFakeGitHub(t)
+	c := newTestClient(t, ts)
+	ctx := context.Background()
+
+	url, err := c.Comment(ctx, "lx-wnk/agent-dashboard", 42, "looks good")
+	require.NoError(t, err)
+	require.Contains(t, url, "issuecomment")
+	require.Equal(t, http.MethodPost, last.Method)
+
+	sha, err := c.MergePullRequest(ctx, "lx-wnk/agent-dashboard", 42, "squash")
+	require.NoError(t, err)
+	require.Equal(t, "deadbeef", sha)
+	require.Equal(t, http.MethodPut, last.Method)
+}
+
+func TestSearchIssuesReportsTheOwningRepository(t *testing.T) {
+	ts, last, _ := newFakeGitHub(t)
+	hits, err := newTestClient(t, ts).SearchIssues(context.Background(), "is:open flaky")
+	require.NoError(t, err)
+	require.Len(t, hits, 1)
+	require.Equal(t, "lx-wnk/agent-dashboard", hits[0].Repo)
+	require.Equal(t, 7, hits[0].Number)
+	require.Contains(t, last.URL.Query().Get("q"), "flaky")
+}
+
+// TestClientErrorsNeverCarryTheToken: an upstream 401 is the single most
+// likely error a user will paste into an issue.
+func TestClientErrorsNeverCarryTheToken(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"message":"Bad credentials"}`))
+	}))
+	t.Cleanup(ts.Close)
+	c, err := github.NewClient(github.Config{Token: "ghp_supersecret", BaseURL: ts.URL, Repos: []string{"lx-wnk/agent-dashboard"}, AllowLoopback: true})
+	require.NoError(t, err)
+
+	_, err = c.OpenPullRequests(context.Background(), "lx-wnk/agent-dashboard", 5)
+	require.Error(t, err)
+	require.False(t, strings.Contains(err.Error(), "ghp_supersecret"), "the token must never appear in an error: %v", err)
+}
+
+func TestNewClientRefusesAnUnparseableBaseURL(t *testing.T) {
+	_, err := github.NewClient(github.Config{Token: "t", BaseURL: "://nope", Repos: []string{"a/b"}})
+	require.Error(t, err)
+}
+
+// TestNewClientRequiresLoopbackOptOut proves the SSRF guard is actually wired
+// in production mode: with AllowLoopback left false (the zero value, and what
+// serverapp.buildGitHubClient always uses), a BaseURL pointing at loopback is
+// refused by validation.SafeDialContext on the first request, exactly as the
+// GitHub Enterprise-on-LAN limitation documented on NewClient describes.
+func TestNewClientRequiresLoopbackOptOut(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode([]map[string]any{})
+	}))
+	t.Cleanup(ts.Close)
+
+	c, err := github.NewClient(github.Config{Token: "t", BaseURL: ts.URL, Repos: []string{"lx-wnk/agent-dashboard"}})
+	require.NoError(t, err)
+
+	_, err = c.OpenPullRequests(context.Background(), "lx-wnk/agent-dashboard", 5)
+	require.Error(t, err)
+}
