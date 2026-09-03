@@ -59,8 +59,10 @@ func DiscoveryPtyFile(home string, pid int) string {
 	return filepath.Join(home, DiscoveryDir, strconv.Itoa(pid)+".pty.json")
 }
 
-// buildConfig returns the mcpConfig struct for the given binary path.
-// This is the single definition of the channel MCP config shape.
+// buildConfig returns the mcpConfig struct for the given binary path, adding
+// the dashboard-tasks HTTP server when taskAPI is non-nil. It errors if
+// taskAPI is set but only one of URL/Token is populated. This is the single
+// definition of the channel MCP config shape.
 func buildConfig(binaryPath string, taskAPI *TaskAPI) (mcpConfig, error) {
 	servers := map[string]mcpServerEntry{
 		"dashboard-channel": {

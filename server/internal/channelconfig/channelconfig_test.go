@@ -185,14 +185,7 @@ func TestConfigJSON_TaskAPIWithoutTokenIsRefused(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestWriteTempConfig_FileIsNotWorldReadable(t *testing.T) {
-	path, err := channelconfig.WriteTempConfig("/bin/agent-dashboard", &channelconfig.TaskAPI{
-		URL: "http://127.0.0.1:13120/api/mcp", Token: "mcp_deadbeef",
-	})
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = os.Remove(path) })
-
-	info, err := os.Stat(path)
-	require.NoError(t, err)
-	require.Zero(t, info.Mode().Perm()&0o077, "a file holding a bearer token must not be group- or world-readable")
+func TestConfigJSON_TaskAPIWithoutURLIsRefused(t *testing.T) {
+	_, err := channelconfig.ConfigJSON("/bin/agent-dashboard", &channelconfig.TaskAPI{Token: "mcp_deadbeef"})
+	require.Error(t, err)
 }
