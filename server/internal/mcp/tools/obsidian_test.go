@@ -210,46 +210,61 @@ func seedObsidianRun(t *testing.T, bundle *db.DBBundle, slug, routineID string) 
 	return run.ID
 }
 
-// TestObsidianWriteRoutineGrantAppliesOnlyToThatRoutine is the whole point of
+// TestObsidianRoutineGrantAppliesOnlyToThatRoutine is the whole point of
 // this change, in one test: one grant, two callers, one difference. A grant
-// on obsidian.write scoped to routine "sched-1" allows a call carrying a
-// stage-run credential whose task that routine materialized, denies a call
-// whose task has no routine, and denies a call carrying an ordinary
-// machine-wide key (no stage run at all).
-func TestObsidianWriteRoutineGrantAppliesOnlyToThatRoutine(t *testing.T) {
-	deps, grants, bundle, ctx, _ := newObsidianDepsWithCaller(t)
-	_, err := grants.Create(ctx, repo.CreateGrantInput{
-		CapabilityName: obsidianapp.CapabilityWrite,
-		Context:        repo.GrantContextFor(repo.GrantContextRoutine, "sched-1"),
-		Pattern:        "*",
-		Mode:           repo.GrantModeAllow,
-		GrantedBy:      "test",
-	})
-	require.NoError(t, err)
+// scoped to routine "sched-1" allows a call carrying a stage-run credential
+// whose task that routine materialized, denies a call whose task has no
+// routine, and denies a call carrying an ordinary machine-wide key (no stage
+// run at all).
+//
+// One case per tool, because each tool passes d.Caller.Contexts(ctx) to its
+// own Authorize call: dropping it from any single one of them compiles, vets
+// and — with only obsidian_write covered — passed.
+func TestObsidianRoutineGrantAppliesOnlyToThatRoutine(t *testing.T) {
+	cases := []struct {
+		tool       string
+		capability string
+		args       map[string]any
+	}{
+		{"obsidian_read", obsidianapp.CapabilityRead, map[string]any{"path": "notes/a.md"}},
+		{"obsidian_search", obsidianapp.CapabilitySearch, map[string]any{"query": "anything"}},
+		{"obsidian_write", obsidianapp.CapabilityWrite, map[string]any{"path": "notes/a.md", "content": "x"}},
+		{"obsidian_delete", obsidianapp.CapabilityDelete, map[string]any{"path": "notes/a.md"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.tool, func(t *testing.T) {
+			deps, grants, bundle, ctx, _ := newObsidianDepsWithCaller(t)
+			_, err := grants.Create(ctx, repo.CreateGrantInput{
+				CapabilityName: tc.capability,
+				Context:        repo.GrantContextFor(repo.GrantContextRoutine, "sched-1"),
+				Pattern:        "*",
+				Mode:           repo.GrantModeAllow,
+				GrantedBy:      "test",
+			})
+			require.NoError(t, err)
 
-	runFromRoutine := seedObsidianRun(t, bundle, "from-routine", "sched-1")
-	runFromHuman := seedObsidianRun(t, bundle, "hand-made", "")
+			runFromRoutine := seedObsidianRun(t, bundle, "from-routine", "sched-1")
+			runFromHuman := seedObsidianRun(t, bundle, "hand-made", "")
 
-	registry := mcp.ToolRegistry{}
-	RegisterObsidianTools(registry, deps)
+			registry := mcp.ToolRegistry{}
+			RegisterObsidianTools(registry, deps)
 
-	// The routine's own task may write.
-	_, err = registry["obsidian_write"].Handler(
-		mcp.ContextWithAuth(ctx, &mcp.MCPAuthInfo{StageRunID: runFromRoutine}),
-		map[string]any{"path": "notes/a.md", "content": "x"})
-	require.NoError(t, err)
+			// The routine's own task may call it.
+			_, err = registry[tc.tool].Handler(
+				mcp.ContextWithAuth(ctx, &mcp.MCPAuthInfo{StageRunID: runFromRoutine}), tc.args)
+			require.NoError(t, err)
 
-	// A task the same routine did not start may not.
-	_, err = registry["obsidian_write"].Handler(
-		mcp.ContextWithAuth(ctx, &mcp.MCPAuthInfo{StageRunID: runFromHuman}),
-		map[string]any{"path": "notes/a.md", "content": "x"})
-	require.Error(t, err)
+			// A task the same routine did not start may not.
+			_, err = registry[tc.tool].Handler(
+				mcp.ContextWithAuth(ctx, &mcp.MCPAuthInfo{StageRunID: runFromHuman}), tc.args)
+			require.Error(t, err)
 
-	// Neither may the machine-wide key.
-	_, err = registry["obsidian_write"].Handler(
-		mcp.ContextWithAuth(ctx, &mcp.MCPAuthInfo{KeyID: "user-key"}),
-		map[string]any{"path": "notes/a.md", "content": "x"})
-	require.Error(t, err)
+			// Neither may the machine-wide key.
+			_, err = registry[tc.tool].Handler(
+				mcp.ContextWithAuth(ctx, &mcp.MCPAuthInfo{KeyID: "user-key"}), tc.args)
+			require.Error(t, err)
+		})
+	}
 }
 
 // TestObsidianDeleteDeniedBeforeVaultCall is the regression test decision D8
