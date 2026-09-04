@@ -16,6 +16,11 @@ type ReadDeps struct {
 	AuditRepo   repo.AuditEventRepo
 	ProjectRepo repo.ProjectRepo
 	SpawnerRepo repo.SpawnerRepo
+	// Caller resolves the stage run on the request's credential into the task
+	// that credential is confined to. The zero value resolves a user key to no
+	// confinement at all, which is how the dashboard's own API keys keep
+	// seeing every task.
+	Caller mcp.CallerResolver
 }
 
 // RegisterReadTools registers all read tools into the given registry.
@@ -93,10 +98,24 @@ func registerListSpawners(registry mcp.ToolRegistry, d ReadDeps) {
 	})
 }
 
-// checkTaskAccess returns an error if the authenticated caller does not own the task.
-// Nil userID on the task means no ownership restriction.
-// MCPAuthInfo carries no UserID field, so all callers are treated as admins.
-func checkTaskAccess(_ context.Context, _ *string) error {
+// checkTaskAccess refuses a task that the caller's credential is not bound to.
+//
+// A user key resolves to no task and may read every task, exactly as before.
+// A stage-run key is confined to the task its run belongs to — without this a
+// stage agent working on task A could read every other task's spec, audit
+// trail and pending permission requests, in every project.
+//
+// A credential that names a stage run which cannot be resolved is refused
+// rather than treated as unconfined: an unresolvable caller is not an
+// unrestricted one.
+func checkTaskAccess(ctx context.Context, caller mcp.CallerResolver, taskID string) error {
+	own, err := caller.TaskID(ctx)
+	if err != nil {
+		return mcp.Fail("access denied: " + err.Error())
+	}
+	if own != "" && own != taskID {
+		return mcp.Fail("access denied: this credential may only read task " + own)
+	}
 	return nil
 }
 
@@ -117,6 +136,20 @@ func registerListTasks(registry mcp.ToolRegistry, d ReadDeps) {
 		},
 		Handler: func(ctx context.Context, args map[string]any) (*mcp.ToolResult, error) {
 			stage := mcp.OptionalString(args, "stage")
+			own, err := d.Caller.TaskID(ctx)
+			if err != nil {
+				return nil, mcp.Fail("list_tasks: access denied: " + err.Error())
+			}
+			if own != "" {
+				task, err := d.TaskRepo.GetByID(ctx, own)
+				if err != nil {
+					return nil, mcp.Fail("list_tasks: " + err.Error())
+				}
+				if stage != "" && task.CurrentStage != stage {
+					return mcp.OK([]*ent.Task{})
+				}
+				return mcp.OK([]*ent.Task{task})
+			}
 			if stage != "" {
 				tasks, err := d.TaskRepo.ListByStage(ctx, stage)
 				if err != nil {
@@ -172,7 +205,7 @@ func registerGetTask(registry mcp.ToolRegistry, d ReadDeps) {
 					return nil, mcp.Fail("Task not found: " + idOrSlug)
 				}
 			}
-			if accessErr := checkTaskAccess(ctx, task.UserID); accessErr != nil {
+			if accessErr := checkTaskAccess(ctx, d.Caller, task.ID); accessErr != nil {
 				return nil, accessErr
 			}
 			return mcp.OK(task)
@@ -207,7 +240,7 @@ func registerListStageRuns(registry mcp.ToolRegistry, d ReadDeps) {
 				}
 				return nil, mcp.Fail("list_stage_runs: " + err.Error())
 			}
-			if accessErr := checkTaskAccess(ctx, task.UserID); accessErr != nil {
+			if accessErr := checkTaskAccess(ctx, d.Caller, task.ID); accessErr != nil {
 				return nil, accessErr
 			}
 			runs, err := d.SRRepo.ListForTask(ctx, taskID)
@@ -249,7 +282,7 @@ func registerListAudit(registry mcp.ToolRegistry, d ReadDeps) {
 				}
 				return nil, mcp.Fail("list_audit: " + err.Error())
 			}
-			if accessErr := checkTaskAccess(ctx, task.UserID); accessErr != nil {
+			if accessErr := checkTaskAccess(ctx, d.Caller, task.ID); accessErr != nil {
 				return nil, accessErr
 			}
 			entries, err := d.AuditRepo.ListForTask(ctx, taskID)
@@ -291,7 +324,7 @@ func registerListPermissionRequests(registry mcp.ToolRegistry, d ReadDeps) {
 				}
 				return nil, mcp.Fail("list_permission_requests: " + err.Error())
 			}
-			if accessErr := checkTaskAccess(ctx, task.UserID); accessErr != nil {
+			if accessErr := checkTaskAccess(ctx, d.Caller, task.ID); accessErr != nil {
 				return nil, accessErr
 			}
 			runs, err := d.SRRepo.ListForTask(ctx, taskID)

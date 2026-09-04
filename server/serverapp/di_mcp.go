@@ -63,6 +63,7 @@ func provideMCPHandler(
 		AuditRepo:   auditRepo,
 		ProjectRepo: projectRepo,
 		SpawnerRepo: spawnerRepo,
+		Caller:      caller,
 	})
 	mcptools.RegisterWriteTools(registry, mcptools.WriteDeps{
 		TaskRepo:         taskRepo,

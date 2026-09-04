@@ -2,6 +2,8 @@ package mcp
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/capability"
@@ -38,18 +40,13 @@ type CallerResolver struct {
 // Every failure resolves to no contexts rather than a partial chain: the safe
 // direction is the one a machine-wide key already takes.
 func (r CallerResolver) Contexts(ctx context.Context) []capability.Context {
-	info := AuthFromContext(ctx)
-	if info == nil || info.StageRunID == "" || r.StageRuns == nil || r.Tasks == nil {
+	taskID, err := r.TaskID(ctx)
+	if err != nil || taskID == "" || r.Tasks == nil {
 		return nil
 	}
-	run, err := r.StageRuns.GetByID(ctx, info.StageRunID)
+	task, err := r.Tasks.GetByID(ctx, taskID)
 	if err != nil {
-		slog.Debug("mcp: stage run for credential not found", "stageRun", info.StageRunID, "err", err)
-		return nil
-	}
-	task, err := r.Tasks.GetByID(ctx, run.TaskID)
-	if err != nil {
-		slog.Debug("mcp: task for stage run not found", "stageRun", run.ID, "task", run.TaskID, "err", err)
+		slog.Debug("mcp: task for stage run not found", "task", taskID, "err", err)
 		return nil
 	}
 	out := []capability.Context{{Kind: repo.GrantContextTask, Ref: task.ID}}
@@ -57,4 +54,34 @@ func (r CallerResolver) Contexts(ctx context.Context) []capability.Context {
 		out = append(out, capability.Context{Kind: repo.GrantContextRoutine, Ref: *task.RoutineID})
 	}
 	return out
+}
+
+// ErrCallerUnresolved reports a credential that names a stage run but whose
+// task cannot be determined. Read tools that narrow to the caller's own task
+// must refuse such a request: an unresolvable caller is not an unrestricted
+// one.
+var ErrCallerUnresolved = errors.New("caller credential names a stage run that cannot be resolved")
+
+// TaskID returns the task the caller's credential is bound to.
+//
+// Three outcomes, and the difference between the last two is the whole point:
+//   - ("", nil)    — no stage run on the credential: a user key, unrestricted.
+//   - (id, nil)    — a stage-run key, confined to that task.
+//   - ("", error)  — a stage-run key that cannot be resolved: refuse.
+func (r CallerResolver) TaskID(ctx context.Context) (string, error) {
+	info := AuthFromContext(ctx)
+	if info == nil || info.StageRunID == "" {
+		return "", nil
+	}
+	if r.StageRuns == nil {
+		return "", fmt.Errorf("%w: no stage run lookup configured", ErrCallerUnresolved)
+	}
+	run, err := r.StageRuns.GetByID(ctx, info.StageRunID)
+	if err != nil {
+		return "", fmt.Errorf("%w: stage run %s: %w", ErrCallerUnresolved, info.StageRunID, err)
+	}
+	if run.TaskID == "" {
+		return "", fmt.Errorf("%w: stage run %s has no task", ErrCallerUnresolved, run.ID)
+	}
+	return run.TaskID, nil
 }
