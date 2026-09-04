@@ -26,7 +26,9 @@ test('workflows view toggle opens the four chart tabs', async ({ page }) => {
   await stubEmptyWorkflowsData(page)
 
   await page.goto('/')
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Dashboard')
+  // The landing view is the cockpit now; this test only needs a mounted
+  // shell before switching to Workflows below.
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Cockpit')
 
   // Switch to Workflows via the main view-mode toggle.
   await page.getByRole('button', { name: 'Workflows' }).click()

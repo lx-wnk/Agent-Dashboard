@@ -97,6 +97,25 @@ describe('useAgents', () => {
     expect(result.selectedAgent.value).toBeNull()
     wrapper.unmount()
   })
+
+  // A caller passing autoStart: false never increments the shared subscriber
+  // count, so it must not decrement it on unmount either — only a caller that
+  // started the stream may stop it. DashboardView mounts/unmounts on every
+  // dashboard<->other-view switch; without this, two switches away from
+  // Dashboard silently close the stream for every other consumer (e.g. App.vue).
+  it('a caller opted out of owning the stream (autoStart: false) does not tear it down for an owner on repeated mount/unmount', async () => {
+    const owner = withSetup(() => useAgents.useAgents({ autoStart: true }))
+    await nextTick()
+    expect(MockEventSource.instances).toHaveLength(1)
+    const es = MockEventSource.instances[0]
+    expect(es.readyState).not.toBe(2)
+
+    withSetup(() => useAgents.useAgents({ autoStart: false })).wrapper.unmount()
+    withSetup(() => useAgents.useAgents({ autoStart: false })).wrapper.unmount()
+
+    expect(es.readyState).not.toBe(2)
+    owner.wrapper.unmount()
+  })
 })
 
 describe('useAgents pendingCapabilityDecisions', () => {

@@ -9,6 +9,15 @@ async function stubAuthDisabled(page: Page) {
   }))
 }
 
+// The needs-you triage band this suite exercises lives on the dashboard
+// view, not the cockpit landing view — pin the landing view the same way
+// dashboard.spec.ts does.
+async function pinDashboardLanding(page: Page) {
+  await page.addInitScript(() => {
+    localStorage.setItem('agent-active-view', 'dashboard')
+  })
+}
+
 function agentWithQuestion(multiSelect: boolean) {
   return {
     pid: 4242,
@@ -79,6 +88,7 @@ async function stubAgents(page: Page, multiSelect: boolean) {
 
 test.describe('AskUserQuestion in the needs-you band', () => {
   test('single-select: answering posts {mode:single,index:0}', async ({ page }) => {
+    await pinDashboardLanding(page)
     await stubAuthDisabled(page)
     await stubAgents(page, false)
 
@@ -108,6 +118,7 @@ test.describe('AskUserQuestion in the needs-you band', () => {
   })
 
   test('multi-select: answering posts {mode:multi,indices:[0,2]}', async ({ page }) => {
+    await pinDashboardLanding(page)
     await stubAuthDisabled(page)
     await stubAgents(page, true)
 
@@ -135,6 +146,7 @@ test.describe('AskUserQuestion in the needs-you band', () => {
   })
 
   test('confirm screen: submitting posts {mode:single,index:0}', async ({ page }) => {
+    await pinDashboardLanding(page)
     await stubAuthDisabled(page)
     await stubAgentsWith(page, agentWithConfirm)
 

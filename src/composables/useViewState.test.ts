@@ -21,10 +21,10 @@ describe('useViewState', () => {
     localStorage.clear()
   })
 
-  it('defaults to dashboard/cards with no stored state', async () => {
+  it('defaults to cockpit/cards with no stored state', async () => {
     const { useViewState } = await freshModule()
     const { activeView, dashboardLayout } = useViewState()
-    expect(activeView.value).toBe('dashboard')
+    expect(activeView.value).toBe('cockpit')
     expect(dashboardLayout.value).toBe('cards')
   })
 
@@ -59,10 +59,10 @@ describe('useViewState', () => {
     expect(localStorage.getItem('agent-dashboard-layout')).toBe('list')
   })
 
-  it('ignores an unknown stored activeView and falls back to dashboard', async () => {
+  it('ignores an unknown stored activeView and falls back to cockpit', async () => {
     localStorage.setItem('agent-active-view', 'kanban')
     const { useViewState } = await freshModule()
-    expect(useViewState().activeView.value).toBe('dashboard')
+    expect(useViewState().activeView.value).toBe('cockpit')
   })
 })
 

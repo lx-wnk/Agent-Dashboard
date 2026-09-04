@@ -7,12 +7,16 @@ import { openListboxOptions, selectListboxOption } from './helpers'
 
 /**
  * Clear localStorage keys that useSidebar and useStatusBar read on module
- * initialisation so each test starts from a clean reactive state.
+ * initialisation so each test starts from a clean reactive state. Also pins
+ * the landing view to the dashboard — the cockpit is the default landing
+ * view now (see the 'landing view' describe below), but this suite exercises
+ * the dashboard view itself, not the default.
  */
 async function clearShellStorage(page: import('@playwright/test').Page) {
   await page.addInitScript(() => {
     localStorage.removeItem('agent-sidebar-pinned')
     localStorage.removeItem('agent-statusbar-collapsed')
+    localStorage.setItem('agent-active-view', 'dashboard')
   })
 }
 
@@ -43,7 +47,7 @@ test.describe('dashboard view', () => {
   // -------------------------------------------------------------------------
   // Default view
   // -------------------------------------------------------------------------
-  test('dashboard is the default view', async ({ page }) => {
+  test('the dashboard view still renders under its own heading', async ({ page }) => {
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Dashboard')
   })
 
@@ -129,5 +133,19 @@ test.describe('dashboard view', () => {
       // Fallback: the whole dashboard view wrapper must at least be in the DOM.
       return expect(page.getByRole('heading', { level: 1 })).toBeVisible()
     })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Landing view — deliberately does not call clearShellStorage, so a first
+// visit with no stored 'agent-active-view' exercises the real default.
+// ---------------------------------------------------------------------------
+
+test.describe('landing view', () => {
+  test('cockpit is the default view on a first visit', async ({ page }) => {
+    await stubAuthDisabled(page)
+    await page.goto('/')
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Cockpit')
+    await expect(page.getByTestId('cockpit')).toBeVisible()
   })
 })

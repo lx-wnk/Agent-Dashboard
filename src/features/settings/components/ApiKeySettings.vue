@@ -26,6 +26,9 @@ import { buildMcpAddCommand, buildMcpJsonConfig } from '@/utils/mcpCommand'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: [] }>()
+// Lazy like its neighbours below: one settings section renders at a time behind
+// a modal, and a static import puts it in the entry chunk, which has a budget.
+const GitHubSettings = defineAsyncComponent(() => import('@/features/settings/components/GitHubSettings.vue'))
 const NotificationSettings = defineAsyncComponent(() => import('@/features/settings/components/NotificationSettings.vue'))
 const PluginSettings = defineAsyncComponent(() => import('@/features/plugins').then(m => m.PluginSettings))
 const ProviderSettings = defineAsyncComponent(() => import('@/features/settings/components/ProviderSettings.vue'))
@@ -45,7 +48,7 @@ function reopenOnboarding() {
 }
 
 // --- Nav ---
-type Section = 'appearance' | 'apiKeys' | 'grants' | 'registry' | 'memory' | 'remotes' | 'permissionPresets' | 'analytics' | 'systemPrompts' | 'plugins' | 'notifications' | 'providers' | 'tracker' | 'projects' | 'spawners' | 'pipelineConfig' | 'server' | 'obsidian'
+type Section = 'appearance' | 'apiKeys' | 'grants' | 'registry' | 'memory' | 'remotes' | 'permissionPresets' | 'analytics' | 'systemPrompts' | 'plugins' | 'notifications' | 'providers' | 'tracker' | 'projects' | 'spawners' | 'pipelineConfig' | 'server' | 'obsidian' | 'github'
 const activeSection = ref<Section>('appearance')
 
 // Nav model — drives the sidebar list. requiresAuth items only show when auth is on.
@@ -56,6 +59,7 @@ const SECTIONS: readonly { id: Section, icon: string, label: string, requiresAut
   { id: 'registry', icon: '▤', label: 'Registry' },
   { id: 'memory', icon: '🧠', label: 'Memory' },
   { id: 'obsidian', icon: '🗒', label: 'Obsidian' },
+  { id: 'github', icon: '⑂', label: 'GitHub' },
   { id: 'remotes', icon: '⌂', label: 'My Remotes', requiresAuth: true },
   { id: 'permissionPresets', icon: '⚿', label: 'Permissions' },
   { id: 'analytics', icon: '📊', label: 'Analytics' },
@@ -651,6 +655,11 @@ const { isImporting, importStatus, start: startImport } = useHistoryImport()
         <!-- Obsidian -->
         <section v-else-if="activeSection === 'obsidian'">
           <ObsidianSettings />
+        </section>
+
+        <!-- GitHub -->
+        <section v-else-if="activeSection === 'github'">
+          <GitHubSettings />
         </section>
 
         <!-- Remotes -->

@@ -29,6 +29,7 @@ import (
 	coordapi "github.com/lx-wnk/agent-dashboard/server/internal/api/coord"
 	apicost "github.com/lx-wnk/agent-dashboard/server/internal/api/cost"
 	apieval "github.com/lx-wnk/agent-dashboard/server/internal/api/eval"
+	apigithub "github.com/lx-wnk/agent-dashboard/server/internal/api/github"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/grants"
 	apihistory "github.com/lx-wnk/agent-dashboard/server/internal/api/history"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/hooks"
@@ -51,6 +52,7 @@ import (
 	apiusage "github.com/lx-wnk/agent-dashboard/server/internal/api/usage"
 	apivisualizations "github.com/lx-wnk/agent-dashboard/server/internal/api/visualizations"
 	apiwp "github.com/lx-wnk/agent-dashboard/server/internal/api/wphandler"
+	"github.com/lx-wnk/agent-dashboard/server/internal/apps/github"
 	"github.com/lx-wnk/agent-dashboard/server/internal/apps/obsidian"
 	"github.com/lx-wnk/agent-dashboard/server/internal/askgate"
 	authpkg "github.com/lx-wnk/agent-dashboard/server/internal/auth"
@@ -158,7 +160,10 @@ type ServerComponents struct {
 	// Obsidian is nil when the vault is unconfigured or no database is
 	// present; see buildObsidianClient (di_obsidian.go).
 	Obsidian *obsidian.Client
-	Cleanup  func()
+	// GitHub is nil when unconfigured or no database is present; see
+	// buildGitHubClient (di_github.go).
+	GitHub  *github.Client
+	Cleanup func()
 }
 
 // ln is the address already bound by Listen, or nil to let the HTTP server
@@ -307,6 +312,11 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	// also being the first run that has to create it.
 	var obsidianClient *obsidian.Client
 	var obsidianSpaceID string
+	// githubClient is nil when GitHub is unconfigured (buildGitHubClient's own
+	// doc comment covers why that is not an error) and stays nil without a
+	// database, since Register and the capability catalogue it depends on need
+	// entClient too.
+	var githubClient *github.Client
 	if entClient != nil {
 		memRepo = repo.NewMemoryRepo(entClient, bundle.WriteClient)
 		memRetriever = memory.NewRetriever(bundle.DB, memRepo)
@@ -352,6 +362,14 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 			return nil, fmt.Errorf("obsidian: register application: %w", err)
 		}
 
+		// GitHub is the second builtin Application, and the reason this slice
+		// exists: it goes through the same Register, the same capability
+		// catalogue and the same encrypted-settings path Obsidian does. If it
+		// ever needs a kernel change Obsidian did not, that is the finding.
+		if err := github.Register(ctx, resourceRepo, capabilityRepo); err != nil {
+			return nil, fmt.Errorf("github: register application: %w", err)
+		}
+
 		// IndexNotes takes a spaceID and memory spaces are never
 		// auto-created (repo.MemoryRepo.CreateSpace is always caller-driven)
 		// — without this, the trigger below would 500 on a fresh install
@@ -370,6 +388,11 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		obsidianClient, err = buildObsidianClient(ctx, settingsSvc)
 		if err != nil {
 			return nil, fmt.Errorf("obsidian: build client: %w", err)
+		}
+
+		githubClient, err = buildGitHubClient(ctx, settingsSvc)
+		if err != nil {
+			return nil, fmt.Errorf("github: build client: %w", err)
 		}
 
 		if rows, err := capabilityRepo.List(ctx); err != nil {
@@ -611,11 +634,14 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	// handler's create core, so it must be built after taskHandler. nil when no DB.
 	sched, schedulesHandler := provideScheduler(entClient, taskHandler, taskBroadcaster, routerConfig.BypassAuth)
 
-	// The only three callers that may block a live request on a human
-	// decision: the memory MCP tools below, the obsidian MCP tools below
-	// them (both have an agent waiting on the tool response), and the HTTP
-	// memory handler further down (a browser request has a human on the
-	// other end). The pipeline's memory push (di_pipeline.go) and the
+	// The six callers that may block a live request on a human decision: the
+	// memory, obsidian and github MCP tools below (an agent waits on the tool
+	// response), and the HTTP memory, resources and github handlers further
+	// down (a browser request has a human on the other end). Count them by
+	// grepping askerArg and memAsker in this file and di_mcp.go — the number
+	// has been stale twice, both times because a new caller was added without
+	// anyone revisiting a sentence in another file.
+	// The pipeline's memory push (di_pipeline.go) and the
 	// obsidian trigger's Gate (obsidianHandler, built further down in this
 	// function — distinct from the obsidian MCP tools, which share this
 	// asker) both construct their own memory.Gate with no Asker instead of
@@ -638,7 +664,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		}
 	}
 
-	mcpHandler := provideMCPHandler(entClient, orch, sched, taskBroadcaster, projectBroadcaster, refineRunner, memRepo, memRetriever, grantUsageRepo, askerArg, obsidianClient)
+	mcpHandler := provideMCPHandler(entClient, orch, sched, taskBroadcaster, projectBroadcaster, refineRunner, memRepo, memRetriever, grantUsageRepo, askerArg, obsidianClient, githubClient)
 
 	var histImporter *histsvc.Importer
 	var historyHandler *apihistory.Handler
@@ -695,6 +721,25 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 			Grants:       repo.NewGrantRepo(entClient),
 			GrantUsage:   grantUsageRepo,
 		}, obsidianSpaceID)
+	}
+
+	// GitHub — /api/github/*. Built WITH askerArg, unlike obsidianHandler
+	// just above: obsidianHandler's route only starts an unattended batch
+	// run (IndexNotes), while these four routes are the direct request the
+	// browser is blocked on, the same shape memoryHandler and
+	// resourcesHandler above already gate with askerArg — a human is on the
+	// other end of it, so an "ask" decision may legitimately hold for their
+	// answer. github.merge never reaches the asker at all: its "spend" class
+	// resolves to deny in Decide, and ServerEnforcer returns ErrDenied
+	// before the ask branch runs.
+	var githubHandler *apigithub.Handler
+	if entClient != nil {
+		githubHandler = apigithub.NewHandler(githubClient, memory.Gate{
+			Capabilities: repo.NewCapabilityRepo(entClient),
+			Grants:       repo.NewGrantRepo(entClient),
+			GrantUsage:   grantUsageRepo,
+			Asker:        askerArg,
+		})
 	}
 
 	// Eval / drift-detection subsystem. The onDrift callback is the only outward
@@ -916,6 +961,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		MemoryHandler:          memoryHandler,
 		ResourcesHandler:       resourcesHandler,
 		ObsidianHandler:        obsidianHandler,
+		GitHubHandler:          githubHandler,
 		RefineHandler:          refineHandler,
 		PlanHandler:            planHandler,
 		AnalyticsHandler:       analyticsHandler,
@@ -953,6 +999,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		Eval:                evalService,
 		Settings:            settingsSvc,
 		Obsidian:            obsidianClient,
+		GitHub:              githubClient,
 		Cleanup:             cleanup,
 	}, nil
 }

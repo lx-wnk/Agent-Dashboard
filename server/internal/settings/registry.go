@@ -136,6 +136,19 @@ var definitions = func() map[string]Definition {
 		{Key: "obsidian.baseURL", Type: TypeString, Default: "", Apply: ApplyRestart, Category: "obsidian"},
 		{Key: "obsidian.vaultRoot", Type: TypeString, Default: "", Apply: ApplyRestart, Category: "obsidian"},
 		{Key: "obsidian.tlsMode", Type: TypeEnum, Enum: []string{"verify", "pinned", "insecure-loopback"}, Default: "verify", Apply: ApplyRestart, Category: "obsidian"},
+		// github.token is the fine-grained PAT the GitHub Application
+		// authenticates with. Secret, so it is encrypted at rest and masked on
+		// every read except Service.Secret — and therefore carries no Default,
+		// which Definition's own doc comment forbids for a secret.
+		//
+		// github.token and github.repos are a required PAIR:
+		// serverapp.buildGitHubClient refuses to boot when exactly one is set.
+		// github.baseURL is deliberately NOT part of that pair — it has a
+		// Default, so it is never unset and cannot be a missing half of
+		// anything.
+		{Key: "github.token", Type: TypeString, Secret: true, Apply: ApplyRestart, Category: "github"},
+		{Key: "github.repos", Type: TypeString, Default: "", Apply: ApplyRestart, Category: "github"},
+		{Key: "github.baseURL", Type: TypeString, Default: "https://api.github.com", Apply: ApplyRestart, Category: "github"},
 	}
 	m := make(map[string]Definition, len(list))
 	for _, d := range list {

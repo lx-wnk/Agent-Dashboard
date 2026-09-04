@@ -13,6 +13,7 @@ const NAV_LABELS = [
   'Registry',
   'Memory',
   'Obsidian',
+  'GitHub',
   'Permissions',
   'Analytics',
   'System Prompts',

@@ -1,6 +1,6 @@
 import { mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { defineComponent } from 'vue'
+import { defineComponent, nextTick } from 'vue'
 
 // Minimal EventSource stub to prevent actual network calls.
 class MockEventSource {
@@ -66,6 +66,26 @@ function withSetup<T>(composable: () => T) {
 }
 
 describe('useTasks', () => {
+  // A caller passing autoStart: false never increments the shared subscriber
+  // count, so it must not decrement it on unmount either — only a caller that
+  // started the stream may stop it. PipelinePanel mounts and unmounts on every
+  // cockpit<->other-view switch, and the cockpit is the landing view; without
+  // this, one switch away closes the tasks stream for every other consumer,
+  // App.vue included, and live task updates stop app-wide with no error shown.
+  it('a caller opted out of owning the stream (autoStart: false) does not tear it down for an owner on repeated mount/unmount', async () => {
+    const owner = withSetup(() => useTasks({ autoStart: true }))
+    await nextTick()
+    expect(MockEventSource.instances).toHaveLength(1)
+    const es = MockEventSource.instances[0]
+    expect(es.readyState).not.toBe(2)
+
+    withSetup(() => useTasks({ autoStart: false })).wrapper.unmount()
+    withSetup(() => useTasks({ autoStart: false })).wrapper.unmount()
+
+    expect(es.readyState).not.toBe(2)
+    owner.wrapper.unmount()
+  })
+
   it('initialises with empty task list', () => {
     const { result, wrapper } = withSetup(() => useTasks({ autoStart: false }))
     expect(result.tasks).toBeDefined()

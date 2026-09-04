@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/apps/github"
 	"github.com/lx-wnk/agent-dashboard/server/internal/apps/obsidian"
 	"github.com/lx-wnk/agent-dashboard/server/internal/capability"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
@@ -29,6 +30,7 @@ func provideMCPHandler(
 	grantUsageRepo repo.GrantUsageRepo,
 	memAsker capability.Asker,
 	obsidianClient *obsidian.Client,
+	githubClient *github.Client,
 ) http.Handler {
 	if client == nil || orch == nil {
 		return nil
@@ -143,6 +145,18 @@ func provideMCPHandler(
 	mcptools.RegisterObsidianTools(registry, mcptools.ObsidianDeps{
 		Client: obsidianClient,
 		Caller: caller,
+		Gate: memory.Gate{
+			Capabilities: repo.NewCapabilityRepo(client),
+			Grants:       repo.NewGrantRepo(client),
+			GrantUsage:   grantUsageRepo,
+			Asker:        memAsker,
+		},
+	})
+	// Same Asker as the memory and Obsidian tools: an agent is waiting on the
+	// tool response either way. RegisterGitHubTools itself skips registering
+	// anything when githubClient is nil.
+	mcptools.RegisterGitHubTools(registry, mcptools.GitHubDeps{
+		Client: githubClient,
 		Gate: memory.Gate{
 			Capabilities: repo.NewCapabilityRepo(client),
 			Grants:       repo.NewGrantRepo(client),
