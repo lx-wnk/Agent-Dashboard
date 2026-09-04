@@ -19,7 +19,7 @@ import AppSelect from './ui/AppSelect.vue'
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: [], spawned: [pid: number] }>()
 
-const { projects } = useProjects()
+const { projects, isLoading: projectsLoading } = useProjects()
 const { spawners } = useSpawners()
 
 const sortedProjects = computed(() =>
@@ -48,14 +48,20 @@ let autoCloseTimer: ReturnType<typeof setTimeout> | null = null
 
 const folderPickerVisible = computed(() => dlg.folders.value.length > 1)
 
-const projectOptions = computed(() => [
-  ...sortedProjects.value.map(p => ({
-    value: p.id,
-    label: `${p.name}${p.folderCount === 0 ? ' — no folder, add one in /settings/projects' : ''}`,
-    disabled: p.folderCount === 0,
-  })),
-  { value: '__create__', label: '+ Create new project…' },
-])
+// While the project fetch is in flight, projects.value is empty for the same
+// reason it would be if there truly were no projects — surface the loading
+// state as its own option rather than rendering an indistinguishable empty
+// list (see git history: this component has shipped that bug twice already).
+const projectOptions = computed(() => projectsLoading.value
+  ? [{ value: '', label: 'Loading projects…', disabled: true }]
+  : [
+      ...sortedProjects.value.map(p => ({
+        value: p.id,
+        label: `${p.name}${p.folderCount === 0 ? ' — no folder, add one in /settings/projects' : ''}`,
+        disabled: p.folderCount === 0,
+      })),
+      { value: '__create__', label: '+ Create new project…' },
+    ])
 
 const folderOptions = computed(() =>
   dlg.folders.value.map(f => ({
@@ -297,6 +303,7 @@ onUnmounted(() => {
           id="spawn-project"
           v-model="projectChoice"
           :options="projectOptions"
+          :disabled="projectsLoading"
           class="w-full"
         />
       </div>
