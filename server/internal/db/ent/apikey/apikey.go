@@ -21,6 +21,12 @@ const (
 	FieldScopes = "scopes"
 	// FieldActive holds the string denoting the active field in the database.
 	FieldActive = "active"
+	// FieldKind holds the string denoting the kind field in the database.
+	FieldKind = "kind"
+	// FieldStageRunID holds the string denoting the stage_run_id field in the database.
+	FieldStageRunID = "stage_run_id"
+	// FieldExpiresAt holds the string denoting the expires_at field in the database.
+	FieldExpiresAt = "expires_at"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// FieldLastUsedAt holds the string denoting the last_used_at field in the database.
@@ -36,6 +42,9 @@ var Columns = []string{
 	FieldKeyHash,
 	FieldScopes,
 	FieldActive,
+	FieldKind,
+	FieldStageRunID,
+	FieldExpiresAt,
 	FieldCreatedAt,
 	FieldLastUsedAt,
 }
@@ -55,6 +64,10 @@ var (
 	DefaultScopes []string
 	// DefaultActive holds the default value on creation for the "active" field.
 	DefaultActive bool
+	// DefaultKind holds the default value on creation for the "kind" field.
+	DefaultKind string
+	// DefaultStageRunID holds the default value on creation for the "stage_run_id" field.
+	DefaultStageRunID string
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 )
@@ -80,6 +93,21 @@ func ByKeyHash(opts ...sql.OrderTermOption) OrderOption {
 // ByActive orders the results by the active field.
 func ByActive(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldActive, opts...).ToFunc()
+}
+
+// ByKind orders the results by the kind field.
+func ByKind(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldKind, opts...).ToFunc()
+}
+
+// ByStageRunID orders the results by the stage_run_id field.
+func ByStageRunID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldStageRunID, opts...).ToFunc()
+}
+
+// ByExpiresAt orders the results by the expires_at field.
+func ByExpiresAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldExpiresAt, opts...).ToFunc()
 }
 
 // ByCreatedAt orders the results by the created_at field.

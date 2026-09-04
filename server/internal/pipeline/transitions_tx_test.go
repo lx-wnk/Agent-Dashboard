@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"sync"
 	"testing"
 
 	"entgo.io/ent/dialect"
@@ -230,4 +231,134 @@ func TestApplyTransition_NoTxBranch_ClosuresRunImmediately(t *testing.T) {
 
 	require.False(t, orch.TaskLockHeldForTest(task.ID), "taskLocks.Delete must run in the no-tx branch")
 	require.True(t, hasEvent(events.all(), task.ID), "OnTaskChanged must fire in the no-tx branch")
+}
+
+// recordedRevokes collects RevokeTaskAPIKeys calls for assertion, guarded for
+// the same reason capturedEvents is: postCommit closures can run from a
+// different goroutine than the test in the async paths this package also has.
+type recordedRevokes struct {
+	mu  sync.Mutex
+	ids []string
+}
+
+func (r *recordedRevokes) revoke(_ context.Context, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.ids = append(r.ids, id)
+	return nil
+}
+
+func (r *recordedRevokes) all() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]string, len(r.ids))
+	copy(out, r.ids)
+	return out
+}
+
+// TestApplyTransition_DoneCommits_RevokesTheCompletedRun is the load-bearing
+// regression test for the finding behind this change: applyTransitionWrites
+// writes stage_run status through a transaction-scoped repo, never through
+// stageRunService.Update, so revocation has to be wired here too (postCommit
+// closures) or a task finishing the normal way would never revoke its
+// credential at all.
+func TestApplyTransition_DoneCommits_RevokesTheCompletedRun(t *testing.T) {
+	ctx := context.Background()
+	bundle := openSharedBundle(t)
+	c := bundle.Client
+
+	taskRepo := repo.NewTaskRepo(c)
+	srRepo := repo.NewStageRunRepo(c)
+	revokes := &recordedRevokes{}
+
+	orch, err := pipeline.NewOrchestrator(pipeline.OrchestratorOptions{
+		TaskRepo:          taskRepo,
+		StageRunRepo:      srRepo,
+		PermissionRepo:    repo.NewPermissionRepo(c),
+		AuditRepo:         repo.NewAuditEventRepo(c),
+		ConfigRepo:        repo.NewPipelineConfigRepo(c),
+		Client:            c,
+		RevokeTaskAPIKeys: revokes.revoke,
+	})
+	require.NoError(t, err)
+
+	task, err := taskRepo.Create(ctx, repo.CreateTaskInput{
+		Slug:                "revoke-on-done",
+		Title:               "Revoke On Done",
+		Cwd:                 "/tmp",
+		CurrentStage:        "finalization",
+		Priority:            "medium",
+		MaxIterations:       3,
+		StageTimeoutSeconds: 1800,
+	})
+	require.NoError(t, err)
+
+	sr, err := srRepo.Create(ctx, repo.CreateStageRunInput{
+		TaskID:      task.ID,
+		Stage:       "finalization",
+		Iteration:   0,
+		SessionName: "revoke-on-done-session",
+	})
+	require.NoError(t, err)
+
+	result, applyErr := orch.ApplyTransitionForTest(ctx, task, sr, pipeline.DoneTransition{})
+	require.NoError(t, applyErr)
+	require.NotNil(t, result)
+
+	require.Equal(t, []string{sr.ID}, revokes.all(),
+		"a committed DoneTransition must revoke the completed run's credentials")
+}
+
+// TestApplyTransition_CommitFails_DoesNotRevoke guards the same D1 property
+// TestApplyTransition_CommitFails_PostCommitEffectsDoNotFire guards for the
+// dependent-cascade closure: a rolled-back transition must not revoke a
+// credential for a run whose status write never became durable.
+func TestApplyTransition_CommitFails_DoesNotRevoke(t *testing.T) {
+	ctx := context.Background()
+	bundle := openSharedBundle(t)
+	c := bundle.Client
+
+	taskRepo := repo.NewTaskRepo(c)
+	srRepo := repo.NewStageRunRepo(c)
+	revokes := &recordedRevokes{}
+
+	faultyClient := newCommitFailClient(bundle.DB)
+
+	orch, err := pipeline.NewOrchestrator(pipeline.OrchestratorOptions{
+		TaskRepo:          taskRepo,
+		StageRunRepo:      srRepo,
+		PermissionRepo:    repo.NewPermissionRepo(c),
+		AuditRepo:         repo.NewAuditEventRepo(c),
+		ConfigRepo:        repo.NewPipelineConfigRepo(c),
+		Client:            faultyClient,
+		RevokeTaskAPIKeys: revokes.revoke,
+	})
+	require.NoError(t, err)
+
+	task, err := taskRepo.Create(ctx, repo.CreateTaskInput{
+		Slug:                "revoke-commit-fail",
+		Title:               "Revoke Commit Fail",
+		Cwd:                 "/tmp",
+		CurrentStage:        "implementation",
+		Priority:            "medium",
+		MaxIterations:       3,
+		StageTimeoutSeconds: 1800,
+	})
+	require.NoError(t, err)
+
+	sr, err := srRepo.Create(ctx, repo.CreateStageRunInput{
+		TaskID:      task.ID,
+		Stage:       "implementation",
+		Iteration:   0,
+		SessionName: "revoke-commit-fail-session",
+	})
+	require.NoError(t, err)
+
+	orch.SeedTaskLockForTest(task.ID)
+
+	_, applyErr := orch.ApplyTransitionForTest(ctx, task, sr, pipeline.DoneTransition{})
+	require.Error(t, applyErr)
+	require.ErrorIs(t, applyErr, errInjectedCommit)
+
+	require.Empty(t, revokes.all(), "a rolled-back transition must not revoke the run's credentials")
 }

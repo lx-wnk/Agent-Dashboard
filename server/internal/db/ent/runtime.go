@@ -77,8 +77,16 @@ func init() {
 	apikeyDescActive := apikeyFields[4].Descriptor()
 	// apikey.DefaultActive holds the default value on creation for the active field.
 	apikey.DefaultActive = apikeyDescActive.Default.(bool)
+	// apikeyDescKind is the schema descriptor for kind field.
+	apikeyDescKind := apikeyFields[5].Descriptor()
+	// apikey.DefaultKind holds the default value on creation for the kind field.
+	apikey.DefaultKind = apikeyDescKind.Default.(string)
+	// apikeyDescStageRunID is the schema descriptor for stage_run_id field.
+	apikeyDescStageRunID := apikeyFields[6].Descriptor()
+	// apikey.DefaultStageRunID holds the default value on creation for the stage_run_id field.
+	apikey.DefaultStageRunID = apikeyDescStageRunID.Default.(string)
 	// apikeyDescCreatedAt is the schema descriptor for created_at field.
-	apikeyDescCreatedAt := apikeyFields[5].Descriptor()
+	apikeyDescCreatedAt := apikeyFields[8].Descriptor()
 	// apikey.DefaultCreatedAt holds the default value on creation for the created_at field.
 	apikey.DefaultCreatedAt = apikeyDescCreatedAt.Default.(func() time.Time)
 	appsettingFields := schema.AppSetting{}.Fields()

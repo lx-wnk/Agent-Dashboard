@@ -3,6 +3,7 @@ package refine
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
@@ -17,6 +18,10 @@ type ConfirmDeps struct {
 	Tasks     repo.TaskRepo
 	StageRuns repo.StageRunRepo
 	Advance   func(ctx context.Context, taskID string) error
+	// Revoke invalidates the concept stage run's MCP credentials once it is
+	// marked done — its agent is gone by then. Nil disables revocation; a
+	// failure logs and never blocks confirmation.
+	Revoke func(ctx context.Context, stageRunID string) error
 }
 
 // Confirm freezes the concept from refinement turns onto the task and advances
@@ -75,6 +80,11 @@ func Confirm(ctx context.Context, d ConfirmDeps, taskID string) (*ent.Task, erro
 				Status:  &done,
 				EndedAt: &now,
 			})
+			if d.Revoke != nil {
+				if rerr := d.Revoke(ctx, sr.ID); rerr != nil {
+					slog.Warn("refine: revoking stage-run credentials failed", "stageRun", sr.ID, "err", rerr)
+				}
+			}
 		}
 	}
 	// The task update is the load-bearing write (stage move + concept freeze);

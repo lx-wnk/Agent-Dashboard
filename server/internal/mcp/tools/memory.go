@@ -16,6 +16,11 @@ type MemoryDeps struct {
 	Repo      repo.MemoryRepo
 	Retriever *memory.Retriever
 	Gate      memory.Gate
+	// Caller resolves the stage run on the request's credential into the task
+	// and routine capability contexts the grant chain is ranked against. The
+	// zero value resolves to nothing, which is exactly how a machine-wide key
+	// behaves.
+	Caller mcp.CallerResolver
 }
 
 // RegisterMemoryTools registers the 2 memory MCP tools into the given registry.
@@ -65,7 +70,7 @@ func registerMemorySearch(registry mcp.ToolRegistry, d MemoryDeps) {
 			// fans out across every space visible in scope, so there is no
 			// single space identity to match a grant pattern against. The
 			// empty value is capability.Match's documented wildcard.
-			if err := d.Gate.Authorize(ctx, repo.CapabilityMemoryRead, "", scope); err != nil {
+			if err := d.Gate.Authorize(ctx, repo.CapabilityMemoryRead, "", scope, d.Caller.Contexts(ctx)...); err != nil {
 				return nil, mcp.Fail("memory_search: " + err.Error())
 			}
 
@@ -131,7 +136,7 @@ func registerMemoryWrite(registry mcp.ToolRegistry, d MemoryDeps) {
 			// an ungranted caller distinguish "unknown space" (404-shaped
 			// error) from "denied" (403-shaped error) without ever holding a
 			// grant — a space-existence oracle ahead of the gate.
-			if err := d.Gate.Authorize(ctx, repo.CapabilityMemoryWrite, spaceSlug, scope); err != nil {
+			if err := d.Gate.Authorize(ctx, repo.CapabilityMemoryWrite, spaceSlug, scope, d.Caller.Contexts(ctx)...); err != nil {
 				return nil, mcp.Fail("memory_write: " + err.Error())
 			}
 

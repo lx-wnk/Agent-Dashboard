@@ -169,6 +169,14 @@ type StageContext struct {
 	// grant made against that routine is in scope for the push. Empty for
 	// a task a human created.
 	AuthorizeMemory func(ctx context.Context, scope repo.Scope, routineID string) error
+
+	// IssueTaskAPIKey mints the MCP credential a spawned stage agent presents
+	// to the dashboard's own /api/mcp endpoint. Nil disables issuance: the
+	// spawn then gets no dashboard-tasks config entry and reaches no task API,
+	// since --strict-mcp-config shuts the user-scope one out. A mint failure
+	// is likewise non-fatal — see
+	// stage_handlers.go's caller.
+	IssueTaskAPIKey func(ctx context.Context, stageRunID string, stageTimeout time.Duration) (string, error)
 }
 
 // StageHandler is implemented by each pipeline stage.
@@ -329,6 +337,18 @@ type OrchestratorOptions struct {
 	// calling memory.Authorize at DI time (serverapp/di_pipeline.go); nil
 	// disables the push the same way a nil InjectMemory does.
 	AuthorizeMemory func(ctx context.Context, scope repo.Scope, routineID string) error
+
+	// IssueTaskAPIKey is forwarded verbatim onto every StageContext this
+	// orchestrator builds — see the matching StageContext field for what it
+	// does. RevokeTaskAPIKeys is consumed directly by stageRunService
+	// (stage_run_service.go) and by applyTransitionWrites' post-commit hooks
+	// (transitions.go), not forwarded onto StageContext: revocation is not a
+	// per-stage-handler concern. Production wires both to
+	// mcp.StageKeyIssuer{Keys: apiKeyRepo}.Issue/Revoke at DI time
+	// (serverapp/di_pipeline.go); nil disables issuance/revocation the same
+	// way a nil AuthorizeMemory disables the memory push.
+	IssueTaskAPIKey   func(ctx context.Context, stageRunID string, stageTimeout time.Duration) (string, error)
+	RevokeTaskAPIKeys func(ctx context.Context, stageRunID string) error
 }
 
 // StageFailedInfo carries failure metadata to the OnStageFailed callback.

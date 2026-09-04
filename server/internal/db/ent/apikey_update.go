@@ -83,6 +83,54 @@ func (_u *ApiKeyUpdate) SetNillableActive(v *bool) *ApiKeyUpdate {
 	return _u
 }
 
+// SetKind sets the "kind" field.
+func (_u *ApiKeyUpdate) SetKind(v string) *ApiKeyUpdate {
+	_u.mutation.SetKind(v)
+	return _u
+}
+
+// SetNillableKind sets the "kind" field if the given value is not nil.
+func (_u *ApiKeyUpdate) SetNillableKind(v *string) *ApiKeyUpdate {
+	if v != nil {
+		_u.SetKind(*v)
+	}
+	return _u
+}
+
+// SetStageRunID sets the "stage_run_id" field.
+func (_u *ApiKeyUpdate) SetStageRunID(v string) *ApiKeyUpdate {
+	_u.mutation.SetStageRunID(v)
+	return _u
+}
+
+// SetNillableStageRunID sets the "stage_run_id" field if the given value is not nil.
+func (_u *ApiKeyUpdate) SetNillableStageRunID(v *string) *ApiKeyUpdate {
+	if v != nil {
+		_u.SetStageRunID(*v)
+	}
+	return _u
+}
+
+// SetExpiresAt sets the "expires_at" field.
+func (_u *ApiKeyUpdate) SetExpiresAt(v time.Time) *ApiKeyUpdate {
+	_u.mutation.SetExpiresAt(v)
+	return _u
+}
+
+// SetNillableExpiresAt sets the "expires_at" field if the given value is not nil.
+func (_u *ApiKeyUpdate) SetNillableExpiresAt(v *time.Time) *ApiKeyUpdate {
+	if v != nil {
+		_u.SetExpiresAt(*v)
+	}
+	return _u
+}
+
+// ClearExpiresAt clears the value of the "expires_at" field.
+func (_u *ApiKeyUpdate) ClearExpiresAt() *ApiKeyUpdate {
+	_u.mutation.ClearExpiresAt()
+	return _u
+}
+
 // SetLastUsedAt sets the "last_used_at" field.
 func (_u *ApiKeyUpdate) SetLastUsedAt(v time.Time) *ApiKeyUpdate {
 	_u.mutation.SetLastUsedAt(v)
@@ -161,6 +209,18 @@ func (_u *ApiKeyUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.Active(); ok {
 		_spec.SetField(apikey.FieldActive, field.TypeBool, value)
 	}
+	if value, ok := _u.mutation.Kind(); ok {
+		_spec.SetField(apikey.FieldKind, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.StageRunID(); ok {
+		_spec.SetField(apikey.FieldStageRunID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ExpiresAt(); ok {
+		_spec.SetField(apikey.FieldExpiresAt, field.TypeTime, value)
+	}
+	if _u.mutation.ExpiresAtCleared() {
+		_spec.ClearField(apikey.FieldExpiresAt, field.TypeTime)
+	}
 	if value, ok := _u.mutation.LastUsedAt(); ok {
 		_spec.SetField(apikey.FieldLastUsedAt, field.TypeTime, value)
 	}
@@ -238,6 +298,54 @@ func (_u *ApiKeyUpdateOne) SetNillableActive(v *bool) *ApiKeyUpdateOne {
 	if v != nil {
 		_u.SetActive(*v)
 	}
+	return _u
+}
+
+// SetKind sets the "kind" field.
+func (_u *ApiKeyUpdateOne) SetKind(v string) *ApiKeyUpdateOne {
+	_u.mutation.SetKind(v)
+	return _u
+}
+
+// SetNillableKind sets the "kind" field if the given value is not nil.
+func (_u *ApiKeyUpdateOne) SetNillableKind(v *string) *ApiKeyUpdateOne {
+	if v != nil {
+		_u.SetKind(*v)
+	}
+	return _u
+}
+
+// SetStageRunID sets the "stage_run_id" field.
+func (_u *ApiKeyUpdateOne) SetStageRunID(v string) *ApiKeyUpdateOne {
+	_u.mutation.SetStageRunID(v)
+	return _u
+}
+
+// SetNillableStageRunID sets the "stage_run_id" field if the given value is not nil.
+func (_u *ApiKeyUpdateOne) SetNillableStageRunID(v *string) *ApiKeyUpdateOne {
+	if v != nil {
+		_u.SetStageRunID(*v)
+	}
+	return _u
+}
+
+// SetExpiresAt sets the "expires_at" field.
+func (_u *ApiKeyUpdateOne) SetExpiresAt(v time.Time) *ApiKeyUpdateOne {
+	_u.mutation.SetExpiresAt(v)
+	return _u
+}
+
+// SetNillableExpiresAt sets the "expires_at" field if the given value is not nil.
+func (_u *ApiKeyUpdateOne) SetNillableExpiresAt(v *time.Time) *ApiKeyUpdateOne {
+	if v != nil {
+		_u.SetExpiresAt(*v)
+	}
+	return _u
+}
+
+// ClearExpiresAt clears the value of the "expires_at" field.
+func (_u *ApiKeyUpdateOne) ClearExpiresAt() *ApiKeyUpdateOne {
+	_u.mutation.ClearExpiresAt()
 	return _u
 }
 
@@ -348,6 +456,18 @@ func (_u *ApiKeyUpdateOne) sqlSave(ctx context.Context) (_node *ApiKey, err erro
 	}
 	if value, ok := _u.mutation.Active(); ok {
 		_spec.SetField(apikey.FieldActive, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.Kind(); ok {
+		_spec.SetField(apikey.FieldKind, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.StageRunID(); ok {
+		_spec.SetField(apikey.FieldStageRunID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ExpiresAt(); ok {
+		_spec.SetField(apikey.FieldExpiresAt, field.TypeTime, value)
+	}
+	if _u.mutation.ExpiresAtCleared() {
+		_spec.ClearField(apikey.FieldExpiresAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.LastUsedAt(); ok {
 		_spec.SetField(apikey.FieldLastUsedAt, field.TypeTime, value)

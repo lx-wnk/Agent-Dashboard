@@ -122,7 +122,7 @@ func registerCreateAPIKey(registry mcp.ToolRegistry, d KeyDeps) {
 
 			token := mcp.GenerateAPIToken()
 			hash := mcp.HashToken(token)
-			key, err := d.ApiKeyRepo.Create(ctx, name, hash, scopes)
+			key, err := d.ApiKeyRepo.Create(ctx, repo.CreateApiKeyInput{Name: name, Hash: hash, Scopes: scopes})
 			if err != nil {
 				return nil, mcp.Fail("create_api_key: " + err.Error())
 			}

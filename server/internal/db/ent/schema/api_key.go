@@ -20,6 +20,17 @@ func (ApiKey) Fields() []ent.Field {
 		field.String("key_hash").Unique().Sensitive(),
 		field.JSON("scopes", []string{}).Default([]string{}),
 		field.Bool("active").Default(true),
+		// kind separates the keys a person created from the ephemeral ones the
+		// pipeline mints per stage run. The default keeps every existing row a
+		// user key without a backfill.
+		field.String("kind").Default("user"),
+		// stage_run_id is the attribution a capability context is resolved from.
+		// Empty for a user key.
+		field.String("stage_run_id").Default(""),
+		// expires_at is a hard stop independent of active: the orchestrator
+		// revoking on a terminal transition and this timestamp are two nets, and
+		// a server that dies between spawn and transition only trips the second.
+		field.Time("expires_at").Optional().Nillable(),
 		field.Time("created_at").Default(time.Now).Immutable(),
 		field.Time("last_used_at").Optional().Nillable(),
 	}
@@ -29,5 +40,7 @@ func (ApiKey) Fields() []ent.Field {
 func (ApiKey) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("active"),
+		index.Fields("stage_run_id"),
+		index.Fields("expires_at"),
 	}
 }

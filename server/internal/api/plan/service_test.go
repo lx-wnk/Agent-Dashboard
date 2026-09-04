@@ -90,6 +90,34 @@ func TestApprovePlan_AdvancesTaskToImplementation(t *testing.T) {
 	require.True(t, hasMeta, "expected approvedPlan key in task metadata")
 }
 
+func TestApprovePlan_RevokesTheStageRunCredential(t *testing.T) {
+	bundle, err := db.Open(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+
+	ctx := context.Background()
+	taskRepo := repo.NewTaskRepo(bundle.Client)
+	srRepo := repo.NewStageRunRepo(bundle.Client)
+	turnsRepo := repo.NewRefinementTurnRepo(bundle.Client)
+
+	taskID, runID := seedPlanReviewTask(t, ctx, taskRepo, srRepo)
+
+	var revoked []string
+	_, err = plan.ApprovePlan(ctx, plan.ApproveDeps{
+		Turns:     turnsRepo,
+		Tasks:     taskRepo,
+		StageRuns: srRepo,
+		Revoke: func(_ context.Context, stageRunID string) error {
+			revoked = append(revoked, stageRunID)
+			return nil
+		},
+	}, taskID)
+
+	require.NoError(t, err)
+	require.Equal(t, []string{runID}, revoked,
+		"approving the plan must revoke the plan_review run's MCP credentials")
+}
+
 func TestRejectPlan_RerunsStageAndStoresFeedback(t *testing.T) {
 	bundle, err := db.Open(":memory:")
 	require.NoError(t, err)

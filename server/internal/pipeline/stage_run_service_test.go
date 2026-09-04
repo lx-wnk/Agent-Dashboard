@@ -72,7 +72,7 @@ func (f *fakeStageRunRepo) ListInWindow(_ context.Context, _, _ time.Time) ([]*e
 
 func TestStageRunService_MarkPending_SetsPendingAndClearsPID(t *testing.T) {
 	repoFake := &fakeStageRunRepo{}
-	s := newStageRunService(repoFake)
+	s := newStageRunService(repoFake, nil)
 	ctx := context.Background()
 
 	_, _ = s.MarkPending(ctx, "run-1")
@@ -97,7 +97,7 @@ func TestStageRunService_MarkPending_SetsPendingAndClearsPID(t *testing.T) {
 
 func TestStageRunService_MarkFailed_SetsFailedEndedAtAndOutput(t *testing.T) {
 	repoFake := &fakeStageRunRepo{}
-	s := newStageRunService(repoFake)
+	s := newStageRunService(repoFake, nil)
 	ctx := context.Background()
 	output := map[string]any{"error": "boom"}
 

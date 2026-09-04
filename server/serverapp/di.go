@@ -64,6 +64,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/eval"
 	histsvc "github.com/lx-wnk/agent-dashboard/server/internal/history"
 	"github.com/lx-wnk/agent-dashboard/server/internal/hookstore"
+	mcppkg "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
 	"github.com/lx-wnk/agent-dashboard/server/internal/memory"
 	"github.com/lx-wnk/agent-dashboard/server/internal/merger"
 	"github.com/lx-wnk/agent-dashboard/server/internal/parser"
@@ -140,12 +141,15 @@ func (noopSettingsRepo) ListAll(context.Context) (map[string]string, error) {
 // set even when an error is also returned (e.g. plugin registry already
 // loaded) — callers must invoke it whenever it is non-nil, regardless of err.
 type ServerComponents struct {
-	API                 *api.Server
-	Broadcaster         *sse.Broadcaster
-	Merger              *merger.Merger
-	Orchestrator        *pipeline.PipelineOrchestrator
-	Scheduler           *scheduler.Scheduler
-	HistImporter        *histsvc.Importer
+	API          *api.Server
+	Broadcaster  *sse.Broadcaster
+	Merger       *merger.Merger
+	Orchestrator *pipeline.PipelineOrchestrator
+	Scheduler    *scheduler.Scheduler
+	HistImporter *histsvc.Importer
+	// ApiKeyRepo feeds mcp.SweepExpiredKeys in runComponents; nil when no
+	// database is configured, same as HistImporter and Eval above.
+	ApiKeyRepo          repo.ApiKeyRepo
 	Baseline            agentbroadcast.BaselineProvider
 	Enricher            merger.Enricher
 	CapabilityDecisions agentbroadcast.CapabilityDecisionProvider
@@ -722,6 +726,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 				_, err := orch.ProgressTask(ctx, taskID, nil)
 				return err
 			},
+			Revoke: mcppkg.StageKeyIssuer{Keys: repo.NewApiKeyRepo(entClient)}.Revoke,
 			ResolveSpawner: func(ctx context.Context, taskID string) (*ent.Spawner, services.SpawnerSource, error) {
 				if spawnerResolver == nil {
 					return nil, services.SpawnerSourceDefault, nil
@@ -747,6 +752,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 				_, err := orch.RequeueForUser(ctx, taskID, prompt)
 				return err
 			},
+			Revoke: mcppkg.StageKeyIssuer{Keys: repo.NewApiKeyRepo(entClient)}.Revoke,
 		})
 	}
 
@@ -940,6 +946,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		Orchestrator:        orch,
 		Scheduler:           sched,
 		HistImporter:        histImporter,
+		ApiKeyRepo:          apiKeyRepo,
 		Baseline:            baselineProvider,
 		Enricher:            agentEnricher,
 		CapabilityDecisions: capabilityDecisions,

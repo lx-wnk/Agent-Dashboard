@@ -79,6 +79,21 @@ func Active(v bool) predicate.ApiKey {
 	return predicate.ApiKey(sql.FieldEQ(FieldActive, v))
 }
 
+// Kind applies equality check predicate on the "kind" field. It's identical to KindEQ.
+func Kind(v string) predicate.ApiKey {
+	return predicate.ApiKey(sql.FieldEQ(FieldKind, v))
+}
+
+// StageRunID applies equality check predicate on the "stage_run_id" field. It's identical to StageRunIDEQ.
+func StageRunID(v string) predicate.ApiKey {
+	return predicate.ApiKey(sql.FieldEQ(FieldStageRunID, v))
+}
+
+// ExpiresAt applies equality check predicate on the "expires_at" field. It's identical to ExpiresAtEQ.
+func ExpiresAt(v time.Time) predicate.ApiKey {
+	return predicate.ApiKey(sql.FieldEQ(FieldExpiresAt, v))
+}
+
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
 func CreatedAt(v time.Time) predicate.ApiKey {
 	return predicate.ApiKey(sql.FieldEQ(FieldCreatedAt, v))
@@ -227,6 +242,186 @@ func ActiveEQ(v bool) predicate.ApiKey {
 // ActiveNEQ applies the NEQ predicate on the "active" field.
 func ActiveNEQ(v bool) predicate.ApiKey {
 	return predicate.ApiKey(sql.FieldNEQ(FieldActive, v))
+}
+
+// KindEQ applies the EQ predicate on the "kind" field.
+func KindEQ(v string) predicate.ApiKey {
+	return predicate.ApiKey(sql.FieldEQ(FieldKind, v))
+}
+
+// KindNEQ applies the NEQ predicate on the "kind" field.
+func KindNEQ(v string) predicate.ApiKey {
+	return predicate.ApiKey(sql.FieldNEQ(FieldKind, v))
+}
+
+// KindIn applies the In predicate on the "kind" field.
+func KindIn(vs ...string) predicate.ApiKey {
+	return predicate.ApiKey(sql.FieldIn(FieldKind, vs...))
+}
+
+// KindNotIn applies the NotIn predicate on the "kind" field.
+func KindNotIn(vs ...string) predicate.ApiKey {
+	return predicate.ApiKey(sql.FieldNotIn(FieldKind, vs...))
+}
+
+// KindGT applies the GT predicate on the "kind" field.
+func KindGT(v string) predicate.ApiKey {
+	return predicate.ApiKey(sql.FieldGT(FieldKind, v))
+}
+
+// KindGTE applies the GTE predicate on the "kind" field.
+func KindGTE(v string) predicate.ApiKey {
+	return predicate.ApiKey(sql.FieldGTE(FieldKind, v))
+}
+
+// KindLT applies the LT predicate on the "kind" field.
+func KindLT(v string) predicate.ApiKey {
+	return predicate.ApiKey(sql.FieldLT(FieldKind, v))
+}
+
+// KindLTE applies the LTE predicate on the "kind" field.
+func KindLTE(v string) predicate.ApiKey {
+	return predicate.ApiKey(sql.FieldLTE(FieldKind, v))
+}
+
+// KindContains applies the Contains predicate on the "kind" field.
+func KindContains(v string) predicate.ApiKey {
+	return predicate.ApiKey(sql.FieldContains(FieldKind, v))
+}
+
+// KindHasPrefix applies the HasPrefix predicate on the "kind" field.
+func KindHasPrefix(v string) predicate.ApiKey {
+	return predicate.ApiKey(sql.FieldHasPrefix(FieldKind, v))
+}
+
+// KindHasSuffix applies the HasSuffix predicate on the "kind" field.
+func KindHasSuffix(v string) predicate.ApiKey {
+	return predicate.ApiKey(sql.FieldHasSuffix(FieldKind, v))
+}
+
+// KindEqualFold applies the EqualFold predicate on the "kind" field.
+func KindEqualFold(v string) predicate.ApiKey {
+	return predicate.ApiKey(sql.FieldEqualFold(FieldKind, v))
+}
+
+// KindContainsFold applies the ContainsFold predicate on the "kind" field.
+func KindContainsFold(v string) predicate.ApiKey {
+	return predicate.ApiKey(sql.FieldContainsFold(FieldKind, v))
+}
+
+// StageRunIDEQ applies the EQ predicate on the "stage_run_id" field.
+func StageRunIDEQ(v string) predicate.ApiKey {
+	return predicate.ApiKey(sql.FieldEQ(FieldStageRunID, v))
+}
+
+// StageRunIDNEQ applies the NEQ predicate on the "stage_run_id" field.
+func StageRunIDNEQ(v string) predicate.ApiKey {
+	return predicate.ApiKey(sql.FieldNEQ(FieldStageRunID, v))
+}
+
+// StageRunIDIn applies the In predicate on the "stage_run_id" field.
+func StageRunIDIn(vs ...string) predicate.ApiKey {
+	return predicate.ApiKey(sql.FieldIn(FieldStageRunID, vs...))
+}
+
+// StageRunIDNotIn applies the NotIn predicate on the "stage_run_id" field.
+func StageRunIDNotIn(vs ...string) predicate.ApiKey {
+	return predicate.ApiKey(sql.FieldNotIn(FieldStageRunID, vs...))
+}
+
+// StageRunIDGT applies the GT predicate on the "stage_run_id" field.
+func StageRunIDGT(v string) predicate.ApiKey {
+	return predicate.ApiKey(sql.FieldGT(FieldStageRunID, v))
+}
+
+// StageRunIDGTE applies the GTE predicate on the "stage_run_id" field.
+func StageRunIDGTE(v string) predicate.ApiKey {
+	return predicate.ApiKey(sql.FieldGTE(FieldStageRunID, v))
+}
+
+// StageRunIDLT applies the LT predicate on the "stage_run_id" field.
+func StageRunIDLT(v string) predicate.ApiKey {
+	return predicate.ApiKey(sql.FieldLT(FieldStageRunID, v))
+}
+
+// StageRunIDLTE applies the LTE predicate on the "stage_run_id" field.
+func StageRunIDLTE(v string) predicate.ApiKey {
+	return predicate.ApiKey(sql.FieldLTE(FieldStageRunID, v))
+}
+
+// StageRunIDContains applies the Contains predicate on the "stage_run_id" field.
+func StageRunIDContains(v string) predicate.ApiKey {
+	return predicate.ApiKey(sql.FieldContains(FieldStageRunID, v))
+}
+
+// StageRunIDHasPrefix applies the HasPrefix predicate on the "stage_run_id" field.
+func StageRunIDHasPrefix(v string) predicate.ApiKey {
+	return predicate.ApiKey(sql.FieldHasPrefix(FieldStageRunID, v))
+}
+
+// StageRunIDHasSuffix applies the HasSuffix predicate on the "stage_run_id" field.
+func StageRunIDHasSuffix(v string) predicate.ApiKey {
+	return predicate.ApiKey(sql.FieldHasSuffix(FieldStageRunID, v))
+}
+
+// StageRunIDEqualFold applies the EqualFold predicate on the "stage_run_id" field.
+func StageRunIDEqualFold(v string) predicate.ApiKey {
+	return predicate.ApiKey(sql.FieldEqualFold(FieldStageRunID, v))
+}
+
+// StageRunIDContainsFold applies the ContainsFold predicate on the "stage_run_id" field.
+func StageRunIDContainsFold(v string) predicate.ApiKey {
+	return predicate.ApiKey(sql.FieldContainsFold(FieldStageRunID, v))
+}
+
+// ExpiresAtEQ applies the EQ predicate on the "expires_at" field.
+func ExpiresAtEQ(v time.Time) predicate.ApiKey {
+	return predicate.ApiKey(sql.FieldEQ(FieldExpiresAt, v))
+}
+
+// ExpiresAtNEQ applies the NEQ predicate on the "expires_at" field.
+func ExpiresAtNEQ(v time.Time) predicate.ApiKey {
+	return predicate.ApiKey(sql.FieldNEQ(FieldExpiresAt, v))
+}
+
+// ExpiresAtIn applies the In predicate on the "expires_at" field.
+func ExpiresAtIn(vs ...time.Time) predicate.ApiKey {
+	return predicate.ApiKey(sql.FieldIn(FieldExpiresAt, vs...))
+}
+
+// ExpiresAtNotIn applies the NotIn predicate on the "expires_at" field.
+func ExpiresAtNotIn(vs ...time.Time) predicate.ApiKey {
+	return predicate.ApiKey(sql.FieldNotIn(FieldExpiresAt, vs...))
+}
+
+// ExpiresAtGT applies the GT predicate on the "expires_at" field.
+func ExpiresAtGT(v time.Time) predicate.ApiKey {
+	return predicate.ApiKey(sql.FieldGT(FieldExpiresAt, v))
+}
+
+// ExpiresAtGTE applies the GTE predicate on the "expires_at" field.
+func ExpiresAtGTE(v time.Time) predicate.ApiKey {
+	return predicate.ApiKey(sql.FieldGTE(FieldExpiresAt, v))
+}
+
+// ExpiresAtLT applies the LT predicate on the "expires_at" field.
+func ExpiresAtLT(v time.Time) predicate.ApiKey {
+	return predicate.ApiKey(sql.FieldLT(FieldExpiresAt, v))
+}
+
+// ExpiresAtLTE applies the LTE predicate on the "expires_at" field.
+func ExpiresAtLTE(v time.Time) predicate.ApiKey {
+	return predicate.ApiKey(sql.FieldLTE(FieldExpiresAt, v))
+}
+
+// ExpiresAtIsNil applies the IsNil predicate on the "expires_at" field.
+func ExpiresAtIsNil() predicate.ApiKey {
+	return predicate.ApiKey(sql.FieldIsNull(FieldExpiresAt))
+}
+
+// ExpiresAtNotNil applies the NotNil predicate on the "expires_at" field.
+func ExpiresAtNotNil() predicate.ApiKey {
+	return predicate.ApiKey(sql.FieldNotNull(FieldExpiresAt))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.

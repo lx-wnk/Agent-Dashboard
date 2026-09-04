@@ -11,7 +11,7 @@ import (
 
 func TestWriteTempConfig_ReturnsFilePath(t *testing.T) {
 	binaryPath := "/usr/local/bin/agent-dashboard"
-	path, err := channelconfig.WriteTempConfig(binaryPath)
+	path, err := channelconfig.WriteTempConfig(binaryPath, nil, nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, path)
 	t.Cleanup(func() { _ = os.Remove(path) })
@@ -19,7 +19,7 @@ func TestWriteTempConfig_ReturnsFilePath(t *testing.T) {
 
 func TestWriteTempConfig_FileExists(t *testing.T) {
 	binaryPath := "/usr/local/bin/agent-dashboard"
-	path, err := channelconfig.WriteTempConfig(binaryPath)
+	path, err := channelconfig.WriteTempConfig(binaryPath, nil, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.Remove(path) })
 
@@ -29,7 +29,7 @@ func TestWriteTempConfig_FileExists(t *testing.T) {
 
 func TestWriteTempConfig_FilePermissions(t *testing.T) {
 	binaryPath := "/usr/local/bin/agent-dashboard"
-	path, err := channelconfig.WriteTempConfig(binaryPath)
+	path, err := channelconfig.WriteTempConfig(binaryPath, nil, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.Remove(path) })
 
@@ -43,7 +43,7 @@ func TestWriteTempConfig_FilePermissions(t *testing.T) {
 
 func TestWriteTempConfig_JSONContract(t *testing.T) {
 	binaryPath := "/usr/local/bin/agent-dashboard"
-	path, err := channelconfig.WriteTempConfig(binaryPath)
+	path, err := channelconfig.WriteTempConfig(binaryPath, nil, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.Remove(path) })
 
@@ -66,14 +66,14 @@ func TestWriteTempConfig_JSONContract(t *testing.T) {
 
 func TestConfigJSON_ValidJSON(t *testing.T) {
 	binaryPath := "/usr/local/bin/agent-dashboard"
-	s, err := channelconfig.ConfigJSON(binaryPath)
+	s, err := channelconfig.ConfigJSON(binaryPath, nil)
 	require.NoError(t, err)
 	require.True(t, json.Valid([]byte(s)), "ConfigJSON must return valid JSON")
 }
 
 func TestConfigJSON_ContainsBinaryPath(t *testing.T) {
 	binaryPath := "/usr/local/bin/agent-dashboard"
-	s, err := channelconfig.ConfigJSON(binaryPath)
+	s, err := channelconfig.ConfigJSON(binaryPath, nil)
 	require.NoError(t, err)
 
 	var cfg struct {
@@ -90,7 +90,7 @@ func TestConfigJSON_ContainsBinaryPath(t *testing.T) {
 
 func TestConfigJSON_ContainsChannelArg(t *testing.T) {
 	binaryPath := "/usr/local/bin/agent-dashboard"
-	s, err := channelconfig.ConfigJSON(binaryPath)
+	s, err := channelconfig.ConfigJSON(binaryPath, nil)
 	require.NoError(t, err)
 
 	var cfg struct {
@@ -108,10 +108,10 @@ func TestConfigJSON_MatchesWriteTempConfig(t *testing.T) {
 	// Both ConfigJSON and WriteTempConfig must produce structurally identical configs.
 	binaryPath := "/usr/local/bin/agent-dashboard"
 
-	jsonStr, err := channelconfig.ConfigJSON(binaryPath)
+	jsonStr, err := channelconfig.ConfigJSON(binaryPath, nil)
 	require.NoError(t, err)
 
-	filePath, err := channelconfig.WriteTempConfig(binaryPath)
+	filePath, err := channelconfig.WriteTempConfig(binaryPath, nil, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.Remove(filePath) })
 
@@ -135,13 +135,57 @@ func TestConfigJSON_MatchesWriteTempConfig(t *testing.T) {
 func TestWriteTempConfig_MultipleCalls(t *testing.T) {
 	// Each call must produce a distinct temp file (no collisions).
 	binaryPath := "/usr/local/bin/agent-dashboard"
-	path1, err := channelconfig.WriteTempConfig(binaryPath)
+	path1, err := channelconfig.WriteTempConfig(binaryPath, nil, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.Remove(path1) })
 
-	path2, err := channelconfig.WriteTempConfig(binaryPath)
+	path2, err := channelconfig.WriteTempConfig(binaryPath, nil, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.Remove(path2) })
 
 	require.NotEqual(t, path1, path2, "successive calls must return distinct file paths")
+}
+
+func TestConfigJSON_NilTaskAPIIsUnchanged(t *testing.T) {
+	got, err := channelconfig.ConfigJSON("/bin/agent-dashboard", nil)
+	require.NoError(t, err)
+	require.Equal(t,
+		`{"mcpServers":{"dashboard-channel":{"command":"/bin/agent-dashboard","args":["channel"]}}}`,
+		got)
+}
+
+func TestConfigJSON_TaskAPIAddsASecondServer(t *testing.T) {
+	got, err := channelconfig.ConfigJSON("/bin/agent-dashboard", &channelconfig.TaskAPI{
+		URL: "http://127.0.0.1:13120/api/mcp", Token: "mcp_deadbeef",
+	})
+	require.NoError(t, err)
+
+	var parsed struct {
+		MCPServers map[string]struct {
+			Command string            `json:"command"`
+			Type    string            `json:"type"`
+			URL     string            `json:"url"`
+			Headers map[string]string `json:"headers"`
+		} `json:"mcpServers"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(got), &parsed))
+	require.Len(t, parsed.MCPServers, 2)
+
+	tasks := parsed.MCPServers["dashboard-tasks"]
+	require.Equal(t, "http", tasks.Type)
+	require.Equal(t, "http://127.0.0.1:13120/api/mcp", tasks.URL)
+	require.Equal(t, "Bearer mcp_deadbeef", tasks.Headers["Authorization"])
+	require.Equal(t, "/bin/agent-dashboard", parsed.MCPServers["dashboard-channel"].Command)
+}
+
+// A half-filled TaskAPI would write a server entry the agent cannot use and,
+// worse, one that looks configured. Refuse it instead.
+func TestConfigJSON_TaskAPIWithoutTokenIsRefused(t *testing.T) {
+	_, err := channelconfig.ConfigJSON("/bin/agent-dashboard", &channelconfig.TaskAPI{URL: "http://127.0.0.1:13120/api/mcp"})
+	require.Error(t, err)
+}
+
+func TestConfigJSON_TaskAPIWithoutURLIsRefused(t *testing.T) {
+	_, err := channelconfig.ConfigJSON("/bin/agent-dashboard", &channelconfig.TaskAPI{Token: "mcp_deadbeef"})
+	require.Error(t, err)
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -494,6 +495,62 @@ func TestSpawnStageAgent_CQ06_FailsLoudUnderRestrictiveAutonomy(t *testing.T) {
 		"restrictive autonomy must fail loud on a writeSettingsFile error instead of spawning with no allow-list")
 }
 
+// TestSpawnStageAgent_TaskAPITokenReachesWrittenConfig closes the gap
+// buildTaskAPI's own unit tests leave open: they cover the pure decision of
+// whether a dashboard-tasks entry gets built, but SpawnStageAgent could still
+// silently drop the result on the floor (e.g. reverting to
+// WriteTempConfig(selfBin, nil)) without failing any of them. This drives the
+// real function end to end with a real (near-instant) child process and reads
+// the config file it actually wrote.
+func TestSpawnStageAgent_TaskAPITokenReachesWrittenConfig(t *testing.T) {
+	dir := filepath.Join(os.TempDir(), "dashboard-"+strconv.Itoa(os.Getuid()))
+	before, _ := os.ReadDir(dir) // ignore error — dir may not exist yet
+	beforeSet := make(map[string]bool, len(before))
+	for _, e := range before {
+		beforeSet[e.Name()] = true
+	}
+
+	opts := pipeline.SpawnAgentOptions{
+		Task:          &ent.Task{ID: "t-reach", Cwd: t.TempDir(), Autonomy: "full"},
+		StageRun:      &ent.StageRun{ID: "r-reach"},
+		EnableChannel: true,
+		TaskAPIToken:  "reachtest-tok",
+		MCPUrl:        "http://127.0.0.1:13120",
+		Spawner:       &ent.Spawner{Command: "/usr/bin/true"},
+	}
+	result, err := pipeline.SpawnStageAgent(opts)
+	require.NoError(t, err)
+	t.Cleanup(result.Cleanup)
+	if p, perr := os.FindProcess(result.PID); perr == nil {
+		_, _ = p.Wait() // reap the child so it doesn't linger as a zombie
+	}
+
+	after, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	var newFile string
+	for _, e := range after {
+		if !beforeSet[e.Name()] {
+			newFile = filepath.Join(dir, e.Name())
+			break
+		}
+	}
+	require.NotEmpty(t, newFile, "SpawnStageAgent must have written a new channel config file")
+
+	data, err := os.ReadFile(newFile)
+	require.NoError(t, err)
+
+	var parsed struct {
+		MCPServers map[string]struct {
+			Headers map[string]string `json:"headers"`
+		} `json:"mcpServers"`
+	}
+	require.NoError(t, json.Unmarshal(data, &parsed))
+	tasksEntry, ok := parsed.MCPServers["dashboard-tasks"]
+	require.True(t, ok, "config must carry a dashboard-tasks entry when TaskAPIToken is set")
+	require.Equal(t, "Bearer reachtest-tok", tasksEntry.Headers["Authorization"],
+		"the minted token must reach the written config, not just buildTaskAPI's return value")
+}
+
 func TestSpawnStageAgent_CQ06_WarnsAndContinuesUnderAllowAllAutonomy(t *testing.T) {
 	for _, autonomy := range []string{"spec_gated", "full"} {
 		t.Run(autonomy, func(t *testing.T) {
@@ -511,4 +568,104 @@ func TestSpawnStageAgent_CQ06_WarnsAndContinuesUnderAllowAllAutonomy(t *testing.
 				"allow-all autonomy must warn and continue past a writeSettingsFile error")
 		})
 	}
+}
+
+// ---------------------------------------------------------------------------
+// --strict-mcp-config and the user-scope server merge
+// ---------------------------------------------------------------------------
+
+// spawnRecording runs SpawnStageAgent against a shell script that records its
+// own argv, then returns that argv together with the MCP config file the
+// spawner wrote for it. Both come from the real spawn, so a change that keeps
+// buildSpawnArgsWithChannelConfig correct but stops routing through it still
+// shows up here.
+func spawnRecording(t *testing.T, userConfigJSON string, opts pipeline.SpawnAgentOptions) ([]string, map[string]json.RawMessage) {
+	t.Helper()
+	configDir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configDir)
+	if userConfigJSON != "" {
+		require.NoError(t, os.WriteFile(filepath.Join(configDir, ".claude.json"), []byte(userConfigJSON), 0o600))
+	}
+
+	scriptDir := t.TempDir()
+	argvPath := filepath.Join(scriptDir, "argv.txt")
+	script := filepath.Join(scriptDir, "record.sh")
+	require.NoError(t, os.WriteFile(script,
+		[]byte("#!/bin/sh\nprintf '%s\\n' \"$@\" > "+argvPath+"\n"), 0o700))
+
+	opts.Task = &ent.Task{ID: "t-strict", Cwd: t.TempDir(), Autonomy: "full"}
+	opts.StageRun = &ent.StageRun{ID: "r-strict"}
+	opts.EnableChannel = true
+	opts.Spawner = &ent.Spawner{Command: script}
+
+	result, err := pipeline.SpawnStageAgent(opts)
+	require.NoError(t, err)
+	t.Cleanup(result.Cleanup)
+	if p, perr := os.FindProcess(result.PID); perr == nil {
+		_, _ = p.Wait()
+	}
+
+	raw, err := os.ReadFile(argvPath)
+	require.NoError(t, err, "the spawned process must have recorded its argv")
+	argv := strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
+
+	cfgPath := ""
+	for i, a := range argv {
+		if a == "--mcp-config" && i+1 < len(argv) {
+			cfgPath = argv[i+1]
+		}
+	}
+	require.NotEmpty(t, cfgPath, "spawn argv must carry --mcp-config <path>")
+
+	data, err := os.ReadFile(cfgPath)
+	require.NoError(t, err)
+	var parsed struct {
+		MCPServers map[string]json.RawMessage `json:"mcpServers"`
+	}
+	require.NoError(t, json.Unmarshal(data, &parsed))
+	return argv, parsed.MCPServers
+}
+
+func TestSpawnStageAgent_PassesStrictMCPConfig(t *testing.T) {
+	argv, _ := spawnRecording(t, "", pipeline.SpawnAgentOptions{})
+	require.Contains(t, argv, "--strict-mcp-config",
+		"without --strict-mcp-config the written file only adds to the user-scope servers, "+
+			"leaving the broad onboarding dashboard-tasks credential reachable")
+}
+
+func TestSpawnStageAgent_CarriesUserScopeServersIntoTheSpawnConfig(t *testing.T) {
+	_, servers := spawnRecording(t,
+		`{"mcpServers":{"context7":{"type":"http","url":"https://ctx7.example/mcp"}}}`,
+		pipeline.SpawnAgentOptions{})
+
+	require.Contains(t, servers, "context7",
+		"--strict-mcp-config makes this file the agent's whole MCP surface, so the "+
+			"operator's own servers must be carried into it")
+	require.Contains(t, servers, "dashboard-channel")
+}
+
+// TestSpawnStageAgent_UserScopeDashboardTasksCannotOverrideTheSpawnCredential
+// is the security property of this change: onboarding registers dashboard-tasks
+// at user scope with a broad, long-lived key (tasks:write, pipeline:control).
+// The spawn's own per-stage-run entry must win under that name, or the agent
+// gets back exactly the scopes StageRunScopes leaves out.
+func TestSpawnStageAgent_UserScopeDashboardTasksCannotOverrideTheSpawnCredential(t *testing.T) {
+	_, servers := spawnRecording(t,
+		`{"mcpServers":{"dashboard-tasks":{"type":"http","url":"http://127.0.0.1:13120/api/mcp",`+
+			`"headers":{"Authorization":"Bearer onboarding-broad-key"}},`+
+			`"dashboard-channel":{"command":"/somewhere/else","args":["channel"]}}}`,
+		pipeline.SpawnAgentOptions{TaskAPIToken: "stagerun-tok", MCPUrl: "http://127.0.0.1:13120"})
+
+	require.Contains(t, string(servers["dashboard-tasks"]), "Bearer stagerun-tok",
+		"the per-stage-run credential must win")
+	require.NotContains(t, string(servers["dashboard-tasks"]), "onboarding-broad-key",
+		"the broad user-scope credential must never reach a spawned stage agent")
+	require.NotContains(t, string(servers["dashboard-channel"]), "/somewhere/else",
+		"the dashboard's own channel bridge entry must win too")
+}
+
+func TestSpawnStageAgent_MalformedUserConfigStillSpawns(t *testing.T) {
+	_, servers := spawnRecording(t, "{ not json at all", pipeline.SpawnAgentOptions{})
+	require.Contains(t, servers, "dashboard-channel",
+		"a ~/.claude.json the dashboard does not own must never break a spawn")
 }

@@ -86,6 +86,23 @@ description — those are agent-supplied free text.
 
 Each tool checks its required scope at call time and returns an MCP error if the token's scope is insufficient.
 
+## Pipeline agents already have a key
+
+A stage run the dashboard's own task pipeline spawns needs none of the setup below: the spawner
+mints a per-stage-run credential and writes it into the agent's `--mcp-config` as a second server,
+`dashboard-tasks` (`http`, alongside the stdio `dashboard-channel` server every spawn already
+gets) — no hand-made key, no `claude mcp add`. That spawn runs with `--strict-mcp-config`, so
+the written file is the agent's whole MCP surface: your user-scope servers from
+`~/.claude.json` are copied into it, but a user-scope `dashboard-tasks` registration is
+deliberately not — the stage run uses its own narrower credential, never yours. That credential is scoped to the stage run that
+holds it, expires with it, and is revoked the moment the run ends; see
+[Security](security.md#capabilities-and-the-permission-gate) for what it can do and how long it
+lives.
+
+The rest of this page is for **your own** Claude Code client — a session you start yourself in a
+terminal — which still needs a key from **Settings → API Keys**, because there is no stage run to
+attribute it to.
+
 ## Connect the dashboard to Claude
 
 The fastest way to wire a Claude Code session to the dashboard's task tools is the one-command

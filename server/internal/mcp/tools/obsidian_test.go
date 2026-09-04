@@ -157,6 +157,116 @@ func obsidianTestDepsWithCatalogue(t *testing.T) (ObsidianDeps, repo.GrantRepo, 
 	return deps, grants, ctx, called
 }
 
+// newObsidianDepsWithCaller mirrors obsidianTestDepsWithCatalogue but also
+// wires Caller against the same database, and returns the bundle so a test
+// can seed a stage run and prove the credential's task/routine context
+// reaches the gate.
+func newObsidianDepsWithCaller(t *testing.T) (ObsidianDeps, repo.GrantRepo, *db.DBBundle, context.Context, *bool) {
+	t.Helper()
+	bundle, err := db.Open(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+
+	capabilities := repo.NewCapabilityRepo(bundle.Client)
+	resources := repo.NewResourceRepo(bundle.Client)
+	ctx := context.Background()
+	require.NoError(t, obsidianapp.Register(ctx, resources, capabilities))
+
+	grants := repo.NewGrantRepo(bundle.Client)
+	ts, called := newFakeObsidianVault(t)
+	deps := ObsidianDeps{
+		Client: newTestObsidianClient(t, ts),
+		Caller: mcp.CallerResolver{
+			StageRuns: repo.NewStageRunRepo(bundle.Client),
+			Tasks:     repo.NewTaskRepo(bundle.Client),
+		},
+		Gate: memory.Gate{Capabilities: capabilities, Grants: grants, GrantUsage: repo.NewGrantUsageRepo(bundle.Client, bundle.WriteClient)},
+	}
+	return deps, grants, bundle, ctx, called
+}
+
+// seedObsidianRun creates a task (optionally bound to a routine) plus one
+// stage run on it, mirroring internal/mcp/caller_test.go's seedRun, and
+// returns the stage run's id.
+func seedObsidianRun(t *testing.T, bundle *db.DBBundle, slug, routineID string) string {
+	t.Helper()
+	ctx := context.Background()
+	tasks := repo.NewTaskRepo(bundle.Client)
+	runs := repo.NewStageRunRepo(bundle.Client)
+
+	in := repo.CreateTaskInput{
+		Slug: slug, Title: slug, Cwd: "/tmp",
+		CurrentStage: "implementation", Priority: "medium",
+		MaxIterations: 5, StageTimeoutSeconds: 60,
+	}
+	if routineID != "" {
+		in.RoutineID = &routineID
+	}
+	task, err := tasks.Create(ctx, in)
+	require.NoError(t, err)
+
+	run, err := runs.Create(ctx, repo.CreateStageRunInput{TaskID: task.ID, Stage: "implementation"})
+	require.NoError(t, err)
+	return run.ID
+}
+
+// TestObsidianRoutineGrantAppliesOnlyToThatRoutine is the whole point of
+// this change, in one test: one grant, two callers, one difference. A grant
+// scoped to routine "sched-1" allows a call carrying a stage-run credential
+// whose task that routine materialized, denies a call whose task has no
+// routine, and denies a call carrying an ordinary machine-wide key (no stage
+// run at all).
+//
+// One case per tool, because each tool passes d.Caller.Contexts(ctx) to its
+// own Authorize call: dropping it from any single one of them compiles, vets
+// and — with only obsidian_write covered — passed.
+func TestObsidianRoutineGrantAppliesOnlyToThatRoutine(t *testing.T) {
+	cases := []struct {
+		tool       string
+		capability string
+		args       map[string]any
+	}{
+		{"obsidian_read", obsidianapp.CapabilityRead, map[string]any{"path": "notes/a.md"}},
+		{"obsidian_search", obsidianapp.CapabilitySearch, map[string]any{"query": "anything"}},
+		{"obsidian_write", obsidianapp.CapabilityWrite, map[string]any{"path": "notes/a.md", "content": "x"}},
+		{"obsidian_delete", obsidianapp.CapabilityDelete, map[string]any{"path": "notes/a.md"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.tool, func(t *testing.T) {
+			deps, grants, bundle, ctx, _ := newObsidianDepsWithCaller(t)
+			_, err := grants.Create(ctx, repo.CreateGrantInput{
+				CapabilityName: tc.capability,
+				Context:        repo.GrantContextFor(repo.GrantContextRoutine, "sched-1"),
+				Pattern:        "*",
+				Mode:           repo.GrantModeAllow,
+				GrantedBy:      "test",
+			})
+			require.NoError(t, err)
+
+			runFromRoutine := seedObsidianRun(t, bundle, "from-routine", "sched-1")
+			runFromHuman := seedObsidianRun(t, bundle, "hand-made", "")
+
+			registry := mcp.ToolRegistry{}
+			RegisterObsidianTools(registry, deps)
+
+			// The routine's own task may call it.
+			_, err = registry[tc.tool].Handler(
+				mcp.ContextWithAuth(ctx, &mcp.MCPAuthInfo{StageRunID: runFromRoutine}), tc.args)
+			require.NoError(t, err)
+
+			// A task the same routine did not start may not.
+			_, err = registry[tc.tool].Handler(
+				mcp.ContextWithAuth(ctx, &mcp.MCPAuthInfo{StageRunID: runFromHuman}), tc.args)
+			require.Error(t, err)
+
+			// Neither may the machine-wide key.
+			_, err = registry[tc.tool].Handler(
+				mcp.ContextWithAuth(ctx, &mcp.MCPAuthInfo{KeyID: "user-key"}), tc.args)
+			require.Error(t, err)
+		})
+	}
+}
+
 // TestObsidianDeleteDeniedBeforeVaultCall is the regression test decision D8
 // exists for: obsidian.delete is never catalogued here (repo.SeedCapabilities
 // does not seed it — only Claude Code tool names and the memory

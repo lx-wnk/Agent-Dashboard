@@ -182,6 +182,66 @@ Preparing the first public release.
   slot exclusively, `extend` to wrap the lower-priority chain). An `extend` addon's
   `mount(el, ctx, parent)` receives a `parent` handle it may invoke to compose the addons
   below it. Addons with no mode remain independent siblings and are unaffected.
+- **A pipeline agent's MCP calls now carry task and routine identity.** Every stage run
+  the pipeline spawns reached `/api/mcp` through the same machine-wide key a person
+  registered by hand, so `capability.Decide`'s `task`/`routine` context levels were
+  reachable for a grant to name but nothing a request ever sent — see the entry above on
+  the routine context, and its own note that `DASHBOARD_MCP_TOKEN` (a single value from
+  config, handed to every spawn) identifies no task and never will: it authenticates the
+  channel bridge's three callback tools (`dashboard_reply`, `request_permission`,
+  `set_stage_output`), a different endpoint from the one the Decider governs, and stays
+  exactly that. Instead, immediately before `--mcp-config` is written
+  (`server/internal/pipeline/stage_handlers.go`), the spawner now mints a second,
+  ephemeral credential — a `kind = "stage_run"` row on the existing `api_key` table
+  (`stage_run_id`, `expires_at` added as nillable-or-defaulted columns; the human-facing
+  `kind = "user"` rows are unaffected and `ApiKeyRepo.List`/`list_api_keys` keep filtering
+  to them) — and writes it into a second `mcpServers` entry, `dashboard-tasks`
+  (`server/internal/channelconfig`), alongside the existing stdio `dashboard-channel`
+  one. That file is now passed with **`--strict-mcp-config`**, without which the whole
+  narrowing above would have been decorative: `--mcp-config` alone *adds to* the user- and
+  project-scope registrations, and onboarding registers `dashboard-tasks` at user scope
+  under the very same name with the broad, long-lived key (`tasks:read`, `tasks:write`,
+  `pipeline:control`) — so a stage agent could simply have used that one instead. Strictness
+  cuts an agent off from the servers its operator configured, so the user-scope servers from
+  `~/.claude.json` are merged into the spawn's file (`server/internal/claudeconfig`, the
+  reader `GET /api/onboarding/status` already used) with the dashboard's own two names
+  reserved: a user-scope `dashboard-tasks` or `dashboard-channel` entry is dropped, never
+  merged, which is the point of the exercise. A `~/.claude.json` that is missing, unreadable
+  or malformed is logged and skipped, never fatal to a spawn. A project-scope `.mcp.json` is
+  not carried over. `mcp.CallerResolver.Contexts` (`server/internal/mcp/caller.go`) resolves that key's
+  `stage_run_id` through `stage_run.task_id → task.routine_id` into
+  `[{task, <id>}, {routine, <id>}]` and every call to the memory MCP tools
+  (`memory_search`, `memory_write`) and the four `obsidian_*` tools now passes it to
+  `Gate.Authorize` as extra context, so a `--scope task:<id>` or `--scope routine:<id>`
+  grant decides those calls the same way the automatic memory push already did — no other
+  MCP tool goes through the capability gate today, so this is the two tool families that
+  do. Every issued key gets one fixed scope set — `tasks:read`, `agent:coord`,
+  `memory:read`, `memory:write`, `obsidian:read`, `obsidian:write` — six scopes, deliberately
+  **not** eight. An earlier draft also included `pipeline:control` and `tasks:write`, but since
+  no other MCP tool resolves through the gate, either one would have been a capability granted
+  outright rather than one the gate narrows later: `pipeline:control` reaches
+  `grant_permission`, `resolve_permission_request` and `approve_all_pending` on scope alone,
+  letting a spawned agent approve its own spec and resolve its own permission requests, and
+  `tasks:write` reaches `manage_task`'s `grant_permissions` action, letting it widen its own
+  permissions. `keys:manage` is excluded for the same family of reason: a spawned agent able to
+  mint its own keys could mint one with no stage run and escape its own attribution. It carries
+  two independent expiries:
+  the orchestrator revokes it (`RevokeForStageRun`, `active = false`) the moment its stage
+  run reaches a terminal state, and independently `expires_at` (the stage's timeout plus a
+  five-minute buffer, `mcp.StageKeyTTLBuffer`) is enforced by `ApiKeyRepo.GetByHash` itself
+  — an expired row is refused with the same message an unknown token gets, before it ever
+  reaches a tool handler. A new hourly sweep (`mcp.SweepExpiredKeys`, started in
+  `server/serverapp/serverapp.go` alongside the cost-history importer and the
+  drift-detection scanner) hard-deletes expired `stage_run` rows — deleted, not
+  tombstoned, since each names a stage run that already has its own record. A credential
+  that fails to mint is not fatal to the spawn: the agent then runs with no task API access
+  at all, since the strict config shuts the user-scope one out. **Still out of scope, deliberately:**
+  interactive sessions started by hand keep using the machine-wide key and resolve with no
+  task context — the `agent_session` context level still has no producer — and the
+  spawner's own `--allowedTools` rendering (`SpawnEnforcer`) still builds synthetic grants
+  from `task_permissions` at one fixed context and never reads the `grants` table; neither
+  changes here. See [`docs/guides/security.md`](docs/guides/security.md#capabilities-and-the-permission-gate)
+  and [`docs/guides/mcp.md`](docs/guides/mcp.md#pipeline-agents-already-have-a-key).
 
 ### Deprecated
 - `GET /api/config/memory` (the config explorer's list of a project's context files — `CLAUDE.md`, skills, etc.) is superseded by `GET /api/config/context-files`, which returns the byte-identical response. The old route keeps answering (it now delegates to the new one and logs a deprecation notice once per process) so nothing breaks today, but new code should call the new route — freeing the name "memory" for the new memory store (see Added, above) is the reason for the rename. Removal is deferred to a later release, after clients have had time to move.

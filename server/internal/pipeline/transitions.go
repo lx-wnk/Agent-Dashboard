@@ -109,6 +109,10 @@ func (o *PipelineOrchestrator) applyTransitionWrites(
 		_ = auditRepo.RecordTaskAudit(ctx, task.ID, nil, "stage_transition", "task:"+task.ID,
 			map[string]any{"from": task.CurrentStage, "to": tr.Stage})
 		updatedRunID = sr.ID
+		// The completed run's own credential is revoked here too, even though
+		// the task moves on rather than finishing: this stage_run's agent has
+		// exited and gets no further calls, exactly like Done/Fail.
+		postCommit = append(postCommit, func() { o.stageRuns.revokeCredentials(ctx, sr.ID) })
 
 	case DoneTransition:
 		if _, err := srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
@@ -125,6 +129,7 @@ func (o *PipelineOrchestrator) applyTransitionWrites(
 		postCommit = append(postCommit, func() {
 			o.handleDependentTasks(ctx, task.ID, "done")
 			o.taskLocks.Delete(task.ID)
+			o.stageRuns.revokeCredentials(ctx, sr.ID)
 		})
 
 	case FailTransition:
@@ -145,6 +150,7 @@ func (o *PipelineOrchestrator) applyTransitionWrites(
 			info := StageFailedInfo{StageRunID: sr.ID, Stage: sr.Stage, Iteration: sr.Iteration, Error: tr.Reason}
 			postCommit = append(postCommit, func() { o.opts.OnStageFailed(task.ID, info) })
 		}
+		postCommit = append(postCommit, func() { o.stageRuns.revokeCredentials(ctx, sr.ID) })
 
 	case WaitUserTransition:
 		if _, err := srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
@@ -182,12 +188,14 @@ func (o *PipelineOrchestrator) applyTransitionWrites(
 				info := StageFailedInfo{StageRunID: sr.ID, Stage: sr.Stage, Iteration: sr.Iteration, Error: fmt.Sprintf("iteration limit reached (%d)", maxIter)}
 				postCommit = append(postCommit, func() { o.opts.OnStageFailed(task.ID, info) })
 			}
+			postCommit = append(postCommit, func() { o.stageRuns.revokeCredentials(ctx, sr.ID) })
 		} else {
 			if _, err := srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
 				Status: strPtr("done"), EndedAt: &now, Output: tr.Output,
 			}); err != nil {
 				return nil, nil, nil, fmt.Errorf("applyTransition.iterate.updateRun: %w", err)
 			}
+			postCommit = append(postCommit, func() { o.stageRuns.revokeCredentials(ctx, sr.ID) })
 			newSR, err := srRepo.Create(ctx, repo.CreateStageRunInput{
 				TaskID:      task.ID,
 				Stage:       sr.Stage,

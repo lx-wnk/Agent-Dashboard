@@ -11,6 +11,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/config"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	"github.com/lx-wnk/agent-dashboard/server/internal/mcp"
 	"github.com/lx-wnk/agent-dashboard/server/internal/memory"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 	"github.com/lx-wnk/agent-dashboard/server/internal/services"
@@ -106,6 +107,8 @@ func provideOrchestrator(
 	worktreeManager := services.NewWorktreeManager(taskRepo)
 	capabilityRepo := repo.NewCapabilityRepo(client)
 	grantRepo := repo.NewGrantRepo(client)
+	apiKeyRepo := repo.NewApiKeyRepo(client)
+	stageKeyIssuer := mcp.StageKeyIssuer{Keys: apiKeyRepo}
 
 	var resolveFn pipeline.SpawnerResolverFunc
 	if spawnerResolver != nil {
@@ -159,6 +162,12 @@ func provideOrchestrator(
 		AuthorizeMemory: func(ctx context.Context, scope repo.Scope, routineID string) error {
 			gate := memory.Gate{Capabilities: capabilityRepo, Grants: grantRepo, GrantUsage: grantUsageRepo}
 			return gate.Authorize(ctx, repo.CapabilityMemoryRead, "", scope, memory.RoutineContext(routineID)...)
+		},
+		IssueTaskAPIKey: func(ctx context.Context, stageRunID string, stageTimeout time.Duration) (string, error) {
+			return stageKeyIssuer.Issue(ctx, stageRunID, stageTimeout)
+		},
+		RevokeTaskAPIKeys: func(ctx context.Context, stageRunID string) error {
+			return stageKeyIssuer.Revoke(ctx, stageRunID)
 		},
 		// BuildTaskPayload is called inside applyTransitionWrites, bound to the
 		// active transaction, so the returned snapshot reflects the just-applied

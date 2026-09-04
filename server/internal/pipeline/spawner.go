@@ -13,9 +13,11 @@ import (
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/capability"
 	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
+	"github.com/lx-wnk/agent-dashboard/server/internal/claudeconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/envsec"
+	"github.com/lx-wnk/agent-dashboard/server/internal/mcp"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pathutil"
 	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
 	"github.com/lx-wnk/agent-dashboard/server/internal/taskcontrol"
@@ -52,6 +54,11 @@ type SpawnAgentOptions struct {
 	ResumeSessionID string
 	MCPToken        string
 	MCPUrl          string
+	// TaskAPIToken is the stage-run credential the agent presents to the
+	// dashboard's own MCP endpoint. Empty means the config gets no such entry
+	// and the agent reaches no task API at all — the user-scope registration
+	// is shut out of the spawn config either way.
+	TaskAPIToken string
 	// Spawner is the resolved DB spawner row that controls which executable
 	// is launched and which extra env vars are seeded. When nil the spawner
 	// behaves identically to the legacy `claude` CLI path. The built-in
@@ -350,7 +357,14 @@ func isLegacyClaudeSpawner(sp *ent.Spawner) bool {
 func buildSpawnArgsWithChannelConfig(opts SpawnAgentOptions, channelCfgPath string) []string {
 	args := BuildSpawnArgs(opts)
 	if channelCfgPath != "" {
-		args = append(args, "--mcp-config", channelCfgPath)
+		// --strict-mcp-config is what makes the written file the agent's entire
+		// MCP surface. Without it the file is merged on top of the user- and
+		// project-scope registrations, and the broad `claude mcp add --scope
+		// user` dashboard-tasks credential onboarding writes stays reachable —
+		// which would give every stage agent back the scopes its own key omits.
+		// The user's other servers are carried into the file instead (see
+		// SpawnStageAgent); a project-scope .mcp.json is not.
+		args = append(args, "--mcp-config", channelCfgPath, "--strict-mcp-config")
 	}
 	return args
 }
@@ -457,8 +471,8 @@ func BuildSpawnEnv(opts SpawnAgentOptions) []string {
 	return env
 }
 
-func writeSettingsFile(autonomy, cwd string, perms []*ent.TaskPermission, enableChannel, allowGitPush bool) (string, bool, bool, error) {
-	allow := BuildAllowList(autonomy, perms, enableChannel, allowGitPush)
+func writeSettingsFile(autonomy, cwd string, perms []*ent.TaskPermission, enableChannel, allowGitPush bool, extraAllow []string) (string, bool, bool, error) {
+	allow := append(BuildAllowList(autonomy, perms, enableChannel, allowGitPush), extraAllow...)
 	deny := BuildDenyList(autonomy, allowGitPush)
 	if len(allow) == 0 && len(deny) == 0 {
 		return "", false, false, nil
@@ -576,6 +590,26 @@ func (l *stderrLogger) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
+// buildTaskAPI returns the channelconfig.TaskAPI entry for opts, or nil when
+// no credential was minted or no dashboard URL is configured — the written
+// config then gets no dashboard-tasks server.
+func buildTaskAPI(opts SpawnAgentOptions) *channelconfig.TaskAPI {
+	if opts.TaskAPIToken == "" || opts.MCPUrl == "" {
+		return nil
+	}
+	return &channelconfig.TaskAPI{URL: opts.MCPUrl + mcp.EndpointPath, Token: opts.TaskAPIToken}
+}
+
+// taskAPIAllow returns the settings allow entries for the dashboard-tasks MCP
+// server, or nil when this spawn reaches no such server — the gate is
+// buildTaskAPI, so the entries appear exactly when the config entry does.
+func taskAPIAllow(opts SpawnAgentOptions) []string {
+	if !opts.EnableChannel || buildTaskAPI(opts) == nil {
+		return nil
+	}
+	return mcp.StageRunAllowedTools()
+}
+
 // IsGitPushAllowed reports whether the task may run `git push`: true when the
 // task opts in via metadata["allowGitPush"], or when the global setting
 // (git.allowPush) is enabled.
@@ -594,7 +628,7 @@ func SpawnStageAgent(opts SpawnAgentOptions) (SpawnResult, error) {
 		cwd = *opts.Task.WorktreePath
 	}
 	allowGitPush := IsGitPushAllowed(opts.Task, opts.AllowGitPush)
-	settingsPath, wrote, isLocal, err := writeSettingsFile(opts.Task.Autonomy, cwd, opts.Permissions, opts.EnableChannel, allowGitPush)
+	settingsPath, wrote, isLocal, err := writeSettingsFile(opts.Task.Autonomy, cwd, opts.Permissions, opts.EnableChannel, allowGitPush, taskAPIAllow(opts))
 	if err != nil {
 		if !taskcontrol.IsAllowAll(opts.Task.Autonomy) {
 			return SpawnResult{}, fmt.Errorf("writeSettingsFile: %w", err)
@@ -607,8 +641,15 @@ func SpawnStageAgent(opts SpawnAgentOptions) (SpawnResult, error) {
 	// Failures are non-fatal: the agent runs without the channel bridge rather than refusing to spawn.
 	var channelCfgPath string
 	if opts.EnableChannel {
+		// The spawn runs --strict-mcp-config, so whatever is not in this file is
+		// gone for the agent. Carry the operator's own servers over; a config
+		// that cannot be read costs the agent those servers, never the spawn.
+		userServers, userErr := claudeconfig.UserMCPServers()
+		if userErr != nil {
+			slog.Warn("claudeconfig: ignoring unreadable ~/.claude.json — agent gets the dashboard's MCP servers only", "err", userErr)
+		}
 		if selfBin, binErr := channelconfig.SelfBinaryPath(); binErr == nil {
-			if cfgPath, cfgErr := channelconfig.WriteTempConfig(selfBin); cfgErr == nil {
+			if cfgPath, cfgErr := channelconfig.WriteTempConfig(selfBin, buildTaskAPI(opts), userServers); cfgErr == nil {
 				channelCfgPath = cfgPath
 			} else {
 				slog.Warn("channelconfig: failed to write temp config — agent runs without channel bridge", "err", cfgErr)

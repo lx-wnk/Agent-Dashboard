@@ -53,6 +53,9 @@ var (
 		{Name: "key_hash", Type: field.TypeString, Unique: true},
 		{Name: "scopes", Type: field.TypeJSON},
 		{Name: "active", Type: field.TypeBool, Default: true},
+		{Name: "kind", Type: field.TypeString, Default: "user"},
+		{Name: "stage_run_id", Type: field.TypeString, Default: ""},
+		{Name: "expires_at", Type: field.TypeTime, Nullable: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "last_used_at", Type: field.TypeTime, Nullable: true},
 	}
@@ -66,6 +69,16 @@ var (
 				Name:    "apikey_active",
 				Unique:  false,
 				Columns: []*schema.Column{APIKeysColumns[4]},
+			},
+			{
+				Name:    "apikey_stage_run_id",
+				Unique:  false,
+				Columns: []*schema.Column{APIKeysColumns[6]},
+			},
+			{
+				Name:    "apikey_expires_at",
+				Unique:  false,
+				Columns: []*schema.Column{APIKeysColumns[7]},
 			},
 		},
 	}

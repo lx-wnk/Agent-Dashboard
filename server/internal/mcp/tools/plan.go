@@ -15,6 +15,7 @@ type PlanDeps struct {
 	StageRuns repo.StageRunRepo
 	Advance   func(ctx context.Context, taskID string) error
 	Requeue   func(ctx context.Context, taskID, prompt string) error
+	Revoke    func(ctx context.Context, stageRunID string) error
 }
 
 // RegisterPlanTools registers the plan gate MCP tools into the registry.
@@ -45,6 +46,7 @@ func registerApprovePlan(registry mcp.ToolRegistry, d PlanDeps) {
 				Tasks:     d.Tasks,
 				StageRuns: d.StageRuns,
 				Advance:   d.Advance,
+				Revoke:    d.Revoke,
 			}, taskID)
 			if err != nil {
 				return nil, mcp.Fail("approve_plan: " + err.Error())
