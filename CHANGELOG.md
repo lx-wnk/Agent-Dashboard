@@ -197,7 +197,18 @@ Preparing the first public release.
   `kind = "user"` rows are unaffected and `ApiKeyRepo.List`/`list_api_keys` keep filtering
   to them) — and writes it into a second `mcpServers` entry, `dashboard-tasks`
   (`server/internal/channelconfig`), alongside the existing stdio `dashboard-channel`
-  one. `mcp.CallerResolver.Contexts` (`server/internal/mcp/caller.go`) resolves that key's
+  one. That file is now passed with **`--strict-mcp-config`**, without which the whole
+  narrowing above would have been decorative: `--mcp-config` alone *adds to* the user- and
+  project-scope registrations, and onboarding registers `dashboard-tasks` at user scope
+  under the very same name with the broad, long-lived key (`tasks:read`, `tasks:write`,
+  `pipeline:control`) — so a stage agent could simply have used that one instead. Strictness
+  cuts an agent off from the servers its operator configured, so the user-scope servers from
+  `~/.claude.json` are merged into the spawn's file (`server/internal/claudeconfig`, the
+  reader `GET /api/onboarding/status` already used) with the dashboard's own two names
+  reserved: a user-scope `dashboard-tasks` or `dashboard-channel` entry is dropped, never
+  merged, which is the point of the exercise. A `~/.claude.json` that is missing, unreadable
+  or malformed is logged and skipped, never fatal to a spawn. A project-scope `.mcp.json` is
+  not carried over. `mcp.CallerResolver.Contexts` (`server/internal/mcp/caller.go`) resolves that key's
   `stage_run_id` through `stage_run.task_id → task.routine_id` into
   `[{task, <id>}, {routine, <id>}]` and every call to the memory MCP tools
   (`memory_search`, `memory_write`) and the four `obsidian_*` tools now passes it to
@@ -223,8 +234,8 @@ Preparing the first public release.
   `server/serverapp/serverapp.go` alongside the cost-history importer and the
   drift-detection scanner) hard-deletes expired `stage_run` rows — deleted, not
   tombstoned, since each names a stage run that already has its own record. A credential
-  that fails to mint is not fatal to the spawn: the agent runs with the channel bridge
-  alone, exactly as it did before this existed. **Still out of scope, deliberately:**
+  that fails to mint is not fatal to the spawn: the agent then runs with no task API access
+  at all, since the strict config shuts the user-scope one out. **Still out of scope, deliberately:**
   interactive sessions started by hand keep using the machine-wide key and resolve with no
   task context — the `agent_session` context level still has no producer — and the
   spawner's own `--allowedTools` rendering (`SpawnEnforcer`) still builds synthetic grants

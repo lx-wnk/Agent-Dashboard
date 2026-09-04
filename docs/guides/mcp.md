@@ -91,7 +91,10 @@ Each tool checks its required scope at call time and returns an MCP error if the
 A stage run the dashboard's own task pipeline spawns needs none of the setup below: the spawner
 mints a per-stage-run credential and writes it into the agent's `--mcp-config` as a second server,
 `dashboard-tasks` (`http`, alongside the stdio `dashboard-channel` server every spawn already
-gets) — no hand-made key, no `claude mcp add`. That credential is scoped to the stage run that
+gets) — no hand-made key, no `claude mcp add`. That spawn runs with `--strict-mcp-config`, so
+the written file is the agent's whole MCP surface: your user-scope servers from
+`~/.claude.json` are copied into it, but a user-scope `dashboard-tasks` registration is
+deliberately not — the stage run uses its own narrower credential, never yours. That credential is scoped to the stage run that
 holds it, expires with it, and is revoked the moment the run ends; see
 [Security](security.md#capabilities-and-the-permission-gate) for what it can do and how long it
 lives.

@@ -110,6 +110,24 @@ Both are excluded for that reason. `keys:manage` is excluded the same way an
 agent able to mint its own keys could mint one with no stage run and escape
 its own attribution.
 
+That scope set only binds because the spawn is launched with
+`--strict-mcp-config` next to its `--mcp-config`
+(`server/internal/pipeline/spawner.go`). Without the strict flag the written
+file is *added to* the user- and project-scope registrations rather than
+replacing them, and `claude mcp add --scope user` (what the onboarding
+one-click registration runs) registers `dashboard-tasks` under the same name
+with a broad, long-lived key — `tasks:read`, `tasks:write`,
+`pipeline:control` — which a stage agent could have used instead of its own.
+Because strictness would otherwise cost an agent every MCP server its
+operator configured, the user-scope servers from `~/.claude.json`
+(`server/internal/claudeconfig`) are merged into the spawn's config file,
+with the dashboard's own two names reserved: a user-scope `dashboard-tasks`
+or `dashboard-channel` entry is dropped rather than merged, so the spawn's
+per-stage-run credential always wins under that name. A `~/.claude.json`
+that is missing, unreadable or malformed is logged and skipped — a file the
+dashboard does not own may not break a spawn. A project-scope `.mcp.json` in
+the worktree is not carried over.
+
 Agent session still has no `grants`-table reader — an interactive session
 started by hand keeps using the machine-wide key and resolves with no task
 context, so the `agent_session` context level stays without a producer.
