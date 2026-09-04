@@ -50,6 +50,24 @@ test.describe('cockpit panels', () => {
     await expectOnlyState(page, 'github', 'empty')
   })
 
+  // PANEL_STATES above carries only the five marker states, so expectOnlyState
+  // can never assert the populated panel — and no other case in this file stubs
+  // a non-empty pullRequests. Without this, a panel stuck on 'empty' passes the
+  // whole suite, which is the same shape as a loading state nothing pins.
+  test('GitHub: a populated answer renders the pull requests, not a state marker', async ({ page }) => {
+    await stubJson(page, '/api/github/summary', {
+      repos: [{
+        repo: 'lx-wnk/agent-dashboard',
+        pullRequests: [{ number: 42, title: 'Add the cockpit', author: 'lx-wnk', url: 'https://example.test/42', draft: false, updatedAt: '2026-09-01T10:00:00Z' }],
+      }],
+    })
+    await openCockpit(page)
+
+    await expect(page.getByTestId('cockpit-github-pr-42')).toContainText('Add the cockpit')
+    for (const state of PANEL_STATES)
+      await expect(page.getByTestId(`cockpit-github-${state}`)).toHaveCount(0)
+  })
+
   test('GitHub: a 500 is failed, never denied', async ({ page }) => {
     await stubJson(page, '/api/github/summary', { error: 'upstream exploded' }, 500)
     await openCockpit(page)
