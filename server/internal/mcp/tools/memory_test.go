@@ -254,3 +254,115 @@ func TestMemorySearchReturnsRankedEntriesWithGrant(t *testing.T) {
 	require.True(t, ok, "entries must be a list, got %T", out["entries"])
 	require.Len(t, entries, 1)
 }
+
+// newMemoryDepsWithCaller mirrors newMemoryDepsForTest but also wires Caller
+// against the same database and returns the bundle, so a test can seed a
+// stage run and prove the credential's task/routine context reaches the gate.
+func newMemoryDepsWithCaller(t *testing.T) (MemoryDeps, repo.GrantRepo, *db.DBBundle, context.Context) {
+	t.Helper()
+	bundle, err := db.Open(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+
+	memRepo := repo.NewMemoryRepo(bundle.Client, bundle.WriteClient)
+	grants := repo.NewGrantRepo(bundle.Client)
+	capabilities := repo.NewCapabilityRepo(bundle.Client)
+	repo.SeedCapabilities(context.Background(), capabilities)
+
+	deps := MemoryDeps{
+		Repo:      memRepo,
+		Retriever: memory.NewRetriever(bundle.DB, memRepo),
+		Caller: mcp.CallerResolver{
+			StageRuns: repo.NewStageRunRepo(bundle.Client),
+			Tasks:     repo.NewTaskRepo(bundle.Client),
+		},
+		Gate: memory.Gate{
+			Capabilities: capabilities,
+			Grants:       grants,
+			GrantUsage:   repo.NewGrantUsageRepo(bundle.Client, bundle.WriteClient),
+		},
+	}
+	return deps, grants, bundle, context.Background()
+}
+
+// seedMemoryRun creates a task (optionally bound to a routine) plus one stage
+// run on it, mirroring internal/mcp/caller_test.go's seedRun, and returns the
+// stage run's id.
+func seedMemoryRun(t *testing.T, bundle *db.DBBundle, slug, routineID string) string {
+	t.Helper()
+	ctx := context.Background()
+	in := repo.CreateTaskInput{
+		Slug: slug, Title: slug, Cwd: "/tmp",
+		CurrentStage: "implementation", Priority: "medium",
+		MaxIterations: 5, StageTimeoutSeconds: 60,
+	}
+	if routineID != "" {
+		in.RoutineID = &routineID
+	}
+	task, err := repo.NewTaskRepo(bundle.Client).Create(ctx, in)
+	require.NoError(t, err)
+
+	run, err := repo.NewStageRunRepo(bundle.Client).Create(ctx, repo.CreateStageRunInput{
+		TaskID: task.ID, Stage: "implementation",
+	})
+	require.NoError(t, err)
+	return run.ID
+}
+
+// TestMemoryRoutineGrantAppliesOnlyToThatRoutine is the memory-side twin of
+// TestObsidianRoutineGrantAppliesOnlyToThatRoutine: one grant scoped to
+// routine "sched-1", three callers, one difference. One case per tool,
+// because each passes d.Caller.Contexts(ctx) to its own Authorize call —
+// dropping it from either compiles, vets and leaves the rest of the suite
+// green, while a routine-scoped grant silently widens to every caller.
+func TestMemoryRoutineGrantAppliesOnlyToThatRoutine(t *testing.T) {
+	cases := []struct {
+		tool       string
+		capability string
+		args       map[string]any
+	}{
+		{"memory_search", repo.CapabilityMemoryRead, map[string]any{"query": "anything"}},
+		{"memory_write", repo.CapabilityMemoryWrite, map[string]any{
+			"spaceSlug": "notes", "summary": "s", "content": "c", "kind": "fact", "sourceKind": "user",
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.tool, func(t *testing.T) {
+			deps, grants, bundle, ctx := newMemoryDepsWithCaller(t)
+			_, err := deps.Repo.CreateSpace(ctx, repo.CreateSpaceInput{
+				Slug: "notes", Name: "Notes", Scope: repo.GlobalScope(),
+			})
+			require.NoError(t, err)
+
+			_, err = grants.Create(ctx, repo.CreateGrantInput{
+				CapabilityName: tc.capability,
+				Context:        repo.GrantContextFor(repo.GrantContextRoutine, "sched-1"),
+				Pattern:        "*",
+				Mode:           repo.GrantModeAllow,
+				GrantedBy:      "test",
+			})
+			require.NoError(t, err)
+
+			runFromRoutine := seedMemoryRun(t, bundle, "from-routine", "sched-1")
+			runFromHuman := seedMemoryRun(t, bundle, "hand-made", "")
+
+			registry := mcp.ToolRegistry{}
+			RegisterMemoryTools(registry, deps)
+
+			// The routine's own task may call it.
+			_, err = registry[tc.tool].Handler(
+				mcp.ContextWithAuth(ctx, &mcp.MCPAuthInfo{StageRunID: runFromRoutine}), tc.args)
+			require.NoError(t, err)
+
+			// A task the same routine did not start may not.
+			_, err = registry[tc.tool].Handler(
+				mcp.ContextWithAuth(ctx, &mcp.MCPAuthInfo{StageRunID: runFromHuman}), tc.args)
+			require.Error(t, err)
+
+			// Neither may the machine-wide key.
+			_, err = registry[tc.tool].Handler(
+				mcp.ContextWithAuth(ctx, &mcp.MCPAuthInfo{KeyID: "user-key"}), tc.args)
+			require.Error(t, err)
+		})
+	}
+}
