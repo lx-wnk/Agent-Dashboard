@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
@@ -24,6 +25,27 @@ import (
 var StageRunScopes = []string{
 	"tasks:read", "agent:coord",
 	"memory:read", "memory:write", "obsidian:read", "obsidian:write",
+}
+
+// StageRunAllowedTools renders the spawn allow-list entries for the tools a
+// stage-run key can actually call: every tool ToolScopeMap assigns to a scope
+// in StageRunScopes (expanded through ResolveScopes, so memory:write also
+// carries memory:read). The client-side allow list and the server-side scope
+// check therefore have one source, and adding or removing a scope moves both.
+//
+// The entries matter because a spawn runs --permission-mode default: an MCP
+// tool that is not pre-approved raises a permission request on its first call,
+// which parks the stage run in awaiting_user instead of doing the work.
+func StageRunAllowedTools() []string {
+	granted := ResolveScopes(StageRunScopes)
+	tools := make([]string, 0, len(ToolScopeMap))
+	for tool, scope := range ToolScopeMap {
+		if granted[scope] {
+			tools = append(tools, "mcp__"+ServerName+"__"+tool)
+		}
+	}
+	sort.Strings(tools) // map iteration order is random; the written file must not churn
+	return tools
 }
 
 // StageKeyTTLBuffer is added to a stage's timeout when setting expires_at. It

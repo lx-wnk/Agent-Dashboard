@@ -471,8 +471,8 @@ func BuildSpawnEnv(opts SpawnAgentOptions) []string {
 	return env
 }
 
-func writeSettingsFile(autonomy, cwd string, perms []*ent.TaskPermission, enableChannel, allowGitPush bool) (string, bool, bool, error) {
-	allow := BuildAllowList(autonomy, perms, enableChannel, allowGitPush)
+func writeSettingsFile(autonomy, cwd string, perms []*ent.TaskPermission, enableChannel, allowGitPush bool, extraAllow []string) (string, bool, bool, error) {
+	allow := append(BuildAllowList(autonomy, perms, enableChannel, allowGitPush), extraAllow...)
 	deny := BuildDenyList(autonomy, allowGitPush)
 	if len(allow) == 0 && len(deny) == 0 {
 		return "", false, false, nil
@@ -600,6 +600,16 @@ func buildTaskAPI(opts SpawnAgentOptions) *channelconfig.TaskAPI {
 	return &channelconfig.TaskAPI{URL: opts.MCPUrl + mcp.EndpointPath, Token: opts.TaskAPIToken}
 }
 
+// taskAPIAllow returns the settings allow entries for the dashboard-tasks MCP
+// server, or nil when this spawn reaches no such server — the gate is
+// buildTaskAPI, so the entries appear exactly when the config entry does.
+func taskAPIAllow(opts SpawnAgentOptions) []string {
+	if !opts.EnableChannel || buildTaskAPI(opts) == nil {
+		return nil
+	}
+	return mcp.StageRunAllowedTools()
+}
+
 // IsGitPushAllowed reports whether the task may run `git push`: true when the
 // task opts in via metadata["allowGitPush"], or when the global setting
 // (git.allowPush) is enabled.
@@ -618,7 +628,7 @@ func SpawnStageAgent(opts SpawnAgentOptions) (SpawnResult, error) {
 		cwd = *opts.Task.WorktreePath
 	}
 	allowGitPush := IsGitPushAllowed(opts.Task, opts.AllowGitPush)
-	settingsPath, wrote, isLocal, err := writeSettingsFile(opts.Task.Autonomy, cwd, opts.Permissions, opts.EnableChannel, allowGitPush)
+	settingsPath, wrote, isLocal, err := writeSettingsFile(opts.Task.Autonomy, cwd, opts.Permissions, opts.EnableChannel, allowGitPush, taskAPIAllow(opts))
 	if err != nil {
 		if !taskcontrol.IsAllowAll(opts.Task.Autonomy) {
 			return SpawnResult{}, fmt.Errorf("writeSettingsFile: %w", err)
