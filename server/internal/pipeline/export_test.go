@@ -144,3 +144,7 @@ func (o *PipelineOrchestrator) ReleaseHTTPPoolForTest() {
 func (o *PipelineOrchestrator) SetHTTPPoolPollForTest(d time.Duration) {
 	o.httpPool.poll = d
 }
+
+// ChannelAllowForTest exposes the channel tool allow-list for the parity test
+// in channel_allowlist_test.go.
+func ChannelAllowForTest() []string { return channelAllow }
