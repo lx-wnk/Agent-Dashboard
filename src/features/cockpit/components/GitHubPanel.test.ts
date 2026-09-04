@@ -1,5 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { PANEL_STATES } from '../panelState'
 import GitHubPanel from './GitHubPanel.vue'
 
 function stubFetch(status: number, body: unknown) {
@@ -11,7 +12,11 @@ function stubFetch(status: number, body: unknown) {
 
 afterEach(() => vi.unstubAllGlobals())
 
-const others = (state: string) => ['loading', 'notAsked', 'denied', 'empty', 'failed'].filter(s => s !== state)
+// PANEL_STATES is the single owner of the state list; a literal here would keep
+// passing after a state is added or renamed, silently stopping covering it.
+// 'ready' is excluded because it renders the content slot, not a marker.
+const markerStates = PANEL_STATES.filter(s => s !== 'ready')
+const others = (state: string) => markerStates.filter(s => s !== state)
 
 async function mountPanel() {
   const wrapper = mount(GitHubPanel)
@@ -93,7 +98,7 @@ describe('gitHubPanel', () => {
       }],
     })
     const wrapper = await mountPanel()
-    for (const state of ['loading', 'notAsked', 'denied', 'empty', 'failed'])
+    for (const state of markerStates)
       expect(wrapper.findAll(`[data-testid="cockpit-github-${state}"]`)).toHaveLength(0)
     expect(wrapper.get('[data-testid="cockpit-github-pr-42"]').text()).toContain('Add the cockpit')
   })
