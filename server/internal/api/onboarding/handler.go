@@ -7,15 +7,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/apikeys"
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
+	"github.com/lx-wnk/agent-dashboard/server/internal/claudeconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/cmdscope"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	mcp "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
@@ -81,40 +80,14 @@ func (h *Handler) status(w http.ResponseWriter, _ *http.Request) error {
 	return nil
 }
 
-// claudeConfigJSONPath resolves ~/.claude.json, honoring CLAUDE_CONFIG_DIR —
-// which relocates the whole Claude config root, not just the ~/.claude/projects
-// tree — so a value here must not be hardcoded to the default home path.
-func claudeConfigJSONPath() (string, error) {
-	if dir := os.Getenv("CLAUDE_CONFIG_DIR"); dir != "" {
-		return filepath.Join(dir, ".claude.json"), nil
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, ".claude.json"), nil
-}
-
-type claudeConfigFile struct {
-	MCPServers map[string]json.RawMessage `json:"mcpServers"`
-}
-
 // mcpRegistered is best-effort: any missing/unreadable/unparseable config file
 // is reported as "not registered" rather than failing the whole status call.
 func mcpRegistered() bool {
-	path, err := claudeConfigJSONPath()
+	servers, err := claudeconfig.UserMCPServers()
 	if err != nil {
 		return false
 	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return false
-	}
-	var cfg claudeConfigFile
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		return false
-	}
-	_, ok := cfg.MCPServers[mcp.ServerName]
+	_, ok := servers[mcp.ServerName]
 	return ok
 }
 
