@@ -24,12 +24,17 @@ type stageRunService struct {
 	// tests and in any composition that wires no issuer, which disables
 	// revocation without changing any call site.
 	revoke func(ctx context.Context, stageRunID string) error
+	// releaseSpawn removes the on-disk artifacts of a stage run's spawn — the
+	// temp --mcp-config file holding its bearer token above all. Nil disables
+	// the removal the same way a nil revoke disables revocation.
+	releaseSpawn func(stageRunID string)
 }
 
-// newStageRunService constructs a stageRunService backed by r, revoking stage-run
-// MCP credentials via revoke on every terminal status write. revoke may be nil.
-func newStageRunService(r repo.StageRunRepo, revoke func(context.Context, string) error) *stageRunService {
-	return &stageRunService{repo: r, revoke: revoke}
+// newStageRunService constructs a stageRunService backed by r, releasing a
+// stage run's credentials and spawn artifacts on every terminal status write.
+// revoke and releaseSpawn may each be nil.
+func newStageRunService(r repo.StageRunRepo, revoke func(context.Context, string) error, releaseSpawn func(string)) *stageRunService {
+	return &stageRunService{repo: r, revoke: revoke, releaseSpawn: releaseSpawn}
 }
 
 func (s *stageRunService) GetByID(ctx context.Context, id string) (*ent.StageRun, error) {
@@ -45,20 +50,28 @@ func (s *stageRunService) Update(ctx context.Context, id string, input repo.Upda
 	// change has already happened, so returning an error here would report
 	// that nothing happened when something did. expires_at is the second net.
 	if input.Status != nil && terminalStageRunStatuses[*input.Status] {
-		s.revokeCredentials(ctx, id)
+		s.releaseStageRun(ctx, id)
 	}
 	return run, nil
 }
 
-// revokeCredentials invalidates id's MCP credentials via revoke, logging
-// (never returning) any failure. Shared by Update above and by
-// applyTransitionWrites' post-commit hooks (transitions.go).
-func (s *stageRunService) revokeCredentials(ctx context.Context, id string) {
-	if s.revoke == nil {
-		return
+// releaseStageRun hands back everything issued to id's agent: its MCP
+// credentials via revoke, and the on-disk spawn artifacts via releaseSpawn.
+// Both failures are logged, never returned — the status change has already
+// happened, so an error here would report that nothing happened when something
+// did. expires_at is the second net under revocation.
+//
+// Shared by Update above and by applyTransitionWrites' post-commit hooks
+// (transitions.go). Call it wherever a stage run's agent is known to be gone,
+// terminal status or not.
+func (s *stageRunService) releaseStageRun(ctx context.Context, id string) {
+	if s.revoke != nil {
+		if err := s.revoke(ctx, id); err != nil {
+			slog.Warn("pipeline: revoking stage-run credentials failed", "stageRun", id, "err", err)
+		}
 	}
-	if err := s.revoke(ctx, id); err != nil {
-		slog.Warn("pipeline: revoking stage-run credentials failed", "stageRun", id, "err", err)
+	if s.releaseSpawn != nil {
+		s.releaseSpawn(id)
 	}
 }
 

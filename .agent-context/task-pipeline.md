@@ -172,12 +172,46 @@ These are session-reader and process-monitor helpers — they do not touch the s
 
 Never import from `pipeline/` in `db/`, `plugin/`, or `proc/` packages.
 
+## Stage-Run Credential Lifecycle
+
+Every stage run gets its own short-lived MCP key (`mcp.StageKeyIssuer.Issue`, wired at
+`serverapp/di_pipeline.go`) so an MCP call can be attributed to the task and routine that made it.
+The key must be handed back the moment its agent is gone.
+
+`stageRunService.releaseStageRun(ctx, stageRunID)` is the single seam that does it, and it does two
+things: revoke the run's keys, and run the cleanup closure `SpawnStageAgent` returned (which deletes
+the temp `--mcp-config` file holding the token, and the settings allow-list entries).
+
+It is reached two ways:
+
+- **Automatically** on any `stageRunService.Update` whose status is in `terminalStageRunStatuses`
+  (`done`, `failed`, `cancelled`). `awaiting_user` is deliberately absent — such a run is resumable
+  and its agent may still be alive; `expires_at` caps it instead.
+- **Explicitly**, as a post-commit hook in `applyTransitionWrites` for arms that end a run inside the
+  transaction, and for `requeued`, which is not terminal but always follows a completion result.
+
+Two rules follow, and both have been violated before:
+
+1. **Writing a stage-run status through `repo.StageRunRepo` directly bypasses revocation.** Only
+   `stageRunService` is wired to `RevokeTaskAPIKeys`. `sweeps.go` and `MarkPending` write via the
+   repo on purpose (they set non-terminal statuses); anything ending a run must not.
+2. **Ending an agent without ending its run leaks a live key until `expires_at`.** Task cancellation
+   used to write the terminal stage only on the task row; `NotifyTaskTerminated` now calls
+   `cancelOpenStageRuns` so both cancel routes (HTTP handler and the `task_cancel` MCP tool) end the
+   run too.
+
+`OnHoldTransition` has no producer anywhere in the tree — its `applyTransitionWrites` arm and the
+`on_hold` stage-run status are unreachable. Do not add credential handling there expecting it to run.
+
 ## When Modifying the Pipeline
 
 - **New stage transition?** Add it to `StageTransition` in `server/internal/pipeline/types.go`, then handle it in `PipelineOrchestrator.applyTransition()`. Wrap DB writes in a transaction via `o.opts.Client.Tx()`.
 - **New side effect (metrics, tracing, a new callback)?** Add an optional callback to `OrchestratorOptions`, wire it in `cmd/serve/di.go`. Do **not** import the side-effect module from inside `pipeline/`.
 - **New agent-driven stage handler?** Create a stage-specific prompt builder in `stage_prompts.go`, then call `newAgentStageHandler(stage, buildPromptFunc)` in `NewStageHandlers()`. The factory handles spawn, feedback-prefix injection (from `priorIterationOutput`), and `AsyncRunningTransition` return. Then add a per-stage schema validator in `completion_detector.go::ValidateStageOutput()` so the orchestrator's retry-then-escalate loop recognizes malformed output.
 - **Custom completion routing** (e.g. a stage that loops back to an earlier stage on a specific output flag)? Edit `PipelineOrchestrator.decideCompletedTransition()` and return a `NextTransition`. If you need to mutate `task.metadata` as part of the transition, pass it via `MetadataPatch` on the `NextTransition` variant so the write lands inside `applyTransitionWrites()`'s transaction — never perform bare `UpdateTask()` calls in the completion path.
+- **New path that ends an agent?** Route the stage-run status write through `stageRunService`, not
+  `repo.StageRunRepo` — that is what releases the run's MCP credentials and its spawn artifacts. See
+  *Stage-Run Credential Lifecycle* above.
 - **New runner-picker priority tier?** Update the sorting logic in `scheduler.go` and the priority documentation. The memory captures user intent; code changes must stay consistent with it.
 - **SSE event coverage for new transitions / mutation paths:** the kanban relies on `onTaskChanged` (fires after every successful `applyTransition()`) plus the route-level `broadcastEnrichedUpdate(taskId)` helper in `api/tasks/handler.go`. Both must produce **enriched** payloads (via `enrich.go::enrichTask()`), otherwise the cards lose `latestStageRunStatus` / `needsUser` and the run-status chip vanishes. When you add a new mutation endpoint, call `broadcastEnrichedUpdate(taskId)` — never raw `BroadcastTaskEvent()`. When you add a new transition kind to `applyTransition()`, the existing `onTaskChanged` call covers it automatically.
 

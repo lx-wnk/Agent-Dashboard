@@ -177,6 +177,13 @@ type StageContext struct {
 	// is likewise non-fatal — see
 	// stage_handlers.go's caller.
 	IssueTaskAPIKey func(ctx context.Context, stageRunID string, stageTimeout time.Duration) (string, error)
+
+	// RegisterSpawnCleanup takes the cleanup closure a spawn returns, so the
+	// files it wrote — the temp --mcp-config carrying the credential minted
+	// above, and the settings allow-list entries — are removed when the run
+	// releases its credentials. Nil leaves those files in place until the
+	// process exits.
+	RegisterSpawnCleanup func(stageRunID string, cleanup func())
 }
 
 // StageHandler is implemented by each pipeline stage.

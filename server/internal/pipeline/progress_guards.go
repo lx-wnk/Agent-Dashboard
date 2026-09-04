@@ -168,6 +168,7 @@ func (o *PipelineOrchestrator) runProgressTaskLocked(ctx context.Context, taskID
 		RecordMemoryInjection: o.opts.RecordMemoryInjection,
 		AuthorizeMemory:       o.opts.AuthorizeMemory,
 		IssueTaskAPIKey:       o.opts.IssueTaskAPIKey,
+		RegisterSpawnCleanup:  o.spawnCleanups.register,
 		DispatchHTTPSpawn: func(stageRunID, taskID string, spawn func(context.Context) (string, error)) {
 			// context.WithoutCancel keeps values (logger, trace ids) but drops the
 			// HTTP request's cancellation, which fires the instant the handler
