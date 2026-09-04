@@ -11,7 +11,7 @@ import (
 
 func TestWriteTempConfig_ReturnsFilePath(t *testing.T) {
 	binaryPath := "/usr/local/bin/agent-dashboard"
-	path, err := channelconfig.WriteTempConfig(binaryPath, nil)
+	path, err := channelconfig.WriteTempConfig(binaryPath, nil, nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, path)
 	t.Cleanup(func() { _ = os.Remove(path) })
@@ -19,7 +19,7 @@ func TestWriteTempConfig_ReturnsFilePath(t *testing.T) {
 
 func TestWriteTempConfig_FileExists(t *testing.T) {
 	binaryPath := "/usr/local/bin/agent-dashboard"
-	path, err := channelconfig.WriteTempConfig(binaryPath, nil)
+	path, err := channelconfig.WriteTempConfig(binaryPath, nil, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.Remove(path) })
 
@@ -29,7 +29,7 @@ func TestWriteTempConfig_FileExists(t *testing.T) {
 
 func TestWriteTempConfig_FilePermissions(t *testing.T) {
 	binaryPath := "/usr/local/bin/agent-dashboard"
-	path, err := channelconfig.WriteTempConfig(binaryPath, nil)
+	path, err := channelconfig.WriteTempConfig(binaryPath, nil, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.Remove(path) })
 
@@ -43,7 +43,7 @@ func TestWriteTempConfig_FilePermissions(t *testing.T) {
 
 func TestWriteTempConfig_JSONContract(t *testing.T) {
 	binaryPath := "/usr/local/bin/agent-dashboard"
-	path, err := channelconfig.WriteTempConfig(binaryPath, nil)
+	path, err := channelconfig.WriteTempConfig(binaryPath, nil, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.Remove(path) })
 
@@ -111,7 +111,7 @@ func TestConfigJSON_MatchesWriteTempConfig(t *testing.T) {
 	jsonStr, err := channelconfig.ConfigJSON(binaryPath, nil)
 	require.NoError(t, err)
 
-	filePath, err := channelconfig.WriteTempConfig(binaryPath, nil)
+	filePath, err := channelconfig.WriteTempConfig(binaryPath, nil, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.Remove(filePath) })
 
@@ -135,11 +135,11 @@ func TestConfigJSON_MatchesWriteTempConfig(t *testing.T) {
 func TestWriteTempConfig_MultipleCalls(t *testing.T) {
 	// Each call must produce a distinct temp file (no collisions).
 	binaryPath := "/usr/local/bin/agent-dashboard"
-	path1, err := channelconfig.WriteTempConfig(binaryPath, nil)
+	path1, err := channelconfig.WriteTempConfig(binaryPath, nil, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.Remove(path1) })
 
-	path2, err := channelconfig.WriteTempConfig(binaryPath, nil)
+	path2, err := channelconfig.WriteTempConfig(binaryPath, nil, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.Remove(path2) })
 

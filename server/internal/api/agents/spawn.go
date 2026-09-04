@@ -384,7 +384,7 @@ func (m *SpawnManager) Spawn(sub string, body map[string]any) (int, error) {
 		selfBin, selfErr := channelconfig.SelfBinaryPath()
 		if selfErr != nil {
 			slog.Warn("spawn: channel disabled — cannot resolve self binary", "err", selfErr)
-		} else if cfgPath, cfgErr := channelconfig.WriteTempConfig(selfBin, nil); cfgErr != nil {
+		} else if cfgPath, cfgErr := channelconfig.WriteTempConfig(selfBin, nil, nil); cfgErr != nil {
 			slog.Warn("spawn: channel disabled — cannot write MCP config", "err", cfgErr)
 		} else {
 			channelCfgPath = cfgPath

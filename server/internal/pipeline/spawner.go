@@ -13,6 +13,7 @@ import (
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/capability"
 	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
+	"github.com/lx-wnk/agent-dashboard/server/internal/claudeconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/envsec"
@@ -55,7 +56,8 @@ type SpawnAgentOptions struct {
 	MCPUrl          string
 	// TaskAPIToken is the stage-run credential the agent presents to the
 	// dashboard's own MCP endpoint. Empty means the config gets no such entry
-	// and the agent reaches only the channel bridge.
+	// and the agent reaches no task API at all — the user-scope registration
+	// is shut out of the spawn config either way.
 	TaskAPIToken string
 	// Spawner is the resolved DB spawner row that controls which executable
 	// is launched and which extra env vars are seeded. When nil the spawner
@@ -355,7 +357,14 @@ func isLegacyClaudeSpawner(sp *ent.Spawner) bool {
 func buildSpawnArgsWithChannelConfig(opts SpawnAgentOptions, channelCfgPath string) []string {
 	args := BuildSpawnArgs(opts)
 	if channelCfgPath != "" {
-		args = append(args, "--mcp-config", channelCfgPath)
+		// --strict-mcp-config is what makes the written file the agent's entire
+		// MCP surface. Without it the file is merged on top of the user- and
+		// project-scope registrations, and the broad `claude mcp add --scope
+		// user` dashboard-tasks credential onboarding writes stays reachable —
+		// which would give every stage agent back the scopes its own key omits.
+		// The user's other servers are carried into the file instead (see
+		// SpawnStageAgent); a project-scope .mcp.json is not.
+		args = append(args, "--mcp-config", channelCfgPath, "--strict-mcp-config")
 	}
 	return args
 }
@@ -622,8 +631,15 @@ func SpawnStageAgent(opts SpawnAgentOptions) (SpawnResult, error) {
 	// Failures are non-fatal: the agent runs without the channel bridge rather than refusing to spawn.
 	var channelCfgPath string
 	if opts.EnableChannel {
+		// The spawn runs --strict-mcp-config, so whatever is not in this file is
+		// gone for the agent. Carry the operator's own servers over; a config
+		// that cannot be read costs the agent those servers, never the spawn.
+		userServers, userErr := claudeconfig.UserMCPServers()
+		if userErr != nil {
+			slog.Warn("claudeconfig: ignoring unreadable ~/.claude.json — agent gets the dashboard's MCP servers only", "err", userErr)
+		}
 		if selfBin, binErr := channelconfig.SelfBinaryPath(); binErr == nil {
-			if cfgPath, cfgErr := channelconfig.WriteTempConfig(selfBin, buildTaskAPI(opts)); cfgErr == nil {
+			if cfgPath, cfgErr := channelconfig.WriteTempConfig(selfBin, buildTaskAPI(opts), userServers); cfgErr == nil {
 				channelCfgPath = cfgPath
 			} else {
 				slog.Warn("channelconfig: failed to write temp config — agent runs without channel bridge", "err", cfgErr)

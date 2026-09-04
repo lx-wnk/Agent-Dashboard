@@ -175,7 +175,8 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 	}
 
 	// A credential that cannot be minted is not a reason to refuse the spawn:
-	// the agent then runs with the channel bridge alone.
+	// the agent then runs without task API access at all, since the spawn is
+	// strict-scoped to its own MCP config.
 	taskAPIToken := ""
 	if ctx.IssueTaskAPIKey != nil {
 		timeout := time.Duration(ctx.Task.StageTimeoutSeconds) * time.Second
