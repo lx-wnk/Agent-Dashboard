@@ -2425,7 +2425,45 @@ func TestMaterialize_RejectsAnInvalidBody(t *testing.T) {
 	rec := post(t, r, `not json`)
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 }
+
+// The single-flight guard of Design note two has no other anchor: deleting the
+// CompareAndSwap is a one-line change, and every other test in this file issues
+// one request at a time, so all of them stay green without it. Two concurrent
+// runs would both hold the lease — it is re-entrant for the same owner, and the
+// owner is per process — and race each other into the same files.
+func TestMaterialize_ASecondConcurrentRequestIsRejected(t *testing.T) {
+	r, _ := newRouter(t)
+
+	var (
+		started = make(chan struct{})
+		release = make(chan struct{})
+		codes   = make(chan int, 1)
+	)
+	// The first request blocks inside materialize() until release is closed,
+	// so the second one provably arrives while the guard is held rather than
+	// after it — a sequential pair would pass with no guard at all.
+	t.Cleanup(func() { close(release) })
+	go func() {
+		rec := postHook(t, r, `{"dryRun":true}`, func() {
+			close(started)
+			<-release
+		})
+		codes <- rec.Code
+	}()
+
+	<-started
+	second := post(t, r, `{"dryRun":true}`)
+	require.Equal(t, http.StatusConflict, second.Code,
+		"a request arriving while a run is in flight must be refused, not queued")
+	require.Contains(t, second.Body.String(), "already running")
+}
 ```
+
+`postHook` is `post` with a callback the fake materializer invokes once it has
+entered `Run`; add it to the harness alongside `post`, and give `newRouter` a
+variant that installs that fake. A test that merely fires two requests in
+sequence would pass with the guard deleted, which is the failure this test
+exists to prevent.
 
 - [ ] **Step 2: Run the test to verify it fails**
 
