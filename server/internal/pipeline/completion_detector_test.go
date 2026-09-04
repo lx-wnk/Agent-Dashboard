@@ -244,12 +244,31 @@ func TestDetectCompletion_InfraAxis(t *testing.T) {
 			wantInfra: true,
 		},
 		{
-			name: "agent_did_not_produce_json_block_is_infra",
+			// The agent ran and produced text; it just missed both output
+			// channels. That is a retryable protocol miss, not an
+			// infrastructure fault — Infra would route it to a blind requeue
+			// that never tells the agent what was wrong.
+			name: "agent_produced_text_but_no_envelope_is_retryable_not_infra",
 			sr:   func() *ent.StageRun { return stageRun("implementation", ptr(0), &sid, &now) },
 			deps: pipeline.CompletionDeps{
 				IsPidAlive: func(int) bool { return false },
 				ReadOutput: func(string, string) (pipeline.StageOutputRead, error) {
 					return pipeline.StageOutputRead{RawText: "some agent output without json block"}, nil
+				},
+			},
+			wantKind:  "failed",
+			wantRetry: true,
+			wantInfra: false,
+		},
+		{
+			// No text at all is a different thing: there is nothing to feed
+			// back, so it stays on the infra path.
+			name: "no_text_at_all_stays_infra",
+			sr:   func() *ent.StageRun { return stageRun("implementation", ptr(0), &sid, &now) },
+			deps: pipeline.CompletionDeps{
+				IsPidAlive: func(int) bool { return false },
+				ReadOutput: func(string, string) (pipeline.StageOutputRead, error) {
+					return pipeline.StageOutputRead{}, nil
 				},
 			},
 			wantKind:  "failed",
@@ -290,9 +309,7 @@ func TestDetectCompletion_InfraAxis(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, c.wantKind, res.Kind)
 			require.Equal(t, c.wantInfra, res.Infra, "Infra mismatch")
-			if c.wantRetry {
-				require.True(t, res.Retryable)
-			}
+			require.Equal(t, c.wantRetry, res.Retryable, "Retryable mismatch")
 		})
 	}
 }
@@ -360,4 +377,31 @@ func TestDetectCompletion_RateLimitedThenRecovered_Completes(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "completed", res.Kind, "a recovered output must complete despite an earlier API error")
 	require.False(t, res.RateLimited)
+}
+
+// TestDetectCompletion_EnvelopeMiss_CarriesFeedback pins what makes the retry
+// informed rather than blind. Routing to Retryable is only half the fix: the
+// IterateTransition built from this result feeds `validation_error` and
+// `rejected_output` into BuildFeedbackPrefix, so the error has to name what was
+// missing and the output has to carry the agent's own text back to it. Drop
+// either and the next attempt repeats the miss.
+func TestDetectCompletion_EnvelopeMiss_CarriesFeedback(t *testing.T) {
+	now := time.Now()
+	sid := "sid-envelope"
+	sr := stageRun("implementation", ptr(0), &sid, &now)
+
+	res, err := pipeline.DetectCompletion(sr, "/tmp", pipeline.CompletionDeps{
+		IsPidAlive: func(int) bool { return false },
+		ReadOutput: func(string, string) (pipeline.StageOutputRead, error) {
+			return pipeline.StageOutputRead{RawText: "I finished the work but forgot the envelope"}, nil
+		},
+	})
+	require.NoError(t, err)
+
+	require.True(t, res.Retryable, "an envelope miss must take the feedback path")
+	require.False(t, res.Infra, "an envelope miss is not an infrastructure fault")
+	require.Contains(t, res.Error, "set_stage_output",
+		"the error is quoted back to the agent, so it must name the primary channel it skipped")
+	require.Equal(t, "I finished the work but forgot the envelope", res.Output["agentMessage"],
+		"the agent's own text must survive into the feedback, else the retry is blind")
 }
