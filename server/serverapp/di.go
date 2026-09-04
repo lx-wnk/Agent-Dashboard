@@ -908,7 +908,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	var channelStageOutputHandler *agents.ChannelStageOutputHandler
 	var auditEventRepo repo.AuditEventRepo
 	if entClient != nil {
-		channelStageOutputHandler = agents.NewChannelStageOutputHandler(repo.NewStageRunRepo(entClient), apiKeyRepo)
+		channelStageOutputHandler = agents.NewChannelStageOutputHandler(repo.NewStageRunRepo(entClient), apiKeyRepo, auditEventRepo)
 		auditEventRepo = repo.NewAuditEventRepo(entClient)
 	}
 
