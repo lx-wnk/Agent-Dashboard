@@ -19,6 +19,13 @@ filesystem. It is not designed to be exposed to the public internet. See
 [docs/guides/security.md](docs/guides/security.md) for a full description of
 the security model, network binding rules, and the multi-machine remote mode.
 
+Authentication is **off by default** (`auth.mode = none`): on the loopback
+interface, any local process with a matching `Origin` header reaches the full
+API, including routes that define the command a spawner executes. This is a
+deliberate single-user local-trust posture, not an oversight — see
+[Authentication and the local-trust default](docs/guides/security.md#authentication-and-the-local-trust-default)
+for what it permits and when it is the wrong posture for you.
+
 ## Reporting a Vulnerability
 
 **Please do not open a public GitHub issue for security vulnerabilities.**

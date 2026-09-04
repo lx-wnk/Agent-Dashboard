@@ -3,7 +3,7 @@
 The dashboard reads sensitive Claude session data from your machine. It is designed local-first and defensive by default.
 
 - **Loopback only** — the server binds to `127.0.0.1` and is never exposed to the network. (Multi-machine mode is opt-in and expects a VPN/SSH tunnel — see [Configuration](configuration.md).)
-- **Local-trust auth bypass** — when on loopback with no GitHub OAuth configured, all API requests are allowed without login. This is safe for a single-user developer machine. Any process with access to `127.0.0.1:13120` can create API keys, spawn agents, and read session data — so for shared or multi-user machines, configure GitHub OAuth (`DASHBOARD_GITHUB_CLIENT_ID` + `DASHBOARD_GITHUB_CLIENT_SECRET`).
+- **Local-trust auth bypass** — `auth.mode` defaults to `none`, and in that mode all API requests are allowed without login. This is the intended posture for a single-user developer machine, and it is a real trust decision rather than a gap: see [Authentication and the local-trust default](#authentication-and-the-local-trust-default) for exactly what it permits. For shared or multi-user machines, configure GitHub OAuth (`DASHBOARD_GITHUB_CLIENT_ID` + `DASHBOARD_GITHUB_CLIENT_SECRET`).
 - **Ephemeral JWT secret** — `DASHBOARD_JWT_SECRET` is auto-generated if unset (sessions reset on restart). Set a stable value for production.
 - **Hashed tokens** — bearer tokens are SHA-256 hashed before storage; raw tokens are shown once and never persisted in plaintext.
 - **Authenticated channel replies** — per-agent bearer tokens authenticate channel replies.
@@ -13,6 +13,69 @@ The dashboard reads sensitive Claude session data from your machine. It is desig
 - **`git push` hard-blocked** by default even when granted; opt out with `DASHBOARD_ALLOW_GIT_PUSH=true` or per-task `metadata.allowGitPush=true`.
 
 See also the [Privacy policy](../../PRIVACY.md).
+
+## Authentication and the local-trust default
+
+`auth.mode` is a database setting (`server/internal/settings/registry.go`) and its
+default is `none`. `resolveBypassAuth` (`server/serverapp/di_router.go`) turns that
+into `BypassAuth`, which makes the router skip `RequireAuth` altogether. Two guards
+still apply in that mode, and they are the ones doing the work:
+
+- `RequireLoopbackHost` — the request must arrive on the loopback interface.
+- `RequireSameOriginForMutations` — every mutating request needs a matching `Origin`
+  header, which is what keeps a random web page in your browser from posting here.
+
+There is no third guard. The dashboard has **no admin role in effect**: nothing in the
+codebase writes `is_admin`, and `server/internal/api/router.go` installs no admin
+middleware. An admin gate did exist on spawner CRUD and was removed precisely because
+it was ungrantable — it rejected every authenticated user and passed everything through
+in bypass mode.
+
+### What that permits
+
+On a default install, any local process that reaches the loopback port with a matching
+`Origin` can:
+
+| Route group | What it grants |
+| --- | --- |
+| `POST/PATCH /api/spawners` | Define the command a spawner executes — the code calls this "RCE-equivalent" (`server/internal/pipeline/spawner.go`, `server/internal/llmadapter/llm_custom.go`) |
+| `PATCH /api/settings/{key}` | Change `auth.mode`, `git.allowPush`, `worktree.force` |
+| `POST /api/grants` | Write the `grants` rows the capability gate reads |
+
+The third entry is worth stating plainly, because it bounds what the capability gate
+in [Capabilities and the permission gate](#capabilities-and-the-permission-gate) is
+claiming. The gate is enforced correctly on every call site listed there — but under
+`auth.mode = none`, whoever can write a grant never has to pass the gate at all. The
+gate constrains *agents*; it does not constrain whoever can write to the API.
+
+Two comments in the code state contracts that no caller currently meets — the mount
+sites do not wrap these routes in the admin middleware they ask for:
+
+- `server/internal/api/spawners/handler.go` — "Caller must wrap r with RequireAuth +
+  RequireAdminOrBypass"
+- `server/internal/api/settings/handler.go` — "Callers must gate this behind admin
+  authorization"
+
+They are kept as the specification of where the gate belongs once the role is
+grantable, tracked in [#427](https://github.com/lx-wnk/Agent-Dashboard/issues/427).
+
+### When this posture is wrong for you
+
+It assumes every local process is as trusted as you are. That assumption breaks on a
+shared or multi-user machine, and it is weaker than it looks on a single-user machine
+too: the agents this dashboard spawns run as the same user, with `Bash`, and are
+therefore inside the trust boundary rather than outside it.
+
+If that is not the posture you want, set `auth.mode` to `plugin` and configure an auth
+provider. `auth.mode` is registered `ApplyRestart`: the running server holds the value
+it read at startup, so changing it — through the settings UI or `agent-dashboard
+settings set` — has no effect until the server restarts. Verify by reloading the
+dashboard and confirming you are asked to log in; do not assume the write took.
+
+Note that the capability gate's human-in-the-loop asker is only constructed
+when authentication is on — under `auth.mode = none` an `ask` decision fails closed
+instead, deliberately, because "a human decided" would otherwise reduce to "any local
+process decided".
 
 ## Capabilities and the permission gate
 
