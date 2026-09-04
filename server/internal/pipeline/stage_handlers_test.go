@@ -281,14 +281,16 @@ func TestAgentStageHandler_IssueTaskAPIKeySuccessReachesSpawnOptions(t *testing.
 	handler := pipeline.NewAgentStageHandlerForTest("implementation", spawnFn)
 
 	var gotStageRunID string
+	var gotTimeout time.Duration
 	ctx := &pipeline.StageContext{
 		Ctx:               context.Background(),
 		Task:              &ent.Task{Title: "Fix the retry loop", Cwd: "/tmp/proj-key-ok", StageTimeoutSeconds: 1800},
 		StageRun:          &ent.StageRun{Stage: "implementation", ID: "sr-key-ok"},
 		RecordAudit:       func(string, map[string]any) {},
 		RequestPermission: func(string, string, string) *ent.PermissionRequest { return nil },
-		IssueTaskAPIKey: func(_ context.Context, stageRunID string, _ time.Duration) (string, error) {
+		IssueTaskAPIKey: func(_ context.Context, stageRunID string, timeout time.Duration) (string, error) {
 			gotStageRunID = stageRunID
+			gotTimeout = timeout
 			return "tok", nil
 		},
 	}
@@ -297,6 +299,11 @@ func TestAgentStageHandler_IssueTaskAPIKeySuccessReachesSpawnOptions(t *testing.
 	require.NoError(t, err)
 	require.Equal(t, "tok", captured.TaskAPIToken)
 	require.Equal(t, "sr-key-ok", gotStageRunID)
+	// StageTimeoutSeconds is an int count of SECONDS: taking the duration as
+	// `_` here let the unit on the conversion drift unnoticed, and a key
+	// minted with a millisecond TTL dies before its agent's first call.
+	require.Equal(t, 1800*time.Second, gotTimeout,
+		"the stage timeout must reach the issuer as seconds, not as raw units")
 }
 
 // TestAgentStageHandler_MemoryBlockInNativeUserPromptNotSystemPrompt is the
