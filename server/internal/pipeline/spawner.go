@@ -91,10 +91,20 @@ type SpawnResult struct {
 	Cleanup      func()
 }
 
-var channelAllow = []string{
-	"mcp__dashboard-channel__dashboard_reply",
-	"mcp__dashboard-channel__request_permission",
-}
+// channelAllow is prepended to every --allowedTools list for a channel-enabled
+// spawn. Every tool the bridge registers has to appear here: the spawn runs with
+// --allowedTools, so a tool absent from this list is not callable no matter that
+// the MCP server offers it. set_stage_output was missing, which made the stage
+// prompt's "if set_stage_output is unavailable, emit a fenced json block"
+// fallback the only path a result could ever take.
+// channelAllow is prepended to every --allowedTools list for a channel-enabled
+// spawn. It is derived from the bridge's own tool list rather than written out:
+// a spawn runs with --allowedTools, so a tool the bridge registers but this list
+// omits is simply not callable, and nothing reports it — the agent sees it as
+// unavailable and takes whatever fallback the prompt offers. set_stage_output
+// was missing exactly that way, which made the stage prompt's fenced-json
+// fallback the only path a stage result could ever take.
+var channelAllow = channelconfig.AllowListEntries()
 
 // BuildDenyList returns the settings deny entries that must be written
 // alongside the allow list. On the allow-all path, a deny for "Bash(git push:*)"

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/capability"
+	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
@@ -265,12 +266,14 @@ func TestAllowListParity(t *testing.T) {
 	t.Run("exception B: channel tools bypass the gate and are asserted separately", func(t *testing.T) {
 		perms := []*ent.TaskPermission{{ID: "p1", Tool: "Bash", Pattern: &safePattern, Granted: true}}
 		got := pipeline.BuildAllowList("manual", perms, true, false)
-		require.GreaterOrEqual(t, len(got), 2)
-		require.Equal(t, []string{
-			"mcp__dashboard-channel__dashboard_reply",
-			"mcp__dashboard-channel__request_permission",
-		}, got[:2], "channel entries are prepended unconditionally, consulting no grant")
-		require.Equal(t, buildViaDecide(perms, "t1", false), got[2:],
+		// Derived from the bridge's own tool list rather than written out here:
+		// spelling the entries a second time is what let set_stage_output go
+		// missing from the real allow-list without any test noticing.
+		channel := channelconfig.AllowListEntries()
+		require.GreaterOrEqual(t, len(got), len(channel))
+		require.Equal(t, channel, got[:len(channel)],
+			"channel entries are prepended unconditionally, consulting no grant")
+		require.Equal(t, buildViaDecide(perms, "t1", false), got[len(channel):],
 			"the remainder must still match the grant-resolved list")
 	})
 }

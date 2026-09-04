@@ -98,7 +98,7 @@ func Run(ctx context.Context) error {
 		return werr
 	})
 
-	server := mcp.NewServer(&mcp.Implementation{Name: "dashboard-channel", Version: "0.1.0"}, &mcp.ServerOptions{
+	server := mcp.NewServer(&mcp.Implementation{Name: channelconfig.ServerName, Version: "0.1.0"}, &mcp.ServerOptions{
 		Instructions: channelInstructions,
 	})
 
@@ -124,7 +124,7 @@ func registerTools(server *mcp.Server, dashboardURL, mcpToken, stageRunID string
 		Message string `json:"message" jsonschema:"Reply message to display in the dashboard"`
 	}
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "dashboard_reply",
+		Name:        channelconfig.ToolDashboardReply,
 		Description: "Send a reply back to the monitoring dashboard. Use when you complete a dashboard instruction or want to report progress.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args replyArgs) (*mcp.CallToolResult, any, error) {
 		if args.Message == "" {
@@ -150,7 +150,7 @@ func registerTools(server *mcp.Server, dashboardURL, mcpToken, stageRunID string
 		Reason      *string     `json:"reason,omitempty"`
 	}
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "request_permission",
+		Name:        channelconfig.ToolRequestPermission,
 		Description: requestPermDesc,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args reqPermArgs) (*mcp.CallToolResult, any, error) {
 		if stageRunID == "" {
@@ -181,7 +181,7 @@ func registerTools(server *mcp.Server, dashboardURL, mcpToken, stageRunID string
 		StageRunID *string        `json:"stageRunId,omitempty" jsonschema:"auto-injected from DASHBOARD_STAGE_RUN_ID env"`
 	}
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "set_stage_output",
+		Name:        channelconfig.ToolSetStageOutput,
 		Description: setStageOutputDesc,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args stageOutputArgs) (*mcp.CallToolResult, any, error) {
 		sid := stageRunID
