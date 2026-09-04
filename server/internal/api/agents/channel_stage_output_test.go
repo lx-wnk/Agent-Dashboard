@@ -50,7 +50,7 @@ func TestChannelStageOutput_ValidImplementation_Persists(t *testing.T) {
 	}
 	fakeKeys := &fakeApiKeyRepo{valid: true}
 
-	h := agents.NewChannelStageOutputHandler(fake, fakeKeys)
+	h := agents.NewChannelStageOutputHandler(fake, fakeKeys, nil)
 
 	body, _ := json.Marshal(map[string]any{
 		"stageRunId": "run-1",
@@ -84,7 +84,7 @@ func TestChannelStageOutput_BadToken_401(t *testing.T) {
 	}
 	fakeKeys := &fakeApiKeyRepo{valid: false}
 
-	h := agents.NewChannelStageOutputHandler(fake, fakeKeys)
+	h := agents.NewChannelStageOutputHandler(fake, fakeKeys, nil)
 
 	body, _ := json.Marshal(map[string]any{
 		"stageRunId": "run-1",
@@ -111,7 +111,7 @@ func TestChannelStageOutput_SchemaInvalid_422(t *testing.T) {
 	}
 	fakeKeys := &fakeApiKeyRepo{valid: true}
 
-	h := agents.NewChannelStageOutputHandler(fake, fakeKeys)
+	h := agents.NewChannelStageOutputHandler(fake, fakeKeys, nil)
 
 	// empty output is missing required self_review fields
 	body, _ := json.Marshal(map[string]any{
@@ -140,7 +140,7 @@ func TestChannelStageOutput_UnknownStageRun_404(t *testing.T) {
 	// auth runs first; valid token so the handler proceeds to GetByID and 404s
 	fakeKeys := &fakeApiKeyRepo{valid: true}
 
-	h := agents.NewChannelStageOutputHandler(fake, fakeKeys)
+	h := agents.NewChannelStageOutputHandler(fake, fakeKeys, nil)
 
 	body, _ := json.Marshal(map[string]any{
 		"stageRunId": "no-such-run",
@@ -162,7 +162,7 @@ func TestChannelStageOutput_BadTokenUnknownRun_401(t *testing.T) {
 	fake := &fakeStageRunRepo{} // GetByID must not be reached
 	fakeKeys := &fakeApiKeyRepo{valid: false}
 
-	h := agents.NewChannelStageOutputHandler(fake, fakeKeys)
+	h := agents.NewChannelStageOutputHandler(fake, fakeKeys, nil)
 
 	body, _ := json.Marshal(map[string]any{
 		"stageRunId": "any-run-id",
@@ -190,7 +190,7 @@ func TestChannelStageOutput_TerminalRun_409(t *testing.T) {
 	}
 	fakeKeys := &fakeApiKeyRepo{valid: true}
 
-	h := agents.NewChannelStageOutputHandler(fake, fakeKeys)
+	h := agents.NewChannelStageOutputHandler(fake, fakeKeys, nil)
 
 	body, _ := json.Marshal(map[string]any{
 		"stageRunId": "run-done",
@@ -219,7 +219,7 @@ func TestChannelStageOutput_WrongTypes_400(t *testing.T) {
 	fake := &fakeStageRunRepo{}
 	fakeKeys := &fakeApiKeyRepo{valid: true}
 
-	h := agents.NewChannelStageOutputHandler(fake, fakeKeys)
+	h := agents.NewChannelStageOutputHandler(fake, fakeKeys, nil)
 
 	// output is an array, not an object — wrong type
 	body, _ := json.Marshal(map[string]any{
@@ -237,5 +237,119 @@ func TestChannelStageOutput_WrongTypes_400(t *testing.T) {
 	}
 	if fake.capturedInput != nil {
 		t.Error("Update should not have been called")
+	}
+}
+
+// recordedAudits captures RecordTaskAudit calls.
+type recordedAudits struct {
+	repo.AuditEventRepo
+	actions  []string
+	taskIDs  []string
+	targets  []string
+	metadata []map[string]any
+	err      error
+}
+
+func (r *recordedAudits) RecordTaskAudit(_ context.Context, taskID string, _ *string, action, target string, metadata map[string]any) error {
+	r.actions = append(r.actions, action)
+	r.taskIDs = append(r.taskIDs, taskID)
+	r.targets = append(r.targets, target)
+	r.metadata = append(r.metadata, metadata)
+	return r.err
+}
+
+// TestChannelStageOutput_AcceptedOutput_RecordsTheToolChannel pins the only
+// signal that separates the two channels a stage result can arrive on. The
+// set_stage_output tool writes stage_runs.output directly; a transcript scrape
+// writes the same column, so afterwards the two are indistinguishable. Without
+// this event there is no way to measure how often the tool channel works, which
+// is what the "agent did not produce a json output block" failures hinge on.
+func TestChannelStageOutput_AcceptedOutput_RecordsTheToolChannel(t *testing.T) {
+	fake := &fakeStageRunRepo{
+		run: &ent.StageRun{ID: "run-1", TaskID: "task-9", Stage: "implementation", Status: "running", Iteration: 2},
+	}
+	audits := &recordedAudits{}
+	h := agents.NewChannelStageOutputHandler(fake, &fakeApiKeyRepo{valid: true}, audits)
+
+	body, _ := json.Marshal(map[string]any{
+		"stageRunId": "run-1",
+		"output":     map[string]any{"summary": "did it", "commits": []any{"abc"}, "openItems": []any{}},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/channel-stage-output", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer valid-token")
+	w := httptest.NewRecorder()
+
+	h.Post(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if len(audits.actions) != 1 || audits.actions[0] != "stage_output_submitted" {
+		t.Fatalf("expected one stage_output_submitted audit, got %v", audits.actions)
+	}
+	if audits.taskIDs[0] != "task-9" {
+		t.Errorf("audit must be task-scoped so it is queryable per task, got taskID %q", audits.taskIDs[0])
+	}
+	if audits.targets[0] != "stage_run:run-1" {
+		t.Errorf("audit must name the stage run it measures, got target %q", audits.targets[0])
+	}
+	if audits.metadata[0]["stage"] != "implementation" {
+		t.Errorf("the channel split is counted per stage, so stage must be recorded, got %v", audits.metadata[0])
+	}
+}
+
+// TestChannelStageOutput_RejectedOutput_RecordsNothing keeps the event honest:
+// counting a rejected submission as a tool-channel success would overstate the
+// channel that the measurement exists to evaluate.
+func TestChannelStageOutput_RejectedOutput_RecordsNothing(t *testing.T) {
+	// self_review, because ValidateStageOutput only has a schema for self_review
+	// and finalization — every other stage falls through to OK, so an
+	// implementation run cannot produce the rejection this test needs.
+	fake := &fakeStageRunRepo{
+		run: &ent.StageRun{ID: "run-1", TaskID: "task-9", Stage: "self_review", Status: "running"},
+	}
+	audits := &recordedAudits{}
+	h := agents.NewChannelStageOutputHandler(fake, &fakeApiKeyRepo{valid: true}, audits)
+
+	body, _ := json.Marshal(map[string]any{"stageRunId": "run-1", "output": map[string]any{"summary": "no passed field"}})
+	req := httptest.NewRequest(http.MethodPost, "/api/channel-stage-output", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer valid-token")
+	w := httptest.NewRecorder()
+
+	h.Post(w, req)
+
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422, got %d", w.Code)
+	}
+	if len(audits.actions) != 0 {
+		t.Fatalf("a rejected output must record no submission, got %v", audits.actions)
+	}
+}
+
+// TestChannelStageOutput_AuditFailure_StillAccepts: the measurement must never
+// cost an accepted stage result. An audit write that fails is logged, not
+// returned.
+func TestChannelStageOutput_AuditFailure_StillAccepts(t *testing.T) {
+	fake := &fakeStageRunRepo{
+		run: &ent.StageRun{ID: "run-1", TaskID: "task-9", Stage: "implementation", Status: "running"},
+	}
+	audits := &recordedAudits{err: errors.New("audit table is on fire")}
+	h := agents.NewChannelStageOutputHandler(fake, &fakeApiKeyRepo{valid: true}, audits)
+
+	body, _ := json.Marshal(map[string]any{
+		"stageRunId": "run-1",
+		"output":     map[string]any{"summary": "did it", "commits": []any{"abc"}, "openItems": []any{}},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/channel-stage-output", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer valid-token")
+	w := httptest.NewRecorder()
+
+	h.Post(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("a failed audit write must not fail the submission, got %d: %s", w.Code, w.Body.String())
+	}
+	if fake.capturedInput == nil {
+		t.Fatal("the output must still be persisted")
 	}
 }

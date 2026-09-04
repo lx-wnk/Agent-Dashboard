@@ -2,6 +2,7 @@ package agents
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
@@ -15,11 +16,14 @@ import (
 type ChannelStageOutputHandler struct {
 	stageRuns repo.StageRunRepo
 	apiKeys   repo.ApiKeyRepo
+	audit     repo.AuditEventRepo
 }
 
 // NewChannelStageOutputHandler creates a handler backed by the given repos.
-func NewChannelStageOutputHandler(stageRuns repo.StageRunRepo, apiKeys repo.ApiKeyRepo) *ChannelStageOutputHandler {
-	return &ChannelStageOutputHandler{stageRuns: stageRuns, apiKeys: apiKeys}
+// audit may be nil, which disables the stage_output_submitted record without
+// changing any behaviour the agent can observe.
+func NewChannelStageOutputHandler(stageRuns repo.StageRunRepo, apiKeys repo.ApiKeyRepo, audit repo.AuditEventRepo) *ChannelStageOutputHandler {
+	return &ChannelStageOutputHandler{stageRuns: stageRuns, apiKeys: apiKeys, audit: audit}
 }
 
 func writeJSONError(w http.ResponseWriter, status int, msg string) {
@@ -85,6 +89,18 @@ func (h *ChannelStageOutputHandler) Post(w http.ResponseWriter, r *http.Request)
 	if _, err := h.stageRuns.Update(r.Context(), sr.ID, repo.UpdateStageRunInput{Output: output}); err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "failed to persist output")
 		return
+	}
+
+	// Records that this stage result arrived through the set_stage_output tool
+	// rather than being scraped from the session transcript. The two are
+	// indistinguishable afterwards — both end as stage_runs.output — so without
+	// this event there is no way to measure how often the tool channel works.
+	// Best-effort: a failed audit write must not fail an accepted stage output.
+	if h.audit != nil {
+		if err := h.audit.RecordTaskAudit(r.Context(), sr.TaskID, nil, "stage_output_submitted", "stage_run:"+sr.ID,
+			map[string]any{"stage": sr.Stage, "iteration": sr.Iteration, "channel": "set_stage_output"}); err != nil {
+			slog.Warn("channel-stage-output: recording the submission audit failed", "stageRun", sr.ID, "err", err)
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")

@@ -404,6 +404,10 @@ Preparing the first public release.
 - `PRIVACY.md` now discloses the issue-tracker import feature (GitHub / Jira) as an opt-in outbound data transfer.
 - Fixed a duplicate `ADR-0006` filename collision in `docs/architecture/adr/` — the eval-drift-detection ADR is renumbered to `ADR-0008`.
 
+### Added
+
+- **A stage result submitted through `set_stage_output` now records an audit event.** A stage's structured result reaches the orchestrator on one of two channels: the `set_stage_output` MCP tool, which writes `stage_runs.output` directly and is used as-is, or a fenced JSON block scraped from the session transcript when the tool was unavailable. Both end in the same column, so afterwards nothing distinguished them — and the pipeline's single most common failure, `agent did not produce a ```json output block`, means *both* channels failed rather than that the agent botched a format. `POST /api/channel-stage-output` now records `stage_output_submitted` against the task, naming the stage run, stage and iteration, so the split between the two channels is countable. Rejected submissions record nothing, and a failing audit write is logged rather than failing an otherwise accepted result.
+
 ### Security
 
 - **A stage run's MCP credentials now end when its agent does, on every path that ends it.** Per-stage-run keys are revoked on the transitions that end a run (done, fail, next, both iterate branches), but three paths ended an agent without ending its run, leaving a usable key until `expires_at`:
