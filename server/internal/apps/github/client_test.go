@@ -243,6 +243,11 @@ func TestBoundQueryRefusesACallerSuppliedScopeQualifier(t *testing.T) {
 		"secret repo:othercorp/private",
 		"secret org:othercorp",
 		"secret user:someone",
+		// owner: unions exactly like repo: and was missing from the first
+		// version of this list, so a caller reached repositories the operator
+		// never named. Measured live: `test repo:golang/go` = 31451 hits,
+		// `test owner:nodejs` = 80920, both together = 112371 — the exact sum.
+		"secret owner:othercorp",
 		"secret REPO:OtherCorp/Private",
 		"repo:othercorp/private",
 	} {
@@ -269,4 +274,36 @@ func TestBoundQueryDoesNotRefuseAnOrdinaryWord(t *testing.T) {
 	got, err := c.BoundQuery("repository refactor")
 	require.NoError(t, err)
 	require.Equal(t, "repository refactor repo:lx-wnk/agent-dashboard", got)
+}
+
+// A qualifier naming a repository the operator already listed narrows a
+// multi-repo search rather than widening it — the commonest refinement there
+// is — so refusing it would be a usability regression with no security gain.
+func TestBoundQueryAllowsNarrowingToAnAllowedRepository(t *testing.T) {
+	c := clientWithRepos(t, "lx-wnk/agent-dashboard", "lx-wnk/other")
+
+	got, err := c.BoundQuery("bug repo:lx-wnk/other")
+	require.NoError(t, err)
+	require.Contains(t, got, "repo:lx-wnk/other")
+}
+
+// The allow-list must hold on the answer, not only on the question. Refusing
+// self-widening queries relies on a denylist of GitHub's scope qualifiers being
+// complete, and it was not — `owner:` was missing. This pins the boundary that
+// does not depend on that list: a hit outside the allow-list is dropped however
+// it entered the result set.
+func TestSearchIssuesDropsAHitOutsideTheAllowList(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"items":[
+			{"number":1,"title":"listed","html_url":"https://x.test/1","repository_url":"https://api.github.com/repos/lx-wnk/agent-dashboard"},
+			{"number":2,"title":"NOT listed","html_url":"https://x.test/2","repository_url":"https://api.github.com/repos/othercorp/private"}
+		]}`))
+	}))
+	t.Cleanup(ts.Close)
+
+	hits, err := newTestClient(t, ts).SearchIssues(context.Background(), "anything")
+	require.NoError(t, err)
+	require.Len(t, hits, 1)
+	require.Equal(t, "lx-wnk/agent-dashboard", hits[0].Repo)
 }

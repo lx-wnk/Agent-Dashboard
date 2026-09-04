@@ -332,8 +332,19 @@ func (c *Client) SearchIssues(ctx context.Context, query string) ([]SearchHit, e
 	}
 	out := make([]SearchHit, 0, len(raw.Items))
 	for _, item := range raw.Items {
+		repo := repoFromAPIURL(item.RepositoryURL)
+		// The allow-list is enforced on the ANSWER, not only on the question.
+		// Bounding the query alone means trusting a denylist of GitHub's scope
+		// qualifiers to be complete, and it was not: `owner:` unions exactly
+		// like `repo:` and was missed, so a caller reached repositories the
+		// operator never listed. Every qualifier GitHub adds next would reopen
+		// that. A hit whose repository is not in the allow-list is dropped here
+		// no matter how it got into the result set.
+		if !c.repos[repo] {
+			continue
+		}
 		out = append(out, SearchHit{
-			Repo:   repoFromAPIURL(item.RepositoryURL),
+			Repo:   repo,
 			Number: item.Number,
 			Title:  item.Title,
 			URL:    item.HTMLURL,
@@ -416,7 +427,7 @@ var ErrQueryWidensScope = errors.New("github: the search query may not carry its
 // scopeQualifiers are the search qualifiers that name where to look. GitHub
 // unions repeated occurrences of these, so one supplied by the caller is a
 // second branch of the same OR, not a narrowing of the first.
-var scopeQualifiers = []string{"repo:", "org:", "user:"}
+var scopeQualifiers = []string{"repo:", "org:", "user:", "owner:"}
 
 // BoundQuery bounds a search to the allow-list by appending one repo:
 // qualifier per configured repository.
@@ -435,9 +446,16 @@ func (c *Client) BoundQuery(query string) (string, error) {
 	for _, field := range strings.Fields(query) {
 		bare := strings.ToLower(strings.TrimPrefix(field, "-"))
 		for _, qualifier := range scopeQualifiers {
-			if strings.HasPrefix(bare, qualifier) {
-				return "", fmt.Errorf("%w (found %q)", ErrQueryWidensScope, field)
+			if !strings.HasPrefix(bare, qualifier) {
+				continue
 			}
+			// Narrowing to a repository the operator already listed is the
+			// commonest refinement of a multi-repo search and widens nothing,
+			// so it passes; anything else names a scope outside the list.
+			if qualifier == "repo:" && c.repos[strings.TrimPrefix(bare, "repo:")] {
+				continue
+			}
+			return "", fmt.Errorf("%w (found %q)", ErrQueryWidensScope, field)
 		}
 	}
 	var b strings.Builder
