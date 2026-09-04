@@ -158,10 +158,10 @@ func DetectCompletion(sr *ent.StageRun, cwd string, deps CompletionDeps) (Comple
 							trimmed = trimmed[len(trimmed)-agentMessageMaxChars:]
 						}
 						return CompletionResult{
-							Kind:   "failed",
-							Error:  "adapter did not produce a ```json output block",
-							Output: map[string]any{"agentMessage": trimmed},
-							Infra:  true,
+							Kind:      "failed",
+							Error:     "adapter did not produce a stage output block: it called neither set_stage_output nor emitted a ```json fence",
+							Output:    map[string]any{"agentMessage": trimmed},
+							Retryable: true,
 						}, nil
 					}
 					return CompletionResult{Kind: "failed", Error: "no parseable json output in synthetic session", Infra: true}, nil
@@ -231,11 +231,17 @@ func DetectCompletion(sr *ent.StageRun, cwd string, deps CompletionDeps) (Comple
 			if len(trimmed) > agentMessageMaxChars {
 				trimmed = trimmed[len(trimmed)-agentMessageMaxChars:]
 			}
+			// Retryable, not Infra: the agent ran and produced text, it just
+			// missed both output channels. Infra routes to a blind requeue that
+			// burns the whole auto-retry budget without ever telling the agent
+			// what was wrong; Retryable routes to IterateTransition, whose
+			// feedback prefix quotes this error and the text below back to it,
+			// and escalates to the user on the second miss instead of the Nth.
 			return CompletionResult{
-				Kind:   "failed",
-				Error:  "agent did not produce a ```json output block",
-				Output: map[string]any{"agentMessage": trimmed},
-				Infra:  true,
+				Kind:      "failed",
+				Error:     "agent did not produce a stage output block: it called neither set_stage_output nor emitted a ```json fence",
+				Output:    map[string]any{"agentMessage": trimmed},
+				Retryable: true,
 			}, nil
 		}
 		return CompletionResult{Kind: "failed", Error: "no parseable json output in session tail", Infra: true}, nil
