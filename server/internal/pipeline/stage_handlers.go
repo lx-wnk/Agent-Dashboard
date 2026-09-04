@@ -209,6 +209,10 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 		return nil, fmt.Errorf("agentStageHandler.Execute(%s): %w", h.stage, err)
 	}
 
+	if ctx.RegisterSpawnCleanup != nil {
+		ctx.RegisterSpawnCleanup(ctx.StageRun.ID, result.Cleanup)
+	}
+
 	ctx.RecordAudit(h.stage+"_spawned", map[string]any{
 		"pid":              result.PID,
 		"iteration":        ctx.StageRun.Iteration,

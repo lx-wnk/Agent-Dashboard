@@ -129,6 +129,7 @@ type PipelineOrchestrator struct {
 	modelResolver    *modelResolver
 	stageRuns        *stageRunService
 	scheduler        *scheduler
+	spawnCleanups    *spawnCleanupRegistry
 
 	httpResultCh chan httpSpawnResult // buffered channel for goroutine pool results
 	httpPool     *httpPool            // limits concurrent HTTP spawns
@@ -189,13 +190,15 @@ func NewOrchestrator(opts OrchestratorOptions) (*PipelineOrchestrator, error) {
 		}
 	}
 	cc := newConfigCache(opts.ConfigRepo)
+	cleanups := newSpawnCleanupRegistry()
 	o := &PipelineOrchestrator{
 		opts:             opts,
 		handlers:         NewStageHandlers(sf),
 		detectCompletion: DetectCompletion,
 		configCache:      cc,
 		modelResolver:    newModelResolver(cc, opts.ConfigRepo),
-		stageRuns:        newStageRunService(opts.StageRunRepo, opts.RevokeTaskAPIKeys),
+		spawnCleanups:    cleanups,
+		stageRuns:        newStageRunService(opts.StageRunRepo, opts.RevokeTaskAPIKeys, cleanups.release),
 		scheduler:        newScheduler(cc, opts.TaskRepo, opts.StageRunRepo, opts.DepRepo),
 		httpPool:         newHTTPPool(cc),
 		httpResultCh:     make(chan httpSpawnResult, defaultMaxParallel*2),
@@ -810,6 +813,11 @@ func (o *PipelineOrchestrator) cascadeCancelDownstream(ctx context.Context, down
 		slog.Warn("handleDependentTasks: cascade cancel failed", "downstreamID", downstreamID, "err", err)
 		return false
 	}
+	// A cascade reaches this task through handleDependentTasks, never through
+	// NotifyTaskTerminated, so its open stage runs need ending here too — a
+	// downstream agent cancelled by its upstream holds the same live credential
+	// as one cancelled directly.
+	o.cancelOpenStageRuns(ctx, downstreamID)
 	return true
 }
 
@@ -908,10 +916,38 @@ func (o *PipelineOrchestrator) updateTokenUsage(ctx context.Context, stageRunID,
 // It also removes the per-task mutex so taskLocks does not grow unbounded.
 func (o *PipelineOrchestrator) NotifyTaskTerminated(ctx context.Context, taskID, stage string) {
 	o.taskLocks.Delete(taskID)
+	o.cancelOpenStageRuns(ctx, taskID)
 	if task, err := o.opts.TaskRepo.GetByID(ctx, taskID); err == nil {
 		o.cleanupTerminalWorktree(ctx, task, true)
 	}
 	o.handleDependentTasks(ctx, taskID, stage)
+}
+
+// cancelOpenStageRuns writes the terminal "cancelled" status on every stage run
+// of taskID that is not terminal yet. Cancelling a task marks only the task
+// itself, so without this the abandoned agent's stage run stays "running" and
+// its MCP credentials stay valid until expires_at. Routing the write through
+// stageRunService.Update is what releases them.
+func (o *PipelineOrchestrator) cancelOpenStageRuns(ctx context.Context, taskID string) {
+	runs, err := o.stageRuns.ListForTask(ctx, taskID)
+	if err != nil {
+		slog.Warn("orchestrator: listing stage runs of a cancelled task failed — credentials stay valid until expiry",
+			"taskID", taskID, "err", err)
+		return
+	}
+	now := time.Now()
+	for _, run := range runs {
+		if terminalStageRunStatuses[run.Status] {
+			continue
+		}
+		if _, err := o.stageRuns.Update(ctx, run.ID, repo.UpdateStageRunInput{
+			Status:  strPtr("cancelled"),
+			EndedAt: &now,
+		}); err != nil {
+			slog.Warn("orchestrator: cancelling a terminated task's stage run failed",
+				"taskID", taskID, "stageRun", run.ID, "err", err)
+		}
+	}
 }
 
 // afterCommitTerminalCleanup removes the task's worktree once a DoneTransition

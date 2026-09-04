@@ -112,7 +112,7 @@ func (o *PipelineOrchestrator) applyTransitionWrites(
 		// The completed run's own credential is revoked here too, even though
 		// the task moves on rather than finishing: this stage_run's agent has
 		// exited and gets no further calls, exactly like Done/Fail.
-		postCommit = append(postCommit, func() { o.stageRuns.revokeCredentials(ctx, sr.ID) })
+		postCommit = append(postCommit, func() { o.stageRuns.releaseStageRun(ctx, sr.ID) })
 
 	case DoneTransition:
 		if _, err := srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
@@ -129,7 +129,7 @@ func (o *PipelineOrchestrator) applyTransitionWrites(
 		postCommit = append(postCommit, func() {
 			o.handleDependentTasks(ctx, task.ID, "done")
 			o.taskLocks.Delete(task.ID)
-			o.stageRuns.revokeCredentials(ctx, sr.ID)
+			o.stageRuns.releaseStageRun(ctx, sr.ID)
 		})
 
 	case FailTransition:
@@ -150,7 +150,7 @@ func (o *PipelineOrchestrator) applyTransitionWrites(
 			info := StageFailedInfo{StageRunID: sr.ID, Stage: sr.Stage, Iteration: sr.Iteration, Error: tr.Reason}
 			postCommit = append(postCommit, func() { o.opts.OnStageFailed(task.ID, info) })
 		}
-		postCommit = append(postCommit, func() { o.stageRuns.revokeCredentials(ctx, sr.ID) })
+		postCommit = append(postCommit, func() { o.stageRuns.releaseStageRun(ctx, sr.ID) })
 
 	case WaitUserTransition:
 		if _, err := srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
@@ -188,14 +188,14 @@ func (o *PipelineOrchestrator) applyTransitionWrites(
 				info := StageFailedInfo{StageRunID: sr.ID, Stage: sr.Stage, Iteration: sr.Iteration, Error: fmt.Sprintf("iteration limit reached (%d)", maxIter)}
 				postCommit = append(postCommit, func() { o.opts.OnStageFailed(task.ID, info) })
 			}
-			postCommit = append(postCommit, func() { o.stageRuns.revokeCredentials(ctx, sr.ID) })
+			postCommit = append(postCommit, func() { o.stageRuns.releaseStageRun(ctx, sr.ID) })
 		} else {
 			if _, err := srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
 				Status: strPtr("done"), EndedAt: &now, Output: tr.Output,
 			}); err != nil {
 				return nil, nil, nil, fmt.Errorf("applyTransition.iterate.updateRun: %w", err)
 			}
-			postCommit = append(postCommit, func() { o.stageRuns.revokeCredentials(ctx, sr.ID) })
+			postCommit = append(postCommit, func() { o.stageRuns.releaseStageRun(ctx, sr.ID) })
 			newSR, err := srRepo.Create(ctx, repo.CreateStageRunInput{
 				TaskID:      task.ID,
 				Stage:       sr.Stage,
@@ -271,6 +271,12 @@ func (o *PipelineOrchestrator) applyTransitionWrites(
 		_ = auditRepo.RecordTaskAudit(ctx, task.ID, nil, "stage_requeued", "task:"+task.ID,
 			map[string]any{"stage": sr.Stage, "attempt": tr.Attempt, "reason": tr.Reason})
 		updatedRunID = sr.ID
+		// A requeue is only ever decided from a completion result, so the agent
+		// that held this run's credentials has already exited. Releasing here
+		// keeps the respawn from adding a second, concurrently valid key for the
+		// same stage_run_id once sweepRequeueableRuns promotes the run back to
+		// pending.
+		postCommit = append(postCommit, func() { o.stageRuns.releaseStageRun(ctx, sr.ID) })
 
 	default:
 		panic(fmt.Sprintf("orchestrator.applyTransition: unhandled transition type %T", t))
