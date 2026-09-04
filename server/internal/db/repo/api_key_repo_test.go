@@ -227,14 +227,52 @@ func TestApiKey_DeleteExpiredRemovesOnlyEphemeralRows(t *testing.T) {
 		Kind: repo.ApiKeyKindStageRun, StageRunID: "sr-1", ExpiresAt: &past,
 	})
 	require.NoError(t, err)
-	_, err = r.Create(ctx, repo.CreateApiKeyInput{Name: "human", Hash: "human", Scopes: []string{"tasks:read"}})
+	// The user key carries an expiry in the past too, so `kind` is the only
+	// thing standing between it and the sweep. With expires_at = NULL it was
+	// protected by the ExpiresAtNotNil clause instead, and dropping the kind
+	// filter altogether left this test green.
+	_, err = r.Create(ctx, repo.CreateApiKeyInput{
+		Name: "human", Hash: "human", Scopes: []string{"tasks:read"},
+		ExpiresAt: &past,
+	})
 	require.NoError(t, err)
 
 	n, err := r.DeleteExpired(ctx, time.Now())
 	require.NoError(t, err)
-	require.Equal(t, 1, n)
+	require.Equal(t, 1, n, "only the stage_run key may be swept")
 
 	keys, err := r.List(ctx)
 	require.NoError(t, err)
 	require.Len(t, keys, 1, "a user key must never be swept, whatever its expiry")
+}
+
+// TestApiKey_DeleteExpiredSparesAKeyExpiringExactlyAtTheCutoff pins the
+// sweep's boundary as exclusive: expires_at == before means the key's last
+// moment is now, not that it is already gone. `before` is a parameter, so the
+// equality case is reachable here — unlike GetByHash, which compares against
+// its own internal time.Now() and therefore has no reachable equality case
+// without a clock seam in production code.
+func TestApiKey_DeleteExpiredSparesAKeyExpiringExactlyAtTheCutoff(t *testing.T) {
+	bundle, err := db.Open(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+	r := repo.NewApiKeyRepo(bundle.Client)
+	ctx := context.Background()
+
+	cutoff := time.Now().Truncate(time.Second)
+	_, err = r.Create(ctx, repo.CreateApiKeyInput{
+		Name: "on-the-boundary", Hash: "boundary", Scopes: []string{"memory:read"},
+		Kind: repo.ApiKeyKindStageRun, StageRunID: "sr-boundary", ExpiresAt: &cutoff,
+	})
+	require.NoError(t, err)
+
+	n, err := r.DeleteExpired(ctx, cutoff)
+	require.NoError(t, err)
+	require.Zero(t, n, "a key expiring exactly at the cutoff is not yet expired")
+
+	// A cutoff one nanosecond later is past it, which also proves the row was
+	// findable all along and the zero above is a boundary result, not a miss.
+	n, err = r.DeleteExpired(ctx, cutoff.Add(time.Nanosecond))
+	require.NoError(t, err)
+	require.Equal(t, 1, n, "a cutoff past the expiry must sweep the key")
 }
