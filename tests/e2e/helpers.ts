@@ -1,4 +1,5 @@
 import type { Locator, Page } from '@playwright/test'
+import { expect } from '@playwright/test'
 
 /**
  * Mock /api/me so the app never redirects to the LoginPage — mirrors the
@@ -90,15 +91,15 @@ export async function openListboxOptions(page: Page, trigger: Locator): Promise<
 export async function selectListboxOption(page: Page, trigger: Locator, optionName: string | RegExp): Promise<void> {
   const listbox = page.getByRole('listbox')
   await closeOtherOpenListbox(page, trigger)
+  // A picker whose options are filled by an in-flight fetch (SpawnDialog's
+  // project list is the known case) disables its trigger for the duration —
+  // wait for that state instead of racing the arrival of the option itself,
+  // so the panel is already fully populated by the time it opens.
+  await expect(trigger).toBeEnabled()
   if (await trigger.getAttribute('aria-expanded') !== 'true') {
     await trigger.click()
     await listbox.waitFor({ state: 'visible' })
   }
-  // The options can arrive after the panel opens: a picker whose list is filled
-  // by an in-flight fetch (SpawnDialog's project list is the known case) renders
-  // an empty listbox first. Wait for the named option explicitly, on a budget well
-  // under the test timeout, so a missing option fails here naming itself instead of
-  // consuming the whole 30s and surfacing as an error from the cleanup block.
   const option = listbox.getByRole('option', { name: optionName })
   await option.waitFor({ state: 'visible', timeout: 10_000 })
   await option.click()
