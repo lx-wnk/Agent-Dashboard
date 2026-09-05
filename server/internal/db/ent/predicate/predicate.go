@@ -39,6 +39,9 @@ type Grant func(*sql.Selector)
 // GrantUsage is the predicate function for grantusage builders.
 type GrantUsage func(*sql.Selector)
 
+// Materialization is the predicate function for materialization builders.
+type Materialization func(*sql.Selector)
+
 // MemoryEntry is the predicate function for memoryentry builders.
 type MemoryEntry func(*sql.Selector)
 
@@ -83,6 +86,9 @@ type Resource func(*sql.Selector)
 
 // Scratchpad is the predicate function for scratchpad builders.
 type Scratchpad func(*sql.Selector)
+
+// Skill is the predicate function for skill builders.
+type Skill func(*sql.Selector)
 
 // Spawner is the predicate function for spawner builders.
 type Spawner func(*sql.Selector)

@@ -23,6 +23,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/evalmetricsnapshot"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/grant"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/grantusage"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/materialization"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/memoryentry"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/memoryinjection"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionpreset"
@@ -38,6 +39,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/remoteregistration"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/resource"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/scratchpad"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/skill"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/spawner"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/stagerun"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/systemprompt"
@@ -117,6 +119,7 @@ func checkColumn(t, c string) error {
 			evalmetricsnapshot.Table: evalmetricsnapshot.ValidColumn,
 			grant.Table:              grant.ValidColumn,
 			grantusage.Table:         grantusage.ValidColumn,
+			materialization.Table:    materialization.ValidColumn,
 			memoryentry.Table:        memoryentry.ValidColumn,
 			memoryinjection.Table:    memoryinjection.ValidColumn,
 			permissionpreset.Table:   permissionpreset.ValidColumn,
@@ -132,6 +135,7 @@ func checkColumn(t, c string) error {
 			remoteregistration.Table: remoteregistration.ValidColumn,
 			resource.Table:           resource.ValidColumn,
 			scratchpad.Table:         scratchpad.ValidColumn,
+			skill.Table:              skill.ValidColumn,
 			spawner.Table:            spawner.ValidColumn,
 			stagerun.Table:           stagerun.ValidColumn,
 			systemprompt.Table:       systemprompt.ValidColumn,

@@ -26,6 +26,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/evalmetricsnapshot"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/grant"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/grantusage"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/materialization"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/memoryentry"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/memoryinjection"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionpreset"
@@ -41,6 +42,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/remoteregistration"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/resource"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/scratchpad"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/skill"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/spawner"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/stagerun"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/systemprompt"
@@ -78,6 +80,8 @@ type Client struct {
 	Grant *GrantClient
 	// GrantUsage is the client for interacting with the GrantUsage builders.
 	GrantUsage *GrantUsageClient
+	// Materialization is the client for interacting with the Materialization builders.
+	Materialization *MaterializationClient
 	// MemoryEntry is the client for interacting with the MemoryEntry builders.
 	MemoryEntry *MemoryEntryClient
 	// MemoryInjection is the client for interacting with the MemoryInjection builders.
@@ -108,6 +112,8 @@ type Client struct {
 	Resource *ResourceClient
 	// Scratchpad is the client for interacting with the Scratchpad builders.
 	Scratchpad *ScratchpadClient
+	// Skill is the client for interacting with the Skill builders.
+	Skill *SkillClient
 	// Spawner is the client for interacting with the Spawner builders.
 	Spawner *SpawnerClient
 	// StageRun is the client for interacting with the StageRun builders.
@@ -146,6 +152,7 @@ func (c *Client) init() {
 	c.EvalMetricSnapshot = NewEvalMetricSnapshotClient(c.config)
 	c.Grant = NewGrantClient(c.config)
 	c.GrantUsage = NewGrantUsageClient(c.config)
+	c.Materialization = NewMaterializationClient(c.config)
 	c.MemoryEntry = NewMemoryEntryClient(c.config)
 	c.MemoryInjection = NewMemoryInjectionClient(c.config)
 	c.PermissionPreset = NewPermissionPresetClient(c.config)
@@ -161,6 +168,7 @@ func (c *Client) init() {
 	c.RemoteRegistration = NewRemoteRegistrationClient(c.config)
 	c.Resource = NewResourceClient(c.config)
 	c.Scratchpad = NewScratchpadClient(c.config)
+	c.Skill = NewSkillClient(c.config)
 	c.Spawner = NewSpawnerClient(c.config)
 	c.StageRun = NewStageRunClient(c.config)
 	c.SystemPrompt = NewSystemPromptClient(c.config)
@@ -272,6 +280,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		EvalMetricSnapshot: NewEvalMetricSnapshotClient(cfg),
 		Grant:              NewGrantClient(cfg),
 		GrantUsage:         NewGrantUsageClient(cfg),
+		Materialization:    NewMaterializationClient(cfg),
 		MemoryEntry:        NewMemoryEntryClient(cfg),
 		MemoryInjection:    NewMemoryInjectionClient(cfg),
 		PermissionPreset:   NewPermissionPresetClient(cfg),
@@ -287,6 +296,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		RemoteRegistration: NewRemoteRegistrationClient(cfg),
 		Resource:           NewResourceClient(cfg),
 		Scratchpad:         NewScratchpadClient(cfg),
+		Skill:              NewSkillClient(cfg),
 		Spawner:            NewSpawnerClient(cfg),
 		StageRun:           NewStageRunClient(cfg),
 		SystemPrompt:       NewSystemPromptClient(cfg),
@@ -325,6 +335,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		EvalMetricSnapshot: NewEvalMetricSnapshotClient(cfg),
 		Grant:              NewGrantClient(cfg),
 		GrantUsage:         NewGrantUsageClient(cfg),
+		Materialization:    NewMaterializationClient(cfg),
 		MemoryEntry:        NewMemoryEntryClient(cfg),
 		MemoryInjection:    NewMemoryInjectionClient(cfg),
 		PermissionPreset:   NewPermissionPresetClient(cfg),
@@ -340,6 +351,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		RemoteRegistration: NewRemoteRegistrationClient(cfg),
 		Resource:           NewResourceClient(cfg),
 		Scratchpad:         NewScratchpadClient(cfg),
+		Skill:              NewSkillClient(cfg),
 		Spawner:            NewSpawnerClient(cfg),
 		StageRun:           NewStageRunClient(cfg),
 		SystemPrompt:       NewSystemPromptClient(cfg),
@@ -379,12 +391,12 @@ func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
 		c.AgentCostTrend, c.ApiKey, c.AppSetting, c.AuditEvent, c.Capability,
 		c.Checkpoint, c.CoordLock, c.DriftAlert, c.EvalMetricSnapshot, c.Grant,
-		c.GrantUsage, c.MemoryEntry, c.MemoryInjection, c.PermissionPreset,
-		c.PermissionRequest, c.PipelineConfig, c.Plugin, c.PluginSetting, c.Project,
-		c.ProjectFolder, c.PromptTemplate, c.ProviderSetting, c.RefinementTurn,
-		c.RemoteRegistration, c.Resource, c.Scratchpad, c.Spawner, c.StageRun,
-		c.SystemPrompt, c.Task, c.TaskDependency, c.TaskPermission, c.TaskSchedule,
-		c.User,
+		c.GrantUsage, c.Materialization, c.MemoryEntry, c.MemoryInjection,
+		c.PermissionPreset, c.PermissionRequest, c.PipelineConfig, c.Plugin,
+		c.PluginSetting, c.Project, c.ProjectFolder, c.PromptTemplate,
+		c.ProviderSetting, c.RefinementTurn, c.RemoteRegistration, c.Resource,
+		c.Scratchpad, c.Skill, c.Spawner, c.StageRun, c.SystemPrompt, c.Task,
+		c.TaskDependency, c.TaskPermission, c.TaskSchedule, c.User,
 	} {
 		n.Use(hooks...)
 	}
@@ -396,12 +408,12 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
 		c.AgentCostTrend, c.ApiKey, c.AppSetting, c.AuditEvent, c.Capability,
 		c.Checkpoint, c.CoordLock, c.DriftAlert, c.EvalMetricSnapshot, c.Grant,
-		c.GrantUsage, c.MemoryEntry, c.MemoryInjection, c.PermissionPreset,
-		c.PermissionRequest, c.PipelineConfig, c.Plugin, c.PluginSetting, c.Project,
-		c.ProjectFolder, c.PromptTemplate, c.ProviderSetting, c.RefinementTurn,
-		c.RemoteRegistration, c.Resource, c.Scratchpad, c.Spawner, c.StageRun,
-		c.SystemPrompt, c.Task, c.TaskDependency, c.TaskPermission, c.TaskSchedule,
-		c.User,
+		c.GrantUsage, c.Materialization, c.MemoryEntry, c.MemoryInjection,
+		c.PermissionPreset, c.PermissionRequest, c.PipelineConfig, c.Plugin,
+		c.PluginSetting, c.Project, c.ProjectFolder, c.PromptTemplate,
+		c.ProviderSetting, c.RefinementTurn, c.RemoteRegistration, c.Resource,
+		c.Scratchpad, c.Skill, c.Spawner, c.StageRun, c.SystemPrompt, c.Task,
+		c.TaskDependency, c.TaskPermission, c.TaskSchedule, c.User,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -432,6 +444,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.Grant.mutate(ctx, m)
 	case *GrantUsageMutation:
 		return c.GrantUsage.mutate(ctx, m)
+	case *MaterializationMutation:
+		return c.Materialization.mutate(ctx, m)
 	case *MemoryEntryMutation:
 		return c.MemoryEntry.mutate(ctx, m)
 	case *MemoryInjectionMutation:
@@ -462,6 +476,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.Resource.mutate(ctx, m)
 	case *ScratchpadMutation:
 		return c.Scratchpad.mutate(ctx, m)
+	case *SkillMutation:
+		return c.Skill.mutate(ctx, m)
 	case *SpawnerMutation:
 		return c.Spawner.mutate(ctx, m)
 	case *StageRunMutation:
@@ -1943,6 +1959,139 @@ func (c *GrantUsageClient) mutate(ctx context.Context, m *GrantUsageMutation) (V
 		return (&GrantUsageDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown GrantUsage mutation op: %q", m.Op())
+	}
+}
+
+// MaterializationClient is a client for the Materialization schema.
+type MaterializationClient struct {
+	config
+}
+
+// NewMaterializationClient returns a client for the Materialization from the given config.
+func NewMaterializationClient(c config) *MaterializationClient {
+	return &MaterializationClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `materialization.Hooks(f(g(h())))`.
+func (c *MaterializationClient) Use(hooks ...Hook) {
+	c.hooks.Materialization = append(c.hooks.Materialization, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `materialization.Intercept(f(g(h())))`.
+func (c *MaterializationClient) Intercept(interceptors ...Interceptor) {
+	c.inters.Materialization = append(c.inters.Materialization, interceptors...)
+}
+
+// Create returns a builder for creating a Materialization entity.
+func (c *MaterializationClient) Create() *MaterializationCreate {
+	mutation := newMaterializationMutation(c.config, OpCreate)
+	return &MaterializationCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of Materialization entities.
+func (c *MaterializationClient) CreateBulk(builders ...*MaterializationCreate) *MaterializationCreateBulk {
+	return &MaterializationCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *MaterializationClient) MapCreateBulk(slice any, setFunc func(*MaterializationCreate, int)) *MaterializationCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &MaterializationCreateBulk{err: fmt.Errorf("calling to MaterializationClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*MaterializationCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &MaterializationCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for Materialization.
+func (c *MaterializationClient) Update() *MaterializationUpdate {
+	mutation := newMaterializationMutation(c.config, OpUpdate)
+	return &MaterializationUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *MaterializationClient) UpdateOne(_m *Materialization) *MaterializationUpdateOne {
+	mutation := newMaterializationMutation(c.config, OpUpdateOne, withMaterialization(_m))
+	return &MaterializationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *MaterializationClient) UpdateOneID(id string) *MaterializationUpdateOne {
+	mutation := newMaterializationMutation(c.config, OpUpdateOne, withMaterializationID(id))
+	return &MaterializationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for Materialization.
+func (c *MaterializationClient) Delete() *MaterializationDelete {
+	mutation := newMaterializationMutation(c.config, OpDelete)
+	return &MaterializationDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *MaterializationClient) DeleteOne(_m *Materialization) *MaterializationDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *MaterializationClient) DeleteOneID(id string) *MaterializationDeleteOne {
+	builder := c.Delete().Where(materialization.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &MaterializationDeleteOne{builder}
+}
+
+// Query returns a query builder for Materialization.
+func (c *MaterializationClient) Query() *MaterializationQuery {
+	return &MaterializationQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeMaterialization},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a Materialization entity by its id.
+func (c *MaterializationClient) Get(ctx context.Context, id string) (*Materialization, error) {
+	return c.Query().Where(materialization.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *MaterializationClient) GetX(ctx context.Context, id string) *Materialization {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *MaterializationClient) Hooks() []Hook {
+	return c.hooks.Materialization
+}
+
+// Interceptors returns the client interceptors.
+func (c *MaterializationClient) Interceptors() []Interceptor {
+	return c.inters.Materialization
+}
+
+func (c *MaterializationClient) mutate(ctx context.Context, m *MaterializationMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&MaterializationCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&MaterializationUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&MaterializationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&MaterializationDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown Materialization mutation op: %q", m.Op())
 	}
 }
 
@@ -3989,6 +4138,139 @@ func (c *ScratchpadClient) mutate(ctx context.Context, m *ScratchpadMutation) (V
 	}
 }
 
+// SkillClient is a client for the Skill schema.
+type SkillClient struct {
+	config
+}
+
+// NewSkillClient returns a client for the Skill from the given config.
+func NewSkillClient(c config) *SkillClient {
+	return &SkillClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `skill.Hooks(f(g(h())))`.
+func (c *SkillClient) Use(hooks ...Hook) {
+	c.hooks.Skill = append(c.hooks.Skill, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `skill.Intercept(f(g(h())))`.
+func (c *SkillClient) Intercept(interceptors ...Interceptor) {
+	c.inters.Skill = append(c.inters.Skill, interceptors...)
+}
+
+// Create returns a builder for creating a Skill entity.
+func (c *SkillClient) Create() *SkillCreate {
+	mutation := newSkillMutation(c.config, OpCreate)
+	return &SkillCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of Skill entities.
+func (c *SkillClient) CreateBulk(builders ...*SkillCreate) *SkillCreateBulk {
+	return &SkillCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *SkillClient) MapCreateBulk(slice any, setFunc func(*SkillCreate, int)) *SkillCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &SkillCreateBulk{err: fmt.Errorf("calling to SkillClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*SkillCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &SkillCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for Skill.
+func (c *SkillClient) Update() *SkillUpdate {
+	mutation := newSkillMutation(c.config, OpUpdate)
+	return &SkillUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *SkillClient) UpdateOne(_m *Skill) *SkillUpdateOne {
+	mutation := newSkillMutation(c.config, OpUpdateOne, withSkill(_m))
+	return &SkillUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *SkillClient) UpdateOneID(id string) *SkillUpdateOne {
+	mutation := newSkillMutation(c.config, OpUpdateOne, withSkillID(id))
+	return &SkillUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for Skill.
+func (c *SkillClient) Delete() *SkillDelete {
+	mutation := newSkillMutation(c.config, OpDelete)
+	return &SkillDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *SkillClient) DeleteOne(_m *Skill) *SkillDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *SkillClient) DeleteOneID(id string) *SkillDeleteOne {
+	builder := c.Delete().Where(skill.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &SkillDeleteOne{builder}
+}
+
+// Query returns a query builder for Skill.
+func (c *SkillClient) Query() *SkillQuery {
+	return &SkillQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeSkill},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a Skill entity by its id.
+func (c *SkillClient) Get(ctx context.Context, id string) (*Skill, error) {
+	return c.Query().Where(skill.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *SkillClient) GetX(ctx context.Context, id string) *Skill {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *SkillClient) Hooks() []Hook {
+	return c.hooks.Skill
+}
+
+// Interceptors returns the client interceptors.
+func (c *SkillClient) Interceptors() []Interceptor {
+	return c.inters.Skill
+}
+
+func (c *SkillClient) mutate(ctx context.Context, m *SkillMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&SkillCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&SkillUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&SkillUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&SkillDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown Skill mutation op: %q", m.Op())
+	}
+}
+
 // SpawnerClient is a client for the Spawner schema.
 type SpawnerClient struct {
 	config
@@ -5201,20 +5483,20 @@ func (c *UserClient) mutate(ctx context.Context, m *UserMutation) (Value, error)
 type (
 	hooks struct {
 		AgentCostTrend, ApiKey, AppSetting, AuditEvent, Capability, Checkpoint,
-		CoordLock, DriftAlert, EvalMetricSnapshot, Grant, GrantUsage, MemoryEntry,
-		MemoryInjection, PermissionPreset, PermissionRequest, PipelineConfig, Plugin,
-		PluginSetting, Project, ProjectFolder, PromptTemplate, ProviderSetting,
-		RefinementTurn, RemoteRegistration, Resource, Scratchpad, Spawner, StageRun,
-		SystemPrompt, Task, TaskDependency, TaskPermission, TaskSchedule,
-		User []ent.Hook
+		CoordLock, DriftAlert, EvalMetricSnapshot, Grant, GrantUsage, Materialization,
+		MemoryEntry, MemoryInjection, PermissionPreset, PermissionRequest,
+		PipelineConfig, Plugin, PluginSetting, Project, ProjectFolder, PromptTemplate,
+		ProviderSetting, RefinementTurn, RemoteRegistration, Resource, Scratchpad,
+		Skill, Spawner, StageRun, SystemPrompt, Task, TaskDependency, TaskPermission,
+		TaskSchedule, User []ent.Hook
 	}
 	inters struct {
 		AgentCostTrend, ApiKey, AppSetting, AuditEvent, Capability, Checkpoint,
-		CoordLock, DriftAlert, EvalMetricSnapshot, Grant, GrantUsage, MemoryEntry,
-		MemoryInjection, PermissionPreset, PermissionRequest, PipelineConfig, Plugin,
-		PluginSetting, Project, ProjectFolder, PromptTemplate, ProviderSetting,
-		RefinementTurn, RemoteRegistration, Resource, Scratchpad, Spawner, StageRun,
-		SystemPrompt, Task, TaskDependency, TaskPermission, TaskSchedule,
-		User []ent.Interceptor
+		CoordLock, DriftAlert, EvalMetricSnapshot, Grant, GrantUsage, Materialization,
+		MemoryEntry, MemoryInjection, PermissionPreset, PermissionRequest,
+		PipelineConfig, Plugin, PluginSetting, Project, ProjectFolder, PromptTemplate,
+		ProviderSetting, RefinementTurn, RemoteRegistration, Resource, Scratchpad,
+		Skill, Spawner, StageRun, SystemPrompt, Task, TaskDependency, TaskPermission,
+		TaskSchedule, User []ent.Interceptor
 	}
 )
