@@ -9,9 +9,11 @@ import (
 // agent. The block spans from __options_start to __options_end, one option per
 // line, at most three kept.
 //
-// Parity: the frontend strips the same block in
-// src/features/pipeline/composables/useRefinementChat.ts (OPTIONS_START_RE,
-// OPTIONS_END_RE). Keep the two in sync.
+// Parity: the frontend strips the same block twice — line by line off the live
+// stream in src/features/pipeline/composables/useRefinementChat.ts
+// (OPTIONS_START_LINE / OPTIONS_END_LINE) and as a whole out of persisted content
+// in src/features/pipeline/components/RefinementChat.vue (OPTIONS_BLOCK_RE).
+// Three markers, one grammar; keep them in sync by hand.
 var optionsBlockRE = regexp.MustCompile(`(?m)^__options_start\n([\s\S]*?)^__options_end\s*$`)
 
 // maxOptions is the upper bound on prepared answers surfaced to the user.
@@ -42,8 +44,9 @@ func ExtractOptions(s string) (cleaned string, options []string) {
 		options = nil
 	}
 
-	// Remove the entire block (including surrounding blank lines that would
-	// otherwise leave a visible gap in the persisted content).
+	// Removes the block itself, not the whitespace around it — a blank line above
+	// it survives. The prompt puts the block last, so the TrimSpace below is what
+	// actually keeps the persisted content clean.
 	cleaned = optionsBlockRE.ReplaceAllString(s, "")
 	cleaned = strings.TrimSpace(cleaned)
 	return cleaned, options

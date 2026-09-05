@@ -356,6 +356,7 @@ function handleOptionClick(option: string) {
           <button
             v-for="(option, i) in lastAssistantOptions"
             :key="i"
+            data-testid="prepared-answer"
             class="px-4 py-2 rounded-full border border-line bg-raised cursor-pointer text-sm font-medium text-fg-mute transition-all hover:border-blue-400 dark:hover:border-blue-500 hover:bg-raised hover:-translate-y-px active:translate-y-0"
             @click="handleOptionClick(option)"
           >

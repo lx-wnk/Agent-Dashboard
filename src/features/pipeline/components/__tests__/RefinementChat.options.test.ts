@@ -74,7 +74,7 @@ describe('refinementChat — prepared answer buttons', () => {
     const wrapper = mountWithTask()
     await flushPromises()
 
-    const optionButtons = wrapper.findAll('button.rounded-full')
+    const optionButtons = wrapper.findAll('[data-testid="prepared-answer"]')
     expect(optionButtons.map(b => b.text())).toEqual(['Yes', 'No', 'Maybe'])
 
     wrapper.unmount()
@@ -88,7 +88,7 @@ describe('refinementChat — prepared answer buttons', () => {
     const wrapper = mountWithTask()
     await flushPromises()
 
-    const optionButtons = wrapper.findAll('button.rounded-full')
+    const optionButtons = wrapper.findAll('[data-testid="prepared-answer"]')
     await optionButtons[0].trigger('click')
     await flushPromises()
 
@@ -105,7 +105,24 @@ describe('refinementChat — prepared answer buttons', () => {
     const wrapper = mountWithTask()
     await flushPromises()
 
-    expect(wrapper.findAll('button.rounded-full')).toHaveLength(0)
+    expect(wrapper.findAll('[data-testid="prepared-answer"]')).toHaveLength(0)
+
+    wrapper.unmount()
+  })
+
+  it('drops the buttons once the user has answered', async () => {
+    // The options belong to a question that has been answered. Leaving them on
+    // screen invites a second click that would send a reply to a question two
+    // turns back.
+    mockMessages = [
+      { role: 'user', content: 'build X' },
+      { role: 'assistant', content: 'Pick one', options: ['Yes', 'No'] },
+      { role: 'user', content: 'Yes' },
+    ]
+    const wrapper = mountWithTask()
+    await flushPromises()
+
+    expect(wrapper.findAll('[data-testid="prepared-answer"]')).toHaveLength(0)
 
     wrapper.unmount()
   })

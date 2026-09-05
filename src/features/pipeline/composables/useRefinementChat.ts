@@ -231,6 +231,14 @@ export function useRefinementChat(taskId: () => string | null) {
           }
         }
       }
+      // An options block the agent opened but never closed (a cut stream, a
+      // timeout) would otherwise have swallowed every line after it. Those lines
+      // were prose, not options — put them back rather than lose the answer.
+      if (insideOptionsBlock && pendingOptions.length > 0) {
+        const recovered = pendingOptions.join('\n')
+        assistantContent += assistantContent ? `\n${recovered}` : recovered
+        messages.value[assistantIdx].content = assistantContent
+      }
       // Stream finished cleanly → the run is complete.
       runStatus.value = 'draft_ready'
     }
