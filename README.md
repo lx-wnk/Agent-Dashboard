@@ -214,7 +214,7 @@ ever needed, is a narrow per-client dial policy, not a change to `validation.IsB
 | [Security](docs/guides/security.md) | Threat model & hardening |
 | [Architecture](docs/architecture/overview.md) | Stack, packages, data flow, pipeline |
 | [Shell statusline](docs/guides/statusline.md) | PS1 integration |
-| [Agent skills](docs/guides/agent-skills.md) | Installing project skills |
+| [Agent skills](docs/guides/agent-skills.md) | Registry-owned skills and how they reach disk |
 
 Full index: [`docs/`](docs/README.md).
 

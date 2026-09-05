@@ -46,6 +46,7 @@ import (
 	apiresources "github.com/lx-wnk/agent-dashboard/server/internal/api/resources"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/search"
 	settingsapi "github.com/lx-wnk/agent-dashboard/server/internal/api/settings"
+	apiskills "github.com/lx-wnk/agent-dashboard/server/internal/api/skills"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/systemprompts"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/tasks"
 	trackerapi "github.com/lx-wnk/agent-dashboard/server/internal/api/tracker"
@@ -66,6 +67,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/eval"
 	histsvc "github.com/lx-wnk/agent-dashboard/server/internal/history"
 	"github.com/lx-wnk/agent-dashboard/server/internal/hookstore"
+	"github.com/lx-wnk/agent-dashboard/server/internal/materializer"
 	mcppkg "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
 	"github.com/lx-wnk/agent-dashboard/server/internal/memory"
 	"github.com/lx-wnk/agent-dashboard/server/internal/merger"
@@ -723,6 +725,27 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		}, obsidianSpaceID)
 	}
 
+	// Skill materialization — POST /api/skills/materialize. Shares the single
+	// resourceRepo instance hoisted above, for the same reason resourcesHandler
+	// does. The two directory sources are the ones the rest of the server
+	// already trusts: the parser's four-tier Claude search set (which is what
+	// finds a ~/.claude-personal), and the provider registry's enabled config
+	// dirs (which already drops the ones that do not exist).
+	var skillsHandler *apiskills.Handler
+	if entClient != nil {
+		skillsHandler = apiskills.NewHandler(materializer.New(
+			resourceRepo,
+			repo.NewSkillRepo(entClient),
+			repo.NewMaterializationRepo(entClient),
+			repo.NewCoordLockRepo(entClient),
+			materializer.Resolver{
+				NodeID:             repo.DefaultNodeID,
+				ClaudeConfigDirs:   parser.AllClaudeConfigDirs,
+				ProviderConfigDirs: providerRegistry.ConfigDirs,
+			},
+		))
+	}
+
 	// GitHub — /api/github/*. Built WITH askerArg, unlike obsidianHandler
 	// just above: obsidianHandler's route only starts an unattended batch
 	// run (IndexNotes), while these four routes are the direct request the
@@ -965,6 +988,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		HistoryHandler:         historyHandler,
 		MemoryHandler:          memoryHandler,
 		ResourcesHandler:       resourcesHandler,
+		SkillsHandler:          skillsHandler,
 		ObsidianHandler:        obsidianHandler,
 		GitHubHandler:          githubHandler,
 		RefineHandler:          refineHandler,

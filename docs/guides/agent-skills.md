@@ -1,25 +1,45 @@
 # Agent Skills
 
-Project-specific AI agent skills are tracked in [`skills-lock.json`](../../skills-lock.json). The skill files themselves are **not** committed — install them locally after cloning.
+Skills are owned by the dashboard's resource registry and **materialized** onto disk — the
+`SKILL.md` files under a config directory are a derived artifact, not the source of truth.
+
+## Materializing
 
 ```bash
-# Claude Code
-cat skills-lock.json | jq -r '.skills[] | "\(.source) .claude/skills/\(.name)/SKILL.md"' | while read url dest; do
-  mkdir -p "$(dirname "$dest")" && curl -sL "$url" -o "$dest"
-done
+# Dry run: reports what would be written, and writes nothing
+curl -X POST http://127.0.0.1:13120/api/skills/materialize \
+  -H 'Content-Type: application/json' -d '{}'
 
-# Other agents (Copilot, Cursor, etc.)
-cat skills-lock.json | jq -r '.skills[] | "\(.source) .agents/skills/\(.name)/SKILL.md"' | while read url dest; do
-  mkdir -p "$(dirname "$dest")" && curl -sL "$url" -o "$dest"
-done
+# Write
+curl -X POST http://127.0.0.1:13120/api/skills/materialize \
+  -H 'Content-Type: application/json' -d '{"dryRun": false}'
 ```
 
-## Current skills
+Both forms answer a report listing every target considered — every Claude config directory on
+this machine, plus every enabled provider — and, per target, one of:
 
-| Skill | Description |
+| Outcome | Meaning |
 |---|---|
-| `vue` | Vue 3 Composition API, script setup, reactivity |
-| `vitest` | Vitest unit testing with Jest-compatible API |
-| `vite` | Vite build tool configuration and plugin API |
-| `vueuse-functions` | VueUse composables for Vue features |
-| `playwright-best-practices` | Playwright E2E testing patterns |
+| `created` | No file was there. One was written. |
+| `unchanged` | The file already holds the registry's content. |
+| `repaired` | The file was one we wrote and had fallen behind the registry. It was rewritten. |
+| `conflict` | The file was one we wrote and a person has since edited it. **Nothing was written**, and nothing will be on a later run either. Resolve it by hand. |
+| `foreign` | The file was not written by this dashboard. It is never touched. |
+| `unsupported` | That runtime has no skill format. Nothing was written, and nothing was faked. |
+| `failed` | That target could not be processed. The others still ran; the report is marked `partial`. |
+
+## What it will and will not do
+
+- It writes **only** `<config dir>/skills/<slug>/SKILL.md` and `<project>/.claude/skills/<slug>/SKILL.md`.
+  The slug is validated before any path is built.
+- It never follows a symlink below the config directory, and never writes over a file it did not
+  write itself.
+- Two dashboard instances on one machine cannot both write: the run takes a node lease first, and
+  the one that does not get it reports what it would have done and names the holder.
+
+## `skills-lock.json` (removed)
+
+Earlier revisions of this guide described a `skills-lock.json` and a `jq` one-liner for installing
+from it. Nothing in the codebase ever read that file, and the snippet could not work as written —
+it read a `.name` key that did not exist and passed an `owner/repo` slug to `curl` as a URL. Both
+are gone. A skill's provenance now lives on its registry row (`origin`, `origin_ref`).

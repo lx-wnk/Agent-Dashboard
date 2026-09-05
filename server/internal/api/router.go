@@ -47,6 +47,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/search"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/sessions"
 	settingsapi "github.com/lx-wnk/agent-dashboard/server/internal/api/settings"
+	apiskills "github.com/lx-wnk/agent-dashboard/server/internal/api/skills"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/spawners"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/system"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/systemprompts"
@@ -176,6 +177,7 @@ type RouterDeps struct {
 	HistoryHandler         *apihistory.Handler
 	MemoryHandler          *apimemory.Handler
 	ResourcesHandler       *resources.Handler
+	SkillsHandler          *apiskills.Handler
 	ObsidianHandler        *apiobsidian.Handler
 	GitHubHandler          *apigithub.Handler
 	RefineHandler          *refineapi.Handler
@@ -436,6 +438,13 @@ func NewRouter(deps RouterDeps) http.Handler {
 		// every other write path in this group, same as grants above: it
 		// runs a real write into the memory store, never mounted in the
 		// hook/MCP bearer-token bypass group.
+		// Skill materialization writes into the user's own config directories,
+		// so it belongs in the session-authenticated group with grants and the
+		// Obsidian index trigger — never in the hook/MCP bearer-token group.
+		if deps.SkillsHandler != nil {
+			deps.SkillsHandler.Mount(r)
+		}
+
 		if deps.ObsidianHandler != nil {
 			deps.ObsidianHandler.Mount(r)
 		}
