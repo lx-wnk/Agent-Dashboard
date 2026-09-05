@@ -91,19 +91,17 @@ type SpawnResult struct {
 	Cleanup      func()
 }
 
-// channelAllow is prepended to every --allowedTools list for a channel-enabled
-// spawn. Every tool the bridge registers has to appear here: the spawn runs with
-// --allowedTools, so a tool absent from this list is not callable no matter that
-// the MCP server offers it. set_stage_output was missing, which made the stage
-// prompt's "if set_stage_output is unavailable, emit a fenced json block"
-// fallback the only path a result could ever take.
-// channelAllow is prepended to every --allowedTools list for a channel-enabled
+// channelAllow is prepended to every permission allow-list for a channel-enabled
 // spawn. It is derived from the bridge's own tool list rather than written out:
-// a spawn runs with --allowedTools, so a tool the bridge registers but this list
-// omits is simply not callable, and nothing reports it — the agent sees it as
-// unavailable and takes whatever fallback the prompt offers. set_stage_output
-// was missing exactly that way, which made the stage prompt's fenced-json
-// fallback the only path a stage result could ever take.
+// a tool the bridge registers but this list omits is not permitted, and nothing
+// reports it — the agent sees it as unavailable and takes whatever fallback the
+// prompt offers. set_stage_output was missing exactly that way.
+//
+// The list does NOT reach the agent as --allowedTools, despite what an earlier
+// version of this comment claimed. writeSettingsFile renders it into
+// .claude/settings.json under permissions.allow; the spawn command line carries
+// only --mcp-config and --strict-mcp-config. Verified 2026-09-05 by reading the
+// command line of a running stage agent.
 var channelAllow = channelconfig.AllowListEntries()
 
 // BuildDenyList returns the settings deny entries that must be written
@@ -160,7 +158,9 @@ func capabilityViewFor(tool string) capability.CapabilityView {
 // request on which context it applies to, not with any real entity.
 const permissionGrantContextRef = "task-permission"
 
-// BuildAllowList assembles the --allowedTools slice for a spawn.
+// BuildAllowList assembles the permission allow-list for a spawn. It is
+// rendered into .claude/settings.json by writeSettingsFile, not passed as
+// --allowedTools — the spawn command line carries neither.
 // When autonomy is an allow-all level (spec_gated or full), the restrictive
 // per-permission loop is skipped and the permissive list is returned instead.
 // Otherwise each granted TaskPermission is translated into a capability grant

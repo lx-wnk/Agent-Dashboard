@@ -148,3 +148,7 @@ func (o *PipelineOrchestrator) SetHTTPPoolPollForTest(d time.Duration) {
 // ChannelAllowForTest exposes the channel tool allow-list for the parity test
 // in channel_allowlist_test.go.
 func ChannelAllowForTest() []string { return channelAllow }
+
+// SharedContextForTest exposes sharedContext, the system prompt every stage
+// spawn carries, for the output-channel test in stage_output_channel_test.go.
+const SharedContextForTest = sharedContext

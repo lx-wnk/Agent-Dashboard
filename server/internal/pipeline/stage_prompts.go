@@ -9,7 +9,14 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 )
 
-const sharedContext = `You are an agent working inside a structured task pipeline. A human orchestrator will review your output at specific stages. Be concise, actionable, and honest about uncertainty. When you produce structured output, wrap it in a fenced ` + "```json ... ```" + ` block for the orchestrator to parse.`
+// sharedContext is prepended to every stage system prompt. It names
+// set_stage_output because the system prompt is the instruction that
+// survives a resume: the stage prompt carrying the same instruction is
+// replaced wholesale by resumeContinueInstruction, so a run past iteration 0
+// would otherwise be told only to use the fence. Saying "wrap it in a fence"
+// here and "call the tool" in the stage prompt is what made the fence the
+// only channel a stage result ever travelled.
+const sharedContext = `You are an agent working inside a structured task pipeline. A human orchestrator will review your output at specific stages. Be concise, actionable, and honest about uncertainty. Submit structured output by calling the ` + "`set_stage_output`" + ` MCP tool — it is validated against the stage schema and is the channel the orchestrator reads first. Only if that tool is genuinely unavailable to you, fall back to wrapping the same object in a fenced ` + "```json ... ```" + ` block.`
 
 const upfrontPermissionsDirective = `## Permissions — declare upfront, in bulk (CRITICAL FIRST STEP)
 
