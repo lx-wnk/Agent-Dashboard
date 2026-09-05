@@ -70,6 +70,8 @@ type TaskSchedule struct {
 	LastRunAt *time.Time `json:"last_run_at,omitempty"`
 	// LastTaskID holds the value of the "last_task_id" field.
 	LastTaskID *string `json:"last_task_id,omitempty"`
+	// ResourceID holds the value of the "resource_id" field.
+	ResourceID string `json:"resource_id,omitempty"`
 	// UserID holds the value of the "user_id" field.
 	UserID *string `json:"user_id,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
@@ -90,7 +92,7 @@ func (*TaskSchedule) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullBool)
 		case taskschedule.FieldMaxIterations, taskschedule.FieldTokenBudget, taskschedule.FieldCostBudgetCents, taskschedule.FieldStageTimeoutSeconds:
 			values[i] = new(sql.NullInt64)
-		case taskschedule.FieldID, taskschedule.FieldName, taskschedule.FieldNlText, taskschedule.FieldCronExpr, taskschedule.FieldTimezone, taskschedule.FieldCatchup, taskschedule.FieldSlugPrefix, taskschedule.FieldTitle, taskschedule.FieldDescription, taskschedule.FieldCwd, taskschedule.FieldSourceBranch, taskschedule.FieldTargetBranch, taskschedule.FieldPriority, taskschedule.FieldCurrentStage, taskschedule.FieldProjectID, taskschedule.FieldSpawnerID, taskschedule.FieldPermissionTemplate, taskschedule.FieldLastTaskID, taskschedule.FieldUserID:
+		case taskschedule.FieldID, taskschedule.FieldName, taskschedule.FieldNlText, taskschedule.FieldCronExpr, taskschedule.FieldTimezone, taskschedule.FieldCatchup, taskschedule.FieldSlugPrefix, taskschedule.FieldTitle, taskschedule.FieldDescription, taskschedule.FieldCwd, taskschedule.FieldSourceBranch, taskschedule.FieldTargetBranch, taskschedule.FieldPriority, taskschedule.FieldCurrentStage, taskschedule.FieldProjectID, taskschedule.FieldSpawnerID, taskschedule.FieldPermissionTemplate, taskschedule.FieldLastTaskID, taskschedule.FieldResourceID, taskschedule.FieldUserID:
 			values[i] = new(sql.NullString)
 		case taskschedule.FieldNextRunAt, taskschedule.FieldLastRunAt, taskschedule.FieldCreatedAt, taskschedule.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -285,6 +287,12 @@ func (_m *TaskSchedule) assignValues(columns []string, values []any) error {
 				_m.LastTaskID = new(string)
 				*_m.LastTaskID = value.String
 			}
+		case taskschedule.FieldResourceID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field resource_id", values[i])
+			} else if value.Valid {
+				_m.ResourceID = value.String
+			}
 		case taskschedule.FieldUserID:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field user_id", values[i])
@@ -441,6 +449,9 @@ func (_m *TaskSchedule) String() string {
 		builder.WriteString("last_task_id=")
 		builder.WriteString(*v)
 	}
+	builder.WriteString(", ")
+	builder.WriteString("resource_id=")
+	builder.WriteString(_m.ResourceID)
 	builder.WriteString(", ")
 	if v := _m.UserID; v != nil {
 		builder.WriteString("user_id=")

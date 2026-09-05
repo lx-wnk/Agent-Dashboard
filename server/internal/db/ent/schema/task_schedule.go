@@ -51,6 +51,8 @@ func (TaskSchedule) Fields() []ent.Field {
 		field.Time("last_run_at").Optional().Nillable(),
 		field.String("last_task_id").Optional().Nillable(),
 
+		field.String("resource_id").Optional().Default(""),
+
 		field.String("user_id").Optional().Nillable(),
 		field.Time("created_at").Default(time.Now).Immutable(),
 		field.Time("updated_at").Default(time.Now).UpdateDefault(time.Now),

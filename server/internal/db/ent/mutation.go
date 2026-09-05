@@ -27806,6 +27806,7 @@ type TaskScheduleMutation struct {
 	next_run_at              *time.Time
 	last_run_at              *time.Time
 	last_task_id             *string
+	resource_id              *string
 	user_id                  *string
 	created_at               *time.Time
 	updated_at               *time.Time
@@ -29106,6 +29107,55 @@ func (m *TaskScheduleMutation) ResetLastTaskID() {
 	delete(m.clearedFields, taskschedule.FieldLastTaskID)
 }
 
+// SetResourceID sets the "resource_id" field.
+func (m *TaskScheduleMutation) SetResourceID(s string) {
+	m.resource_id = &s
+}
+
+// ResourceID returns the value of the "resource_id" field in the mutation.
+func (m *TaskScheduleMutation) ResourceID() (r string, exists bool) {
+	v := m.resource_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldResourceID returns the old "resource_id" field's value of the TaskSchedule entity.
+// If the TaskSchedule object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TaskScheduleMutation) OldResourceID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldResourceID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldResourceID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldResourceID: %w", err)
+	}
+	return oldValue.ResourceID, nil
+}
+
+// ClearResourceID clears the value of the "resource_id" field.
+func (m *TaskScheduleMutation) ClearResourceID() {
+	m.resource_id = nil
+	m.clearedFields[taskschedule.FieldResourceID] = struct{}{}
+}
+
+// ResourceIDCleared returns if the "resource_id" field was cleared in this mutation.
+func (m *TaskScheduleMutation) ResourceIDCleared() bool {
+	_, ok := m.clearedFields[taskschedule.FieldResourceID]
+	return ok
+}
+
+// ResetResourceID resets all changes to the "resource_id" field.
+func (m *TaskScheduleMutation) ResetResourceID() {
+	m.resource_id = nil
+	delete(m.clearedFields, taskschedule.FieldResourceID)
+}
+
 // SetUserID sets the "user_id" field.
 func (m *TaskScheduleMutation) SetUserID(s string) {
 	m.user_id = &s
@@ -29261,7 +29311,7 @@ func (m *TaskScheduleMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *TaskScheduleMutation) Fields() []string {
-	fields := make([]string, 0, 29)
+	fields := make([]string, 0, 30)
 	if m.name != nil {
 		fields = append(fields, taskschedule.FieldName)
 	}
@@ -29340,6 +29390,9 @@ func (m *TaskScheduleMutation) Fields() []string {
 	if m.last_task_id != nil {
 		fields = append(fields, taskschedule.FieldLastTaskID)
 	}
+	if m.resource_id != nil {
+		fields = append(fields, taskschedule.FieldResourceID)
+	}
 	if m.user_id != nil {
 		fields = append(fields, taskschedule.FieldUserID)
 	}
@@ -29409,6 +29462,8 @@ func (m *TaskScheduleMutation) Field(name string) (ent.Value, bool) {
 		return m.LastRunAt()
 	case taskschedule.FieldLastTaskID:
 		return m.LastTaskID()
+	case taskschedule.FieldResourceID:
+		return m.ResourceID()
 	case taskschedule.FieldUserID:
 		return m.UserID()
 	case taskschedule.FieldCreatedAt:
@@ -29476,6 +29531,8 @@ func (m *TaskScheduleMutation) OldField(ctx context.Context, name string) (ent.V
 		return m.OldLastRunAt(ctx)
 	case taskschedule.FieldLastTaskID:
 		return m.OldLastTaskID(ctx)
+	case taskschedule.FieldResourceID:
+		return m.OldResourceID(ctx)
 	case taskschedule.FieldUserID:
 		return m.OldUserID(ctx)
 	case taskschedule.FieldCreatedAt:
@@ -29673,6 +29730,13 @@ func (m *TaskScheduleMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetLastTaskID(v)
 		return nil
+	case taskschedule.FieldResourceID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetResourceID(v)
+		return nil
 	case taskschedule.FieldUserID:
 		v, ok := value.(string)
 		if !ok {
@@ -29814,6 +29878,9 @@ func (m *TaskScheduleMutation) ClearedFields() []string {
 	if m.FieldCleared(taskschedule.FieldLastTaskID) {
 		fields = append(fields, taskschedule.FieldLastTaskID)
 	}
+	if m.FieldCleared(taskschedule.FieldResourceID) {
+		fields = append(fields, taskschedule.FieldResourceID)
+	}
 	if m.FieldCleared(taskschedule.FieldUserID) {
 		fields = append(fields, taskschedule.FieldUserID)
 	}
@@ -29869,6 +29936,9 @@ func (m *TaskScheduleMutation) ClearField(name string) error {
 		return nil
 	case taskschedule.FieldLastTaskID:
 		m.ClearLastTaskID()
+		return nil
+	case taskschedule.FieldResourceID:
+		m.ClearResourceID()
 		return nil
 	case taskschedule.FieldUserID:
 		m.ClearUserID()
@@ -29958,6 +30028,9 @@ func (m *TaskScheduleMutation) ResetField(name string) error {
 		return nil
 	case taskschedule.FieldLastTaskID:
 		m.ResetLastTaskID()
+		return nil
+	case taskschedule.FieldResourceID:
+		m.ResetResourceID()
 		return nil
 	case taskschedule.FieldUserID:
 		m.ResetUserID()
