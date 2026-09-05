@@ -106,7 +106,7 @@ func TestAdvanceREST_ConceptDraft_DoesNotAutoApprove(t *testing.T) {
 	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
 	orch := &lifecycleOrchestrator{}
 	client, r := newLifecycleHandler(t, orch)
-	taskID := seedTaskWithRun(t, client, "concept", "done")
+	taskID := seedTaskWithRun(t, client, "backlog", "done")
 
 	req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/tasks/"+taskID+"/advance", nil))
 	w := httptest.NewRecorder()

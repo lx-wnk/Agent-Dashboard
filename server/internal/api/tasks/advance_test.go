@@ -155,7 +155,7 @@ func TestAdvance_ConceptWithDraftSpec_DoesNotAutoApproveSpec(t *testing.T) {
 	client := openAdvanceDB(t)
 	orch := &advanceOrchestrator{}
 	// concept stage, run.done → primary is approve_spec
-	taskID := seedTaskWithRun(t, client, "concept", "done")
+	taskID := seedTaskWithRun(t, client, "backlog", "done")
 
 	res, err := tasks.Advance(context.Background(), advanceDeps(t, client, orch), taskID)
 	if err != nil {
@@ -238,7 +238,7 @@ func (s stubRefineReader) State(_ string) (string, string) { return s.status, ""
 func TestAdvance_ConceptRefining_Dispatches(t *testing.T) {
 	client := openAdvanceDB(t)
 	orch := &advanceOrchestrator{}
-	taskID := seedTaskWithRun(t, client, "concept", "")
+	taskID := seedTaskWithRun(t, client, "backlog", "")
 	deps := advanceDeps(t, client, orch)
 	deps.RefineReader = stubRefineReader{status: "refining"}
 

@@ -101,7 +101,7 @@ func TestSearch_TaskFTS(t *testing.T) {
 		INSERT INTO tasks (id, slug, title, cwd, current_stage, priority, max_iterations, stage_timeout_seconds, silver_bullet, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		"task-id-fts-1", "fts-test-slug", "FTSUniqueKeywordXYZ", "/tmp/test",
-		"concept", "medium", 20, 1800, false, now, now,
+		"backlog", "medium", 20, 1800, false, now, now,
 	)
 	if err != nil {
 		t.Fatalf("insert task: %v", err)
@@ -152,7 +152,7 @@ func TestSearch_TaskVisibility_NonAdmin(t *testing.T) {
 		INSERT INTO tasks (id, slug, title, cwd, current_stage, priority, max_iterations, stage_timeout_seconds, silver_bullet, user_id, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		"task-alice", "alice-task", "ScopingTestAlice", "/tmp/alice",
-		"concept", "medium", 20, 1800, false, "user-alice", now, now,
+		"backlog", "medium", 20, 1800, false, "user-alice", now, now,
 	)
 	if err != nil {
 		t.Fatalf("insert alice task: %v", err)
@@ -163,7 +163,7 @@ func TestSearch_TaskVisibility_NonAdmin(t *testing.T) {
 		INSERT INTO tasks (id, slug, title, cwd, current_stage, priority, max_iterations, stage_timeout_seconds, silver_bullet, user_id, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		"task-bob", "bob-task", "ScopingTestBob", "/tmp/bob",
-		"concept", "medium", 20, 1800, false, "user-bob", now, now,
+		"backlog", "medium", 20, 1800, false, "user-bob", now, now,
 	)
 	if err != nil {
 		t.Fatalf("insert bob task: %v", err)

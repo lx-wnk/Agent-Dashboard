@@ -13,8 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// seedConceptTask creates a task in the concept stage with a concept stage run.
-func seedConceptTask(t *testing.T, ctx context.Context, taskRepo repo.TaskRepo, srRepo repo.StageRunRepo) *ent.Task {
+// seedBacklogTask creates a task in the backlog stage with a backlog stage run.
+func seedBacklogTask(t *testing.T, ctx context.Context, taskRepo repo.TaskRepo, srRepo repo.StageRunRepo) *ent.Task {
 	t.Helper()
 	task, err := taskRepo.Create(ctx, repo.CreateTaskInput{
 		Slug:          "refine-mcp-test-" + t.Name(),
@@ -22,13 +22,13 @@ func seedConceptTask(t *testing.T, ctx context.Context, taskRepo repo.TaskRepo, 
 		Cwd:           t.TempDir(),
 		MaxIterations: 3,
 		Priority:      "normal",
-		CurrentStage:  "concept",
+		CurrentStage:  "backlog",
 	})
 	require.NoError(t, err)
 
 	run, err := srRepo.Create(ctx, repo.CreateStageRunInput{
 		TaskID:    task.ID,
-		Stage:     "concept",
+		Stage:     "backlog",
 		Iteration: 0,
 	})
 	require.NoError(t, err)
@@ -69,7 +69,7 @@ func TestGetRefineStatus_IdleWhenNoRun(t *testing.T) {
 	require.Equal(t, "none", payload["status"])
 }
 
-func TestApproveSpec_AdvancesTaskPastConcept(t *testing.T) {
+func TestApproveSpec_AdvancesTaskPastBacklog(t *testing.T) {
 	bundle, err := db.Open(":memory:")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = bundle.Client.Close() })
@@ -79,7 +79,7 @@ func TestApproveSpec_AdvancesTaskPastConcept(t *testing.T) {
 	srRepo := repo.NewStageRunRepo(bundle.Client)
 	turnsRepo := repo.NewRefinementTurnRepo(bundle.Client)
 
-	task := seedConceptTask(t, ctx, taskRepo, srRepo)
+	task := seedBacklogTask(t, ctx, taskRepo, srRepo)
 
 	// Record that Advance was called.
 	advanced := false
@@ -119,8 +119,8 @@ func TestApproveSpec_AdvancesTaskPastConcept(t *testing.T) {
 	require.True(t, found, "expected a confirmed sentinel turn")
 	require.True(t, advanced, "expected Advance to be called")
 
-	// Concept stage run should be marked done.
-	sr, err := srRepo.GetLatestByTaskAndStage(ctx, task.ID, "concept")
+	// Backlog stage run should be marked done.
+	sr, err := srRepo.GetLatestByTaskAndStage(ctx, task.ID, "backlog")
 	require.NoError(t, err)
 	require.NotNil(t, sr)
 	require.Equal(t, "done", sr.Status)
@@ -136,7 +136,7 @@ func TestRefineTask_StoresUserTurnAndRunsRefinement(t *testing.T) {
 	srRepo := repo.NewStageRunRepo(bundle.Client)
 	turnsRepo := repo.NewRefinementTurnRepo(bundle.Client)
 
-	task := seedConceptTask(t, ctx, taskRepo, srRepo)
+	task := seedBacklogTask(t, ctx, taskRepo, srRepo)
 
 	// Stub spawner that returns a canned assistant line.
 	stubSpawn := func(_ context.Context, _ refine.SpawnConfig, _ *ent.Spawner) (<-chan string, error) {
@@ -196,7 +196,7 @@ func TestInjectConcept_DraftReadyThenApproveSpecPersistsMetadata(t *testing.T) {
 	turnsRepo := repo.NewRefinementTurnRepo(bundle.Client)
 	runner := refine.NewRunner(turnsRepo, nil)
 
-	task := seedConceptTask(t, ctx, taskRepo, srRepo)
+	task := seedBacklogTask(t, ctx, taskRepo, srRepo)
 
 	registry := mcp.ToolRegistry{}
 	RegisterRefineTools(registry, RefineDeps{

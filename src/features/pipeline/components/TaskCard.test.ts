@@ -18,7 +18,7 @@ const baseTask: PipelineTask = {
   worktreePath: null,
   sourceBranch: null,
   targetBranch: null,
-  currentStage: 'backlog',
+  currentStage: 'ready',
   parentTaskId: null,
   maxIterations: 3,
   tokenBudget: null,
@@ -102,8 +102,8 @@ describe('taskCard', () => {
     expect(wrapper.emitted('select')![0]).toEqual([baseTask])
   })
 
-  it('shows Continue Chat button when currentStage is concept', () => {
-    const task = { ...baseTask, currentStage: 'concept' as const }
+  it('shows Continue Chat button when currentStage is backlog', () => {
+    const task = { ...baseTask, currentStage: 'backlog' as const }
     const wrapper = mount(TaskCard, {
       props: { task },
       global: { stubs },
@@ -115,7 +115,7 @@ describe('taskCard', () => {
   })
 
   it('continue Chat emits openChat and NOT select (click.stop)', async () => {
-    const task = { ...baseTask, currentStage: 'concept' as const }
+    const task = { ...baseTask, currentStage: 'backlog' as const }
     const wrapper = mount(TaskCard, {
       props: { task },
       global: { stubs },

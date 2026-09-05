@@ -24,7 +24,7 @@ func (Task) Fields() []ent.Field {
 		field.String("target_branch").Optional().Nillable(),
 		// Defaults below mirror db.Default* (db/defaults.go); the schema cannot
 		// import that package without an ent-codegen import cycle. Keep in sync.
-		field.String("current_stage").Default("concept"),
+		field.String("current_stage").Default("backlog"),
 		field.String("priority").Default("medium"),
 		field.String("user_id").Optional().Nillable(),
 		field.String("parent_task_id").Optional().Nillable(),

@@ -65,7 +65,7 @@ func TestOpen_DropsBareWebFetchGrants(t *testing.T) {
 	// Insert a task so the FK constraint on task_permissions is satisfied.
 	_, err = bundle1.DB.Exec(
 		`INSERT INTO tasks (id, slug, title, cwd, current_stage, priority, max_iterations, stage_timeout_seconds, silver_bullet, created_at, updated_at)
-		 VALUES ('t1','bare-wf-test','Test','','concept','medium',20,1800,0,datetime('now'),datetime('now'))`,
+		 VALUES ('t1','bare-wf-test','Test','','backlog','medium',20,1800,0,datetime('now'),datetime('now'))`,
 	)
 	require.NoError(t, err)
 
@@ -144,7 +144,7 @@ func TestOpen_FTS5TriggerRoundTrip(t *testing.T) {
 	_, err = bundle.DB.Exec(
 		`INSERT INTO tasks (id, slug, title, cwd, current_stage, priority, max_iterations, stage_timeout_seconds, silver_bullet, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
-		"task-fts-1", "fts-roundtrip", "Observability Dashboard Feature", "/tmp/project", "concept", "medium", 20, 1800, 0,
+		"task-fts-1", "fts-roundtrip", "Observability Dashboard Feature", "/tmp/project", "backlog", "medium", 20, 1800, 0,
 	)
 	require.NoError(t, err)
 
@@ -353,7 +353,7 @@ func insertBackfillTask(t *testing.T, sqlDB *sql.DB, id string) {
 	t.Helper()
 	_, err := sqlDB.Exec(
 		`INSERT INTO tasks (id, slug, title, cwd, current_stage, priority, max_iterations, stage_timeout_seconds, silver_bullet, created_at, updated_at)
-		 VALUES (?, ?, 'Test', '', 'concept', 'medium', 20, 1800, 0, datetime('now'), datetime('now'))`,
+		 VALUES (?, ?, 'Test', '', 'backlog', 'medium', 20, 1800, 0, datetime('now'), datetime('now'))`,
 		id, id,
 	)
 	require.NoError(t, err)
@@ -750,4 +750,56 @@ func TestOpen_AppSettingGainsSecretColumns(t *testing.T) {
 
 	_, err = r.UpsertSecret(t.Context(), "obsidian.apiKey", "Y2lwaGVy", "bm9uY2U=")
 	require.NoError(t, err)
+}
+
+// stageOf reads a task's stored stage name straight from SQL, bypassing any
+// ent-level normalization.
+func stageOf(t *testing.T, path, taskID string) string {
+	t.Helper()
+	raw, err := sql.Open("sqlite", "file:"+path)
+	require.NoError(t, err)
+	defer func() { _ = raw.Close() }()
+	var stage string
+	require.NoError(t, raw.QueryRow(`SELECT current_stage FROM tasks WHERE id = ?`, taskID).Scan(&stage))
+	return stage
+}
+
+// TestOpen_RenameStagesRunsOnlyOnce is the load-bearing test for the stage
+// rename. The rename is a chained one — "backlog"→"ready" then
+// "concept"→"backlog" — so a second unguarded pass would take the rows the
+// first pass had just written as "backlog" and push them on to "ready".
+// "ready" is the stage the scheduler picks up, so a task deliberately parked in
+// the refinement holding pen would start running on the next restart with
+// nobody having asked for it. Only reopening a third time proves that cannot
+// happen.
+func TestOpen_RenameStagesRunsOnlyOnce(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "rename.db")
+
+	bundle0, err := db.Open(path)
+	require.NoError(t, err)
+	_, err = bundle0.DB.Exec(
+		`INSERT INTO tasks (id, slug, title, cwd, current_stage, priority, max_iterations, stage_timeout_seconds, silver_bullet, created_at, updated_at)
+		 VALUES ('t-concept', 't-concept', 'Test', '', 'concept', 'medium', 20, 1800, 0, datetime('now'), datetime('now')),
+		        ('t-backlog', 't-backlog', 'Test', '', 'backlog', 'medium', 20, 1800, 0, datetime('now'), datetime('now'))`,
+	)
+	require.NoError(t, err)
+	// The seeding Open already recorded the marker, so clear it: the rows above
+	// stand in for a database written before the rename shipped.
+	_, err = bundle0.DB.Exec(`DELETE FROM applied_migrations WHERE name = 'rename-stages-concept-backlog'`)
+	require.NoError(t, err)
+	require.NoError(t, bundle0.Close())
+
+	bundle1, err := db.Open(path)
+	require.NoError(t, err)
+	require.NoError(t, bundle1.Close())
+	require.Equal(t, "backlog", stageOf(t, path, "t-concept"), "old concept must land in the holding pen")
+	require.Equal(t, "ready", stageOf(t, path, "t-backlog"), "old backlog must become runnable")
+
+	bundle2, err := db.Open(path)
+	require.NoError(t, err)
+	require.NoError(t, bundle2.Close())
+	require.Equal(t, "backlog", stageOf(t, path, "t-concept"),
+		"a second boot must not push the parked task on to 'ready'")
+	require.Equal(t, "ready", stageOf(t, path, "t-backlog"))
 }

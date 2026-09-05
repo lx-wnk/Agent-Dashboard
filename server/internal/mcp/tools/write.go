@@ -222,7 +222,7 @@ func registerCreateTask(registry mcp.ToolRegistry, d WriteDeps) {
 				Slug:         slug,
 				Title:        title,
 				Cwd:          cwd,
-				CurrentStage: "concept",
+				CurrentStage: "backlog",
 				Priority:     "medium",
 				SilverBullet: mcp.OptionalBool(args, "silverBullet"),
 			}

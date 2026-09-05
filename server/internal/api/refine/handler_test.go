@@ -375,8 +375,8 @@ func TestConfirm_PersistsConceptOntoTask(t *testing.T) {
 	if up.SourceBranch == nil || *up.SourceBranch != "users/claude/eps-fix" {
 		t.Errorf("SourceBranch = %v, want it set (triggers auto-worktree)", up.SourceBranch)
 	}
-	if up.CurrentStage == nil || *up.CurrentStage != "backlog" {
-		t.Errorf("CurrentStage = %v, want backlog", up.CurrentStage)
+	if up.CurrentStage == nil || *up.CurrentStage != "ready" {
+		t.Errorf("CurrentStage = %v, want ready", up.CurrentStage)
 	}
 	if up.Metadata == nil || up.Metadata["spec"] != "serialize to JSON" {
 		t.Errorf("Metadata.spec = %v, want concept spec persisted", up.Metadata)

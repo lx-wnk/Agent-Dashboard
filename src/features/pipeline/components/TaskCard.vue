@@ -137,7 +137,7 @@ const activeChildOutputExpanded = ref(false)
       {{ task.description }}
     </div>
     <button
-      v-if="task.currentStage === 'concept'"
+      v-if="task.currentStage === 'backlog'"
       class="relative z-10 self-start text-[11px] font-semibold px-2 py-0.5 rounded border border-info-line bg-info-soft text-info-text hover:brightness-105 transition-[filter] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent"
       @click.stop="emit('openChat', task)"
       @keydown.enter.stop

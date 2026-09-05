@@ -57,7 +57,7 @@ func newWorktreeTestHandler(t *testing.T, fake tasks.WorktreeStatusProvider) (st
 		Slug:                "wt-test",
 		Title:               "WT Test",
 		Cwd:                 "/tmp",
-		CurrentStage:        "concept",
+		CurrentStage:        "backlog",
 		Priority:            "medium",
 		MaxIterations:       5,
 		StageTimeoutSeconds: 300,

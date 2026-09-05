@@ -26,7 +26,7 @@ func createTask(t *testing.T, r repo.TaskRepo, slug string) string {
 		Slug:                slug,
 		Title:               "Test Task",
 		Cwd:                 "/tmp",
-		CurrentStage:        "concept",
+		CurrentStage:        "backlog",
 		Priority:            "medium",
 		MaxIterations:       20,
 		StageTimeoutSeconds: 1800,

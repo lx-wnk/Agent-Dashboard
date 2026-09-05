@@ -121,21 +121,21 @@ describe('useTasks', () => {
   it('tasksByStageMap orders each stage by rank ascending', () => {
     const { result, wrapper } = withSetup(() => useTasks({ autoStart: false }))
     result.tasks.value = [
-      { id: 'c', currentStage: 'backlog', rank: 300, createdAt: '2026-01-01T00:00:00Z' },
-      { id: 'a', currentStage: 'backlog', rank: 100, createdAt: '2026-01-01T00:00:00Z' },
-      { id: 'b', currentStage: 'backlog', rank: 200, createdAt: '2026-01-01T00:00:00Z' },
+      { id: 'c', currentStage: 'ready', rank: 300, createdAt: '2026-01-01T00:00:00Z' },
+      { id: 'a', currentStage: 'ready', rank: 100, createdAt: '2026-01-01T00:00:00Z' },
+      { id: 'b', currentStage: 'ready', rank: 200, createdAt: '2026-01-01T00:00:00Z' },
     ] as any
-    expect(result.tasksByStageMap.value.backlog!.map(t => t.id)).toEqual(['a', 'b', 'c'])
+    expect(result.tasksByStageMap.value.ready!.map(t => t.id)).toEqual(['a', 'b', 'c'])
     wrapper.unmount()
   })
 
   it('falls back to createdAt when rank is absent', () => {
     const { result, wrapper } = withSetup(() => useTasks({ autoStart: false }))
     result.tasks.value = [
-      { id: 'new', currentStage: 'backlog', createdAt: '2026-02-01T00:00:00Z' },
-      { id: 'old', currentStage: 'backlog', createdAt: '2026-01-01T00:00:00Z' },
+      { id: 'new', currentStage: 'ready', createdAt: '2026-02-01T00:00:00Z' },
+      { id: 'old', currentStage: 'ready', createdAt: '2026-01-01T00:00:00Z' },
     ] as any
-    expect(result.tasksByStageMap.value.backlog!.map(t => t.id)).toEqual(['old', 'new'])
+    expect(result.tasksByStageMap.value.ready!.map(t => t.id)).toEqual(['old', 'new'])
     wrapper.unmount()
   })
 
@@ -143,9 +143,9 @@ describe('useTasks', () => {
     const mod = await import('@/features/pipeline/composables/useTasks')
     const { result, wrapper } = withSetup(() => useTasks({ autoStart: false }))
     result.tasks.value = [
-      { id: 'a', currentStage: 'backlog', rank: 1000, createdAt: '2026-01-01T00:00:00Z' },
-      { id: 'm', currentStage: 'backlog', rank: 5000, createdAt: '2026-01-01T00:00:00Z' },
-      { id: 'b', currentStage: 'backlog', rank: 3000, createdAt: '2026-01-01T00:00:00Z' },
+      { id: 'a', currentStage: 'ready', rank: 1000, createdAt: '2026-01-01T00:00:00Z' },
+      { id: 'm', currentStage: 'ready', rank: 5000, createdAt: '2026-01-01T00:00:00Z' },
+      { id: 'b', currentStage: 'ready', rank: 3000, createdAt: '2026-01-01T00:00:00Z' },
     ] as any
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
@@ -165,9 +165,9 @@ describe('useTasks', () => {
     const mod = await import('@/features/pipeline/composables/useTasks')
     const { result, wrapper } = withSetup(() => useTasks({ autoStart: false }))
     result.tasks.value = [
-      { id: 'a', currentStage: 'backlog', rank: 1000, createdAt: '2026-01-01T00:00:00Z' },
-      { id: 'm', currentStage: 'backlog', rank: 5000, createdAt: '2026-01-01T00:00:00Z' },
-      { id: 'b', currentStage: 'backlog', rank: 3000, createdAt: '2026-01-01T00:00:00Z' },
+      { id: 'a', currentStage: 'ready', rank: 1000, createdAt: '2026-01-01T00:00:00Z' },
+      { id: 'm', currentStage: 'ready', rank: 5000, createdAt: '2026-01-01T00:00:00Z' },
+      { id: 'b', currentStage: 'ready', rank: 3000, createdAt: '2026-01-01T00:00:00Z' },
     ] as any
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: false,

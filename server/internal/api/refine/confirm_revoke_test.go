@@ -29,13 +29,13 @@ func TestConfirm_RevokesTheStageRunCredential(t *testing.T) {
 		Cwd:           t.TempDir(),
 		MaxIterations: 3,
 		Priority:      "normal",
-		CurrentStage:  "concept",
+		CurrentStage:  "backlog",
 	})
 	require.NoError(t, err)
 
 	run, err := srRepo.Create(ctx, repo.CreateStageRunInput{
 		TaskID:    task.ID,
-		Stage:     "concept",
+		Stage:     "backlog",
 		Iteration: 0,
 	})
 	require.NoError(t, err)

@@ -20,7 +20,7 @@ func TestTaskRepo_CreateAndGet(t *testing.T) {
 		Title:               "Fix Login",
 		Description:         &desc,
 		Cwd:                 "/tmp/proj",
-		CurrentStage:        "concept",
+		CurrentStage:        "backlog",
 		Priority:            "medium",
 		MaxIterations:       20,
 		StageTimeoutSeconds: 1800,
@@ -44,7 +44,7 @@ func TestTaskRepo_Update_CurrentStage(t *testing.T) {
 
 	task, err := r.Create(ctx, repo.CreateTaskInput{
 		Slug: "my-task", Title: "My Task", Cwd: "/tmp",
-		CurrentStage: "concept", Priority: "medium",
+		CurrentStage: "backlog", Priority: "medium",
 		MaxIterations: 20, StageTimeoutSeconds: 1800,
 	})
 	require.NoError(t, err)
@@ -63,7 +63,7 @@ func TestTaskRepo_Delete(t *testing.T) {
 
 	task, err := r.Create(ctx, repo.CreateTaskInput{
 		Slug: "to-delete", Title: "Delete Me", Cwd: "/tmp",
-		CurrentStage: "concept", Priority: "medium",
+		CurrentStage: "backlog", Priority: "medium",
 		MaxIterations: 20, StageTimeoutSeconds: 1800,
 	})
 	require.NoError(t, err)
@@ -83,7 +83,7 @@ func TestTaskRepo_Update_MetadataClear(t *testing.T) {
 	meta := map[string]any{"key": "value"}
 	task, err := r.Create(ctx, repo.CreateTaskInput{
 		Slug: "meta-task", Title: "Meta Task", Cwd: "/tmp",
-		CurrentStage: "concept", Priority: "medium",
+		CurrentStage: "backlog", Priority: "medium",
 		MaxIterations: 20, StageTimeoutSeconds: 1800,
 		Metadata: meta,
 	})
@@ -104,14 +104,14 @@ func TestTaskRepo_ListForUser_UnscopedSeesAll(t *testing.T) {
 	uid2 := "user-2"
 	_, err := r.Create(ctx, repo.CreateTaskInput{
 		Slug: "task-u1", Title: "Task U1", Cwd: "/tmp",
-		CurrentStage: "concept", Priority: "medium",
+		CurrentStage: "backlog", Priority: "medium",
 		MaxIterations: 20, StageTimeoutSeconds: 1800,
 		UserID: &uid1,
 	})
 	require.NoError(t, err)
 	_, err = r.Create(ctx, repo.CreateTaskInput{
 		Slug: "task-u2", Title: "Task U2", Cwd: "/tmp",
-		CurrentStage: "concept", Priority: "medium",
+		CurrentStage: "backlog", Priority: "medium",
 		MaxIterations: 20, StageTimeoutSeconds: 1800,
 		UserID: &uid2,
 	})
@@ -143,7 +143,7 @@ func TestTaskRepo_ListPickable(t *testing.T) {
 		{"t-done", "done", false},
 		{"t-cancelled", "cancelled", false},
 		{"t-on-hold", "on_hold", false},
-		{"t-concept", "concept", false},
+		{"t-concept", "backlog", false},
 	}
 
 	for _, tc := range stages {
@@ -232,7 +232,7 @@ func TestTaskRepo_RerankBetween(t *testing.T) {
 				Slug:                "target",
 				Title:               "Target",
 				Cwd:                 "/tmp",
-				CurrentStage:        "concept",
+				CurrentStage:        "backlog",
 				Priority:            "medium",
 				MaxIterations:       20,
 				StageTimeoutSeconds: 1800,
@@ -247,7 +247,7 @@ func TestTaskRepo_RerankBetween(t *testing.T) {
 					Slug:                "before",
 					Title:               "Before",
 					Cwd:                 "/tmp",
-					CurrentStage:        "concept",
+					CurrentStage:        "backlog",
 					Priority:            "medium",
 					MaxIterations:       20,
 					StageTimeoutSeconds: 1800,
@@ -262,7 +262,7 @@ func TestTaskRepo_RerankBetween(t *testing.T) {
 					Slug:                "after",
 					Title:               "After",
 					Cwd:                 "/tmp",
-					CurrentStage:        "concept",
+					CurrentStage:        "backlog",
 					Priority:            "medium",
 					MaxIterations:       20,
 					StageTimeoutSeconds: 1800,
@@ -304,7 +304,7 @@ func TestTaskRepo_CountActiveBySourceBranch(t *testing.T) {
 	}
 
 	mk("a-impl", "implementation", "feat/shared")
-	mk("b-concept", "concept", "feat/shared")
+	mk("b-concept", "backlog", "feat/shared")
 	mk("c-done", "done", "feat/shared")           // terminal — must be ignored
 	mk("d-cancelled", "cancelled", "feat/shared") // terminal — must be ignored
 	mk("e-other", "implementation", "feat/other")

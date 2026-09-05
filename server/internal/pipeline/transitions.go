@@ -388,8 +388,8 @@ func (o *PipelineOrchestrator) decideCompletedTransition(ctx context.Context, ta
 	if run.Stage == "plan_review" {
 		return WaitUserTransition{Reason: "Plan review: awaiting user approval", AgentDone: true}
 	}
-	// After backlog, enter plan_review only when the task opted into plan mode.
-	if run.Stage == "backlog" {
+	// After ready, enter plan_review only when the task opted into plan mode.
+	if run.Stage == "ready" {
 		if task.PlanMode {
 			return NextTransition{Stage: "plan_review", Output: output}
 		}

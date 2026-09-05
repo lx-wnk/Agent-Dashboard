@@ -64,7 +64,7 @@ func createTaskWith(t *testing.T, f *resolverFixture, slug string, projectID, sp
 		Slug:                slug,
 		Title:               "T",
 		Cwd:                 "/tmp",
-		CurrentStage:        "concept",
+		CurrentStage:        "backlog",
 		Priority:            "medium",
 		MaxIterations:       20,
 		StageTimeoutSeconds: 1800,

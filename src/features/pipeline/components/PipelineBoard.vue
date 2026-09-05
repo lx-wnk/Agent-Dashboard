@@ -115,8 +115,8 @@ const COLUMNS: ColumnDef[] = [
     group: 'needs-you',
     sortable: true,
   },
-  { id: 'concept', label: STAGE_LABELS.concept, stages: ['concept'], group: 'active', sortable: true },
   { id: 'backlog', label: STAGE_LABELS.backlog, stages: ['backlog'], group: 'active', sortable: true },
+  { id: 'ready', label: STAGE_LABELS.ready, stages: ['ready'], group: 'active', sortable: true },
   { id: 'plan_review', label: STAGE_LABELS.plan_review, stages: ['plan_review'], group: 'active', sortable: false },
   {
     id: 'implementation',

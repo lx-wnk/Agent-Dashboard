@@ -82,7 +82,7 @@ func TestPermissionRepo_DeleteTaskPermission(t *testing.T) {
 func createStageRun(t *testing.T, sr repo.StageRunRepo, taskID string) string {
 	t.Helper()
 	run, err := sr.Create(context.Background(), repo.CreateStageRunInput{
-		TaskID: taskID, Stage: "concept", Iteration: 1,
+		TaskID: taskID, Stage: "backlog", Iteration: 1,
 	})
 	if err != nil {
 		t.Fatalf("create stage run: %v", err)

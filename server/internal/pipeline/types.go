@@ -201,8 +201,8 @@ type PromptBundle struct {
 
 // StageOrder defines canonical stage progression.
 var StageOrder = []string{
-	"concept",
 	"backlog",
+	"ready",
 	"plan_review",
 	"implementation",
 	"self_review",

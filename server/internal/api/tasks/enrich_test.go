@@ -193,7 +193,7 @@ func TestEnrichOne_AvailableActions_ConceptNoRun(t *testing.T) {
 		Slug:         "enrich-actions-concept",
 		Title:        "Actions Concept",
 		Cwd:          "/tmp/enrich-actions-concept",
-		CurrentStage: "concept",
+		CurrentStage: "backlog",
 		Priority:     "medium",
 	})
 	require.NoError(t, err)

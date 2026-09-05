@@ -107,7 +107,7 @@ func registerGetRefineStatus(registry mcp.ToolRegistry, d RefineDeps) {
 func registerApproveSpec(registry mcp.ToolRegistry, d RefineDeps) {
 	registry.Register(&mcp.ToolDef{
 		Name:        "approve_spec",
-		Description: "Confirm the refined spec, freezing it onto the task and advancing it past the concept stage.",
+		Description: "Confirm the refined spec, freezing it onto the task and advancing it past the backlog stage.",
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{

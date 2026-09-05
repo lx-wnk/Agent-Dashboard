@@ -90,8 +90,8 @@ export interface OutputMessage {
 
 // Task Pipeline Types
 export type PipelineStage
-  = | 'concept'
-    | 'backlog'
+  = | 'backlog'
+    | 'ready'
     | 'plan_review'
     | 'implementation'
     | 'self_review'

@@ -18,7 +18,7 @@ func TestEvaluateDependency(t *testing.T) {
 	}{
 		{"satisfied at required done", "done", "on_hold", "done", DepSatisfied},
 		{"blocked while in progress", "done", "on_hold", "implementation", DepBlocked},
-		{"blocked before start", "done", "on_hold", "concept", DepBlocked},
+		{"blocked before start", "done", "on_hold", "backlog", DepBlocked},
 		{"unsatisfiable when cancelled and action on_hold", "done", "on_hold", "cancelled", DepUnsatisfiable},
 		{"cancelled rescued by start action", "done", "start", "cancelled", DepSatisfied},
 		{"required cancelled is satisfied when cancelled", "cancelled", "on_hold", "cancelled", DepSatisfied},

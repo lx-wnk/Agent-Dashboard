@@ -19,7 +19,7 @@ watch(actionError, (msg) => {
 const slashMenuRef = ref<InstanceType<typeof TaskSlashCommandMenu> | null>(null)
 
 // Spec approval is owned by the concept section in TaskOverviewTab; exclude it
-// here so a concept-stage task does not render two "Approve Spec" buttons.
+// here so a backlog-stage task does not render two "Approve Spec" buttons.
 const actions = computed(() =>
   renderableActions(task.value?.availableActions).filter(a => a.action !== 'approve_spec'),
 )

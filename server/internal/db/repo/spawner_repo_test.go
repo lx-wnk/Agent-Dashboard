@@ -251,7 +251,7 @@ func TestSpawnerRepo_DeleteInUseByTask(t *testing.T) {
 		Slug:                "uses-spawner",
 		Title:               "Task",
 		Cwd:                 "/tmp",
-		CurrentStage:        "concept",
+		CurrentStage:        "backlog",
 		Priority:            "medium",
 		MaxIterations:       20,
 		StageTimeoutSeconds: 1800,

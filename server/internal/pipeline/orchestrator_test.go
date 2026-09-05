@@ -13,7 +13,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 )
 
-func TestOrchestrator_BacklogTransitionsToImplementation(t *testing.T) {
+func TestOrchestrator_ReadyTransitionsToImplementation(t *testing.T) {
 	orch, taskRepo := makeTestOrchestratorWithRepos(t)
 	ctx := context.Background()
 
@@ -21,7 +21,7 @@ func TestOrchestrator_BacklogTransitionsToImplementation(t *testing.T) {
 		Slug:                "backlog-test",
 		Title:               "Backlog Test",
 		Cwd:                 "/tmp",
-		CurrentStage:        "backlog",
+		CurrentStage:        "ready",
 		Priority:            "medium",
 		MaxIterations:       3,
 		StageTimeoutSeconds: 1800,
