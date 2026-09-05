@@ -23,6 +23,7 @@ type mcpServerEntry struct {
 	Type    string            `json:"type,omitempty"`
 	URL     string            `json:"url,omitempty"`
 	Headers map[string]string `json:"headers,omitempty"`
+	Env     map[string]string `json:"env,omitempty"`
 }
 
 // mcpConfig holds entries as any so a user-scope server carried over from
@@ -80,22 +81,32 @@ func DiscoveryPtyFile(home string, pid int) string {
 // taskAPI is set but only one of URL/Token is populated. This is the single
 // definition of the channel MCP config shape.
 func buildConfig(binaryPath string, taskAPI *TaskAPI, userServers map[string]json.RawMessage) (mcpConfig, error) {
-	servers := map[string]any{
-		ChannelServerName: mcpServerEntry{
-			Command: binaryPath,
-			Args:    []string{SubcommandChannel},
-		},
+	channel := mcpServerEntry{
+		Command: binaryPath,
+		Args:    []string{SubcommandChannel},
 	}
+	servers := map[string]any{}
 	if taskAPI != nil {
 		if taskAPI.URL == "" || taskAPI.Token == "" {
 			return mcpConfig{}, fmt.Errorf("channelconfig: TaskAPI needs both a URL and a token")
 		}
+		// The bridge posts its callbacks — set_stage_output, request_permission,
+		// dashboard_reply — back to the dashboard and authenticates with
+		// DASHBOARD_MCP_TOKEN. Without this it inherits whatever the operator
+		// happened to set globally, and an install that set nothing had every
+		// callback answered 401 with no sign of it anywhere but the agent's own
+		// transcript. Handing it the stage run's own key instead means the
+		// credential is short-lived, attributable to the run, and revoked with
+		// it. No new exposure: the same token is already in this file, in the
+		// task API server's Authorization header.
+		channel.Env = map[string]string{EnvMCPToken: taskAPI.Token}
 		servers[mcp.ServerName] = mcpServerEntry{
 			Type:    "http",
 			URL:     taskAPI.URL,
 			Headers: map[string]string{"Authorization": "Bearer " + taskAPI.Token},
 		}
 	}
+	servers[ChannelServerName] = channel
 	for name, entry := range userServers {
 		if reservedServerNames[name] {
 			continue

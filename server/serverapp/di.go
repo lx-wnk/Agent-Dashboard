@@ -908,8 +908,13 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	var channelStageOutputHandler *agents.ChannelStageOutputHandler
 	var auditEventRepo repo.AuditEventRepo
 	if entClient != nil {
-		channelStageOutputHandler = agents.NewChannelStageOutputHandler(repo.NewStageRunRepo(entClient), apiKeyRepo, auditEventRepo)
+		// Constructed after the repo it takes: passing auditEventRepo while it was
+		// still the zero value handed the handler a nil interface, which its own
+		// nil-guard then treated as "auditing disabled" — silently, by design, so
+		// nothing logged and the stage_output_submitted event simply never
+		// appeared. Keep the assignment first.
 		auditEventRepo = repo.NewAuditEventRepo(entClient)
+		channelStageOutputHandler = agents.NewChannelStageOutputHandler(repo.NewStageRunRepo(entClient), apiKeyRepo, auditEventRepo)
 	}
 
 	usageHandler := apiusage.NewHandler(settingsSvc, nil) // nil agg = uses default scanner
