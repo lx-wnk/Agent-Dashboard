@@ -58,7 +58,7 @@ describe('refinementChat — input availability while approval-ready', () => {
     return mount(RefinementChat, {
       props: {
         open: true,
-        task: { id: 't1', slug: 's', title: 'T', currentStage: 'concept', createdAt: '', updatedAt: '' } as any,
+        task: { id: 't1', slug: 's', title: 'T', currentStage: 'backlog', createdAt: '', updatedAt: '' } as any,
       },
       attachTo: document.body,
     })

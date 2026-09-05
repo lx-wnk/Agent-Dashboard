@@ -15,7 +15,7 @@ function makeTask(overrides = {}) {
     worktreePath: null,
     sourceBranch: null,
     targetBranch: null,
-    currentStage: 'backlog',
+    currentStage: 'ready',
     parentTaskId: null,
     maxIterations: 10,
     tokenBudget: null,

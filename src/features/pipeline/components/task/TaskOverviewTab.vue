@@ -137,7 +137,7 @@ async function loadLastRefineOutput(taskId: string): Promise<void> {
 watch(
   () => [task.value?.id, task.value?.currentStage, task.value?.refineStatus] as const,
   ([id, stage]) => {
-    if (id && stage === 'concept')
+    if (id && stage === 'backlog')
       void loadLastRefineOutput(id)
   },
   { immediate: true },
@@ -169,7 +169,7 @@ watch(
       <TaskPendingRequests />
     </div>
 
-    <template v-if="task.currentStage === 'concept'">
+    <template v-if="task.currentStage === 'backlog'">
       <RefineStatusPanel
         :status="task.refineStatus ?? 'none'"
         :error="task.refineError ?? null"

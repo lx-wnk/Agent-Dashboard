@@ -59,7 +59,7 @@ func createTestTask(t *testing.T, taskRepo repo.TaskRepo, slug, cwd string) stri
 		Slug:                slug,
 		Title:               "T-" + slug,
 		Cwd:                 cwd,
-		CurrentStage:        "concept",
+		CurrentStage:        "backlog",
 		Priority:            "medium",
 		MaxIterations:       5,
 		StageTimeoutSeconds: 300,

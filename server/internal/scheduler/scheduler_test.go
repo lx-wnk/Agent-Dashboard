@@ -38,7 +38,7 @@ func newHarness(t *testing.T, now time.Time) *testHarness {
 			Slug:                spec.Slug,
 			Title:               spec.Title,
 			Cwd:                 spec.Cwd,
-			CurrentStage:        "concept",
+			CurrentStage:        "backlog",
 			Priority:            "medium",
 			MaxIterations:       20,
 			StageTimeoutSeconds: 1800,

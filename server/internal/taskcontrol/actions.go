@@ -55,9 +55,9 @@ func ComputeActions(s TaskState) []Action {
 		}
 	}
 
-	// Concept stage: spec authoring and approval flow.
-	if s.Stage == "concept" {
-		return conceptActions(s)
+	// Backlog stage: spec authoring and approval flow.
+	if s.Stage == "backlog" {
+		return backlogActions(s)
 	}
 
 	// on_hold: a human explicitly parked the task.
@@ -75,10 +75,10 @@ func ComputeActions(s TaskState) []Action {
 	return agentStageActions(s)
 }
 
-// conceptActions handles the concept stage state machine.
-// Concept is the only stage where a refine runner may be active, and where
+// backlogActions handles the backlog stage state machine.
+// Backlog is the only stage where a refine runner may be active, and where
 // "approve_spec" is the key gate to moving the task forward.
-func conceptActions(s TaskState) []Action {
+func backlogActions(s TaskState) []Action {
 	// Refine runner in flight — wait for it; advance is the tentative next step.
 	// RefineStatus values mirror refine.Status* ("refining"/"draft_ready"/...).
 	if s.RunStatus == "running" || s.RefineStatus == "refining" {
@@ -104,13 +104,13 @@ func conceptActions(s TaskState) []Action {
 	}
 
 	// Spec draft is ready (refine done or task freshly created with no run).
-	// This is the normal idle state after concept authoring.
+	// This is the normal idle state after backlog authoring.
 	if s.RefineStatus == "draft_ready" || s.RunStatus == "" || s.RunStatus == "done" {
 		return []Action{
 			enabled(ActionApproveSpec, true),
 			enabled(ActionRefine, false),
 			enabled(ActionCancel, false),
-			disabled(ActionAdvance, "use approve_spec to advance from concept"),
+			disabled(ActionAdvance, "use approve_spec to advance from backlog"),
 			disabled(ActionRetry, "no failed run to retry"),
 			disabled(ActionResume, "task is not awaiting user"),
 			disabled(ActionApproveAllPending, "no pending permissions"),
@@ -124,7 +124,7 @@ func conceptActions(s TaskState) []Action {
 			enabled(ActionRefine, false),
 			enabled(ActionCancel, false),
 			disabled(ActionRetry, "use refine to re-run, or approve_spec to advance"),
-			disabled(ActionAdvance, "use approve_spec to advance from concept"),
+			disabled(ActionAdvance, "use approve_spec to advance from backlog"),
 			disabled(ActionResume, "task is not awaiting user"),
 		}
 	}
@@ -134,7 +134,7 @@ func conceptActions(s TaskState) []Action {
 		enabled(ActionApproveSpec, true),
 		enabled(ActionRefine, false),
 		enabled(ActionCancel, false),
-		disabled(ActionAdvance, "use approve_spec to advance from concept"),
+		disabled(ActionAdvance, "use approve_spec to advance from backlog"),
 		disabled(ActionRetry, "no failed run to retry"),
 		disabled(ActionResume, "task is not awaiting user"),
 	}

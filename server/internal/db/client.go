@@ -184,6 +184,14 @@ func Open(path string) (*DBBundle, error) {
 		_ = client.Close()
 		return nil, fmt.Errorf("db: backfill grants: %w", err)
 	}
+	// Rename the "backlog"/"concept" pipeline stages to "ready"/"backlog" across
+	// every table that stores a stage name. Must run after ent auto-migrate
+	// (tasks, stage_runs, task_schedules all exist) and is safe to run on every
+	// boot — idempotent, see migrateRenameStages.
+	if err := migrateRenameStages(sqlDB); err != nil {
+		_ = client.Close()
+		return nil, fmt.Errorf("db: rename stages: %w", err)
+	}
 	if err := runRawMigrations(sqlDB); err != nil {
 		_ = client.Close()
 		return nil, fmt.Errorf("db: raw migrations: %w", err)
@@ -393,6 +401,39 @@ func migrateNormalizeApprovedOutcome(db *sql.DB) error {
 			`UPDATE permission_requests SET outcome = 'granted' WHERE outcome = 'approved'`,
 		); err != nil {
 			return fmt.Errorf("normalize approved outcomes: %w", err)
+		}
+	}
+	return nil
+}
+
+// migrateRenameStages rewrites the stored "backlog"/"concept" stage names to
+// "ready"/"backlog" in every table that carries a stage column. Rename order
+// is collision-safe: "backlog"→"ready" runs first, then "concept"→"backlog",
+// so a row already named "backlog" is never re-caught by the second rename.
+// Idempotent: a second run finds no rows with the old names and does nothing.
+func migrateRenameStages(db *sql.DB) error {
+	renames := []struct{ table, column, from, to string }{
+		{"tasks", "current_stage", "backlog", "ready"},
+		{"tasks", "current_stage", "concept", "backlog"},
+		{"stage_runs", "stage", "backlog", "ready"},
+		{"stage_runs", "stage", "concept", "backlog"},
+		{"task_schedules", "current_stage", "backlog", "ready"},
+		{"task_schedules", "current_stage", "concept", "backlog"},
+	}
+	for _, r := range renames {
+		var count int
+		if err := db.QueryRow(
+			fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE %s = ?`, r.table, r.column), r.from,
+		).Scan(&count); err != nil {
+			return fmt.Errorf("count %s.%s=%q: %w", r.table, r.column, r.from, err)
+		}
+		if count > 0 {
+			slog.Warn("migration: renaming stage", "table", r.table, "column", r.column, "from", r.from, "to", r.to, "count", count)
+			if _, err := db.Exec(
+				fmt.Sprintf(`UPDATE %s SET %s = ? WHERE %s = ?`, r.table, r.column, r.column), r.to, r.from,
+			); err != nil {
+				return fmt.Errorf("rename %s.%s %q→%q: %w", r.table, r.column, r.from, r.to, err)
+			}
 		}
 	}
 	return nil

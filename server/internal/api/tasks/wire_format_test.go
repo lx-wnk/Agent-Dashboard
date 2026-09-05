@@ -362,7 +362,7 @@ func TestListDependencies_WireFormat(t *testing.T) {
 		Cwd:           t.TempDir(),
 		MaxIterations: 5,
 		Priority:      "normal",
-		CurrentStage:  "backlog",
+		CurrentStage:  "ready",
 	})
 	if err != nil {
 		t.Fatalf("create downstream: %v", err)
@@ -435,7 +435,7 @@ func TestListDependencies_WireFormat(t *testing.T) {
 			Cwd:           t.TempDir(),
 			MaxIterations: 5,
 			Priority:      "normal",
-			CurrentStage:  "concept",
+			CurrentStage:  "backlog",
 		})
 		if err != nil {
 			t.Fatalf("create third: %v", err)
@@ -453,8 +453,8 @@ func TestListDependencies_WireFormat(t *testing.T) {
 			t.Fatalf("unmarshal response: %v (body: %s)", err, w.Body.String())
 		}
 		assertKeys(t, row, want, forbidden)
-		if row["dependsOnStage"] != "concept" {
-			t.Errorf("dependsOnStage = %v, want %q", row["dependsOnStage"], "concept")
+		if row["dependsOnStage"] != "backlog" {
+			t.Errorf("dependsOnStage = %v, want %q", row["dependsOnStage"], "backlog")
 		}
 	})
 }

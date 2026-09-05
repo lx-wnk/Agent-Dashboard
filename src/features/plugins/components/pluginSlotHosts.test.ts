@@ -22,7 +22,7 @@ beforeEach(() => {
 })
 afterEach(() => vi.unstubAllGlobals())
 
-const task = { id: 't1', slug: 's', title: 'T', currentStage: 'concept', createdAt: '2026-06-12T00:00:00Z', maxIterations: 3 } as any
+const task = { id: 't1', slug: 's', title: 'T', currentStage: 'backlog', createdAt: '2026-06-12T00:00:00Z', maxIterations: 3 } as any
 const agent = {
   pid: 1,
   projectName: 'P',

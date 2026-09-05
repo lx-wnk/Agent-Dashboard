@@ -19,12 +19,12 @@ func TestStageRunRepo_CreateAndGet(t *testing.T) {
 
 	run, err := sr.Create(ctx, repo.CreateStageRunInput{
 		TaskID:    taskID,
-		Stage:     "concept",
+		Stage:     "backlog",
 		Iteration: 1,
 	})
 	require.NoError(t, err)
 	require.Equal(t, taskID, run.TaskID)
-	require.Equal(t, "concept", run.Stage)
+	require.Equal(t, "backlog", run.Stage)
 
 	got, err := sr.GetByID(ctx, run.ID)
 	require.NoError(t, err)
@@ -39,9 +39,9 @@ func TestStageRunRepo_GetLatestForTask(t *testing.T) {
 
 	taskID := createTask(t, tr, "sr-task-2")
 
-	run1, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "concept", Iteration: 1})
+	run1, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "backlog", Iteration: 1})
 	require.NoError(t, err)
-	run2, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "concept", Iteration: 2})
+	run2, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "backlog", Iteration: 2})
 	require.NoError(t, err)
 
 	latest, err := sr.GetLatestForTask(ctx, taskID)
@@ -59,9 +59,9 @@ func TestStageRunRepo_ListByStatus(t *testing.T) {
 
 	taskID := createTask(t, tr, "sr-task-3")
 
-	run1, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "concept", Iteration: 1})
+	run1, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "backlog", Iteration: 1})
 	require.NoError(t, err)
-	_, err = sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "concept", Iteration: 2})
+	_, err = sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "backlog", Iteration: 2})
 	require.NoError(t, err)
 
 	status := "running"
@@ -81,7 +81,7 @@ func TestStageRunRepo_Update_Status(t *testing.T) {
 	sr := repo.NewStageRunRepo(client)
 
 	taskID := createTask(t, tr, "sr-task-4")
-	run, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "concept", Iteration: 1})
+	run, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "backlog", Iteration: 1})
 	require.NoError(t, err)
 
 	status := "running"
@@ -98,11 +98,11 @@ func TestStageRunRepo_SumCompletedCostCents(t *testing.T) {
 
 	taskID := createTask(t, tr, "sr-task-5")
 
-	run1, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "concept", Iteration: 1})
+	run1, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "backlog", Iteration: 1})
 	require.NoError(t, err)
-	run2, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "concept", Iteration: 2})
+	run2, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "backlog", Iteration: 2})
 	require.NoError(t, err)
-	run3, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "concept", Iteration: 3})
+	run3, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "backlog", Iteration: 3})
 	require.NoError(t, err)
 
 	doneCost := 100
@@ -131,11 +131,11 @@ func TestStageRunRepo_GetLatestForTasks(t *testing.T) {
 	taskID1 := createTask(t, tr, "sr-multi-1")
 	taskID2 := createTask(t, tr, "sr-multi-2")
 
-	_, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID1, Stage: "concept", Iteration: 1})
+	_, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID1, Stage: "backlog", Iteration: 1})
 	require.NoError(t, err)
-	run1b, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID1, Stage: "concept", Iteration: 2})
+	run1b, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID1, Stage: "backlog", Iteration: 2})
 	require.NoError(t, err)
-	run2, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID2, Stage: "concept", Iteration: 1})
+	run2, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID2, Stage: "backlog", Iteration: 1})
 	require.NoError(t, err)
 
 	latest, err := sr.GetLatestForTasks(ctx, []string{taskID1, taskID2})
@@ -151,7 +151,7 @@ func TestStageRunRepo_Update_StartedAtClear(t *testing.T) {
 	sr := repo.NewStageRunRepo(client)
 
 	taskID := createTask(t, tr, "sr-started-at-clear")
-	run, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "concept", Iteration: 0})
+	run, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "backlog", Iteration: 0})
 	require.NoError(t, err)
 
 	now := time.Now().Truncate(time.Second)
@@ -178,7 +178,7 @@ func TestStageRunRepo_ListInWindow(t *testing.T) {
 	taskID := createTask(t, tr, "sr-window-1")
 
 	// Create three stage_runs and note their creation times.
-	run1, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "concept", Iteration: 1})
+	run1, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "backlog", Iteration: 1})
 	require.NoError(t, err)
 	run2, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "implement", Iteration: 1})
 	require.NoError(t, err)
@@ -215,7 +215,7 @@ func TestStageRunRepo_Update_RetryFields(t *testing.T) {
 	sr := repo.NewStageRunRepo(client)
 
 	taskID := createTask(t, tr, "sr-retry-1")
-	run, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "concept", Iteration: 1})
+	run, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "backlog", Iteration: 1})
 	require.NoError(t, err)
 
 	retryCount := 3
@@ -252,7 +252,7 @@ func TestStageRunRepo_ListBySessionIDs(t *testing.T) {
 
 	taskID := createTask(t, tr, "sr-batch-session")
 
-	run1, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "concept", Iteration: 1})
+	run1, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "backlog", Iteration: 1})
 	require.NoError(t, err)
 	run2, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "implement", Iteration: 1})
 	require.NoError(t, err)
@@ -299,11 +299,11 @@ func TestStageRunRepo_SumCompletedTokens(t *testing.T) {
 
 	taskID := createTask(t, tr, "sr-task-tokens")
 
-	run1, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "concept", Iteration: 1})
+	run1, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "backlog", Iteration: 1})
 	require.NoError(t, err)
-	run2, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "concept", Iteration: 2})
+	run2, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "backlog", Iteration: 2})
 	require.NoError(t, err)
-	run3, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "concept", Iteration: 3})
+	run3, err := sr.Create(ctx, repo.CreateStageRunInput{TaskID: taskID, Stage: "backlog", Iteration: 3})
 	require.NoError(t, err)
 
 	doneTok := 1000

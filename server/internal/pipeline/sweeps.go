@@ -25,7 +25,7 @@ func (o *PipelineOrchestrator) sweepAwaitingUserRuns(ctx context.Context, allRun
 			continue
 		}
 		// Only reap runs that had a live agent process which has since died.
-		// Nil-PID runs are legitimate: concept/backlog WaitUser transitions never
+		// Nil-PID runs are legitimate: backlog/ready WaitUser transitions never
 		// spawn an agent, so IsPidAlive(0) == false must not trigger the reaper.
 		if run.Pid != nil && !proc.IsPidAlive(*run.Pid) {
 			slog.Warn("orchestrator: awaiting_user run has dead PID — reaping as failed",

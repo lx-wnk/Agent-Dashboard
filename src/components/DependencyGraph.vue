@@ -33,8 +33,8 @@ interface GraphLink {
 function stageColor(stage: string): string {
   const c = chartColors()
   const map: Record<string, string> = {
-    concept: c.accent,
-    backlog: paletteColor(1),
+    backlog: c.accent,
+    ready: paletteColor(1),
     implementation: c.info,
     self_review: paletteColor(0),
     finalization: c.success,

@@ -57,7 +57,7 @@ func TestEnrichDep_UpstreamInProgress_IsBlocked(t *testing.T) {
 	depRepo := repo.NewDependencyRepo(bundle.Client)
 
 	upstreamID := createEnrichTask(t, taskRepo, "enrich-dep-up-progress", "implementation")
-	downstreamID := createEnrichTask(t, taskRepo, "enrich-dep-down-progress", "backlog")
+	downstreamID := createEnrichTask(t, taskRepo, "enrich-dep-down-progress", "ready")
 
 	_, err := depRepo.Add(ctx, downstreamID, upstreamID, "done", "on_hold")
 	require.NoError(t, err)
@@ -79,7 +79,7 @@ func TestEnrichDep_UpstreamCancelled_IsUnsatisfiable(t *testing.T) {
 	depRepo := repo.NewDependencyRepo(bundle.Client)
 
 	upstreamID := createEnrichTask(t, taskRepo, "enrich-dep-up-cancel", "cancelled")
-	downstreamID := createEnrichTask(t, taskRepo, "enrich-dep-down-cancel", "backlog")
+	downstreamID := createEnrichTask(t, taskRepo, "enrich-dep-down-cancel", "ready")
 
 	_, err := depRepo.Add(ctx, downstreamID, upstreamID, "done", "on_hold")
 	require.NoError(t, err)
@@ -101,7 +101,7 @@ func TestEnrichDep_UpstreamDone_NeitherBlockedNorUnsatisfiable(t *testing.T) {
 	depRepo := repo.NewDependencyRepo(bundle.Client)
 
 	upstreamID := createEnrichTask(t, taskRepo, "enrich-dep-up-done", "done")
-	downstreamID := createEnrichTask(t, taskRepo, "enrich-dep-down-done", "backlog")
+	downstreamID := createEnrichTask(t, taskRepo, "enrich-dep-down-done", "ready")
 
 	_, err := depRepo.Add(ctx, downstreamID, upstreamID, "done", "on_hold")
 	require.NoError(t, err)
@@ -121,7 +121,7 @@ func TestEnrichDep_NoDeps_NeitherBlockedNorUnsatisfiable(t *testing.T) {
 	permRepo := repo.NewPermissionRepo(bundle.Client)
 	depRepo := repo.NewDependencyRepo(bundle.Client)
 
-	taskID := createEnrichTask(t, taskRepo, "enrich-dep-no-deps", "backlog")
+	taskID := createEnrichTask(t, taskRepo, "enrich-dep-no-deps", "ready")
 
 	enriched := enrichWithDeps(t, taskRepo, srRepo, permRepo, depRepo, taskID)
 

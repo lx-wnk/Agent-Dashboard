@@ -15,9 +15,9 @@ func TestDecideCompletedTransition_PlanMode(t *testing.T) {
 	orch := makeTestOrchestrator(t)
 	ctx := context.Background()
 
-	t.Run("plan_mode=true backlog→plan_review", func(t *testing.T) {
-		task := &ent.Task{PlanMode: true, CurrentStage: "backlog"}
-		run := &ent.StageRun{Stage: "backlog"}
+	t.Run("plan_mode=true ready→plan_review", func(t *testing.T) {
+		task := &ent.Task{PlanMode: true, CurrentStage: "ready"}
+		run := &ent.StageRun{Stage: "ready"}
 		output := map[string]any{"summary": "done"}
 
 		got := orch.DecideCompletedTransitionForTest(ctx, task, run, output)
@@ -28,9 +28,9 @@ func TestDecideCompletedTransition_PlanMode(t *testing.T) {
 		assert.Equal(t, output, next.Output)
 	})
 
-	t.Run("plan_mode=false backlog skips plan_review→implementation", func(t *testing.T) {
-		task := &ent.Task{PlanMode: false, CurrentStage: "backlog"}
-		run := &ent.StageRun{Stage: "backlog"}
+	t.Run("plan_mode=false ready skips plan_review→implementation", func(t *testing.T) {
+		task := &ent.Task{PlanMode: false, CurrentStage: "ready"}
+		run := &ent.StageRun{Stage: "ready"}
 		output := map[string]any{"summary": "done"}
 
 		got := orch.DecideCompletedTransitionForTest(ctx, task, run, output)

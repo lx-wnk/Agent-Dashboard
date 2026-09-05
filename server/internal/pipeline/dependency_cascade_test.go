@@ -9,8 +9,8 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 )
 
-// makeCascadeTask creates a task at "backlog" stage (non-terminal, non-concept)
-// for cascade tests. Backlog is excluded from ListPickable but is a valid
+// makeCascadeTask creates a task at "ready" stage (non-terminal, non-backlog)
+// for cascade tests. Ready is excluded from ListPickable but is a valid
 // non-terminal stage for cascade assertions.
 func makeCascadeTask(t *testing.T, taskRepo repo.TaskRepo, slug string) string {
 	t.Helper()
@@ -19,7 +19,7 @@ func makeCascadeTask(t *testing.T, taskRepo repo.TaskRepo, slug string) string {
 		Slug:                slug,
 		Title:               slug,
 		Cwd:                 "/tmp",
-		CurrentStage:        "backlog",
+		CurrentStage:        "ready",
 		Priority:            "medium",
 		MaxIterations:       3,
 		StageTimeoutSeconds: 1800,
@@ -85,7 +85,7 @@ func TestCascade_StartActionLeavesDownstreamUnchanged(t *testing.T) {
 
 	orch.HandleDependentTasksForTest(ctx, upstreamID, "cancelled")
 
-	require.Equal(t, "backlog", stageOf(t, taskRepo, downstreamID), "stage must be unchanged for action=start")
+	require.Equal(t, "ready", stageOf(t, taskRepo, downstreamID), "stage must be unchanged for action=start")
 	require.True(t, hasEvent(events.all(), downstreamID), "OnTaskChanged must still fire for start action")
 }
 
@@ -103,7 +103,7 @@ func TestCascade_OnHoldActionLeavesDownstreamUnchanged(t *testing.T) {
 
 	orch.HandleDependentTasksForTest(ctx, upstreamID, "cancelled")
 
-	require.Equal(t, "backlog", stageOf(t, taskRepo, downstreamID), "stage must be unchanged for action=on_hold")
+	require.Equal(t, "ready", stageOf(t, taskRepo, downstreamID), "stage must be unchanged for action=on_hold")
 	require.True(t, hasEvent(events.all(), downstreamID), "OnTaskChanged must fire for on_hold action")
 }
 
@@ -122,7 +122,7 @@ func TestCascade_DoneUpstreamDoesNotChangeDownstream(t *testing.T) {
 
 	orch.HandleDependentTasksForTest(ctx, upstreamID, "done")
 
-	require.Equal(t, "backlog", stageOf(t, taskRepo, downstreamID), "stage must be unchanged when upstream reaches done")
+	require.Equal(t, "ready", stageOf(t, taskRepo, downstreamID), "stage must be unchanged when upstream reaches done")
 	require.True(t, hasEvent(events.all(), downstreamID), "OnTaskChanged must fire so the picker can pick up on next tick")
 }
 

@@ -15,8 +15,8 @@ func TestEvalMetricRepo_Insert_And_ListByMetric(t *testing.T) {
 
 	base := time.Date(2025, 3, 1, 12, 0, 0, 0, time.UTC)
 	rows := []repo.EvalMetricSnapshotRow{
-		{SpawnerID: "sp1", Model: "claude-sonnet", Stage: "concept", MetricKey: "success_rate", Value: 0.95, SampleCount: 20, WindowStart: base.Add(-1 * time.Hour), WindowEnd: base, RecordedAt: base},
-		{SpawnerID: "sp1", Model: "claude-sonnet", Stage: "concept", MetricKey: "cost_cents", Value: 42.0, SampleCount: 20, WindowStart: base.Add(-1 * time.Hour), WindowEnd: base, RecordedAt: base},
+		{SpawnerID: "sp1", Model: "claude-sonnet", Stage: "backlog", MetricKey: "success_rate", Value: 0.95, SampleCount: 20, WindowStart: base.Add(-1 * time.Hour), WindowEnd: base, RecordedAt: base},
+		{SpawnerID: "sp1", Model: "claude-sonnet", Stage: "backlog", MetricKey: "cost_cents", Value: 42.0, SampleCount: 20, WindowStart: base.Add(-1 * time.Hour), WindowEnd: base, RecordedAt: base},
 		{SpawnerID: "sp2", Model: "default", Stage: "implement", MetricKey: "success_rate", Value: 0.80, SampleCount: 10, WindowStart: base.Add(-2 * time.Hour), WindowEnd: base.Add(-1 * time.Hour), RecordedAt: base.Add(-30 * time.Minute)},
 	}
 	require.NoError(t, r.Insert(t.Context(), rows))
@@ -47,9 +47,9 @@ func TestEvalMetricRepo_ListByTimeRange(t *testing.T) {
 
 	base := time.Date(2025, 4, 1, 10, 0, 0, 0, time.UTC)
 	rows := []repo.EvalMetricSnapshotRow{
-		{SpawnerID: "sp1", Model: "m1", Stage: "concept", MetricKey: "k1", Value: 1.0, SampleCount: 5, WindowStart: base.Add(-1 * time.Hour), WindowEnd: base, RecordedAt: base.Add(-2 * time.Hour)},
-		{SpawnerID: "sp1", Model: "m1", Stage: "concept", MetricKey: "k1", Value: 2.0, SampleCount: 5, WindowStart: base, WindowEnd: base.Add(time.Hour), RecordedAt: base},
-		{SpawnerID: "sp1", Model: "m1", Stage: "concept", MetricKey: "k1", Value: 3.0, SampleCount: 5, WindowStart: base.Add(time.Hour), WindowEnd: base.Add(2 * time.Hour), RecordedAt: base.Add(2 * time.Hour)},
+		{SpawnerID: "sp1", Model: "m1", Stage: "backlog", MetricKey: "k1", Value: 1.0, SampleCount: 5, WindowStart: base.Add(-1 * time.Hour), WindowEnd: base, RecordedAt: base.Add(-2 * time.Hour)},
+		{SpawnerID: "sp1", Model: "m1", Stage: "backlog", MetricKey: "k1", Value: 2.0, SampleCount: 5, WindowStart: base, WindowEnd: base.Add(time.Hour), RecordedAt: base},
+		{SpawnerID: "sp1", Model: "m1", Stage: "backlog", MetricKey: "k1", Value: 3.0, SampleCount: 5, WindowStart: base.Add(time.Hour), WindowEnd: base.Add(2 * time.Hour), RecordedAt: base.Add(2 * time.Hour)},
 	}
 	require.NoError(t, r.Insert(t.Context(), rows))
 

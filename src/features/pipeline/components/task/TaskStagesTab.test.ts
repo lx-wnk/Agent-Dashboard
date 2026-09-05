@@ -13,7 +13,7 @@ function makeRun(overrides: Partial<StageRun> = {}): StageRun {
   return {
     id: 'run-1',
     taskId: 'task-1',
-    stage: 'concept',
+    stage: 'backlog',
     sessionId: null,
     sessionName: null,
     pid: null,

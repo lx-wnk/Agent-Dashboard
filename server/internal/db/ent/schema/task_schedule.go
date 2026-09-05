@@ -35,7 +35,7 @@ func (TaskSchedule) Fields() []ent.Field {
 		field.String("source_branch").Optional().Nillable(),
 		field.String("target_branch").Optional().Nillable(),
 		field.String("priority").Default("medium"),
-		field.String("current_stage").Default("concept"),
+		field.String("current_stage").Default("backlog"),
 		field.Int("max_iterations").Default(20),
 		field.Int("token_budget").Optional().Nillable(),
 		field.Int("cost_budget_cents").Optional().Nillable(),

@@ -18,16 +18,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestBacklogHandler_TransitionsToImplementation(t *testing.T) {
-	h := pipeline.GetHandlerForStage("backlog")
+func TestReadyHandler_TransitionsToImplementation(t *testing.T) {
+	h := pipeline.GetHandlerForStage("ready")
 	require.NotNil(t, h)
 	require.False(t, h.RequiresAgent())
 
 	audited := false
 	ctx := &pipeline.StageContext{
 		Ctx:      context.Background(),
-		Task:     &ent.Task{Slug: "my-task", CurrentStage: "backlog"},
-		StageRun: &ent.StageRun{Stage: "backlog"},
+		Task:     &ent.Task{Slug: "my-task", CurrentStage: "ready"},
+		StageRun: &ent.StageRun{Stage: "ready"},
 		RecordAudit: func(action string, _ map[string]any) {
 			audited = true
 		},
@@ -41,8 +41,8 @@ func TestBacklogHandler_TransitionsToImplementation(t *testing.T) {
 	require.True(t, audited)
 }
 
-func TestConceptHandler_WaitsUser(t *testing.T) {
-	h := pipeline.GetHandlerForStage("concept")
+func TestBacklogHandler_WaitsUser(t *testing.T) {
+	h := pipeline.GetHandlerForStage("backlog")
 	require.NotNil(t, h)
 	require.False(t, h.RequiresAgent())
 

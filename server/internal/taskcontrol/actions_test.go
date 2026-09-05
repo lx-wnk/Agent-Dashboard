@@ -46,24 +46,24 @@ func TestComputeActions(t *testing.T) {
 		wantReasonIn map[string]string // action → substring that must appear in Reason
 	}{
 		{
-			name:  "concept stage, refining in progress",
-			state: taskcontrol.FromFields("concept", "", "refining", 0, false),
-			// Concept is running refine — primary is advance (spec flowing)
+			name:  "backlog stage, refining in progress",
+			state: taskcontrol.FromFields("backlog", "", "refining", 0, false),
+			// Backlog is running refine — primary is advance (spec flowing)
 			wantPrimary:  "advance",
 			wantEnabled:  []string{"advance", "cancel"},
 			wantDisabled: []string{"approve_spec", "retry", "resume"},
 		},
 		{
-			name:  "concept stage, draft ready, no run",
-			state: taskcontrol.FromFields("concept", "", "draft_ready", 0, false),
+			name:  "backlog stage, draft ready, no run",
+			state: taskcontrol.FromFields("backlog", "", "draft_ready", 0, false),
 			// Spec complete, awaiting human approval to move forward
 			wantPrimary:  "approve_spec",
 			wantEnabled:  []string{"approve_spec", "refine", "cancel"},
 			wantDisabled: []string{"retry", "advance", "resume"},
 		},
 		{
-			name:  "concept stage, awaiting_user (run blocked)",
-			state: taskcontrol.FromFields("concept", "awaiting_user", "", 0, true),
+			name:  "backlog stage, awaiting_user (run blocked)",
+			state: taskcontrol.FromFields("backlog", "awaiting_user", "", 0, true),
 			// Needs human to look at it; resume is the primary
 			wantPrimary:  "resume",
 			wantEnabled:  []string{"resume", "cancel"},
@@ -172,8 +172,8 @@ func TestComputeActions(t *testing.T) {
 // at most one enabled action carries Primary:true.
 func TestComputeActions_ExactlyOnePrimaryAmongEnabled(t *testing.T) {
 	states := []taskcontrol.TaskState{
-		taskcontrol.FromFields("concept", "", "refining", 0, false),
-		taskcontrol.FromFields("concept", "", "draft_ready", 0, false),
+		taskcontrol.FromFields("backlog", "", "refining", 0, false),
+		taskcontrol.FromFields("backlog", "", "draft_ready", 0, false),
 		taskcontrol.FromFields("implementation", "running", "", 0, false),
 		taskcontrol.FromFields("implementation", "failed", "", 0, false),
 		taskcontrol.FromFields("implementation", "awaiting_user", "", 3, true),

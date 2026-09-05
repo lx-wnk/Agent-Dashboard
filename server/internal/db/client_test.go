@@ -144,7 +144,7 @@ func TestOpen_FTS5TriggerRoundTrip(t *testing.T) {
 	_, err = bundle.DB.Exec(
 		`INSERT INTO tasks (id, slug, title, cwd, current_stage, priority, max_iterations, stage_timeout_seconds, silver_bullet, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
-		"task-fts-1", "fts-roundtrip", "Observability Dashboard Feature", "/tmp/project", "concept", "medium", 20, 1800, 0,
+		"task-fts-1", "fts-roundtrip", "Observability Dashboard Feature", "/tmp/project", "backlog", "medium", 20, 1800, 0,
 	)
 	require.NoError(t, err)
 

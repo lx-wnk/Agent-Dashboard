@@ -374,18 +374,18 @@ func (h *staticHandler) Execute(ctx *StageContext) (StageTransition, error) {
 	return h.executeFn(ctx)
 }
 
-var conceptHandler StageHandler = &staticHandler{
-	stage: "concept",
+var backlogHandler StageHandler = &staticHandler{
+	stage: "backlog",
 	executeFn: func(ctx *StageContext) (StageTransition, error) {
-		ctx.RecordAudit("concept_chat_pending", nil)
+		ctx.RecordAudit("backlog_chat_pending", nil)
 		return WaitUserTransition{Reason: "Refinement chat in progress"}, nil
 	},
 }
 
-var backlogHandler StageHandler = &staticHandler{
-	stage: "backlog",
+var readyHandler StageHandler = &staticHandler{
+	stage: "ready",
 	executeFn: func(ctx *StageContext) (StageTransition, error) {
-		ctx.RecordAudit("backlog_entered", nil)
+		ctx.RecordAudit("ready_entered", nil)
 		return NextTransition{Stage: "implementation"}, nil
 	},
 }
@@ -426,8 +426,8 @@ func planReviewBuilder(ctx *StageContext) PromptBundle {
 // into all agent-driven stages.
 func NewStageHandlers(spawnFn SpawnFunc) map[string]StageHandler {
 	return map[string]StageHandler{
-		"concept":        conceptHandler,
 		"backlog":        backlogHandler,
+		"ready":          readyHandler,
 		"implementation": createAgentStage("implementation", implementationBuilder, spawnFn),
 		"self_review":    createAgentStage("self_review", selfReviewBuilder, spawnFn),
 		"plan_review":    createAgentStage("plan_review", planReviewBuilder, spawnFn),

@@ -7,8 +7,8 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 )
 
-// conceptStageTools is the minimum tool set the concept-stage agent needs to explore a codebase.
-var conceptStageTools = []string{"Read", "Glob", "Grep"}
+// backlogStageTools is the minimum tool set the backlog-stage agent needs to explore a codebase.
+var backlogStageTools = []string{"Read", "Glob", "Grep"}
 
 // SaveGrantsToPresets persists all current effective task permissions as presets for the
 // task's cwd + userID combination. Call after refine confirm so future tasks in the same
@@ -104,7 +104,7 @@ func ApplyPresetPermissions(
 }
 
 // BulkGrantConceptStagePermissions grants Read/Glob/Grep to a task when they are not already
-// present. These are the minimum tools the concept-stage agent needs to explore the codebase.
+// present. These are the minimum tools the backlog-stage agent needs to explore the codebase.
 func BulkGrantConceptStagePermissions(
 	ctx context.Context,
 	taskID string,
@@ -120,7 +120,7 @@ func BulkGrantConceptStagePermissions(
 	}
 
 	var entries []repo.GrantEntry
-	for _, tool := range conceptStageTools {
+	for _, tool := range backlogStageTools {
 		if !has[tool] {
 			entries = append(entries, repo.GrantEntry{Tool: tool})
 		}

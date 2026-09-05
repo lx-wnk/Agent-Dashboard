@@ -12,7 +12,7 @@ function makeTask(id: string, updatedAt: string): PipelineTask {
     worktreePath: null,
     sourceBranch: null,
     targetBranch: null,
-    currentStage: 'backlog',
+    currentStage: 'ready',
     parentTaskId: null,
     maxIterations: 10,
     tokenBudget: null,

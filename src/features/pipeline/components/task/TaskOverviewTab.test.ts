@@ -47,7 +47,7 @@ function makeTask(overrides: Record<string, unknown> = {}) {
     worktreePath: null,
     sourceBranch: null,
     targetBranch: null,
-    currentStage: 'backlog',
+    currentStage: 'ready',
     currentIteration: 0,
     maxIterations: 10,
     tokenBudget: null,

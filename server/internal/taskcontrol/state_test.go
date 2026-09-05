@@ -8,8 +8,8 @@ import (
 )
 
 func TestFromFields_BasicMapping(t *testing.T) {
-	s := taskcontrol.FromFields("concept", "running", "", 0, false)
-	require.Equal(t, "concept", s.Stage)
+	s := taskcontrol.FromFields("backlog", "running", "", 0, false)
+	require.Equal(t, "backlog", s.Stage)
 	require.Equal(t, "running", s.RunStatus)
 	require.Equal(t, 0, s.PendingPerms)
 	require.False(t, s.NeedsUser)
@@ -23,6 +23,6 @@ func TestFromFields_NeedsUserPropagated(t *testing.T) {
 
 func TestFromFields_NoRunStatus(t *testing.T) {
 	// Task with no stage run yet — RunStatus should be empty string.
-	s := taskcontrol.FromFields("concept", "", "", 0, false)
+	s := taskcontrol.FromFields("backlog", "", "", 0, false)
 	require.Empty(t, s.RunStatus)
 }

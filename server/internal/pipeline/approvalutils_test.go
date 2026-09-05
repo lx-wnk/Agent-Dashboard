@@ -59,7 +59,7 @@ func TestBulkGrantConceptStagePermissions_IdempotentWhenAlreadyGranted(t *testin
 	})
 	require.NoError(t, err)
 
-	// Pre-grant all concept tools.
+	// Pre-grant all backlog tools.
 	_, err = permRepo.BulkGrantPermissions(ctx, task.ID, []repo.GrantEntry{
 		{Tool: "Read"},
 		{Tool: "Glob"},

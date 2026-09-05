@@ -25,12 +25,12 @@ type ConfirmDeps struct {
 }
 
 // Confirm freezes the concept from refinement turns onto the task and advances
-// it past the concept stage. It is the shared implementation called by both
+// it past the backlog stage. It is the shared implementation called by both
 // the REST handler and the MCP approve_spec tool.
 // Returns the updated task on success.
 func Confirm(ctx context.Context, d ConfirmDeps, taskID string) (*ent.Task, error) {
-	backlog := "backlog"
-	update := repo.UpdateTaskInput{CurrentStage: &backlog}
+	ready := "ready"
+	update := repo.UpdateTaskInput{CurrentStage: &ready}
 	if d.Turns != nil {
 		if turns, err := d.Turns.ListForTask(ctx, taskID, 0); err == nil {
 			if concept, ok := refine.ExtractConcept(turns); ok {
@@ -75,7 +75,7 @@ func Confirm(ctx context.Context, d ConfirmDeps, taskID string) (*ent.Task, erro
 	if d.StageRuns != nil {
 		now := time.Now()
 		done := "done"
-		if sr, err := d.StageRuns.GetLatestByTaskAndStage(ctx, taskID, "concept"); err == nil && sr != nil {
+		if sr, err := d.StageRuns.GetLatestByTaskAndStage(ctx, taskID, "backlog"); err == nil && sr != nil {
 			_, _ = d.StageRuns.Update(ctx, sr.ID, repo.UpdateStageRunInput{
 				Status:  &done,
 				EndedAt: &now,

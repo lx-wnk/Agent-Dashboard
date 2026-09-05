@@ -7,7 +7,7 @@ package taskcontrol
 // which actions are valid. All fields are plain strings/ints so ComputeActions
 // stays pure (no DB/IO) and is trivially testable.
 type TaskState struct {
-	// Stage is the task's current pipeline stage (e.g. "concept", "implementation").
+	// Stage is the task's current pipeline stage (e.g. "backlog", "implementation").
 	Stage string
 	// RunStatus is the status of the latest StageRun that belongs to the current
 	// stage, or "" when no run exists yet.

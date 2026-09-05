@@ -36,7 +36,7 @@ func newMemoryRepoWithStageRun(t *testing.T) (repo.MemoryRepo, context.Context, 
 	taskID := createTask(t, repo.NewTaskRepo(bundle.Client), "memory-injection-task")
 	run, err := repo.NewStageRunRepo(bundle.Client).Create(ctx, repo.CreateStageRunInput{
 		TaskID:    taskID,
-		Stage:     "concept",
+		Stage:     "backlog",
 		Iteration: 1,
 	})
 	if err != nil {

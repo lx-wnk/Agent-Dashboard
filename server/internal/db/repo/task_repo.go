@@ -333,7 +333,7 @@ func (r *entTaskRepo) ListForUser(ctx context.Context, userID string, unscoped b
 func (r *entTaskRepo) ListPickable(ctx context.Context) ([]*ent.Task, error) {
 	tasks, err := r.client.Task.Query().
 		Where(
-			task.CurrentStageNotIn("done", "cancelled", "on_hold", "concept"),
+			task.CurrentStageNotIn("done", "cancelled", "on_hold", "backlog"),
 		).
 		Order(
 			task.BySilverBullet(sql.OrderDesc()),

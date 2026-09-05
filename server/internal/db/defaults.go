@@ -6,7 +6,7 @@ package db
 // (it cannot import this package — ent codegen would form an import cycle);
 // keep the two in sync.
 const (
-	DefaultStage               = "concept"
+	DefaultStage               = "backlog"
 	DefaultPriority            = "medium"
 	DefaultMaxIterations       = 20
 	DefaultStageTimeoutSeconds = 1800
