@@ -364,8 +364,28 @@ func isLegacyClaudeSpawner(sp *ent.Spawner) bool {
 	return false
 }
 
-func buildSpawnArgsWithChannelConfig(opts SpawnAgentOptions, channelCfgPath string) []string {
+// buildSpawnArgsWithChannelConfig assembles the final argv, including the
+// permission flags. allow and deny are passed as --allowedTools and
+// --disallowedTools because the settings file is not a reliable carrier: Claude
+// Code applies permissions.allow from .claude/settings.json only in a workspace
+// that has been trusted, and a stage worktree is created fresh, so it never has
+// been. The CLI is explicit about it — "Ignoring N permissions.allow entries
+// from .claude/settings.json: this workspace has not been trusted" — and
+// discards every entry. Command-line flags carry no such condition.
+//
+// Verified 2026-09-05 in an untrusted directory: a settings file allowing Write
+// leaves Write blocked ("Permission not granted, session non-interactive"),
+// while --allowedTools Write lets the same call through.
+func buildSpawnArgsWithChannelConfig(opts SpawnAgentOptions, channelCfgPath string, allow, deny []string) []string {
 	args := BuildSpawnArgs(opts)
+	if len(allow) > 0 {
+		args = append(args, "--allowedTools")
+		args = append(args, allow...)
+	}
+	if len(deny) > 0 {
+		args = append(args, "--disallowedTools")
+		args = append(args, deny...)
+	}
 	if channelCfgPath != "" {
 		// --strict-mcp-config is what makes the written file the agent's entire
 		// MCP surface. Without it the file is merged on top of the user- and
@@ -638,6 +658,11 @@ func SpawnStageAgent(opts SpawnAgentOptions) (SpawnResult, error) {
 		cwd = *opts.Task.WorktreePath
 	}
 	allowGitPush := IsGitPushAllowed(opts.Task, opts.AllowGitPush)
+	// Resolved once and used twice: as the spawn's permission flags, which are
+	// what actually binds, and as the settings file, which still helps in a
+	// workspace the user has trusted and is harmless where it is ignored.
+	spawnAllow := append(BuildAllowList(opts.Task.Autonomy, opts.Permissions, opts.EnableChannel, allowGitPush), taskAPIAllow(opts)...)
+	spawnDeny := BuildDenyList(opts.Task.Autonomy, allowGitPush)
 	settingsPath, wrote, isLocal, err := writeSettingsFile(opts.Task.Autonomy, cwd, opts.Permissions, opts.EnableChannel, allowGitPush, taskAPIAllow(opts))
 	if err != nil {
 		if !taskcontrol.IsAllowAll(opts.Task.Autonomy) {
@@ -669,7 +694,7 @@ func SpawnStageAgent(opts SpawnAgentOptions) (SpawnResult, error) {
 		}
 	}
 
-	args := buildSpawnArgsWithChannelConfig(opts, channelCfgPath)
+	args := buildSpawnArgsWithChannelConfig(opts, channelCfgPath, spawnAllow, spawnDeny)
 	cmd := buildExecCommand(opts.Spawner, args)
 	cmd.Dir = cwd
 	cmd.Env = BuildSpawnEnv(opts)
