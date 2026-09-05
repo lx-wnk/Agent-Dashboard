@@ -187,7 +187,8 @@ func Open(path string) (*DBBundle, error) {
 	// Rename the "backlog"/"concept" pipeline stages to "ready"/"backlog" across
 	// every table that stores a stage name. Must run after ent auto-migrate
 	// (tasks, stage_runs, task_schedules all exist) and is safe to run on every
-	// boot — idempotent, see migrateRenameStages.
+	// boot only because it records a one-shot marker — the rename itself is not
+	// idempotent, see migrateRenameStages.
 	if err := migrateRenameStages(sqlDB); err != nil {
 		_ = client.Close()
 		return nil, fmt.Errorf("db: rename stages: %w", err)
@@ -410,8 +411,30 @@ func migrateNormalizeApprovedOutcome(db *sql.DB) error {
 // "ready"/"backlog" in every table that carries a stage column. Rename order
 // is collision-safe: "backlog"→"ready" runs first, then "concept"→"backlog",
 // so a row already named "backlog" is never re-caught by the second rename.
-// Idempotent: a second run finds no rows with the old names and does nothing.
+// It runs exactly once, and it has to: after the first pass the rows that were
+// "concept" are named "backlog", which the first rename would catch on a second
+// pass and push to "ready" — the stage the scheduler picks up. Every task parked
+// in the refinement holding pen would start running by itself after a restart.
+// The data cannot answer "did this already run" either: a database that happens
+// to hold no "concept" row is indistinguishable from a migrated one. Hence the
+// marker row.
 func migrateRenameStages(db *sql.DB) error {
+	const marker = "rename-stages-concept-backlog"
+	if _, err := db.Exec(
+		`CREATE TABLE IF NOT EXISTS applied_migrations (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL)`,
+	); err != nil {
+		return fmt.Errorf("create applied_migrations: %w", err)
+	}
+	var applied int
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM applied_migrations WHERE name = ?`, marker,
+	).Scan(&applied); err != nil {
+		return fmt.Errorf("check marker %q: %w", marker, err)
+	}
+	if applied > 0 {
+		return nil
+	}
+
 	renames := []struct{ table, column, from, to string }{
 		{"tasks", "current_stage", "backlog", "ready"},
 		{"tasks", "current_stage", "concept", "backlog"},
@@ -435,6 +458,12 @@ func migrateRenameStages(db *sql.DB) error {
 				return fmt.Errorf("rename %s.%s %q→%q: %w", r.table, r.column, r.from, r.to, err)
 			}
 		}
+	}
+
+	if _, err := db.Exec(
+		`INSERT INTO applied_migrations (name, applied_at) VALUES (?, datetime('now'))`, marker,
+	); err != nil {
+		return fmt.Errorf("record marker %q: %w", marker, err)
 	}
 	return nil
 }
