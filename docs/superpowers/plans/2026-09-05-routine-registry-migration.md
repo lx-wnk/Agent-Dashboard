@@ -117,7 +117,9 @@ Mirrors `ReconcilePluginResources` line for line:
 Extracted so that both the reconciler and `Create` share one code path. Accepts the schedule, calls `resources.Upsert`, backlinks, returns the resource ID.
 
 **Design note — `ArchiveScheduleResource`:**
-Thin wrapper: `resources.SetState(ctx, resourceID, ResourceStateArchived)`. Extracted for naming clarity and to centralize the archived-state constant. `ResourceStateArchived` is not yet defined — this task adds it alongside `ResourceStateOrphaned` in `resource_repo.go` (currently at line 31). **Wait — `ResourceStateOrphaned` already exists at line 31.** Check whether an `"archived"` constant already exists. If not, add `ResourceStateArchived = "archived"` to the const block.
+Thin wrapper: `resources.SetState(ctx, resourceID, ResourceStateArchived)`. Extracted for naming clarity and to keep the archived-state constant in one place. `ResourceStateArchived` does not exist yet: `resource_repo.go` defines `discovered`, `installed`, `enabled`, `disabled` and `orphaned` and nothing else. This task adds `ResourceStateArchived = "archived"` to that const block.
+
+Why a new state rather than reusing `orphaned`: orphaned describes a resource whose backing thing vanished without anyone deciding to remove it — the reconciler's finding. Archived is the opposite, a deliberate deletion whose resource row is kept so grants still resolve. Collapsing the two would make "the plugin directory disappeared" and "the user deleted this routine" indistinguishable in the registry.
 
 **Steps:**
 - [ ] Check if `ResourceStateArchived` exists in `resource_repo.go`. If not, add it to the state const block.
