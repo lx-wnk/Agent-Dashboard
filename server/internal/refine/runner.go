@@ -127,10 +127,12 @@ func (r *Runner) Start(taskID string, cfg SpawnConfig, sp *ent.Spawner) (<-chan 
 			r.setState(taskID, StatusFailed, resp)
 		default:
 			cleaned, phases := ExtractPhases(resp)
+			cleaned, options := ExtractOptions(cleaned)
 			in := repo.CreateTurnInput{
 				TaskID:  taskID,
 				Role:    "assistant",
 				Content: cleaned,
+				Options: options,
 			}
 			if len(phases) > 0 {
 				last := phases[len(phases)-1]

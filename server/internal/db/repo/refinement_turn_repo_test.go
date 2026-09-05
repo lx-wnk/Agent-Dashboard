@@ -70,3 +70,41 @@ func TestRefinementTurnRepo_ListForTaskNewest_Limit(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, turns, 3)
 }
+
+// TestRefinementTurnRepo_OptionsRoundTrip covers the ent write path for prepared
+// answers, which nothing else reaches: the runner's own test uses a fake repo, so
+// without this the JSON field could fail to persist and every suite stays green.
+// A turn created without options must read back empty rather than as a stored
+// null the UI would have to special-case.
+func TestRefinementTurnRepo_OptionsRoundTrip(t *testing.T) {
+	client := openTestDB(t)
+	taskRepo := repo.NewTaskRepo(client)
+	turnRepo := repo.NewRefinementTurnRepo(client)
+	ctx := context.Background()
+
+	taskID := createTask(t, taskRepo, "refine-options-test")
+
+	withOptions, err := turnRepo.Create(ctx, repo.CreateTurnInput{
+		TaskID:  taskID,
+		Role:    "assistant",
+		Content: "Which database?",
+		Options: []string{"PostgreSQL", "SQLite"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"PostgreSQL", "SQLite"}, withOptions.Options)
+
+	withoutOptions, err := turnRepo.Create(ctx, repo.CreateTurnInput{
+		TaskID:  taskID,
+		Role:    "assistant",
+		Content: "No question here.",
+	})
+	require.NoError(t, err)
+	require.Empty(t, withoutOptions.Options)
+
+	turns, err := turnRepo.ListForTaskNewest(ctx, taskID, 10)
+	require.NoError(t, err)
+	require.Len(t, turns, 2)
+	require.Equal(t, []string{"PostgreSQL", "SQLite"}, turns[0].Options,
+		"options must survive the round trip through the database")
+	require.Empty(t, turns[1].Options)
+}

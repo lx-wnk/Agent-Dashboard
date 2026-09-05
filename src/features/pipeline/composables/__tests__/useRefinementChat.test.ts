@@ -248,3 +248,73 @@ it('parses a streamed __phase_done marker into completedPhases + approvalReady, 
   expect(assistant?.content).not.toContain('__phase_done')
   expect(assistant?.content).toContain('Looks ready.')
 })
+
+describe('useRefinementChat.sendMessage — streamed options block', () => {
+  function readerFor(frames: string) {
+    const chunks = [new TextEncoder().encode(frames)]
+    let i = 0
+    return {
+      read: async () => i < chunks.length
+        ? { done: false, value: chunks[i++] }
+        : { done: true, value: undefined },
+    }
+  }
+
+  function stubStream(frames: string) {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: { getReader: () => readerFor(frames) },
+    }))
+  }
+
+  it('parses the block into options and keeps both markers out of the content', async () => {
+    const frames
+      = 'data: Which database?\n\n'
+        + 'data: __options_start\n\n'
+        + 'data: PostgreSQL\n\n'
+        + 'data: SQLite\n\n'
+        + 'data: __options_end\n\n'
+    stubStream(frames)
+
+    const chat = useRefinementChat(() => 'task-1')
+    await chat.sendMessage('go')
+
+    const msg = chat.messages.value.at(-1)
+    expect(msg?.options).toEqual(['PostgreSQL', 'SQLite'])
+    expect(msg?.content).toBe('Which database?')
+    expect(msg?.content).not.toContain('__options')
+  })
+
+  it('keeps only the first three options when the agent offers more', async () => {
+    const frames
+      = 'data: Pick one\n\n'
+        + 'data: __options_start\n\n'
+        + 'data: one\n\ndata: two\n\ndata: three\n\ndata: four\n\n'
+        + 'data: __options_end\n\n'
+    stubStream(frames)
+
+    const chat = useRefinementChat(() => 'task-1')
+    await chat.sendMessage('go')
+
+    expect(chat.messages.value.at(-1)?.options).toEqual(['one', 'two', 'three'])
+  })
+
+  it('recovers the text of a block the agent opened but never closed', async () => {
+    // A cut stream (the 5-minute refine timeout, a crashed process) can end
+    // mid-block. Everything after __options_start would otherwise be collected as
+    // options that never arrive and never render — the answer silently truncates.
+    const frames
+      = 'data: Here is the plan.\n\n'
+        + 'data: __options_start\n\n'
+        + 'data: and then we deploy\n\n'
+    stubStream(frames)
+
+    const chat = useRefinementChat(() => 'task-1')
+    await chat.sendMessage('go')
+
+    const msg = chat.messages.value.at(-1)
+    expect(msg?.content).toBe('Here is the plan.\nand then we deploy')
+    expect(msg?.options).toBeUndefined()
+  })
+})

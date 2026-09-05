@@ -55,6 +55,12 @@ func (_c *RefinementTurnCreate) SetNillablePhase(v *string) *RefinementTurnCreat
 	return _c
 }
 
+// SetOptions sets the "options" field.
+func (_c *RefinementTurnCreate) SetOptions(v []string) *RefinementTurnCreate {
+	_c.mutation.SetOptions(v)
+	return _c
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (_c *RefinementTurnCreate) SetCreatedAt(v time.Time) *RefinementTurnCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -187,6 +193,10 @@ func (_c *RefinementTurnCreate) createSpec() (*RefinementTurn, *sqlgraph.CreateS
 		_spec.SetField(refinementturn.FieldPhase, field.TypeString, value)
 		_node.Phase = &value
 	}
+	if value, ok := _c.mutation.Options(); ok {
+		_spec.SetField(refinementturn.FieldOptions, field.TypeJSON, value)
+		_node.Options = value
+	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(refinementturn.FieldCreatedAt, field.TypeTime, value)
 		_node.CreatedAt = value
@@ -294,6 +304,24 @@ func (u *RefinementTurnUpsert) UpdatePhase() *RefinementTurnUpsert {
 // ClearPhase clears the value of the "phase" field.
 func (u *RefinementTurnUpsert) ClearPhase() *RefinementTurnUpsert {
 	u.SetNull(refinementturn.FieldPhase)
+	return u
+}
+
+// SetOptions sets the "options" field.
+func (u *RefinementTurnUpsert) SetOptions(v []string) *RefinementTurnUpsert {
+	u.Set(refinementturn.FieldOptions, v)
+	return u
+}
+
+// UpdateOptions sets the "options" field to the value that was provided on create.
+func (u *RefinementTurnUpsert) UpdateOptions() *RefinementTurnUpsert {
+	u.SetExcluded(refinementturn.FieldOptions)
+	return u
+}
+
+// ClearOptions clears the value of the "options" field.
+func (u *RefinementTurnUpsert) ClearOptions() *RefinementTurnUpsert {
+	u.SetNull(refinementturn.FieldOptions)
 	return u
 }
 
@@ -408,6 +436,27 @@ func (u *RefinementTurnUpsertOne) UpdatePhase() *RefinementTurnUpsertOne {
 func (u *RefinementTurnUpsertOne) ClearPhase() *RefinementTurnUpsertOne {
 	return u.Update(func(s *RefinementTurnUpsert) {
 		s.ClearPhase()
+	})
+}
+
+// SetOptions sets the "options" field.
+func (u *RefinementTurnUpsertOne) SetOptions(v []string) *RefinementTurnUpsertOne {
+	return u.Update(func(s *RefinementTurnUpsert) {
+		s.SetOptions(v)
+	})
+}
+
+// UpdateOptions sets the "options" field to the value that was provided on create.
+func (u *RefinementTurnUpsertOne) UpdateOptions() *RefinementTurnUpsertOne {
+	return u.Update(func(s *RefinementTurnUpsert) {
+		s.UpdateOptions()
+	})
+}
+
+// ClearOptions clears the value of the "options" field.
+func (u *RefinementTurnUpsertOne) ClearOptions() *RefinementTurnUpsertOne {
+	return u.Update(func(s *RefinementTurnUpsert) {
+		s.ClearOptions()
 	})
 }
 
@@ -689,6 +738,27 @@ func (u *RefinementTurnUpsertBulk) UpdatePhase() *RefinementTurnUpsertBulk {
 func (u *RefinementTurnUpsertBulk) ClearPhase() *RefinementTurnUpsertBulk {
 	return u.Update(func(s *RefinementTurnUpsert) {
 		s.ClearPhase()
+	})
+}
+
+// SetOptions sets the "options" field.
+func (u *RefinementTurnUpsertBulk) SetOptions(v []string) *RefinementTurnUpsertBulk {
+	return u.Update(func(s *RefinementTurnUpsert) {
+		s.SetOptions(v)
+	})
+}
+
+// UpdateOptions sets the "options" field to the value that was provided on create.
+func (u *RefinementTurnUpsertBulk) UpdateOptions() *RefinementTurnUpsertBulk {
+	return u.Update(func(s *RefinementTurnUpsert) {
+		s.UpdateOptions()
+	})
+}
+
+// ClearOptions clears the value of the "options" field.
+func (u *RefinementTurnUpsertBulk) ClearOptions() *RefinementTurnUpsertBulk {
+	return u.Update(func(s *RefinementTurnUpsert) {
+		s.ClearOptions()
 	})
 }
 

@@ -309,6 +309,16 @@ func PhaseContainsFold(v string) predicate.RefinementTurn {
 	return predicate.RefinementTurn(sql.FieldContainsFold(FieldPhase, v))
 }
 
+// OptionsIsNil applies the IsNil predicate on the "options" field.
+func OptionsIsNil() predicate.RefinementTurn {
+	return predicate.RefinementTurn(sql.FieldIsNull(FieldOptions))
+}
+
+// OptionsNotNil applies the NotNil predicate on the "options" field.
+func OptionsNotNil() predicate.RefinementTurn {
+	return predicate.RefinementTurn(sql.FieldNotNull(FieldOptions))
+}
+
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
 func CreatedAtEQ(v time.Time) predicate.RefinementTurn {
 	return predicate.RefinementTurn(sql.FieldEQ(FieldCreatedAt, v))

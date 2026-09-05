@@ -67,6 +67,17 @@ __phase_done: approval
 Emit each marker at most once, only when that phase is genuinely complete. Do not
 explain the markers to the user.
 
+When your turn ends with a question (not the approval turn), suggest up to three
+short answers the user is most likely to pick. Emit them as an out-of-band block
+the user never sees:
+__options_start
+<option 1>
+<option 2>
+<option 3>
+__options_end
+Place the block after all visible prose, on its own lines. Do not explain the
+block or refer to it in your answer. If you are not asking a question, omit it.
+
 ` + conceptSchemaInstruction + `
 </system>
 {{range .History}}

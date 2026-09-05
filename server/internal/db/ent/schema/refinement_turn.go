@@ -19,6 +19,7 @@ func (RefinementTurn) Fields() []ent.Field {
 		field.Enum("role").Values("user", "assistant"),
 		field.String("content"),
 		field.String("phase").Optional().Nillable(),
+		field.JSON("options", []string{}).Optional(),
 		field.Time("created_at").Default(time.Now).Immutable(),
 	}
 }
