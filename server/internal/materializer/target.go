@@ -83,13 +83,35 @@ func (r Resolver) Targets(scope repo.Scope) []Target {
 
 	switch scope.Normalize().Kind {
 	case repo.ScopeGlobal:
+		// Deduplicated by resolved path; the Root stays the spelling we were
+		// given. A dotfiles layout that links ~/.claude at ~/.claude-personal
+		// has AllClaudeConfigDirs return both, and they are one directory. Two
+		// targets for one directory is worse than a duplicate write: the first
+		// records the file under its own target_key, the second finds content it
+		// has no record of — the record belongs to the other key — and Classify
+		// calls that foreign, reporting a file we wrote ourselves as somebody
+		// else's on every run from then on.
+		//
+		// The resolved path is only the comparison key. Writing it into Root
+		// would rewrite target_key for every directory reached through a link —
+		// on macOS even /var/... becomes /private/var/... — which orphans every
+		// materialization row already recorded and turns the entire existing
+		// state foreign at once. That is the same defect at a larger scale, and
+		// the plan warns about it where target_key is defined.
+		seenRoot := map[string]bool{}
 		for _, dir := range r.ClaudeConfigDirs() {
-			if isDir(dir) {
-				out = append(out, Target{
-					NodeID: r.NodeID, Provider: string(sdk.ProviderClaude),
-					Layer: LayerUser, Root: filepath.Clean(dir), Adapter: AdapterClaude,
-				})
+			if !isDir(dir) {
+				continue
 			}
+			key := resolvedRoot(dir)
+			if seenRoot[key] {
+				continue
+			}
+			seenRoot[key] = true
+			out = append(out, Target{
+				NodeID: r.NodeID, Provider: string(sdk.ProviderClaude),
+				Layer: LayerUser, Root: filepath.Clean(dir), Adapter: AdapterClaude,
+			})
 		}
 	case repo.ScopeProject:
 		if isDir(scope.Ref) {
@@ -119,6 +141,18 @@ func (r Resolver) Targets(scope repo.Scope) []Target {
 
 // isDir reports whether path exists and is a directory. A config dir that does
 // not exist is skipped, never created.
+// resolvedRoot returns dir with symlinks resolved. It is a comparison key only
+// and never reaches a Target.Root — see the dedupe loop for why that separation
+// is load-bearing. Falls back to the cleaned path when resolution fails: a root
+// that cannot be resolved is still a usable destination, and refusing it here
+// would drop a real config directory over a transient stat error.
+func resolvedRoot(dir string) string {
+	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
+		return filepath.Clean(resolved)
+	}
+	return filepath.Clean(dir)
+}
+
 func isDir(path string) bool {
 	if path == "" {
 		return false
