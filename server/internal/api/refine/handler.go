@@ -71,11 +71,12 @@ func (h *Handler) Mount(r chi.Router) {
 
 // TurnResponse is the JSON shape returned by GET /api/refine/{taskId}/turns.
 type TurnResponse struct {
-	ID        string  `json:"id"`
-	Role      string  `json:"role"`
-	Content   string  `json:"content"`
-	Phase     *string `json:"phase,omitempty"`
-	CreatedAt string  `json:"created_at"` // RFC3339
+	ID        string   `json:"id"`
+	Role      string   `json:"role"`
+	Content   string   `json:"content"`
+	Phase     *string  `json:"phase,omitempty"`
+	Options   []string `json:"options,omitempty"`
+	CreatedAt string   `json:"created_at"` // RFC3339
 }
 
 // GET /api/refine/{taskId}/turns
@@ -97,6 +98,7 @@ func (h *Handler) listTurns(w http.ResponseWriter, r *http.Request) {
 			Role:      string(t.Role),
 			Content:   t.Content,
 			Phase:     t.Phase,
+			Options:   t.Options,
 			CreatedAt: t.CreatedAt.Format(time.RFC3339),
 		})
 	}

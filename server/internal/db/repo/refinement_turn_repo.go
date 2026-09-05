@@ -30,6 +30,7 @@ type CreateTurnInput struct {
 	Role    string // "user" or "assistant"
 	Content string
 	Phase   *string
+	Options []string // prepared answers; nil = none
 }
 
 type entRefinementTurnRepo struct{ client *ent.Client }
@@ -40,13 +41,16 @@ func NewRefinementTurnRepo(client *ent.Client) RefinementTurnRepo {
 }
 
 func (r *entRefinementTurnRepo) Create(ctx context.Context, in CreateTurnInput) (*ent.RefinementTurn, error) {
-	turn, err := r.client.RefinementTurn.Create().
+	b := r.client.RefinementTurn.Create().
 		SetID(uuid.New().String()).
 		SetTaskID(in.TaskID).
 		SetRole(refinementturn.Role(in.Role)).
 		SetContent(in.Content).
-		SetNillablePhase(in.Phase).
-		Save(ctx)
+		SetNillablePhase(in.Phase)
+	if len(in.Options) > 0 {
+		b = b.SetOptions(in.Options)
+	}
+	turn, err := b.Save(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("refinementTurn.Create: %w", err)
 	}

@@ -205,6 +205,86 @@ func TestRunner_Start_PersistsPhaseAndStripsMarker(t *testing.T) {
 	}
 }
 
+func TestRunner_Start_PersistsOptionsAndStripsBlock(t *testing.T) {
+	turns := &fakeTurns{}
+	spawn := func(_ context.Context, _ SpawnConfig, _ *ent.Spawner) (<-chan string, error) {
+		ch := make(chan string, 6)
+		ch <- "Here is a question?"
+		ch <- "__options_start"
+		ch <- "Yes, do it"
+		ch <- "No, skip it"
+		ch <- "Let me think"
+		ch <- "__options_end"
+		close(ch)
+		return ch, nil
+	}
+	r := NewRunner(turns, spawn)
+	out, _ := r.Start("task-1", SpawnConfig{}, nil)
+	for range out { //nolint:revive
+	}
+	waitFor(t, func() bool { s, _ := r.State("task-1"); return s == StatusDraftReady }, "done")
+
+	turns.mu.Lock()
+	defer turns.mu.Unlock()
+	var asst *repo.CreateTurnInput
+	for i := range turns.created {
+		if turns.created[i].Role == "assistant" {
+			asst = &turns.created[i]
+		}
+	}
+	if asst == nil {
+		t.Fatal("no assistant turn persisted")
+	}
+	wantOptions := []string{"Yes, do it", "No, skip it", "Let me think"}
+	if len(asst.Options) != len(wantOptions) {
+		t.Fatalf("persisted options: got %v, want %v", asst.Options, wantOptions)
+	}
+	for i, want := range wantOptions {
+		if asst.Options[i] != want {
+			t.Errorf("option %d: got %q, want %q", i, asst.Options[i], want)
+		}
+	}
+	for _, marker := range []string{"__options_start", "__options_end", "Yes, do it", "No, skip it", "Let me think"} {
+		if strings.Contains(asst.Content, marker) {
+			t.Errorf("persisted content still contains %q: %q", marker, asst.Content)
+		}
+	}
+	if asst.Content != "Here is a question?" {
+		t.Errorf("persisted content: got %q, want %q", asst.Content, "Here is a question?")
+	}
+}
+
+func TestRunner_Start_NoOptionsBlockPersistsNilOptions(t *testing.T) {
+	turns := &fakeTurns{}
+	spawn := func(_ context.Context, _ SpawnConfig, _ *ent.Spawner) (<-chan string, error) {
+		ch := make(chan string, 2)
+		ch <- "Here is a question?"
+		ch <- "No options here."
+		close(ch)
+		return ch, nil
+	}
+	r := NewRunner(turns, spawn)
+	out, _ := r.Start("task-1", SpawnConfig{}, nil)
+	for range out { //nolint:revive
+	}
+	waitFor(t, func() bool { s, _ := r.State("task-1"); return s == StatusDraftReady }, "done")
+
+	turns.mu.Lock()
+	defer turns.mu.Unlock()
+	var asst *repo.CreateTurnInput
+	for i := range turns.created {
+		if turns.created[i].Role == "assistant" {
+			asst = &turns.created[i]
+		}
+	}
+	if asst == nil {
+		t.Fatal("no assistant turn persisted")
+	}
+	if asst.Options != nil {
+		t.Errorf("persisted options: got %v, want nil", asst.Options)
+	}
+}
+
 func TestRunner_Start_RejectsConcurrentRun(t *testing.T) {
 	release := make(chan struct{})
 	spawn := func(_ context.Context, _ SpawnConfig, _ *ent.Spawner) (<-chan string, error) {

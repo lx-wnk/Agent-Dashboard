@@ -17179,6 +17179,8 @@ type RefinementTurnMutation struct {
 	role          *refinementturn.Role
 	content       *string
 	phase         *string
+	options       *[]string
+	appendoptions []string
 	created_at    *time.Time
 	clearedFields map[string]struct{}
 	done          bool
@@ -17447,6 +17449,71 @@ func (m *RefinementTurnMutation) ResetPhase() {
 	delete(m.clearedFields, refinementturn.FieldPhase)
 }
 
+// SetOptions sets the "options" field.
+func (m *RefinementTurnMutation) SetOptions(s []string) {
+	m.options = &s
+	m.appendoptions = nil
+}
+
+// Options returns the value of the "options" field in the mutation.
+func (m *RefinementTurnMutation) Options() (r []string, exists bool) {
+	v := m.options
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOptions returns the old "options" field's value of the RefinementTurn entity.
+// If the RefinementTurn object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RefinementTurnMutation) OldOptions(ctx context.Context) (v []string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOptions is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOptions requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOptions: %w", err)
+	}
+	return oldValue.Options, nil
+}
+
+// AppendOptions adds s to the "options" field.
+func (m *RefinementTurnMutation) AppendOptions(s []string) {
+	m.appendoptions = append(m.appendoptions, s...)
+}
+
+// AppendedOptions returns the list of values that were appended to the "options" field in this mutation.
+func (m *RefinementTurnMutation) AppendedOptions() ([]string, bool) {
+	if len(m.appendoptions) == 0 {
+		return nil, false
+	}
+	return m.appendoptions, true
+}
+
+// ClearOptions clears the value of the "options" field.
+func (m *RefinementTurnMutation) ClearOptions() {
+	m.options = nil
+	m.appendoptions = nil
+	m.clearedFields[refinementturn.FieldOptions] = struct{}{}
+}
+
+// OptionsCleared returns if the "options" field was cleared in this mutation.
+func (m *RefinementTurnMutation) OptionsCleared() bool {
+	_, ok := m.clearedFields[refinementturn.FieldOptions]
+	return ok
+}
+
+// ResetOptions resets all changes to the "options" field.
+func (m *RefinementTurnMutation) ResetOptions() {
+	m.options = nil
+	m.appendoptions = nil
+	delete(m.clearedFields, refinementturn.FieldOptions)
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (m *RefinementTurnMutation) SetCreatedAt(t time.Time) {
 	m.created_at = &t
@@ -17517,7 +17584,7 @@ func (m *RefinementTurnMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *RefinementTurnMutation) Fields() []string {
-	fields := make([]string, 0, 5)
+	fields := make([]string, 0, 6)
 	if m.task_id != nil {
 		fields = append(fields, refinementturn.FieldTaskID)
 	}
@@ -17529,6 +17596,9 @@ func (m *RefinementTurnMutation) Fields() []string {
 	}
 	if m.phase != nil {
 		fields = append(fields, refinementturn.FieldPhase)
+	}
+	if m.options != nil {
+		fields = append(fields, refinementturn.FieldOptions)
 	}
 	if m.created_at != nil {
 		fields = append(fields, refinementturn.FieldCreatedAt)
@@ -17549,6 +17619,8 @@ func (m *RefinementTurnMutation) Field(name string) (ent.Value, bool) {
 		return m.Content()
 	case refinementturn.FieldPhase:
 		return m.Phase()
+	case refinementturn.FieldOptions:
+		return m.Options()
 	case refinementturn.FieldCreatedAt:
 		return m.CreatedAt()
 	}
@@ -17568,6 +17640,8 @@ func (m *RefinementTurnMutation) OldField(ctx context.Context, name string) (ent
 		return m.OldContent(ctx)
 	case refinementturn.FieldPhase:
 		return m.OldPhase(ctx)
+	case refinementturn.FieldOptions:
+		return m.OldOptions(ctx)
 	case refinementturn.FieldCreatedAt:
 		return m.OldCreatedAt(ctx)
 	}
@@ -17606,6 +17680,13 @@ func (m *RefinementTurnMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetPhase(v)
+		return nil
+	case refinementturn.FieldOptions:
+		v, ok := value.([]string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOptions(v)
 		return nil
 	case refinementturn.FieldCreatedAt:
 		v, ok := value.(time.Time)
@@ -17647,6 +17728,9 @@ func (m *RefinementTurnMutation) ClearedFields() []string {
 	if m.FieldCleared(refinementturn.FieldPhase) {
 		fields = append(fields, refinementturn.FieldPhase)
 	}
+	if m.FieldCleared(refinementturn.FieldOptions) {
+		fields = append(fields, refinementturn.FieldOptions)
+	}
 	return fields
 }
 
@@ -17663,6 +17747,9 @@ func (m *RefinementTurnMutation) ClearField(name string) error {
 	switch name {
 	case refinementturn.FieldPhase:
 		m.ClearPhase()
+		return nil
+	case refinementturn.FieldOptions:
+		m.ClearOptions()
 		return nil
 	}
 	return fmt.Errorf("unknown RefinementTurn nullable field %s", name)
@@ -17683,6 +17770,9 @@ func (m *RefinementTurnMutation) ResetField(name string) error {
 		return nil
 	case refinementturn.FieldPhase:
 		m.ResetPhase()
+		return nil
+	case refinementturn.FieldOptions:
+		m.ResetOptions()
 		return nil
 	case refinementturn.FieldCreatedAt:
 		m.ResetCreatedAt()

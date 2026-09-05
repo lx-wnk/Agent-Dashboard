@@ -3,6 +3,7 @@
 package ent
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -25,6 +26,8 @@ type RefinementTurn struct {
 	Content string `json:"content,omitempty"`
 	// Phase holds the value of the "phase" field.
 	Phase *string `json:"phase,omitempty"`
+	// Options holds the value of the "options" field.
+	Options []string `json:"options,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt    time.Time `json:"created_at,omitempty"`
 	selectValues sql.SelectValues
@@ -35,6 +38,8 @@ func (*RefinementTurn) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
+		case refinementturn.FieldOptions:
+			values[i] = new([]byte)
 		case refinementturn.FieldID, refinementturn.FieldTaskID, refinementturn.FieldRole, refinementturn.FieldContent, refinementturn.FieldPhase:
 			values[i] = new(sql.NullString)
 		case refinementturn.FieldCreatedAt:
@@ -84,6 +89,14 @@ func (_m *RefinementTurn) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.Phase = new(string)
 				*_m.Phase = value.String
+			}
+		case refinementturn.FieldOptions:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field options", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.Options); err != nil {
+					return fmt.Errorf("unmarshal field options: %w", err)
+				}
 			}
 		case refinementturn.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -140,6 +153,9 @@ func (_m *RefinementTurn) String() string {
 		builder.WriteString("phase=")
 		builder.WriteString(*v)
 	}
+	builder.WriteString(", ")
+	builder.WriteString("options=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Options))
 	builder.WriteString(", ")
 	builder.WriteString("created_at=")
 	builder.WriteString(_m.CreatedAt.Format(time.ANSIC))

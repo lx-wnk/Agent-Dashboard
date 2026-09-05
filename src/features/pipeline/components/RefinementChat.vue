@@ -24,12 +24,16 @@ const JSON_BLOCK_RE = /```json\n([\s\S]*?)```/
 // machine data (parsed for the title + persisted onto the task on confirm), so
 // hide it from the chat bubble rather than rendering a raw JSON dump.
 const JSON_BLOCK_STRIP_RE = /```json\n[\s\S]*?```/g
+// Options block: strip from displayed content in case any marker leaks through.
+// Parity: server/internal/refine/options.go (optionsBlockRE).
+const OPTIONS_BLOCK_RE = /^__options_start\n[\s\S]*?^__options_end\s*$/gm
 
 function cleanContent(text: string): string {
   return text
     .replace(PHASE_DONE_RE, '')
     .replace(REFINED_TITLE_RE, '')
     .replace(JSON_BLOCK_STRIP_RE, '')
+    .replace(OPTIONS_BLOCK_RE, '')
     .trimEnd()
 }
 
@@ -241,6 +245,19 @@ function isPhaseMarker(idx: number): string | null {
     return null
   return msg.phase
 }
+
+// Prepared answers from the last assistant message — shown as clickable buttons
+// so the user can pick instead of typing. Disappear once answered (next user msg).
+const lastAssistantOptions = computed(() => {
+  const last = messages.value.at(-1)
+  if (!last || last.role !== 'assistant' || !last.options?.length)
+    return []
+  return last.options
+})
+
+function handleOptionClick(option: string) {
+  sendMessage(option)
+}
 </script>
 
 <template>
@@ -329,6 +346,21 @@ function isPhaseMarker(idx: number): string | null {
           class="self-start min-w-[52px] px-3 py-2 rounded-xl rounded-bl-sm bg-raised border border-line text-fg-faint"
         >
           <span class="dot-pulse"><span /><span /><span /></span>
+        </div>
+
+        <!-- Prepared answer buttons — last assistant message only -->
+        <div
+          v-if="lastAssistantOptions.length > 0 && !isStreaming"
+          class="flex flex-wrap gap-2 self-start max-w-[88%] pt-1"
+        >
+          <button
+            v-for="(option, i) in lastAssistantOptions"
+            :key="i"
+            class="px-4 py-2 rounded-full border border-line bg-raised cursor-pointer text-sm font-medium text-fg-mute transition-all hover:border-blue-400 dark:hover:border-blue-500 hover:bg-raised hover:-translate-y-px active:translate-y-0"
+            @click="handleOptionClick(option)"
+          >
+            {{ option }}
+          </button>
         </div>
       </div>
 

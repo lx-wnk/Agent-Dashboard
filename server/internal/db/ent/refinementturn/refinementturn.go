@@ -22,6 +22,8 @@ const (
 	FieldContent = "content"
 	// FieldPhase holds the string denoting the phase field in the database.
 	FieldPhase = "phase"
+	// FieldOptions holds the string denoting the options field in the database.
+	FieldOptions = "options"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// Table holds the table name of the refinementturn in the database.
@@ -35,6 +37,7 @@ var Columns = []string{
 	FieldRole,
 	FieldContent,
 	FieldPhase,
+	FieldOptions,
 	FieldCreatedAt,
 }
 

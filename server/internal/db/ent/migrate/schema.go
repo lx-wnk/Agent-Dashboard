@@ -649,6 +649,7 @@ var (
 		{Name: "role", Type: field.TypeEnum, Enums: []string{"user", "assistant"}},
 		{Name: "content", Type: field.TypeString},
 		{Name: "phase", Type: field.TypeString, Nullable: true},
+		{Name: "options", Type: field.TypeJSON, Nullable: true},
 		{Name: "created_at", Type: field.TypeTime},
 	}
 	// RefinementTurnsTable holds the schema information for the "refinement_turns" table.
@@ -660,7 +661,7 @@ var (
 			{
 				Name:    "refinementturn_task_id_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{RefinementTurnsColumns[1], RefinementTurnsColumns[5]},
+				Columns: []*schema.Column{RefinementTurnsColumns[1], RefinementTurnsColumns[6]},
 			},
 		},
 	}

@@ -9,6 +9,7 @@ import (
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"entgo.io/ent/dialect/sql/sqljson"
 	"entgo.io/ent/schema/field"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/predicate"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/refinementturn"
@@ -89,6 +90,24 @@ func (_u *RefinementTurnUpdate) ClearPhase() *RefinementTurnUpdate {
 	return _u
 }
 
+// SetOptions sets the "options" field.
+func (_u *RefinementTurnUpdate) SetOptions(v []string) *RefinementTurnUpdate {
+	_u.mutation.SetOptions(v)
+	return _u
+}
+
+// AppendOptions appends value to the "options" field.
+func (_u *RefinementTurnUpdate) AppendOptions(v []string) *RefinementTurnUpdate {
+	_u.mutation.AppendOptions(v)
+	return _u
+}
+
+// ClearOptions clears the value of the "options" field.
+func (_u *RefinementTurnUpdate) ClearOptions() *RefinementTurnUpdate {
+	_u.mutation.ClearOptions()
+	return _u
+}
+
 // Mutation returns the RefinementTurnMutation object of the builder.
 func (_u *RefinementTurnUpdate) Mutation() *RefinementTurnMutation {
 	return _u.mutation
@@ -157,6 +176,17 @@ func (_u *RefinementTurnUpdate) sqlSave(ctx context.Context) (_node int, err err
 	}
 	if _u.mutation.PhaseCleared() {
 		_spec.ClearField(refinementturn.FieldPhase, field.TypeString)
+	}
+	if value, ok := _u.mutation.Options(); ok {
+		_spec.SetField(refinementturn.FieldOptions, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedOptions(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, refinementturn.FieldOptions, value)
+		})
+	}
+	if _u.mutation.OptionsCleared() {
+		_spec.ClearField(refinementturn.FieldOptions, field.TypeJSON)
 	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
@@ -237,6 +267,24 @@ func (_u *RefinementTurnUpdateOne) SetNillablePhase(v *string) *RefinementTurnUp
 // ClearPhase clears the value of the "phase" field.
 func (_u *RefinementTurnUpdateOne) ClearPhase() *RefinementTurnUpdateOne {
 	_u.mutation.ClearPhase()
+	return _u
+}
+
+// SetOptions sets the "options" field.
+func (_u *RefinementTurnUpdateOne) SetOptions(v []string) *RefinementTurnUpdateOne {
+	_u.mutation.SetOptions(v)
+	return _u
+}
+
+// AppendOptions appends value to the "options" field.
+func (_u *RefinementTurnUpdateOne) AppendOptions(v []string) *RefinementTurnUpdateOne {
+	_u.mutation.AppendOptions(v)
+	return _u
+}
+
+// ClearOptions clears the value of the "options" field.
+func (_u *RefinementTurnUpdateOne) ClearOptions() *RefinementTurnUpdateOne {
+	_u.mutation.ClearOptions()
 	return _u
 }
 
@@ -338,6 +386,17 @@ func (_u *RefinementTurnUpdateOne) sqlSave(ctx context.Context) (_node *Refineme
 	}
 	if _u.mutation.PhaseCleared() {
 		_spec.ClearField(refinementturn.FieldPhase, field.TypeString)
+	}
+	if value, ok := _u.mutation.Options(); ok {
+		_spec.SetField(refinementturn.FieldOptions, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedOptions(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, refinementturn.FieldOptions, value)
+		})
+	}
+	if _u.mutation.OptionsCleared() {
+		_spec.ClearField(refinementturn.FieldOptions, field.TypeJSON)
 	}
 	_node = &RefinementTurn{config: _u.config}
 	_spec.Assign = _node.assignValues

@@ -11,11 +11,18 @@ export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
   phase?: string | null
+  options?: string[]
   images?: ImageAttachment[]
 }
 
 export const PHASE_ORDER = ['analysis', 'spec', 'implementation_plan', 'approval'] as const
 const PHASE_DONE_LINE_RE = /__phase_done:\s*(\w+)/
+
+// Options block markers — the agent emits prepared answers between these two
+// lines. Parity: the backend strips the same block in
+// server/internal/refine/options.go (optionsBlockRE). Keep the two in sync.
+const OPTIONS_START_LINE = '__options_start'
+const OPTIONS_END_LINE = '__options_end'
 
 export const PHASE_LABELS: Record<string, string> = {
   analysis: 'Analysis',
@@ -33,6 +40,7 @@ export interface RefineTurn {
   role: string
   content: string
   phase: string | null
+  options?: string[]
 }
 
 /** Single-source fetch for the refinement conversation history. Throws on non-2xx. */
@@ -76,6 +84,7 @@ export function useRefinementChat(taskId: () => string | null) {
       role: t.role as 'user' | 'assistant',
       content: t.content,
       phase: t.phase,
+      ...(t.options?.length ? { options: t.options } : {}),
     }))
     for (const t of turns) {
       if (t.phase)
@@ -109,6 +118,8 @@ export function useRefinementChat(taskId: () => string | null) {
     error.value = null
 
     let assistantContent = ''
+    let insideOptionsBlock = false
+    let pendingOptions: string[] = []
     const assistantIdx = messages.value.push({ role: 'assistant', content: '' }) - 1
 
     abortController = new AbortController()
@@ -168,6 +179,28 @@ export function useRefinementChat(taskId: () => string | null) {
               // A line that is purely a marker contributes no text (and no break).
               if (raw.replace(PHASE_DONE_LINE_RE, '').trim() === '')
                 continue
+            }
+
+            // Options block: collect lines between __options_start / __options_end.
+            // Strip entirely from the displayed content — the options surface as
+            // structured data on the message, not as visible text.
+            if (raw.trim() === OPTIONS_START_LINE) {
+              insideOptionsBlock = true
+              pendingOptions = []
+              continue
+            }
+            if (raw.trim() === OPTIONS_END_LINE) {
+              insideOptionsBlock = false
+              if (pendingOptions.length > 0) {
+                messages.value[assistantIdx].options = pendingOptions.slice(0, 3)
+              }
+              continue
+            }
+            if (insideOptionsBlock) {
+              const trimmed = raw.trim()
+              if (trimmed)
+                pendingOptions.push(trimmed)
+              continue
             }
 
             // Default claude output is plain text, not JSON — fall back to treating

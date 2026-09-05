@@ -454,7 +454,7 @@ func init() {
 	refinementturnFields := schema.RefinementTurn{}.Fields()
 	_ = refinementturnFields
 	// refinementturnDescCreatedAt is the schema descriptor for created_at field.
-	refinementturnDescCreatedAt := refinementturnFields[5].Descriptor()
+	refinementturnDescCreatedAt := refinementturnFields[6].Descriptor()
 	// refinementturn.DefaultCreatedAt holds the default value on creation for the created_at field.
 	refinementturn.DefaultCreatedAt = refinementturnDescCreatedAt.Default.(func() time.Time)
 	remoteregistrationFields := schema.RemoteRegistration{}.Fields()
