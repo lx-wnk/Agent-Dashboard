@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/db"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 )
 
@@ -37,7 +38,7 @@ func newSchedule(t *testing.T, r repo.TaskScheduleRepo, name string, in repo.Cre
 }
 
 func TestTaskScheduleRepo_CRUD(t *testing.T) {
-	r := repo.NewTaskScheduleRepo(openDB(t))
+	r := repo.NewTaskScheduleRepo(openDB(t), nil)
 	ctx := context.Background()
 
 	id := newSchedule(t, r, "daily", repo.CreateTaskScheduleInput{})
@@ -75,7 +76,7 @@ func TestTaskScheduleRepo_CRUD(t *testing.T) {
 }
 
 func TestTaskScheduleRepo_ListDue(t *testing.T) {
-	r := repo.NewTaskScheduleRepo(openDB(t))
+	r := repo.NewTaskScheduleRepo(openDB(t), nil)
 	ctx := context.Background()
 	now := time.Date(2026, 6, 18, 12, 0, 0, 0, time.UTC)
 
@@ -96,7 +97,7 @@ func TestTaskScheduleRepo_ListDue(t *testing.T) {
 }
 
 func TestTaskScheduleRepo_UpdateFireState(t *testing.T) {
-	r := repo.NewTaskScheduleRepo(openDB(t))
+	r := repo.NewTaskScheduleRepo(openDB(t), nil)
 	ctx := context.Background()
 	id := newSchedule(t, r, "fire", repo.CreateTaskScheduleInput{})
 
@@ -119,5 +120,149 @@ func TestTaskScheduleRepo_UpdateFireState(t *testing.T) {
 	}
 	if s.NextRunAt == nil || !s.NextRunAt.Equal(next) {
 		t.Fatalf("next_run_at mismatch: %+v", s.NextRunAt)
+	}
+}
+
+// newScheduleRepoWithResources returns a TaskScheduleRepo wired to a ResourceRepo
+// so CRUD operations propagate to the resource registry.
+func newScheduleRepoWithResources(t *testing.T) (repo.TaskScheduleRepo, repo.ResourceRepo, context.Context) {
+	t.Helper()
+	bundle, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+	resources := repo.NewResourceRepo(bundle.Client)
+	schedules := repo.NewTaskScheduleRepo(bundle.Client, resources)
+	return schedules, resources, context.Background()
+}
+
+func TestTaskScheduleRepo_CreateCreatesResourceRow(t *testing.T) {
+	schedules, resources, ctx := newScheduleRepoWithResources(t)
+
+	s, err := schedules.Create(ctx, repo.CreateTaskScheduleInput{
+		Name:                "nightly",
+		CronExpr:            "0 9 * * *",
+		SlugPrefix:          "nightly",
+		Title:               "Nightly run",
+		Cwd:                 "/tmp",
+		MaxIterations:       20,
+		StageTimeoutSeconds: 1800,
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// Resource row must exist with the schedule ID as slug
+	res, err := resources.Get(ctx, repo.ResourceKindRoutine, repo.GlobalScope(), s.ID)
+	if err != nil {
+		t.Fatalf("resource not created: %v", err)
+	}
+	if res.State != repo.ResourceStateEnabled {
+		t.Fatalf("expected enabled, got %s", res.State)
+	}
+	if res.Name != "nightly" {
+		t.Fatalf("expected name nightly, got %s", res.Name)
+	}
+	if res.OriginRef != s.ID {
+		t.Fatalf("origin_ref mismatch: %s != %s", res.OriginRef, s.ID)
+	}
+
+	// Schedule must have resource_id backlinked
+	got, _ := schedules.GetByID(ctx, s.ID)
+	if got.ResourceID != res.ID {
+		t.Fatalf("resource_id not backlinked: %s != %s", got.ResourceID, res.ID)
+	}
+}
+
+func TestTaskScheduleRepo_DeleteOrphansResourceRow(t *testing.T) {
+	schedules, resources, ctx := newScheduleRepoWithResources(t)
+
+	s, err := schedules.Create(ctx, repo.CreateTaskScheduleInput{
+		Name:                "ephemeral",
+		CronExpr:            "0 9 * * *",
+		SlugPrefix:          "eph",
+		Title:               "Ephemeral",
+		Cwd:                 "/tmp",
+		MaxIterations:       20,
+		StageTimeoutSeconds: 1800,
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	if err := schedules.Delete(ctx, s.ID); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+
+	// Resource row must still exist, state orphaned
+	res, err := resources.Get(ctx, repo.ResourceKindRoutine, repo.GlobalScope(), s.ID)
+	if err != nil {
+		t.Fatalf("resource row should survive delete: %v", err)
+	}
+	if res.State != repo.ResourceStateOrphaned {
+		t.Fatalf("expected orphaned, got %s", res.State)
+	}
+}
+
+func TestTaskScheduleRepo_SetEnabledSyncsResourceState(t *testing.T) {
+	schedules, resources, ctx := newScheduleRepoWithResources(t)
+
+	s, err := schedules.Create(ctx, repo.CreateTaskScheduleInput{
+		Name:                "toggle",
+		CronExpr:            "0 9 * * *",
+		SlugPrefix:          "toggle",
+		Title:               "Toggle",
+		Cwd:                 "/tmp",
+		MaxIterations:       20,
+		StageTimeoutSeconds: 1800,
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// Disable
+	if _, err := schedules.SetEnabled(ctx, s.ID, false); err != nil {
+		t.Fatalf("SetEnabled(false): %v", err)
+	}
+	res, _ := resources.Get(ctx, repo.ResourceKindRoutine, repo.GlobalScope(), s.ID)
+	if res.State != repo.ResourceStateDisabled {
+		t.Fatalf("expected disabled, got %s", res.State)
+	}
+
+	// Re-enable
+	if _, err := schedules.SetEnabled(ctx, s.ID, true); err != nil {
+		t.Fatalf("SetEnabled(true): %v", err)
+	}
+	res, _ = resources.Get(ctx, repo.ResourceKindRoutine, repo.GlobalScope(), s.ID)
+	if res.State != repo.ResourceStateEnabled {
+		t.Fatalf("expected enabled, got %s", res.State)
+	}
+}
+
+func TestTaskScheduleRepo_UpdateRefreshesResourceName(t *testing.T) {
+	schedules, resources, ctx := newScheduleRepoWithResources(t)
+
+	s, err := schedules.Create(ctx, repo.CreateTaskScheduleInput{
+		Name:                "original",
+		CronExpr:            "0 9 * * *",
+		SlugPrefix:          "orig",
+		Title:               "Original",
+		Cwd:                 "/tmp",
+		MaxIterations:       20,
+		StageTimeoutSeconds: 1800,
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	newName := "renamed"
+	if _, err := schedules.Update(ctx, s.ID, repo.UpdateTaskScheduleInput{Name: &newName}); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+
+	res, _ := resources.Get(ctx, repo.ResourceKindRoutine, repo.GlobalScope(), s.ID)
+	if res.Name != "renamed" {
+		t.Fatalf("expected renamed, got %s", res.Name)
 	}
 }

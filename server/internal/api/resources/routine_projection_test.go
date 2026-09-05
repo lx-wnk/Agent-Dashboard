@@ -24,7 +24,7 @@ func newRoutineMux(t *testing.T) (*chi.Mux, repo.TaskScheduleRepo, context.Conte
 
 	ctx := context.Background()
 	repo.SeedCapabilities(ctx, repo.NewCapabilityRepo(bundle.Client))
-	schedRepo := repo.NewTaskScheduleRepo(bundle.Client)
+	schedRepo := repo.NewTaskScheduleRepo(bundle.Client, nil)
 
 	mux := chi.NewRouter()
 	apiresources.NewHandler(repo.NewResourceRepo(bundle.Client), schedRepo, memory.Gate{

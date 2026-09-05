@@ -20,7 +20,7 @@ func provideScheduler(client *ent.Client, taskHandler *tasks.Handler, tb *sse.Ta
 	if client == nil || taskHandler == nil {
 		return nil, nil
 	}
-	schedRepo := repo.NewTaskScheduleRepo(client)
+	schedRepo := repo.NewTaskScheduleRepo(client, nil)
 	taskRepo := repo.NewTaskRepo(client)
 	permRepo := repo.NewPermissionRepo(client)
 	cfgRepo := repo.NewPipelineConfigRepo(client)

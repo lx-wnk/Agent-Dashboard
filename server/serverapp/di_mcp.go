@@ -118,7 +118,7 @@ func provideMCPHandler(
 		Revoke: mcp.StageKeyIssuer{Keys: apiKeyRepo}.Revoke,
 	})
 	mcptools.RegisterScheduleTools(registry, mcptools.ScheduleDeps{
-		Repo:       repo.NewTaskScheduleRepo(client),
+		Repo:       repo.NewTaskScheduleRepo(client, nil),
 		Translator: scheduler.NewNLCron(nil),
 		Runner:     sched,
 		Broadcast:  broadcast,

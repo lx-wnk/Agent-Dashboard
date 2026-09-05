@@ -17,7 +17,7 @@ func newScheduleRegistry(t *testing.T) (mcp.ToolRegistry, repo.TaskScheduleRepo)
 	bundle, err := db.Open(":memory:")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = bundle.Client.Close() })
-	r := repo.NewTaskScheduleRepo(bundle.Client)
+	r := repo.NewTaskScheduleRepo(bundle.Client, nil)
 	registry := mcp.ToolRegistry{}
 	RegisterScheduleTools(registry, ScheduleDeps{
 		Repo:       r,
