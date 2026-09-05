@@ -247,7 +247,10 @@ func buildAllowedToolsList(ctx *StageContext) []string {
 
 // resumeContinueInstruction replaces the full task spec on resume spawns to
 // avoid re-sending the entire spec that the session already has in context.
-const resumeContinueInstruction = "Continue your previous attempt on this task. Your earlier session context is already loaded — do not restart from scratch or re-read the full specification. Review where you left off, fix what caused the previous failure, and complete the remaining work."
+// It repeats how to submit the result, because replacing the stage prompt also
+// drops that prompt's set_stage_output instruction — leaving a resumed run with
+// no statement of the primary channel at all.
+const resumeContinueInstruction = "Continue your previous attempt on this task. Your earlier session context is already loaded — do not restart from scratch or re-read the full specification. Review where you left off, fix what caused the previous failure, and complete the remaining work. Submit your result as your FINAL action by calling the `set_stage_output` MCP tool, in the same shape your original instructions specified; only if that tool is unavailable, emit the same object as a fenced json block."
 
 // buildStageUserPrompt assembles the user-facing prompt for a stage execution.
 // On resume, the full task spec (bundle.UserPrompt) is swapped for a short
