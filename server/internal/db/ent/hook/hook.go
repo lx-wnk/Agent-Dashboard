@@ -141,6 +141,18 @@ func (f GrantUsageFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, 
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.GrantUsageMutation", m)
 }
 
+// The MaterializationFunc type is an adapter to allow the use of ordinary
+// function as Materialization mutator.
+type MaterializationFunc func(context.Context, *ent.MaterializationMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f MaterializationFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.MaterializationMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.MaterializationMutation", m)
+}
+
 // The MemoryEntryFunc type is an adapter to allow the use of ordinary
 // function as MemoryEntry mutator.
 type MemoryEntryFunc func(context.Context, *ent.MemoryEntryMutation) (ent.Value, error)
@@ -319,6 +331,18 @@ func (f ScratchpadFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, 
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ScratchpadMutation", m)
+}
+
+// The SkillFunc type is an adapter to allow the use of ordinary
+// function as Skill mutator.
+type SkillFunc func(context.Context, *ent.SkillMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SkillFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SkillMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SkillMutation", m)
 }
 
 // The SpawnerFunc type is an adapter to allow the use of ordinary

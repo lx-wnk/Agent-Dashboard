@@ -34,6 +34,8 @@ type Tx struct {
 	Grant *GrantClient
 	// GrantUsage is the client for interacting with the GrantUsage builders.
 	GrantUsage *GrantUsageClient
+	// Materialization is the client for interacting with the Materialization builders.
+	Materialization *MaterializationClient
 	// MemoryEntry is the client for interacting with the MemoryEntry builders.
 	MemoryEntry *MemoryEntryClient
 	// MemoryInjection is the client for interacting with the MemoryInjection builders.
@@ -64,6 +66,8 @@ type Tx struct {
 	Resource *ResourceClient
 	// Scratchpad is the client for interacting with the Scratchpad builders.
 	Scratchpad *ScratchpadClient
+	// Skill is the client for interacting with the Skill builders.
+	Skill *SkillClient
 	// Spawner is the client for interacting with the Spawner builders.
 	Spawner *SpawnerClient
 	// StageRun is the client for interacting with the StageRun builders.
@@ -222,6 +226,7 @@ func (tx *Tx) init() {
 	tx.EvalMetricSnapshot = NewEvalMetricSnapshotClient(tx.config)
 	tx.Grant = NewGrantClient(tx.config)
 	tx.GrantUsage = NewGrantUsageClient(tx.config)
+	tx.Materialization = NewMaterializationClient(tx.config)
 	tx.MemoryEntry = NewMemoryEntryClient(tx.config)
 	tx.MemoryInjection = NewMemoryInjectionClient(tx.config)
 	tx.PermissionPreset = NewPermissionPresetClient(tx.config)
@@ -237,6 +242,7 @@ func (tx *Tx) init() {
 	tx.RemoteRegistration = NewRemoteRegistrationClient(tx.config)
 	tx.Resource = NewResourceClient(tx.config)
 	tx.Scratchpad = NewScratchpadClient(tx.config)
+	tx.Skill = NewSkillClient(tx.config)
 	tx.Spawner = NewSpawnerClient(tx.config)
 	tx.StageRun = NewStageRunClient(tx.config)
 	tx.SystemPrompt = NewSystemPromptClient(tx.config)

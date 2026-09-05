@@ -16,6 +16,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/evalmetricsnapshot"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/grant"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/grantusage"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/materialization"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/memoryentry"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/memoryinjection"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionrequest"
@@ -31,6 +32,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/resource"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/schema"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/scratchpad"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/skill"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/spawner"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/stagerun"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/systemprompt"
@@ -250,6 +252,29 @@ func init() {
 	grantusageDescUsedAt := grantusageFields[1].Descriptor()
 	// grantusage.DefaultUsedAt holds the default value on creation for the used_at field.
 	grantusage.DefaultUsedAt = grantusageDescUsedAt.Default.(func() time.Time)
+	materializationMixin := schema.Materialization{}.Mixin()
+	materializationMixinFields0 := materializationMixin[0].Fields()
+	_ = materializationMixinFields0
+	materializationFields := schema.Materialization{}.Fields()
+	_ = materializationFields
+	// materializationDescCreatedAt is the schema descriptor for created_at field.
+	materializationDescCreatedAt := materializationMixinFields0[1].Descriptor()
+	// materialization.DefaultCreatedAt holds the default value on creation for the created_at field.
+	materialization.DefaultCreatedAt = materializationDescCreatedAt.Default.(func() time.Time)
+	// materializationDescUpdatedAt is the schema descriptor for updated_at field.
+	materializationDescUpdatedAt := materializationMixinFields0[2].Descriptor()
+	// materialization.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	materialization.DefaultUpdatedAt = materializationDescUpdatedAt.Default.(func() time.Time)
+	// materialization.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	materialization.UpdateDefaultUpdatedAt = materializationDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// materializationDescContentHash is the schema descriptor for content_hash field.
+	materializationDescContentHash := materializationFields[3].Descriptor()
+	// materialization.DefaultContentHash holds the default value on creation for the content_hash field.
+	materialization.DefaultContentHash = materializationDescContentHash.Default.(string)
+	// materializationDescOutcome is the schema descriptor for outcome field.
+	materializationDescOutcome := materializationFields[4].Descriptor()
+	// materialization.DefaultOutcome holds the default value on creation for the outcome field.
+	materialization.DefaultOutcome = materializationDescOutcome.Default.(string)
 	memoryentryMixin := schema.MemoryEntry{}.Mixin()
 	memoryentryMixinFields0 := memoryentryMixin[0].Fields()
 	_ = memoryentryMixinFields0
@@ -493,6 +518,29 @@ func init() {
 	scratchpad.DefaultUpdatedAt = scratchpadDescUpdatedAt.Default.(func() time.Time)
 	// scratchpad.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	scratchpad.UpdateDefaultUpdatedAt = scratchpadDescUpdatedAt.UpdateDefault.(func() time.Time)
+	skillMixin := schema.Skill{}.Mixin()
+	skillMixinFields0 := skillMixin[0].Fields()
+	_ = skillMixinFields0
+	skillFields := schema.Skill{}.Fields()
+	_ = skillFields
+	// skillDescCreatedAt is the schema descriptor for created_at field.
+	skillDescCreatedAt := skillMixinFields0[1].Descriptor()
+	// skill.DefaultCreatedAt holds the default value on creation for the created_at field.
+	skill.DefaultCreatedAt = skillDescCreatedAt.Default.(func() time.Time)
+	// skillDescUpdatedAt is the schema descriptor for updated_at field.
+	skillDescUpdatedAt := skillMixinFields0[2].Descriptor()
+	// skill.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	skill.DefaultUpdatedAt = skillDescUpdatedAt.Default.(func() time.Time)
+	// skill.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	skill.UpdateDefaultUpdatedAt = skillDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// skillDescDescription is the schema descriptor for description field.
+	skillDescDescription := skillFields[1].Descriptor()
+	// skill.DefaultDescription holds the default value on creation for the description field.
+	skill.DefaultDescription = skillDescDescription.Default.(string)
+	// skillDescBody is the schema descriptor for body field.
+	skillDescBody := skillFields[2].Descriptor()
+	// skill.DefaultBody holds the default value on creation for the body field.
+	skill.DefaultBody = skillDescBody.Default.(string)
 	spawnerFields := schema.Spawner{}.Fields()
 	_ = spawnerFields
 	// spawnerDescArgs is the schema descriptor for args field.

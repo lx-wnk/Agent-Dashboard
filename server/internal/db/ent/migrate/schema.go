@@ -339,6 +339,35 @@ var (
 			},
 		},
 	}
+	// MaterializationsColumns holds the columns for the "materializations" table.
+	MaterializationsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "resource_id", Type: field.TypeString},
+		{Name: "target_key", Type: field.TypeString},
+		{Name: "path", Type: field.TypeString},
+		{Name: "content_hash", Type: field.TypeString, Default: ""},
+		{Name: "outcome", Type: field.TypeString, Default: ""},
+	}
+	// MaterializationsTable holds the schema information for the "materializations" table.
+	MaterializationsTable = &schema.Table{
+		Name:       "materializations",
+		Columns:    MaterializationsColumns,
+		PrimaryKey: []*schema.Column{MaterializationsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "materialization_resource_id_target_key",
+				Unique:  true,
+				Columns: []*schema.Column{MaterializationsColumns[3], MaterializationsColumns[4]},
+			},
+			{
+				Name:    "materialization_outcome",
+				Unique:  false,
+				Columns: []*schema.Column{MaterializationsColumns[7]},
+			},
+		},
+	}
 	// MemoryEntriesColumns holds the columns for the "memory_entries" table.
 	MemoryEntriesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -713,6 +742,28 @@ var (
 			},
 		},
 	}
+	// SkillsColumns holds the columns for the "skills" table.
+	SkillsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "resource_id", Type: field.TypeString, Unique: true},
+		{Name: "description", Type: field.TypeString, Default: ""},
+		{Name: "body", Type: field.TypeString, Size: 2147483647, Default: ""},
+	}
+	// SkillsTable holds the schema information for the "skills" table.
+	SkillsTable = &schema.Table{
+		Name:       "skills",
+		Columns:    SkillsColumns,
+		PrimaryKey: []*schema.Column{SkillsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "skill_resource_id",
+				Unique:  true,
+				Columns: []*schema.Column{SkillsColumns[3]},
+			},
+		},
+	}
 	// SpawnersColumns holds the columns for the "spawners" table.
 	SpawnersColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -1053,6 +1104,7 @@ var (
 		EvalMetricSnapshotsTable,
 		GrantsTable,
 		GrantUsagesTable,
+		MaterializationsTable,
 		MemoryEntriesTable,
 		MemoryInjectionsTable,
 		PermissionPresetsTable,
@@ -1068,6 +1120,7 @@ var (
 		RemoteRegistrationsTable,
 		ResourcesTable,
 		ScratchpadsTable,
+		SkillsTable,
 		SpawnersTable,
 		StageRunsTable,
 		SystemPromptsTable,
