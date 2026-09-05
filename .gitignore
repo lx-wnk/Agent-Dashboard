@@ -14,7 +14,7 @@ package-lock.json
 !.mcp.json.example
 
 
-# Agent skills (installed from skills-lock.json)
+# Agent skills — materialized from the registry, never committed
 .claude/skills/
 .agents/skills/
 .claude/worktrees/

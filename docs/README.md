@@ -19,7 +19,7 @@ The tree has three tiers, and they are kept apart on purpose:
 | [Controlling & Spawning Agents](guides/agent-control.md) | Channel control, the spawn dialog, slash commands, permissions |
 | [Security](guides/security.md) | Threat model, auth, hardening defaults, the capability gate, and the Obsidian vault client's TLS trust model |
 | [Shell Statusline](guides/statusline.md) | `scripts/statusline.py` PS1 integration |
-| [Agent Skills](guides/agent-skills.md) | Installing the project's AI agent skills |
+| [Agent Skills](guides/agent-skills.md) | Registry-owned skills and how they reach disk |
 | [Plugins](plugin-guide.md) | Sidecar plugin architecture |
 | [Hooks setup](hooks-setup.md) | Optional hook-based rescan triggers |
 | [Desktop distribution](desktop-distribution.md) | Packaging the macOS app, signing, notarization |
