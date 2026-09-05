@@ -474,7 +474,7 @@ func BuildSpawnEnv(opts SpawnAgentOptions) []string {
 	merged["DASHBOARD_STAGE_RUN_ID"] = opts.StageRun.ID
 	merged["DASHBOARD_TASK_ID"] = opts.Task.ID
 	if opts.MCPToken != "" {
-		merged["DASHBOARD_MCP_TOKEN"] = opts.MCPToken
+		merged[channelconfig.EnvMCPToken] = opts.MCPToken
 	}
 	if opts.MCPUrl != "" {
 		merged["DASHBOARD_MCP_URL"] = opts.MCPUrl

@@ -52,7 +52,7 @@ func Run(ctx context.Context) error {
 			"url", dashboardURL)
 		dashboardURL = "http://127.0.0.1:13120"
 	}
-	mcpToken := os.Getenv("DASHBOARD_MCP_TOKEN")
+	mcpToken := os.Getenv(channelconfig.EnvMCPToken)
 	stageRunID := os.Getenv("DASHBOARD_STAGE_RUN_ID")
 	initialToken, err := generateToken()
 	if err != nil {

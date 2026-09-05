@@ -27,3 +27,10 @@ func AllowListEntries() []string {
 	}
 	return entries
 }
+
+// EnvMCPToken is the environment variable the bridge reads its dashboard
+// credential from. Declared here because two packages depend on the exact
+// spelling: channelconfig writes it into the spawn's MCP config, and the bridge
+// reads it at startup. A mismatch would leave the bridge unauthenticated with no
+// error anywhere — the callback simply comes back 401.
+const EnvMCPToken = "DASHBOARD_MCP_TOKEN"
