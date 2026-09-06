@@ -339,6 +339,20 @@ func (_c *TaskScheduleCreate) SetNillableLastTaskID(v *string) *TaskScheduleCrea
 	return _c
 }
 
+// SetResourceID sets the "resource_id" field.
+func (_c *TaskScheduleCreate) SetResourceID(v string) *TaskScheduleCreate {
+	_c.mutation.SetResourceID(v)
+	return _c
+}
+
+// SetNillableResourceID sets the "resource_id" field if the given value is not nil.
+func (_c *TaskScheduleCreate) SetNillableResourceID(v *string) *TaskScheduleCreate {
+	if v != nil {
+		_c.SetResourceID(*v)
+	}
+	return _c
+}
+
 // SetUserID sets the "user_id" field.
 func (_c *TaskScheduleCreate) SetUserID(v string) *TaskScheduleCreate {
 	_c.mutation.SetUserID(v)
@@ -453,6 +467,10 @@ func (_c *TaskScheduleCreate) defaults() {
 	if _, ok := _c.mutation.SilverBullet(); !ok {
 		v := taskschedule.DefaultSilverBullet
 		_c.mutation.SetSilverBullet(v)
+	}
+	if _, ok := _c.mutation.ResourceID(); !ok {
+		v := taskschedule.DefaultResourceID
+		_c.mutation.SetResourceID(v)
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		v := taskschedule.DefaultCreatedAt()
@@ -670,6 +688,10 @@ func (_c *TaskScheduleCreate) createSpec() (*TaskSchedule, *sqlgraph.CreateSpec)
 	if value, ok := _c.mutation.LastTaskID(); ok {
 		_spec.SetField(taskschedule.FieldLastTaskID, field.TypeString, value)
 		_node.LastTaskID = &value
+	}
+	if value, ok := _c.mutation.ResourceID(); ok {
+		_spec.SetField(taskschedule.FieldResourceID, field.TypeString, value)
+		_node.ResourceID = value
 	}
 	if value, ok := _c.mutation.UserID(); ok {
 		_spec.SetField(taskschedule.FieldUserID, field.TypeString, value)
@@ -1146,6 +1168,24 @@ func (u *TaskScheduleUpsert) UpdateLastTaskID() *TaskScheduleUpsert {
 // ClearLastTaskID clears the value of the "last_task_id" field.
 func (u *TaskScheduleUpsert) ClearLastTaskID() *TaskScheduleUpsert {
 	u.SetNull(taskschedule.FieldLastTaskID)
+	return u
+}
+
+// SetResourceID sets the "resource_id" field.
+func (u *TaskScheduleUpsert) SetResourceID(v string) *TaskScheduleUpsert {
+	u.Set(taskschedule.FieldResourceID, v)
+	return u
+}
+
+// UpdateResourceID sets the "resource_id" field to the value that was provided on create.
+func (u *TaskScheduleUpsert) UpdateResourceID() *TaskScheduleUpsert {
+	u.SetExcluded(taskschedule.FieldResourceID)
+	return u
+}
+
+// ClearResourceID clears the value of the "resource_id" field.
+func (u *TaskScheduleUpsert) ClearResourceID() *TaskScheduleUpsert {
+	u.SetNull(taskschedule.FieldResourceID)
 	return u
 }
 
@@ -1710,6 +1750,27 @@ func (u *TaskScheduleUpsertOne) UpdateLastTaskID() *TaskScheduleUpsertOne {
 func (u *TaskScheduleUpsertOne) ClearLastTaskID() *TaskScheduleUpsertOne {
 	return u.Update(func(s *TaskScheduleUpsert) {
 		s.ClearLastTaskID()
+	})
+}
+
+// SetResourceID sets the "resource_id" field.
+func (u *TaskScheduleUpsertOne) SetResourceID(v string) *TaskScheduleUpsertOne {
+	return u.Update(func(s *TaskScheduleUpsert) {
+		s.SetResourceID(v)
+	})
+}
+
+// UpdateResourceID sets the "resource_id" field to the value that was provided on create.
+func (u *TaskScheduleUpsertOne) UpdateResourceID() *TaskScheduleUpsertOne {
+	return u.Update(func(s *TaskScheduleUpsert) {
+		s.UpdateResourceID()
+	})
+}
+
+// ClearResourceID clears the value of the "resource_id" field.
+func (u *TaskScheduleUpsertOne) ClearResourceID() *TaskScheduleUpsertOne {
+	return u.Update(func(s *TaskScheduleUpsert) {
+		s.ClearResourceID()
 	})
 }
 
@@ -2446,6 +2507,27 @@ func (u *TaskScheduleUpsertBulk) UpdateLastTaskID() *TaskScheduleUpsertBulk {
 func (u *TaskScheduleUpsertBulk) ClearLastTaskID() *TaskScheduleUpsertBulk {
 	return u.Update(func(s *TaskScheduleUpsert) {
 		s.ClearLastTaskID()
+	})
+}
+
+// SetResourceID sets the "resource_id" field.
+func (u *TaskScheduleUpsertBulk) SetResourceID(v string) *TaskScheduleUpsertBulk {
+	return u.Update(func(s *TaskScheduleUpsert) {
+		s.SetResourceID(v)
+	})
+}
+
+// UpdateResourceID sets the "resource_id" field to the value that was provided on create.
+func (u *TaskScheduleUpsertBulk) UpdateResourceID() *TaskScheduleUpsertBulk {
+	return u.Update(func(s *TaskScheduleUpsert) {
+		s.UpdateResourceID()
+	})
+}
+
+// ClearResourceID clears the value of the "resource_id" field.
+func (u *TaskScheduleUpsertBulk) ClearResourceID() *TaskScheduleUpsertBulk {
+	return u.Update(func(s *TaskScheduleUpsert) {
+		s.ClearResourceID()
 	})
 }
 

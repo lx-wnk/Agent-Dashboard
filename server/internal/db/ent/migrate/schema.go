@@ -1054,6 +1054,7 @@ var (
 		{Name: "next_run_at", Type: field.TypeTime, Nullable: true},
 		{Name: "last_run_at", Type: field.TypeTime, Nullable: true},
 		{Name: "last_task_id", Type: field.TypeString, Nullable: true},
+		{Name: "resource_id", Type: field.TypeString, Nullable: true, Default: ""},
 		{Name: "user_id", Type: field.TypeString, Nullable: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},

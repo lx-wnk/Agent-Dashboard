@@ -65,6 +65,8 @@ const (
 	FieldLastRunAt = "last_run_at"
 	// FieldLastTaskID holds the string denoting the last_task_id field in the database.
 	FieldLastTaskID = "last_task_id"
+	// FieldResourceID holds the string denoting the resource_id field in the database.
+	FieldResourceID = "resource_id"
 	// FieldUserID holds the string denoting the user_id field in the database.
 	FieldUserID = "user_id"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
@@ -104,6 +106,7 @@ var Columns = []string{
 	FieldNextRunAt,
 	FieldLastRunAt,
 	FieldLastTaskID,
+	FieldResourceID,
 	FieldUserID,
 	FieldCreatedAt,
 	FieldUpdatedAt,
@@ -144,6 +147,8 @@ var (
 	DefaultStageTimeoutSeconds int
 	// DefaultSilverBullet holds the default value on creation for the "silver_bullet" field.
 	DefaultSilverBullet bool
+	// DefaultResourceID holds the default value on creation for the "resource_id" field.
+	DefaultResourceID string
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 	// DefaultUpdatedAt holds the default value on creation for the "updated_at" field.
@@ -283,6 +288,11 @@ func ByLastRunAt(opts ...sql.OrderTermOption) OrderOption {
 // ByLastTaskID orders the results by the last_task_id field.
 func ByLastTaskID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldLastTaskID, opts...).ToFunc()
+}
+
+// ByResourceID orders the results by the resource_id field.
+func ByResourceID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldResourceID, opts...).ToFunc()
 }
 
 // ByUserID orders the results by the user_id field.

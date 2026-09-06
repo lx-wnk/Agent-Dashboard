@@ -490,6 +490,26 @@ func (_u *TaskScheduleUpdate) ClearLastTaskID() *TaskScheduleUpdate {
 	return _u
 }
 
+// SetResourceID sets the "resource_id" field.
+func (_u *TaskScheduleUpdate) SetResourceID(v string) *TaskScheduleUpdate {
+	_u.mutation.SetResourceID(v)
+	return _u
+}
+
+// SetNillableResourceID sets the "resource_id" field if the given value is not nil.
+func (_u *TaskScheduleUpdate) SetNillableResourceID(v *string) *TaskScheduleUpdate {
+	if v != nil {
+		_u.SetResourceID(*v)
+	}
+	return _u
+}
+
+// ClearResourceID clears the value of the "resource_id" field.
+func (_u *TaskScheduleUpdate) ClearResourceID() *TaskScheduleUpdate {
+	_u.mutation.ClearResourceID()
+	return _u
+}
+
 // SetUserID sets the "user_id" field.
 func (_u *TaskScheduleUpdate) SetUserID(v string) *TaskScheduleUpdate {
 	_u.mutation.SetUserID(v)
@@ -722,6 +742,12 @@ func (_u *TaskScheduleUpdate) sqlSave(ctx context.Context) (_node int, err error
 	}
 	if _u.mutation.LastTaskIDCleared() {
 		_spec.ClearField(taskschedule.FieldLastTaskID, field.TypeString)
+	}
+	if value, ok := _u.mutation.ResourceID(); ok {
+		_spec.SetField(taskschedule.FieldResourceID, field.TypeString, value)
+	}
+	if _u.mutation.ResourceIDCleared() {
+		_spec.ClearField(taskschedule.FieldResourceID, field.TypeString)
 	}
 	if value, ok := _u.mutation.UserID(); ok {
 		_spec.SetField(taskschedule.FieldUserID, field.TypeString, value)
@@ -1214,6 +1240,26 @@ func (_u *TaskScheduleUpdateOne) ClearLastTaskID() *TaskScheduleUpdateOne {
 	return _u
 }
 
+// SetResourceID sets the "resource_id" field.
+func (_u *TaskScheduleUpdateOne) SetResourceID(v string) *TaskScheduleUpdateOne {
+	_u.mutation.SetResourceID(v)
+	return _u
+}
+
+// SetNillableResourceID sets the "resource_id" field if the given value is not nil.
+func (_u *TaskScheduleUpdateOne) SetNillableResourceID(v *string) *TaskScheduleUpdateOne {
+	if v != nil {
+		_u.SetResourceID(*v)
+	}
+	return _u
+}
+
+// ClearResourceID clears the value of the "resource_id" field.
+func (_u *TaskScheduleUpdateOne) ClearResourceID() *TaskScheduleUpdateOne {
+	_u.mutation.ClearResourceID()
+	return _u
+}
+
 // SetUserID sets the "user_id" field.
 func (_u *TaskScheduleUpdateOne) SetUserID(v string) *TaskScheduleUpdateOne {
 	_u.mutation.SetUserID(v)
@@ -1476,6 +1522,12 @@ func (_u *TaskScheduleUpdateOne) sqlSave(ctx context.Context) (_node *TaskSchedu
 	}
 	if _u.mutation.LastTaskIDCleared() {
 		_spec.ClearField(taskschedule.FieldLastTaskID, field.TypeString)
+	}
+	if value, ok := _u.mutation.ResourceID(); ok {
+		_spec.SetField(taskschedule.FieldResourceID, field.TypeString, value)
+	}
+	if _u.mutation.ResourceIDCleared() {
+		_spec.ClearField(taskschedule.FieldResourceID, field.TypeString)
 	}
 	if value, ok := _u.mutation.UserID(); ok {
 		_spec.SetField(taskschedule.FieldUserID, field.TypeString, value)

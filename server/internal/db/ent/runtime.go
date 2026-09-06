@@ -745,12 +745,16 @@ func init() {
 	taskscheduleDescSilverBullet := taskscheduleFields[19].Descriptor()
 	// taskschedule.DefaultSilverBullet holds the default value on creation for the silver_bullet field.
 	taskschedule.DefaultSilverBullet = taskscheduleDescSilverBullet.Default.(bool)
+	// taskscheduleDescResourceID is the schema descriptor for resource_id field.
+	taskscheduleDescResourceID := taskscheduleFields[27].Descriptor()
+	// taskschedule.DefaultResourceID holds the default value on creation for the resource_id field.
+	taskschedule.DefaultResourceID = taskscheduleDescResourceID.Default.(string)
 	// taskscheduleDescCreatedAt is the schema descriptor for created_at field.
-	taskscheduleDescCreatedAt := taskscheduleFields[28].Descriptor()
+	taskscheduleDescCreatedAt := taskscheduleFields[29].Descriptor()
 	// taskschedule.DefaultCreatedAt holds the default value on creation for the created_at field.
 	taskschedule.DefaultCreatedAt = taskscheduleDescCreatedAt.Default.(func() time.Time)
 	// taskscheduleDescUpdatedAt is the schema descriptor for updated_at field.
-	taskscheduleDescUpdatedAt := taskscheduleFields[29].Descriptor()
+	taskscheduleDescUpdatedAt := taskscheduleFields[30].Descriptor()
 	// taskschedule.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	taskschedule.DefaultUpdatedAt = taskscheduleDescUpdatedAt.Default.(func() time.Time)
 	// taskschedule.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

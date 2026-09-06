@@ -189,6 +189,11 @@ func LastTaskID(v string) predicate.TaskSchedule {
 	return predicate.TaskSchedule(sql.FieldEQ(FieldLastTaskID, v))
 }
 
+// ResourceID applies equality check predicate on the "resource_id" field. It's identical to ResourceIDEQ.
+func ResourceID(v string) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldEQ(FieldResourceID, v))
+}
+
 // UserID applies equality check predicate on the "user_id" field. It's identical to UserIDEQ.
 func UserID(v string) predicate.TaskSchedule {
 	return predicate.TaskSchedule(sql.FieldEQ(FieldUserID, v))
@@ -1697,6 +1702,81 @@ func LastTaskIDEqualFold(v string) predicate.TaskSchedule {
 // LastTaskIDContainsFold applies the ContainsFold predicate on the "last_task_id" field.
 func LastTaskIDContainsFold(v string) predicate.TaskSchedule {
 	return predicate.TaskSchedule(sql.FieldContainsFold(FieldLastTaskID, v))
+}
+
+// ResourceIDEQ applies the EQ predicate on the "resource_id" field.
+func ResourceIDEQ(v string) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldEQ(FieldResourceID, v))
+}
+
+// ResourceIDNEQ applies the NEQ predicate on the "resource_id" field.
+func ResourceIDNEQ(v string) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldNEQ(FieldResourceID, v))
+}
+
+// ResourceIDIn applies the In predicate on the "resource_id" field.
+func ResourceIDIn(vs ...string) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldIn(FieldResourceID, vs...))
+}
+
+// ResourceIDNotIn applies the NotIn predicate on the "resource_id" field.
+func ResourceIDNotIn(vs ...string) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldNotIn(FieldResourceID, vs...))
+}
+
+// ResourceIDGT applies the GT predicate on the "resource_id" field.
+func ResourceIDGT(v string) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldGT(FieldResourceID, v))
+}
+
+// ResourceIDGTE applies the GTE predicate on the "resource_id" field.
+func ResourceIDGTE(v string) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldGTE(FieldResourceID, v))
+}
+
+// ResourceIDLT applies the LT predicate on the "resource_id" field.
+func ResourceIDLT(v string) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldLT(FieldResourceID, v))
+}
+
+// ResourceIDLTE applies the LTE predicate on the "resource_id" field.
+func ResourceIDLTE(v string) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldLTE(FieldResourceID, v))
+}
+
+// ResourceIDContains applies the Contains predicate on the "resource_id" field.
+func ResourceIDContains(v string) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldContains(FieldResourceID, v))
+}
+
+// ResourceIDHasPrefix applies the HasPrefix predicate on the "resource_id" field.
+func ResourceIDHasPrefix(v string) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldHasPrefix(FieldResourceID, v))
+}
+
+// ResourceIDHasSuffix applies the HasSuffix predicate on the "resource_id" field.
+func ResourceIDHasSuffix(v string) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldHasSuffix(FieldResourceID, v))
+}
+
+// ResourceIDIsNil applies the IsNil predicate on the "resource_id" field.
+func ResourceIDIsNil() predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldIsNull(FieldResourceID))
+}
+
+// ResourceIDNotNil applies the NotNil predicate on the "resource_id" field.
+func ResourceIDNotNil() predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldNotNull(FieldResourceID))
+}
+
+// ResourceIDEqualFold applies the EqualFold predicate on the "resource_id" field.
+func ResourceIDEqualFold(v string) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldEqualFold(FieldResourceID, v))
+}
+
+// ResourceIDContainsFold applies the ContainsFold predicate on the "resource_id" field.
+func ResourceIDContainsFold(v string) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldContainsFold(FieldResourceID, v))
 }
 
 // UserIDEQ applies the EQ predicate on the "user_id" field.

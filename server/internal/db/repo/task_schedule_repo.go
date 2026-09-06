@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -90,10 +91,18 @@ type FireStateInput struct {
 	NextRunAt  *time.Time
 }
 
-type entTaskScheduleRepo struct{ client *ent.Client }
+type entTaskScheduleRepo struct {
+	client    *ent.Client
+	resources ResourceRepo
+}
 
+// NewTaskScheduleRepo returns a TaskScheduleRepo that propagates every lifecycle
+// change to the resource registry. The registry repo is built here rather than
+// injected: it is a stateless wrapper over the same client, nothing substitutes
+// it, and an injected one only offers each call site a way to pass nil and
+// silently lose the sync — which is what every mutating call site did.
 func NewTaskScheduleRepo(client *ent.Client) TaskScheduleRepo {
-	return &entTaskScheduleRepo{client: client}
+	return &entTaskScheduleRepo{client: client, resources: NewResourceRepo(client)}
 }
 
 func (r *entTaskScheduleRepo) Create(ctx context.Context, in CreateTaskScheduleInput) (*ent.TaskSchedule, error) {
@@ -141,6 +150,10 @@ func (r *entTaskScheduleRepo) Create(ctx context.Context, in CreateTaskScheduleI
 	s, err := q.Save(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("taskschedule.Create: %w", err)
+	}
+
+	if _, err := UpsertScheduleResource(ctx, r.resources, r.client, s); err != nil {
+		slog.Warn("taskschedule.Create: resource upsert failed, reconciler will catch it", "schedule_id", s.ID, "err", err)
 	}
 	return s, nil
 }
@@ -210,12 +223,33 @@ func (r *entTaskScheduleRepo) Update(ctx context.Context, id string, in UpdateTa
 	if err != nil {
 		return nil, fmt.Errorf("taskschedule.Update: %w", err)
 	}
+
+	// Sync name and enabled changes to the resource row.
+	if s.ResourceID != "" {
+		if in.Name != nil || in.Enabled != nil {
+			if _, uErr := UpsertScheduleResource(ctx, r.resources, r.client, s); uErr != nil {
+				slog.Warn("taskschedule.Update: resource sync failed", "schedule_id", id, "err", uErr)
+			}
+		}
+	}
 	return s, nil
 }
 
 func (r *entTaskScheduleRepo) Delete(ctx context.Context, id string) error {
+	s, err := r.client.TaskSchedule.Get(ctx, id)
+	if err != nil {
+		return fmt.Errorf("taskschedule.Delete: %w", err)
+	}
+	resourceID := s.ResourceID
+
 	if err := r.client.TaskSchedule.DeleteOneID(id).Exec(ctx); err != nil {
 		return fmt.Errorf("taskschedule.Delete: %w", err)
+	}
+
+	if resourceID != "" {
+		if err := OrphanScheduleResource(ctx, r.resources, resourceID); err != nil {
+			slog.Warn("taskschedule.Delete: resource orphan failed", "schedule_id", id, "err", err)
+		}
 	}
 	return nil
 }
@@ -260,6 +294,16 @@ func (r *entTaskScheduleRepo) SetEnabled(ctx context.Context, id string, enabled
 	s, err := r.client.TaskSchedule.UpdateOneID(id).SetEnabled(enabled).SetUpdatedAt(time.Now()).Save(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("taskschedule.SetEnabled: %w", err)
+	}
+
+	if s.ResourceID != "" {
+		state := ResourceStateDisabled
+		if enabled {
+			state = ResourceStateEnabled
+		}
+		if _, err := r.resources.SetState(ctx, s.ResourceID, state); err != nil {
+			slog.Warn("taskschedule.SetEnabled: resource state sync failed", "schedule_id", id, "err", err)
+		}
 	}
 	return s, nil
 }

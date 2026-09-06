@@ -103,50 +103,36 @@ func viewOf(row *ent.Resource) resourceView {
 	}
 }
 
-// routineViews projects task_schedule rows into the routine kind. The
-// registry table has no routine rows and deliberately gets none: a schedule
-// already carries the trigger, the task template and the budget a routine is
-// made of, so a mirrored registry row would be a second truth to keep in sync
-// on every create, rename, enable and delete. Projecting on read keeps one
-// writer.
-//
-// The projected ID is the schedule's own, which is exactly the ContextRef a
-// "routine" capability grant is anchored to (memory.RoutineContext) — the id
-// shown here is the id to grant against.
-//
-// Schedules have no scope column, so every routine is reported at global
-// scope. That matches how ListMerged treats global rows: they resolve in
-// every scope.
-func (h *Handler) routineViews(r *http.Request) ([]resourceView, error) {
-	// A non-nil empty slice, not nil: nil encodes as null and a client that
-	// maps over the list would crash on it — the same reason list() below
-	// builds its slice with make.
+// routineResources returns persisted resource rows for routines owned by the
+// calling user. Per-user narrowing is preserved: the resource table has no
+// user column, so identity comes from the schedule table. The caller's
+// schedules are resolved first, then only resource rows whose OriginRef
+// matches one of those schedule IDs are returned.
+func (h *Handler) routineResources(r *http.Request) ([]resourceView, error) {
 	if h.schedules == nil {
 		return []resourceView{}, nil
 	}
 	payload, _ := auth.PayloadFromContext(r.Context())
-	rows, err := h.schedules.ListForUser(r.Context(), payload.Sub, h.bypassAuth)
+	schedules, err := h.schedules.ListForUser(r.Context(), payload.Sub, h.bypassAuth)
 	if err != nil {
 		return nil, fmt.Errorf("resources.list routines: %w", err)
 	}
-	out := make([]resourceView, 0, len(rows))
-	for _, s := range rows {
-		state := repo.ResourceStateDisabled
-		if s.Enabled {
-			state = repo.ResourceStateEnabled
+
+	scheduleIDs := make(map[string]struct{}, len(schedules))
+	for _, s := range schedules {
+		scheduleIDs[s.ID] = struct{}{}
+	}
+
+	rows, err := h.resources.ListForKind(r.Context(), repo.ResourceKindRoutine)
+	if err != nil {
+		return nil, fmt.Errorf("resources.list routines: %w", err)
+	}
+
+	out := make([]resourceView, 0, len(scheduleIDs))
+	for _, row := range rows {
+		if _, ok := scheduleIDs[row.OriginRef]; ok {
+			out = append(out, viewOf(row))
 		}
-		out = append(out, resourceView{
-			ID:        s.ID,
-			Kind:      repo.ResourceKindRoutine,
-			Slug:      s.SlugPrefix,
-			Name:      s.Name,
-			ScopeKind: string(repo.ScopeGlobal),
-			NodeID:    repo.DefaultNodeID,
-			State:     state,
-			Origin:    repo.ResourceOriginLocal,
-			CreatedAt: s.CreatedAt,
-			UpdatedAt: s.UpdatedAt,
-		})
 	}
 	return out, nil
 }
@@ -191,10 +177,10 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) error {
 	// rows and any extra row names the path's own. Same capability, same
 	// empty value, same requested scope as listSpaces, so the two cannot
 	// drift apart again. The other kinds are not gated: application rows are
-	// already public via /api/plugins, routine rows are the schedules
-	// /api/schedules already serves to the same caller (routineViews applies
-	// that route's own user narrowing), and nothing writes skill yet. Do not
-	// "simplify" this into gating everything or nothing.
+	// already public via /api/plugins, routine rows are narrowed to the
+	// calling user's schedules (routineResources filters by OriginRef),
+	// and nothing writes skill yet. Do not "simplify" this into gating
+	// everything or nothing.
 	if kind == repo.ResourceKindMemorySpace {
 		if err := h.gate.Authorize(r.Context(), repo.CapabilityMemoryRead, "", scope); err != nil {
 			return apierr.NewAppError(http.StatusForbidden, err.Error())
@@ -202,7 +188,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if kind == repo.ResourceKindRoutine {
-		out, err := h.routineViews(r)
+		out, err := h.routineResources(r)
 		if err != nil {
 			return err
 		}

@@ -335,6 +335,11 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		} else if linked > 0 {
 			slog.Info("registry: linked plugins to registry identities", "count", linked)
 		}
+		if linked, err := repo.ReconcileScheduleResources(ctx, resourceRepo, entClient); err != nil {
+			slog.Warn("registry: schedule reconcile failed", "err", err)
+		} else if linked > 0 {
+			slog.Info("registry: linked schedules to registry identities", "count", linked)
+		}
 
 		// Seed the capability catalogue from the tool allow-list, then load it
 		// back into the pipeline package so BuildAllowList's grant-translation
