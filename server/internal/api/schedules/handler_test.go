@@ -22,7 +22,7 @@ func newServer(t *testing.T) *httptest.Server {
 	}
 	t.Cleanup(func() { _ = bundle.Client.Close() })
 	h := schedules.NewHandler(
-		repo.NewTaskScheduleRepo(bundle.Client, nil),
+		repo.NewTaskScheduleRepo(bundle.Client),
 		scheduler.NewNLCron(nil),
 		nil,
 		true,

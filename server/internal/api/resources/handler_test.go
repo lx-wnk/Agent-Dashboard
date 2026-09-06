@@ -35,7 +35,7 @@ func newUngrantedMux(t *testing.T) (*chi.Mux, repo.ResourceRepo, repo.GrantRepo,
 		GrantUsage:   repo.NewGrantUsageRepo(bundle.Client, bundle.WriteClient),
 	}
 	mux := chi.NewRouter()
-	apiresources.NewHandler(resourceRepo, repo.NewTaskScheduleRepo(bundle.Client, nil), gate, true).Mount(mux)
+	apiresources.NewHandler(resourceRepo, repo.NewTaskScheduleRepo(bundle.Client), gate, true).Mount(mux)
 	return mux, resourceRepo, grantRepo, ctx
 }
 

@@ -126,7 +126,7 @@ func buildBypassRouter(t *testing.T) http.Handler {
 		PresetsHandler:       presets.NewHandler(repo.NewPermissionPresetRepo(c)),
 		SystemPromptsHandler: systemprompts.NewHandler(repo.NewSystemPromptRepo(c)),
 		GrantsHandler:        grants.NewHandler(repo.NewGrantRepo(c), repo.NewCapabilityRepo(c)),
-		ResourcesHandler: resources.NewHandler(repo.NewResourceRepo(c), repo.NewTaskScheduleRepo(c, nil), memory.Gate{
+		ResourcesHandler: resources.NewHandler(repo.NewResourceRepo(c), repo.NewTaskScheduleRepo(c), memory.Gate{
 			Capabilities: repo.NewCapabilityRepo(c),
 			Grants:       repo.NewGrantRepo(c),
 			GrantUsage:   repo.NewGrantUsageRepo(c, bundle.WriteClient),

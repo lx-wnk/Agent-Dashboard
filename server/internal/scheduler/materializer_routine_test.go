@@ -21,7 +21,7 @@ func TestMaterialize_StampsRoutineID(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = bundle.Client.Close() })
 
-	schedRepo := repo.NewTaskScheduleRepo(bundle.Client, nil)
+	schedRepo := repo.NewTaskScheduleRepo(bundle.Client)
 	sched := mkSchedule(t, schedRepo, repo.CreateTaskScheduleInput{})
 
 	var got NewTaskSpec

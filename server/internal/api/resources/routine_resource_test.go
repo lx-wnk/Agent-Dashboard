@@ -29,7 +29,7 @@ func newRoutineResourceMux(t *testing.T, bypassAuth bool) (*chi.Mux, repo.TaskSc
 	ctx := context.Background()
 	repo.SeedCapabilities(ctx, repo.NewCapabilityRepo(bundle.Client))
 	resourceRepo := repo.NewResourceRepo(bundle.Client)
-	schedRepo := repo.NewTaskScheduleRepo(bundle.Client, resourceRepo)
+	schedRepo := repo.NewTaskScheduleRepo(bundle.Client)
 
 	mux := chi.NewRouter()
 	if !bypassAuth {

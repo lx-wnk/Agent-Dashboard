@@ -28,7 +28,7 @@ func newHarness(t *testing.T, now time.Time) *testHarness {
 	t.Cleanup(func() { _ = bundle.Client.Close() })
 	client := bundle.Client
 
-	schedRepo := repo.NewTaskScheduleRepo(client, nil)
+	schedRepo := repo.NewTaskScheduleRepo(client)
 	taskRepo := repo.NewTaskRepo(client)
 	permRepo := repo.NewPermissionRepo(client)
 

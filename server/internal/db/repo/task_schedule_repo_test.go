@@ -38,7 +38,7 @@ func newSchedule(t *testing.T, r repo.TaskScheduleRepo, name string, in repo.Cre
 }
 
 func TestTaskScheduleRepo_CRUD(t *testing.T) {
-	r := repo.NewTaskScheduleRepo(openDB(t), nil)
+	r := repo.NewTaskScheduleRepo(openDB(t))
 	ctx := context.Background()
 
 	id := newSchedule(t, r, "daily", repo.CreateTaskScheduleInput{})
@@ -76,7 +76,7 @@ func TestTaskScheduleRepo_CRUD(t *testing.T) {
 }
 
 func TestTaskScheduleRepo_ListDue(t *testing.T) {
-	r := repo.NewTaskScheduleRepo(openDB(t), nil)
+	r := repo.NewTaskScheduleRepo(openDB(t))
 	ctx := context.Background()
 	now := time.Date(2026, 6, 18, 12, 0, 0, 0, time.UTC)
 
@@ -97,7 +97,7 @@ func TestTaskScheduleRepo_ListDue(t *testing.T) {
 }
 
 func TestTaskScheduleRepo_UpdateFireState(t *testing.T) {
-	r := repo.NewTaskScheduleRepo(openDB(t), nil)
+	r := repo.NewTaskScheduleRepo(openDB(t))
 	ctx := context.Background()
 	id := newSchedule(t, r, "fire", repo.CreateTaskScheduleInput{})
 
@@ -133,7 +133,7 @@ func newScheduleRepoWithResources(t *testing.T) (repo.TaskScheduleRepo, repo.Res
 	}
 	t.Cleanup(func() { _ = bundle.Client.Close() })
 	resources := repo.NewResourceRepo(bundle.Client)
-	schedules := repo.NewTaskScheduleRepo(bundle.Client, resources)
+	schedules := repo.NewTaskScheduleRepo(bundle.Client)
 	return schedules, resources, context.Background()
 }
 
@@ -264,5 +264,66 @@ func TestTaskScheduleRepo_UpdateRefreshesResourceName(t *testing.T) {
 	res, _ := resources.Get(ctx, repo.ResourceKindRoutine, repo.GlobalScope(), s.ID)
 	if res.Name != "renamed" {
 		t.Fatalf("expected renamed, got %s", res.Name)
+	}
+}
+
+// TestTaskScheduleRepo_EveryConstructedRepoSyncsResources is the wiring test.
+// The lifecycle helpers were reachable only through a repo somebody had handed a
+// ResourceRepo, and every mutating call site in production — the REST schedules
+// handler, the scheduler, and the MCP schedule tools — was constructed without
+// one, so the whole sync was dead in production while every unit test passed.
+// The constructor now builds its own, which is what makes that unreachable; this
+// asserts it from the constructor's public surface rather than from a repo the
+// test wired by hand.
+func TestTaskScheduleRepo_EveryConstructedRepoSyncsResources(t *testing.T) {
+	bundle, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+	ctx := context.Background()
+
+	// Exactly the call every production site makes — no ResourceRepo in sight.
+	schedules := repo.NewTaskScheduleRepo(bundle.Client)
+	resources := repo.NewResourceRepo(bundle.Client)
+
+	s, err := schedules.Create(ctx, repo.CreateTaskScheduleInput{
+		Name:                "wired",
+		CronExpr:            "0 9 * * *",
+		SlugPrefix:          "wired",
+		Title:               "Wired run",
+		Cwd:                 "/tmp",
+		MaxIterations:       20,
+		StageTimeoutSeconds: 1800,
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if _, err := resources.Get(ctx, repo.ResourceKindRoutine, repo.GlobalScope(), s.ID); err != nil {
+		t.Fatalf("create did not reach the registry: %v", err)
+	}
+
+	// SetEnabled is the MCP tools' path and has its own writer, separate from Update.
+	if _, err := schedules.SetEnabled(ctx, s.ID, false); err != nil {
+		t.Fatalf("SetEnabled: %v", err)
+	}
+	res, err := resources.Get(ctx, repo.ResourceKindRoutine, repo.GlobalScope(), s.ID)
+	if err != nil {
+		t.Fatalf("resource lookup after SetEnabled: %v", err)
+	}
+	if res.State != repo.ResourceStateDisabled {
+		t.Errorf("state after disable: got %q, want %q", res.State, repo.ResourceStateDisabled)
+	}
+
+	// A deleted schedule leaves the row behind as orphaned so grants still resolve.
+	if err := schedules.Delete(ctx, s.ID); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	res, err = resources.Get(ctx, repo.ResourceKindRoutine, repo.GlobalScope(), s.ID)
+	if err != nil {
+		t.Fatalf("resource must survive the schedule: %v", err)
+	}
+	if res.State != repo.ResourceStateOrphaned {
+		t.Errorf("state after delete: got %q, want %q", res.State, repo.ResourceStateOrphaned)
 	}
 }

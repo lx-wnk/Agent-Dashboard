@@ -703,7 +703,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	// is waiting on this request too.
 	var resourcesHandler *apiresources.Handler
 	if entClient != nil {
-		resourcesHandler = apiresources.NewHandler(resourceRepo, repo.NewTaskScheduleRepo(entClient, resourceRepo), memory.Gate{
+		resourcesHandler = apiresources.NewHandler(resourceRepo, repo.NewTaskScheduleRepo(entClient), memory.Gate{
 			Capabilities: repo.NewCapabilityRepo(entClient),
 			Grants:       repo.NewGrantRepo(entClient),
 			GrantUsage:   grantUsageRepo,
