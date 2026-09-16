@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lx-wnk/agent-dashboard/sdk"
 	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
+	"github.com/lx-wnk/agent-dashboard/server/internal/claudemodel"
 	"github.com/lx-wnk/agent-dashboard/server/internal/parser"
 	"github.com/lx-wnk/agent-dashboard/server/internal/scanner"
 )
@@ -31,7 +32,7 @@ type Spawner struct {
 type SpawnOpts struct {
 	CWD            string       // default: <Home>/work/project
 	Provider       sdk.Provider // default: sdk.ProviderClaude
-	Model          string       // default: "claude-opus-4-8"
+	Model          string       // default: the newest Opus
 	LiveInjectable bool         // when true, discovery file has a non-empty tmuxPane
 	NoChannel      bool         // when true, do NOT write a discovery file (plain terminal agent)
 	Pty            bool         // when true, also write a {pid}.pty.json pty-broker discovery file with ptyInject:true
@@ -70,7 +71,7 @@ func (s *Spawner) Spawn(opts SpawnOpts) Agent {
 	}
 	model := opts.Model
 	if model == "" {
-		model = "claude-opus-4-8"
+		model = claudemodel.Latest(claudemodel.Opus)
 	}
 
 	s.mu.Lock()

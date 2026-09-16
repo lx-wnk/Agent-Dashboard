@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/claudemodel"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
@@ -54,9 +55,9 @@ func TestStageModelDefault_BalancedDefaults(t *testing.T) {
 		stage     string
 		wantModel string
 	}{
-		{"implementation", "claude-opus-4-6"},
-		{"self_review", "claude-sonnet-4-6"},
-		{"finalization", "claude-haiku-4-5"},
+		{"implementation", claudemodel.Latest(claudemodel.Opus)},
+		{"self_review", claudemodel.Latest(claudemodel.Sonnet)},
+		{"finalization", claudemodel.Latest(claudemodel.Haiku)},
 	}
 
 	for _, tc := range cases {
@@ -180,7 +181,7 @@ func TestStageModelDefault_DBConfigRowOverridesCoded(t *testing.T) {
 // Each assertion is independent so a single failure does not mask others.
 func TestEffectiveStageModelForProject_PrecedenceChain(t *testing.T) {
 	const stage = "implementation"
-	const codedDefault = "claude-opus-4-6"
+	codedDefault := claudemodel.Latest(claudemodel.Opus)
 	const globalOverride = "claude-sonnet-4-6"
 	const projectOverride = "claude-haiku-4-5"
 

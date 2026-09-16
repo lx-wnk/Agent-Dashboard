@@ -4,7 +4,7 @@ import { stubAuthDisabled, stubEmptyStream, stubJson } from './helpers'
 
 // ---------------------------------------------------------------------------
 // Cost Analytics view + the refinement chat overlay opened from a
-// concept-stage task on the Pipeline board.
+// backlog-stage task on the Pipeline board.
 // ---------------------------------------------------------------------------
 
 test.describe('Cost analytics', () => {
@@ -60,7 +60,7 @@ test.describe('Cost analytics', () => {
 
 const TASK_ID = 'e2e-refine-task-1'
 
-function conceptTask() {
+function backlogTask() {
   return {
     id: TASK_ID,
     slug: 'slug-e2e-refine',
@@ -70,7 +70,7 @@ function conceptTask() {
     worktreePath: null,
     sourceBranch: null,
     targetBranch: null,
-    currentStage: 'concept',
+    currentStage: 'backlog',
     parentTaskId: null,
     maxIterations: 10,
     tokenBudget: null,
@@ -88,11 +88,11 @@ function conceptTask() {
   }
 }
 
-async function stubPipelineWithConceptTask(page: Page) {
+async function stubPipelineWithBacklogTask(page: Page) {
   await stubAuthDisabled(page)
   await stubJson(page, '/api/agents', [])
   await stubEmptyStream(page, '/api/agents/stream')
-  await stubJson(page, '/api/tasks', [conceptTask()])
+  await stubJson(page, '/api/tasks', [backlogTask()])
   await stubEmptyStream(page, '/api/tasks/stream')
   await stubJson(page, '/api/projects', [])
   await stubEmptyStream(page, '/api/projects/stream')
@@ -104,7 +104,7 @@ async function stubPipelineWithConceptTask(page: Page) {
 
 test.describe('Refinement chat', () => {
   test.beforeEach(async ({ page }) => {
-    await stubPipelineWithConceptTask(page)
+    await stubPipelineWithBacklogTask(page)
 
     await page.goto('/')
     await page

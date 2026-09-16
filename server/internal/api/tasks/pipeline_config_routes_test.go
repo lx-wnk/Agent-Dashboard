@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/tasks"
 	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
+	"github.com/lx-wnk/agent-dashboard/server/internal/claudemodel"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
@@ -139,11 +140,11 @@ func TestPutPipelineConfig_StageModelOverrideRoundTrip(t *testing.T) {
 		t.Errorf("after PUT: self_review=%q, want claude-haiku-4-5", resp.StageModels["self_review"])
 	}
 	// Other stages should still return coded defaults.
-	if resp.StageModels["implementation"] != "claude-opus-4-6" {
-		t.Errorf("after PUT: implementation=%q, want claude-opus-4-6", resp.StageModels["implementation"])
+	if want := claudemodel.Latest(claudemodel.Opus); resp.StageModels["implementation"] != want {
+		t.Errorf("after PUT: implementation=%q, want coded default %s", resp.StageModels["implementation"], want)
 	}
-	if resp.StageModels["finalization"] != "claude-haiku-4-5" {
-		t.Errorf("after PUT: finalization=%q, want claude-haiku-4-5", resp.StageModels["finalization"])
+	if want := claudemodel.Latest(claudemodel.Haiku); resp.StageModels["finalization"] != want {
+		t.Errorf("after PUT: finalization=%q, want coded default %s", resp.StageModels["finalization"], want)
 	}
 
 	// GET should round-trip the persisted override.
@@ -179,7 +180,7 @@ func TestPutPipelineConfig_EmptyModelClearsRow(t *testing.T) {
 		t.Fatalf("PUT override: expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
 
-	// Now clear it by sending empty string — should revert to coded default (claude-sonnet-4-6).
+	// Now clear it by sending empty string — should revert to the coded default.
 	clear := map[string]any{"stageModels": map[string]string{"self_review": ""}}
 	b2, _ := json.Marshal(clear)
 	req2 := withAuth(t, httptest.NewRequest(http.MethodPut, "/api/pipeline/config", bytes.NewReader(b2)))
@@ -195,8 +196,8 @@ func TestPutPipelineConfig_EmptyModelClearsRow(t *testing.T) {
 	if err := json.Unmarshal(rr2.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if resp.StageModels["self_review"] != "claude-sonnet-4-6" {
-		t.Errorf("after clear: self_review=%q, want coded default claude-sonnet-4-6", resp.StageModels["self_review"])
+	if want := claudemodel.Latest(claudemodel.Sonnet); resp.StageModels["self_review"] != want {
+		t.Errorf("after clear: self_review=%q, want coded default %s", resp.StageModels["self_review"], want)
 	}
 }
 

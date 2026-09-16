@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/lx-wnk/agent-dashboard/sdk"
+	"github.com/lx-wnk/agent-dashboard/server/internal/claudemodel"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/parser"
 )
@@ -415,7 +416,7 @@ func parseTokensFromRaw(raw string) (sdk.TokenUsage, string, time.Time, string, 
 func parseTokensFromReader(r io.Reader) (sdk.TokenUsage, string, time.Time, string, error) {
 	var (
 		total        sdk.TokenUsage
-		model        = "claude-sonnet-4-6"
+		model        = claudemodel.Latest(claudemodel.Sonnet)
 		lastActivity time.Time // zero → no timestamp parsed
 		cwd          string
 	)

@@ -3,19 +3,21 @@ package pipeline
 import (
 	"context"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/claudemodel"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 )
 
-const (
-	// Per-stage model config key prefix (e.g. stageModelKeyPrefix+"implementation").
-	stageModelKeyPrefix = "stageModel."
+// Per-stage model config key prefix (e.g. stageModelKeyPrefix+"implementation").
+const stageModelKeyPrefix = "stageModel."
 
-	// Balanced defaults: implementation gets the most capable model, finalization
-	// the fastest. An explicit DB row or task/spawner override takes precedence.
-	defaultModelImplementation = "claude-opus-4-6"
-	defaultModelSelfReview     = "claude-sonnet-4-6"
-	defaultModelPlanReview     = "claude-sonnet-4-6"
-	defaultModelFinalization   = "claude-haiku-4-5"
+// Balanced defaults: implementation gets the most capable series, finalization
+// the fastest, each at its newest known model. An explicit DB row or
+// task/spawner override takes precedence.
+var (
+	defaultModelImplementation = claudemodel.Latest(claudemodel.Opus)
+	defaultModelSelfReview     = claudemodel.Latest(claudemodel.Sonnet)
+	defaultModelPlanReview     = claudemodel.Latest(claudemodel.Sonnet)
+	defaultModelFinalization   = claudemodel.Latest(claudemodel.Haiku)
 )
 
 // modelResolver resolves the effective per-stage model, applying coded default

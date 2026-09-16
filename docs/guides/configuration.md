@@ -172,7 +172,7 @@ The `anthropic` adapter runs pipeline stage agents and refinement chat against t
 1. `ANTHROPIC_API_KEY` set in the server environment (inherited by the spawner binary).
 2. The `anthropic-spawner` binary on `PATH`, or its absolute path in `DASHBOARD_ANTHROPIC_SPAWNER_CMD`.
 
-**Default model:** `claude-opus-4-8` (can be overridden per-spawner via the model resolution chain described in the [Pipeline stage configuration](#pipeline-stage-configuration) section).
+**Default model:** `claude-opus-5`, the newest Opus model (can be overridden per-spawner via the model resolution chain described in the [Pipeline stage configuration](#pipeline-stage-configuration) section).
 
 **Building the binary:**
 

@@ -3,7 +3,12 @@
 // can be imported from any layer without creating a cycle.
 package pricing
 
-import "github.com/lx-wnk/agent-dashboard/sdk"
+import (
+	"regexp"
+
+	"github.com/lx-wnk/agent-dashboard/sdk"
+	"github.com/lx-wnk/agent-dashboard/server/internal/claudemodel"
+)
 
 // modelPricingEntry holds per-million-token USD prices for a single model.
 type modelPricingEntry struct {
@@ -11,12 +16,22 @@ type modelPricingEntry struct {
 }
 
 // modelPricing stores per-million-token USD prices for known Claude models.
+// Claude rates: platform.claude.com/docs/en/about-claude/pricing, read
+// 2026-09-16. CacheCreate is the 5-minute cache write.
 var modelPricing = map[string]modelPricingEntry{
-	"claude-opus-4-6":   {15, 75, 1.5, 18.75},
+	"claude-fable-5-1":  {10, 50, 0.25, 12.5},
+	"claude-fable-5":    {10, 50, 1, 12.5},
+	"claude-opus-5":     {5, 25, 0.5, 6.25},
+	"claude-opus-4-8":   {5, 25, 0.5, 6.25},
+	"claude-opus-4-7":   {5, 25, 0.5, 6.25},
+	"claude-opus-4-6":   {5, 25, 0.5, 6.25},
+	"claude-opus-4-5":   {5, 25, 0.5, 6.25},
+	"claude-opus-4-1":   {15, 75, 1.5, 18.75},
 	"claude-opus-4-0":   {15, 75, 1.5, 18.75},
+	"claude-sonnet-5":   {2, 10, 0.2, 2.5},
 	"claude-sonnet-4-6": {3, 15, 0.3, 3.75},
 	"claude-sonnet-4-5": {3, 15, 0.3, 3.75},
-	"claude-haiku-4-5":  {0.8, 4, 0.08, 1},
+	"claude-haiku-4-5":  {1, 5, 0.1, 1.25},
 
 	// OpenAI — source: platform.openai.com/pricing (verify before releasing).
 	// Cache read = 50% of input price per OpenAI caching docs; cache write = $0.
@@ -29,12 +44,17 @@ var modelPricing = map[string]modelPricingEntry{
 	"gemini-2.5-flash": {0.075, 0.30, 0, 0},
 }
 
-const defaultModel = "claude-sonnet-4-6"
+// defaultModel prices an unrecognised model: the newest Sonnet.
+var defaultModel = claudemodel.Latest(claudemodel.Sonnet)
+
+// datedSuffix matches the snapshot date some IDs carry, e.g. the -20251001 in
+// claude-haiku-4-5-20251001, which is priced like its alias.
+var datedSuffix = regexp.MustCompile(`-\d{8}$`)
 
 // lookupModel returns the pricing entry for the given model, falling back to
 // defaultModel when the model string is not recognised.
 func lookupModel(model string) modelPricingEntry {
-	p, ok := modelPricing[model]
+	p, ok := modelPricing[datedSuffix.ReplaceAllString(model, "")]
 	if !ok {
 		p = modelPricing[defaultModel]
 	}
@@ -45,7 +65,7 @@ func lookupModel(model string) modelPricingEntry {
 // given model. Used by callers that need to distinguish "we have no idea what
 // this costs" (e.g. Codex / Gemini models) from "Claude model, default-priced".
 func HasPricing(model string) bool {
-	_, ok := modelPricing[model]
+	_, ok := modelPricing[datedSuffix.ReplaceAllString(model, "")]
 	return ok
 }
 
