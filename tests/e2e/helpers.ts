@@ -13,6 +13,15 @@ export async function stubAuthDisabled(page: Page): Promise<void> {
   }))
 }
 
+/**
+ * Moves the pointer onto the content area. A pointer resting over the sidebar
+ * rail expands the nav to 220px, and content under that strip stays covered
+ * while the pointer moves onto it, so a click there is intercepted forever.
+ */
+export async function parkPointerOffNav(page: Page): Promise<void> {
+  await page.mouse.move(640, 360)
+}
+
 /** Stubs a GET endpoint to return a fixed JSON body. */
 export async function stubJson(page: Page, path: string, body: unknown, status = 200): Promise<void> {
   // Match the exact path with an optional query string, so callers can pass the
