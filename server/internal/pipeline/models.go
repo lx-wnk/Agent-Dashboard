@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -24,6 +25,13 @@ const (
 	SeriesSonnet = "sonnet"
 	SeriesHaiku  = "haiku"
 )
+
+// AllowedModels returns the allowed model IDs in sorted order.
+func AllowedModels() []string {
+	ids := slices.Collect(maps.Keys(allowedModelIDs))
+	slices.Sort(ids)
+	return ids
+}
 
 // IsValidModel reports whether id is a known, supported Claude model.
 func IsValidModel(id string) bool {
