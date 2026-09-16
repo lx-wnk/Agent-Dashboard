@@ -18,6 +18,8 @@ type Tx struct {
 	ApiKey *ApiKeyClient
 	// AppSetting is the client for interacting with the AppSetting builders.
 	AppSetting *AppSettingClient
+	// ApplicationSecret is the client for interacting with the ApplicationSecret builders.
+	ApplicationSecret *ApplicationSecretClient
 	// AuditEvent is the client for interacting with the AuditEvent builders.
 	AuditEvent *AuditEventClient
 	// Capability is the client for interacting with the Capability builders.
@@ -34,6 +36,8 @@ type Tx struct {
 	Grant *GrantClient
 	// GrantUsage is the client for interacting with the GrantUsage builders.
 	GrantUsage *GrantUsageClient
+	// MCPApplication is the client for interacting with the MCPApplication builders.
+	MCPApplication *MCPApplicationClient
 	// Materialization is the client for interacting with the Materialization builders.
 	Materialization *MaterializationClient
 	// MemoryEntry is the client for interacting with the MemoryEntry builders.
@@ -218,6 +222,7 @@ func (tx *Tx) init() {
 	tx.AgentCostTrend = NewAgentCostTrendClient(tx.config)
 	tx.ApiKey = NewApiKeyClient(tx.config)
 	tx.AppSetting = NewAppSettingClient(tx.config)
+	tx.ApplicationSecret = NewApplicationSecretClient(tx.config)
 	tx.AuditEvent = NewAuditEventClient(tx.config)
 	tx.Capability = NewCapabilityClient(tx.config)
 	tx.Checkpoint = NewCheckpointClient(tx.config)
@@ -226,6 +231,7 @@ func (tx *Tx) init() {
 	tx.EvalMetricSnapshot = NewEvalMetricSnapshotClient(tx.config)
 	tx.Grant = NewGrantClient(tx.config)
 	tx.GrantUsage = NewGrantUsageClient(tx.config)
+	tx.MCPApplication = NewMCPApplicationClient(tx.config)
 	tx.Materialization = NewMaterializationClient(tx.config)
 	tx.MemoryEntry = NewMemoryEntryClient(tx.config)
 	tx.MemoryInjection = NewMemoryInjectionClient(tx.config)

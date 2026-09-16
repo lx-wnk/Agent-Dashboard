@@ -45,6 +45,18 @@ func (f AppSettingFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, 
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AppSettingMutation", m)
 }
 
+// The ApplicationSecretFunc type is an adapter to allow the use of ordinary
+// function as ApplicationSecret mutator.
+type ApplicationSecretFunc func(context.Context, *ent.ApplicationSecretMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ApplicationSecretFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ApplicationSecretMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ApplicationSecretMutation", m)
+}
+
 // The AuditEventFunc type is an adapter to allow the use of ordinary
 // function as AuditEvent mutator.
 type AuditEventFunc func(context.Context, *ent.AuditEventMutation) (ent.Value, error)
@@ -139,6 +151,18 @@ func (f GrantUsageFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, 
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.GrantUsageMutation", m)
+}
+
+// The MCPApplicationFunc type is an adapter to allow the use of ordinary
+// function as MCPApplication mutator.
+type MCPApplicationFunc func(context.Context, *ent.MCPApplicationMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f MCPApplicationFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.MCPApplicationMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.MCPApplicationMutation", m)
 }
 
 // The MaterializationFunc type is an adapter to allow the use of ordinary

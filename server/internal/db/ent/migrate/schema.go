@@ -98,6 +98,28 @@ var (
 		Columns:    AppSettingsColumns,
 		PrimaryKey: []*schema.Column{AppSettingsColumns[0]},
 	}
+	// ApplicationSecretsColumns holds the columns for the "application_secrets" table.
+	ApplicationSecretsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "resource_id", Type: field.TypeString},
+		{Name: "env_name", Type: field.TypeString},
+		{Name: "ciphertext", Type: field.TypeString},
+		{Name: "nonce", Type: field.TypeString},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// ApplicationSecretsTable holds the schema information for the "application_secrets" table.
+	ApplicationSecretsTable = &schema.Table{
+		Name:       "application_secrets",
+		Columns:    ApplicationSecretsColumns,
+		PrimaryKey: []*schema.Column{ApplicationSecretsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "applicationsecret_resource_id_env_name",
+				Unique:  true,
+				Columns: []*schema.Column{ApplicationSecretsColumns[1], ApplicationSecretsColumns[2]},
+			},
+		},
+	}
 	// AuditEventsColumns holds the columns for the "audit_events" table.
 	AuditEventsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -338,6 +360,25 @@ var (
 				Columns: []*schema.Column{GrantUsagesColumns[3], GrantUsagesColumns[4]},
 			},
 		},
+	}
+	// McpApplicationsColumns holds the columns for the "mcp_applications" table.
+	McpApplicationsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "resource_id", Type: field.TypeString, Unique: true},
+		{Name: "server_name", Type: field.TypeString},
+		{Name: "attach_all", Type: field.TypeBool, Default: false},
+		{Name: "required_env", Type: field.TypeJSON, Default: "[]"},
+		{Name: "catalogue", Type: field.TypeJSON, Default: "[]"},
+		{Name: "catalogue_error", Type: field.TypeString, Default: ""},
+		{Name: "catalogue_refreshed_at", Type: field.TypeTime, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// McpApplicationsTable holds the schema information for the "mcp_applications" table.
+	McpApplicationsTable = &schema.Table{
+		Name:       "mcp_applications",
+		Columns:    McpApplicationsColumns,
+		PrimaryKey: []*schema.Column{McpApplicationsColumns[0]},
 	}
 	// MaterializationsColumns holds the columns for the "materializations" table.
 	MaterializationsColumns = []*schema.Column{
@@ -1098,6 +1139,7 @@ var (
 		AgentCostTrendsTable,
 		APIKeysTable,
 		AppSettingsTable,
+		ApplicationSecretsTable,
 		AuditEventsTable,
 		CapabilitiesTable,
 		CheckpointsTable,
@@ -1106,6 +1148,7 @@ var (
 		EvalMetricSnapshotsTable,
 		GrantsTable,
 		GrantUsagesTable,
+		McpApplicationsTable,
 		MaterializationsTable,
 		MemoryEntriesTable,
 		MemoryInjectionsTable,
