@@ -64,6 +64,8 @@ const ChannelServerName = "dashboard-channel"
 // spawned stage agent back the scopes the per-stage-run key deliberately omits.
 var reservedServerNames = map[string]bool{ChannelServerName: true, mcp.ServerName: true}
 
+func IsReservedServerName(name string) bool { return reservedServerNames[name] }
+
 // DiscoveryFile returns the channel-bridge discovery file path for a pid:
 // <home>/.claude/dashboard-channel/<pid>.json
 func DiscoveryFile(home string, pid int) string {

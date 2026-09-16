@@ -59,8 +59,10 @@ import (
 	authpkg "github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/capability"
 	"github.com/lx-wnk/agent-dashboard/server/internal/checkpoint"
+	"github.com/lx-wnk/agent-dashboard/server/internal/claudeconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/claudesettings"
 	"github.com/lx-wnk/agent-dashboard/server/internal/config"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/rawrepo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
@@ -69,6 +71,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/hookstore"
 	"github.com/lx-wnk/agent-dashboard/server/internal/materializer"
 	mcppkg "github.com/lx-wnk/agent-dashboard/server/internal/mcp"
+	"github.com/lx-wnk/agent-dashboard/server/internal/mcpapps"
 	"github.com/lx-wnk/agent-dashboard/server/internal/memory"
 	"github.com/lx-wnk/agent-dashboard/server/internal/merger"
 	"github.com/lx-wnk/agent-dashboard/server/internal/parser"
@@ -339,6 +342,17 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 			slog.Warn("registry: schedule reconcile failed", "err", err)
 		} else if linked > 0 {
 			slog.Info("registry: linked schedules to registry identities", "count", linked)
+		}
+
+		mcpAppRepo := repo.NewMCPApplicationRepo(entClient)
+		if servers, err := claudeconfig.UserMCPServers(); err != nil {
+			// The first-run marker must not be recorded from an unreadable file,
+			// or every server that exists today would be demoted to opt-in.
+			slog.Warn("mcpapps: ~/.claude.json unreadable — applications not reconciled", "err", err)
+		} else if n, err := mcpapps.Reconcile(ctx, servers, resourceRepo, mcpAppRepo, db.MarkerStore{DB: bundle.DB}); err != nil {
+			slog.Warn("mcpapps: reconcile failed", "err", err)
+		} else {
+			slog.Info("mcpapps: applications reconciled", "mirrored", n)
 		}
 
 		// Seed the capability catalogue from the tool allow-list, then load it
