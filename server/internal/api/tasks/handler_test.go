@@ -14,6 +14,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/task"
 	rawrepo "github.com/lx-wnk/agent-dashboard/server/internal/db/rawrepo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
@@ -353,6 +354,32 @@ func TestGrantPermission_RecordsDecidedBy(t *testing.T) {
 	}
 	if perms[0].DecidedAt == nil {
 		t.Error("expected decided_at to be recorded, got nil")
+	}
+}
+
+// TestCreateTask_BodyCannotAttachApplications pins that applications reach a
+// task only through the scheduler: a caller that could name them on the task
+// it creates could hand itself any mailbox.
+func TestCreateTask_BodyCannotAttachApplications(t *testing.T) {
+	client, r := newTestHandlerWithRepos(t)
+	b, _ := json.Marshal(map[string]any{
+		"slug": "no-attach", "title": "T", "cwd": "/tmp/no-attach",
+		"applications": []string{"res-mail"},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/tasks", bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
+	req = withAuth(t, req)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated && rr.Code != http.StatusOK {
+		t.Fatalf("create: %d %s", rr.Code, rr.Body.String())
+	}
+	created, err := client.Task.Query().Where(task.Slug("no-attach")).Only(context.Background())
+	if err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	if len(created.Applications) != 0 {
+		t.Fatalf("applications = %v — the create body must not attach applications", created.Applications)
 	}
 }
 
