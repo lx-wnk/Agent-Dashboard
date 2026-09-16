@@ -79,7 +79,7 @@ claude.ai connectors are not entries in `~/.claude.json`, so `channelconfig.go:1
 
 ### 3.1 MCP servers become registry Applications
 
-- A reconciler — modelled on `ReconcileScheduleResources` — reads the user-scope `mcpServers` from `~/.claude.json` at startup and on demand, and upserts one `resources` row per server: `kind = application`, `origin = local`, `slug = <server name>`, state `discovered`.
+- A reconciler — modelled on `ReconcileScheduleResources` — reads the user-scope `mcpServers` from `~/.claude.json` at startup and on demand, and upserts one `resources` row per server: `kind = application`, `origin = local`, `slug = mcp-<server name>`, state `discovered`. The prefix keeps a server from taking over the registry row of a plugin application with the same slug; a server whose name does not form a valid slug is skipped with a warning.
 - Reserved dashboard server names are skipped, exactly as `channelconfig.go:110` skips them.
 - **Servers present at the first reconcile** are marked *attach to all runs*, so today's behaviour is kept — but as a visible, reversible flag instead of an implicit rule.
 - **Servers added later** start as *attach only when requested*.
@@ -87,8 +87,9 @@ claude.ai connectors are not entries in `~/.claude.json`, so `channelconfig.go:1
 
 ### 3.2 Attachment per run (closes G2)
 
-- A routine (`task_schedule`) carries the list of applications its tasks need. The scheduler copies it onto each task it materializes.
-- **Attachment is authority, not metadata.** It decides which mailbox a run can see. It is therefore settable only through human-authenticated HTTP routes and by the scheduler — never through the MCP task API and never through `task.metadata`. This is the same reasoning that kept `RoutineID` out of the task-create body (`server/internal/api/tasks/handler.go:339`).
+- A routine (`task_schedule`) carries the list of applications its tasks need. The scheduler copies it onto each task it materializes. A task gets applications **only** this way; the task-create body does not accept them.
+- **Attachment is authority, not metadata.** It decides which mailbox a run can see. It is therefore settable only through the schedules HTTP routes and by the scheduler — never through the MCP task API, never through `task.metadata`, never through the task-create body. This is the same reasoning that kept `RoutineID` out of the task-create body (`server/internal/api/tasks/handler.go:339`).
+- **Limit under `auth.mode=none`:** no authentication middleware guards `/api` routes then (`server/internal/api/router.go:312-313`), so any local process — including an agent's Bash — can call the schedules routes. With authentication enabled the routes require a session. This is the documented local-trust posture, not a gap this spec closes.
 - At spawn, `channelconfig` writes only (a) the dashboard's own servers, (b) servers flagged *attach to all runs*, and (c) the run's attached applications.
 
 ### 3.3 Secrets held by the dashboard
@@ -104,7 +105,7 @@ claude.ai connectors are not entries in `~/.claude.json`, so `channelconfig.go:1
 - The dashboard connects to each application as an MCP **client** (`go-sdk`) and reads `tools/list`. Every tool becomes a `capability` row named exactly as Claude Code names it — `mcp__<server>__<tool>` — so the spawn enforcer renders it into `--allowedTools` / `--disallowedTools` without translation.
 - **Class defaults to `tool`**: no grant, no silent allow (`decide.go:233`).
 - `readOnlyHint` / `destructiveHint` from the server are shown in the UI as hints only. The MCP specification requires clients to treat tool annotations as untrusted unless the server is trusted.
-- `IsAllowedTool` additionally accepts tools present in the catalogue.
+- The spawn's permission filter (rule 3 in `resolvePermissionDecisions`, `spawner.go`) additionally accepts tools present in an attached application's catalogue, so a human's task-level approval of such a tool is honoured.
 - The spawn enforcer resolves decisions in the run's full context chain — task, routine, project, global. Today it resolves a task context only (`spawner.go:190`).
 - **Allow-all autonomy still does not allow MCP tools wholesale.** `PermissiveAllowList` (`server/internal/taskcontrol/autonomy.go:29`) stays built-in tools only.
 - **A tool that appears after a server update** gets class `tool` and therefore never slips into an allow list.
