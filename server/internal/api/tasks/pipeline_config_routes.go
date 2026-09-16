@@ -10,10 +10,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
+	"github.com/lx-wnk/agent-dashboard/server/internal/claudemodel"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
-	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 )
 
 // validStageModelKeys lists the agent-driven stages that support per-stage model and spawner overrides.
@@ -105,7 +105,7 @@ func (h *Handler) writeScopedStageModels(ctx context.Context, projectID *string,
 			}
 			continue
 		}
-		if !pipeline.IsValidModel(model) {
+		if !claudemodel.IsKnown(model) {
 			return apierr.NewAppError(http.StatusBadRequest, fmt.Sprintf("stageModel.%s: unknown model %q", stage, model))
 		}
 		if err := h.cfgRepo.SetScoped(ctx, projectID, stageModelKeyPrefix+stage, model); err != nil {

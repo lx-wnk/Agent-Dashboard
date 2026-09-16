@@ -15,7 +15,7 @@ import {
 import { toast } from '@/composables/useToast'
 import SpawnerDetailView from '@/features/settings/components/SpawnerDetailView.vue'
 import { errorMessage } from '@/utils/errorMessage'
-import { EFFORT_OPTIONS } from '@/utils/models'
+import { EFFORT_OPTIONS, latestModel } from '@/utils/models'
 import { isAllowedSpawnerCommand } from '@/utils/validation'
 
 withDefaults(defineProps<{ hideTitle?: boolean }>(), { hideTitle: false })
@@ -560,7 +560,7 @@ async function handleSetDefault(id: string) {
                 v-model="form.modelOverride"
                 type="text"
                 class="w-full bg-card border border-line rounded px-2.5 py-1.5 text-sm text-fg font-mono focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:border-accent"
-                placeholder="claude-opus-4-5"
+                :placeholder="latestModel('opus')"
               >
             </div>
           </template>

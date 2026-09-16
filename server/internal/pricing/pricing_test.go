@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/lx-wnk/agent-dashboard/sdk"
-	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
+	"github.com/lx-wnk/agent-dashboard/server/internal/claudemodel"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pricing"
 	"github.com/stretchr/testify/require"
 )
@@ -73,7 +73,7 @@ func TestEstimateCost_Haiku(t *testing.T) {
 // TestEstimateCost_UnknownModel falls back to the newest Sonnet.
 func TestEstimateCost_UnknownModel(t *testing.T) {
 	usage := sdk.TokenUsage{InputTokens: 1_000_000, OutputTokens: 1_000_000}
-	sonnet := pricing.EstimateCost(usage, pipeline.LatestModel(pipeline.SeriesSonnet))
+	sonnet := pricing.EstimateCost(usage, claudemodel.Latest(claudemodel.Sonnet))
 	unknown := pricing.EstimateCost(usage, "claude-fictional-model")
 	require.InDelta(t, sonnet, unknown, 0.0001)
 }
@@ -122,7 +122,7 @@ func TestEstimateCacheReadCost_Opus(t *testing.T) {
 // A model the pipeline can run but the table does not price would be costed
 // silently at the fallback rate.
 func TestHasPricing_EveryAllowedPipelineModel(t *testing.T) {
-	for _, id := range pipeline.AllowedModels() {
+	for _, id := range claudemodel.IDs() {
 		if !pricing.HasPricing(id) {
 			t.Errorf("HasPricing(%q) = false: add its published rates to modelPricing", id)
 		}

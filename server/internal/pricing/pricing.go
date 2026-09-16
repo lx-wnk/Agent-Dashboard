@@ -7,6 +7,7 @@ import (
 	"regexp"
 
 	"github.com/lx-wnk/agent-dashboard/sdk"
+	"github.com/lx-wnk/agent-dashboard/server/internal/claudemodel"
 )
 
 // modelPricingEntry holds per-million-token USD prices for a single model.
@@ -43,10 +44,8 @@ var modelPricing = map[string]modelPricingEntry{
 	"gemini-2.5-flash": {0.075, 0.30, 0, 0},
 }
 
-// defaultModel prices an unrecognised model. It is the newest Sonnet; a test
-// in pricing_test.go holds it to pipeline.LatestModel, which this package
-// cannot import.
-const defaultModel = "claude-sonnet-5"
+// defaultModel prices an unrecognised model: the newest Sonnet.
+var defaultModel = claudemodel.Latest(claudemodel.Sonnet)
 
 // datedSuffix matches the snapshot date some IDs carry, e.g. the -20251001 in
 // claude-haiku-4-5-20251001, which is priced like its alias.
