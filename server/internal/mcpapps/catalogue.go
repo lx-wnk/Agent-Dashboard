@@ -50,6 +50,9 @@ func StdioTransport(entry ServerEntry, env map[string]string) (mcp.Transport, er
 	if !entry.IsStdio() {
 		return nil, fmt.Errorf("the tool catalogue supports stdio servers only, this one is %q", entry.Type)
 	}
+	// #nosec G204 -- entry comes from the operator's user-scope ~/.claude.json, the file Claude Code itself reads to launch this
+	// same server for every session; the dashboard runs exactly that command, as the same OS user, and exec.Command uses no shell.
+	// Anyone able to write that file already runs as this user and could start the command directly.
 	cmd := exec.Command(entry.Command, entry.Args...)
 	cmd.Env = os.Environ()
 	for k, v := range entry.Env {
