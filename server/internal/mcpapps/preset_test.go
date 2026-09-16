@@ -21,11 +21,11 @@ func TestApplyPreset_GrantsKnownToolsOnceAndSkipsUnknown(t *testing.T) {
 	apps := repo.NewMCPApplicationRepo(bundle.Client)
 	grants := repo.NewGrantRepo(bundle.Client)
 
-	app, err := apps.Upsert(ctx, repo.UpsertMCPApplicationInput{ResourceID: "res-mail", ServerName: "mail"})
+	_, err = apps.Upsert(ctx, repo.UpsertMCPApplicationInput{ResourceID: "res-mail", ServerName: "mail"})
 	require.NoError(t, err)
 	require.NoError(t, apps.RecordCatalogue(ctx, "res-mail",
 		[]schema.CatalogueTool{{Name: "search"}, {Name: "send"}}, "", time.Now()))
-	app, err = apps.GetByResourceID(ctx, "res-mail")
+	app, err := apps.GetByResourceID(ctx, "res-mail")
 	require.NoError(t, err)
 
 	p := mcpapps.Preset{Confirmed: true, AllowForRoutine: []string{"search", "not_in_catalogue"}, DenyGlobal: []string{"send"}}
@@ -61,11 +61,11 @@ func TestApplyPreset_RefusesUnconfirmedPreset(t *testing.T) {
 	apps := repo.NewMCPApplicationRepo(bundle.Client)
 	grants := repo.NewGrantRepo(bundle.Client)
 
-	app, err := apps.Upsert(ctx, repo.UpsertMCPApplicationInput{ResourceID: "res-mail", ServerName: "mail"})
+	_, err = apps.Upsert(ctx, repo.UpsertMCPApplicationInput{ResourceID: "res-mail", ServerName: "mail"})
 	require.NoError(t, err)
 	require.NoError(t, apps.RecordCatalogue(ctx, "res-mail",
 		[]schema.CatalogueTool{{Name: "search"}, {Name: "send"}}, "", time.Now()))
-	app, err = apps.GetByResourceID(ctx, "res-mail")
+	app, err := apps.GetByResourceID(ctx, "res-mail")
 	require.NoError(t, err)
 
 	p := mcpapps.Preset{Confirmed: false, AllowForRoutine: []string{"search"}, DenyGlobal: []string{"send"}}
@@ -113,11 +113,11 @@ func TestApplyPreset_NarrowerGrantIsNotExisting(t *testing.T) {
 			apps := repo.NewMCPApplicationRepo(bundle.Client)
 			grants := repo.NewGrantRepo(bundle.Client)
 
-			app, err := apps.Upsert(ctx, repo.UpsertMCPApplicationInput{ResourceID: "res-mail", ServerName: "mail"})
+			_, err = apps.Upsert(ctx, repo.UpsertMCPApplicationInput{ResourceID: "res-mail", ServerName: "mail"})
 			require.NoError(t, err)
 			require.NoError(t, apps.RecordCatalogue(ctx, "res-mail",
 				[]schema.CatalogueTool{{Name: "search"}}, "", time.Now()))
-			app, err = apps.GetByResourceID(ctx, "res-mail")
+			app, err := apps.GetByResourceID(ctx, "res-mail")
 			require.NoError(t, err)
 
 			in := tt.in
