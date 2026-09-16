@@ -13,11 +13,11 @@ import (
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/capability"
 	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
-	"github.com/lx-wnk/agent-dashboard/server/internal/claudeconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/envsec"
 	"github.com/lx-wnk/agent-dashboard/server/internal/mcp"
+	"github.com/lx-wnk/agent-dashboard/server/internal/mcpapps"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pathutil"
 	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
 	"github.com/lx-wnk/agent-dashboard/server/internal/taskcontrol"
@@ -82,6 +82,12 @@ type SpawnAgentOptions struct {
 	// value the claude CLI actually recognizes (services.IsValidEffortLevel);
 	// an unresolved or unrecognized value must reach here as "", never a guess.
 	Effort string
+
+	// Applications is the resolved set of MCP applications this run may use:
+	// their server configs, which of their tools are allowed or denied, and
+	// which tool names exist in their catalogue at all. Zero value means the
+	// run gets no MCP applications.
+	Applications mcpapps.RunApplications
 }
 
 type SpawnResult struct {
@@ -166,7 +172,7 @@ const permissionGrantContextRef = "task-permission"
 // Otherwise each granted TaskPermission is translated into a capability grant
 // and resolved through capability.Decide, then capability.SpawnEnforcer
 // renders whatever decided allow.
-func BuildAllowList(autonomy string, perms []*ent.TaskPermission, enableChannel, allowGitPush bool) []string {
+func BuildAllowList(autonomy string, perms []*ent.TaskPermission, enableChannel, allowGitPush bool, catalogueTools map[string]bool) []string {
 	var allow []string
 	if enableChannel {
 		allow = append(allow, channelAllow...)
@@ -174,7 +180,7 @@ func BuildAllowList(autonomy string, perms []*ent.TaskPermission, enableChannel,
 	if taskcontrol.IsAllowAll(autonomy) {
 		return append(allow, taskcontrol.PermissiveAllowList(allowGitPush)...)
 	}
-	decisions, entries := resolvePermissionDecisions(perms, allowGitPush)
+	decisions, entries := resolvePermissionDecisions(perms, allowGitPush, catalogueTools)
 	return append(allow, capability.SpawnEnforcer{}.AllowList(decisions, entries)...)
 }
 
@@ -186,7 +192,7 @@ func BuildAllowList(autonomy string, perms []*ent.TaskPermission, enableChannel,
 // Decide resolve context specificity, mode ranking, and grant expiry for
 // whatever survives. The returned slices are parallel and preserve the order
 // perms was walked in, as capability.SpawnEnforcer.AllowList requires.
-func resolvePermissionDecisions(perms []*ent.TaskPermission, allowGitPush bool) ([]capability.Decision, []capability.AllowEntry) {
+func resolvePermissionDecisions(perms []*ent.TaskPermission, allowGitPush bool, catalogueTools map[string]bool) ([]capability.Decision, []capability.AllowEntry) {
 	contexts := []capability.Context{{Kind: "task", Ref: permissionGrantContextRef}}
 
 	type survivor struct{ tool, value string }
@@ -197,8 +203,8 @@ func resolvePermissionDecisions(perms []*ent.TaskPermission, allowGitPush bool) 
 		if !p.Granted {
 			continue // rule 1: not granted
 		}
-		if !permissions.IsAllowedTool(p.Tool) {
-			continue // rule 3: tool not on the allow-list
+		if !permissions.IsAllowedTool(p.Tool) && !catalogueTools[p.Tool] {
+			continue // rule 3: tool not on the allow-list and not in any attached application's catalogue
 		}
 
 		var value string
@@ -251,6 +257,17 @@ func resolvePermissionDecisions(perms []*ent.TaskPermission, allowGitPush bool) 
 		entries = append(entries, capability.AllowEntry{Tool: s.tool, Pattern: s.value})
 	}
 	return decisions, entries
+}
+
+// spawnToolLists renders one spawn's tool decisions in one place, so the
+// settings file and the spawn's command-line flags always agree: permission
+// grants and channel tools, plus whatever the run's attached MCP applications
+// allow or deny on top.
+func spawnToolLists(opts SpawnAgentOptions, allowGitPush bool) (allow, deny []string) {
+	allow = append(BuildAllowList(opts.Task.Autonomy, opts.Permissions, opts.EnableChannel, allowGitPush, opts.Applications.CatalogueTools), taskAPIAllow(opts)...)
+	allow = append(allow, opts.Applications.Allow...)
+	deny = append(BuildDenyList(opts.Task.Autonomy, allowGitPush), opts.Applications.Deny...)
+	return allow, deny
 }
 
 func BuildSpawnArgs(opts SpawnAgentOptions) []string {
@@ -501,9 +518,7 @@ func BuildSpawnEnv(opts SpawnAgentOptions) []string {
 	return env
 }
 
-func writeSettingsFile(autonomy, cwd string, perms []*ent.TaskPermission, enableChannel, allowGitPush bool, extraAllow []string) (string, bool, bool, error) {
-	allow := append(BuildAllowList(autonomy, perms, enableChannel, allowGitPush), extraAllow...)
-	deny := BuildDenyList(autonomy, allowGitPush)
+func writeSettingsFile(cwd string, allow, deny []string) (string, bool, bool, error) {
 	if len(allow) == 0 && len(deny) == 0 {
 		return "", false, false, nil
 	}
@@ -661,9 +676,8 @@ func SpawnStageAgent(opts SpawnAgentOptions) (SpawnResult, error) {
 	// Resolved once and used twice: as the spawn's permission flags, which are
 	// what actually binds, and as the settings file, which still helps in a
 	// workspace the user has trusted and is harmless where it is ignored.
-	spawnAllow := append(BuildAllowList(opts.Task.Autonomy, opts.Permissions, opts.EnableChannel, allowGitPush), taskAPIAllow(opts)...)
-	spawnDeny := BuildDenyList(opts.Task.Autonomy, allowGitPush)
-	settingsPath, wrote, isLocal, err := writeSettingsFile(opts.Task.Autonomy, cwd, opts.Permissions, opts.EnableChannel, allowGitPush, taskAPIAllow(opts))
+	spawnAllow, spawnDeny := spawnToolLists(opts, allowGitPush)
+	settingsPath, wrote, isLocal, err := writeSettingsFile(cwd, spawnAllow, spawnDeny)
 	if err != nil {
 		if !taskcontrol.IsAllowAll(opts.Task.Autonomy) {
 			return SpawnResult{}, fmt.Errorf("writeSettingsFile: %w", err)
@@ -677,12 +691,9 @@ func SpawnStageAgent(opts SpawnAgentOptions) (SpawnResult, error) {
 	var channelCfgPath string
 	if opts.EnableChannel {
 		// The spawn runs --strict-mcp-config, so whatever is not in this file is
-		// gone for the agent. Carry the operator's own servers over; a config
-		// that cannot be read costs the agent those servers, never the spawn.
-		userServers, userErr := claudeconfig.UserMCPServers()
-		if userErr != nil {
-			slog.Warn("claudeconfig: ignoring unreadable ~/.claude.json — agent gets the dashboard's MCP servers only", "err", userErr)
-		}
+		// gone for the agent. Carry the operator's own servers over; the
+		// resolver already read and merged them (mcpapps.Resolver.ReadServers).
+		userServers := opts.Applications.Servers
 		if selfBin, binErr := channelconfig.SelfBinaryPath(); binErr == nil {
 			if cfgPath, cfgErr := channelconfig.WriteTempConfig(selfBin, buildTaskAPI(opts), userServers); cfgErr == nil {
 				channelCfgPath = cfgPath

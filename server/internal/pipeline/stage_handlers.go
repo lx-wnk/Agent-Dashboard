@@ -13,6 +13,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/llmadapter"
+	"github.com/lx-wnk/agent-dashboard/server/internal/mcpapps"
 	"github.com/lx-wnk/agent-dashboard/server/internal/memory"
 	"github.com/lx-wnk/agent-dashboard/server/internal/services"
 )
@@ -174,6 +175,15 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 		}
 	}
 
+	var apps mcpapps.RunApplications
+	if ctx.ResolveApplications != nil {
+		resolved, err := ctx.ResolveApplications(ctx.Ctx, ctx.Task)
+		if err != nil {
+			return FailTransition{Reason: "MCP applications: " + err.Error()}, nil
+		}
+		apps = resolved
+	}
+
 	// A credential that cannot be minted is not a reason to refuse the spawn:
 	// the agent then runs without task API access at all, since the spawn is
 	// strict-scoped to its own MCP config.
@@ -204,6 +214,7 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 		Effort:          nativeEffort,
 		AdditionalDirs:  ctx.AdditionalDirs,
 		AllowGitPush:    ctx.AllowGitPush,
+		Applications:    apps,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("agentStageHandler.Execute(%s): %w", h.stage, err)
@@ -227,7 +238,7 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 // mirroring the logic in BuildAllowList so non-Claude adapters receive the
 // same tool constraints.
 func buildAllowedToolsList(ctx *StageContext) []string {
-	raw := BuildAllowList(ctx.Task.Autonomy, ctx.Permissions, false, ctx.AllowGitPush)
+	raw := BuildAllowList(ctx.Task.Autonomy, ctx.Permissions, false, ctx.AllowGitPush, nil)
 	// Strip the Bash(...) wrapper — non-Claude adapters receive plain tool names.
 	tools := make([]string, 0, len(raw))
 	for _, entry := range raw {

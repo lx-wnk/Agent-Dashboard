@@ -623,7 +623,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		}
 	}
 
-	orch, err = provideOrchestrator(cfg, settingsSvc, entClient, taskBroadcaster, systemPromptRepo, spawnerResolver, cpStart, cpStop, memRepo, memRetriever, grantUsageRepo)
+	orch, err = provideOrchestrator(cfg, settingsSvc, entClient, taskBroadcaster, systemPromptRepo, spawnerResolver, cpStart, cpStop, memRepo, memRetriever, grantUsageRepo, repo.NewApplicationSecretRepo(entClient, box))
 	if err != nil {
 		return &ServerComponents{Cleanup: cleanup}, err
 	}

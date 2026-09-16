@@ -6,6 +6,7 @@ import (
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	"github.com/lx-wnk/agent-dashboard/server/internal/mcpapps"
 	"github.com/lx-wnk/agent-dashboard/server/internal/memory"
 )
 
@@ -177,6 +178,11 @@ type StageContext struct {
 	// is likewise non-fatal — see
 	// stage_handlers.go's caller.
 	IssueTaskAPIKey func(ctx context.Context, stageRunID string, stageTimeout time.Duration) (string, error)
+
+	// ResolveApplications decides which MCP applications a run gets, with
+	// which environment, and which of their tools are allowed or denied. nil
+	// means the run gets no MCP applications.
+	ResolveApplications func(ctx context.Context, task *ent.Task) (mcpapps.RunApplications, error)
 
 	// RegisterSpawnCleanup takes the cleanup closure a spawn returns, so the
 	// files it wrote — the temp --mcp-config carrying the credential minted
@@ -356,6 +362,12 @@ type OrchestratorOptions struct {
 	// way a nil AuthorizeMemory disables the memory push.
 	IssueTaskAPIKey   func(ctx context.Context, stageRunID string, stageTimeout time.Duration) (string, error)
 	RevokeTaskAPIKeys func(ctx context.Context, stageRunID string) error
+
+	// ResolveApplications is forwarded verbatim onto every StageContext this
+	// orchestrator builds — see the matching StageContext field for what it
+	// does. nil disables MCP applications the same way a nil AuthorizeMemory
+	// disables the memory push.
+	ResolveApplications func(ctx context.Context, task *ent.Task) (mcpapps.RunApplications, error)
 }
 
 // StageFailedInfo carries failure metadata to the OnStageFailed callback.

@@ -136,7 +136,7 @@ func buildViaDecide(perms []*ent.TaskPermission, taskID string, allowGitPush boo
 func assertParity(t *testing.T, perms []*ent.TaskPermission, allowGitPush bool) {
 	t.Helper()
 	const taskID = "t1"
-	want := pipeline.BuildAllowList("manual", perms, false, allowGitPush)
+	want := pipeline.BuildAllowList("manual", perms, false, allowGitPush, nil)
 	got := buildViaDecide(perms, taskID, allowGitPush)
 	require.Equal(t, want, got, "capability.Decide must reproduce BuildAllowList's output element for element and order for order")
 }
@@ -253,7 +253,7 @@ func TestAllowListParity(t *testing.T) {
 	t.Run("exception A: allow-all autonomy is out of scope for the Decider", func(t *testing.T) {
 		perms := []*ent.TaskPermission{{ID: "p1", Tool: "Bash", Pattern: &safePattern, Granted: true}}
 		for _, autonomy := range []string{"spec_gated", "full"} {
-			got := pipeline.BuildAllowList(autonomy, perms, false, false)
+			got := pipeline.BuildAllowList(autonomy, perms, false, false, nil)
 			require.Equal(t, taskcontrol.PermissiveAllowList(false), got,
 				"autonomy=%s must return the permissive allow-list untouched by perms", autonomy)
 		}
@@ -265,7 +265,7 @@ func TestAllowListParity(t *testing.T) {
 	// grant-resolved list.
 	t.Run("exception B: channel tools bypass the gate and are asserted separately", func(t *testing.T) {
 		perms := []*ent.TaskPermission{{ID: "p1", Tool: "Bash", Pattern: &safePattern, Granted: true}}
-		got := pipeline.BuildAllowList("manual", perms, true, false)
+		got := pipeline.BuildAllowList("manual", perms, true, false, nil)
 		// Derived from the bridge's own tool list rather than written out here:
 		// spelling the entries a second time is what let set_stage_output go
 		// missing from the real allow-list without any test noticing.
