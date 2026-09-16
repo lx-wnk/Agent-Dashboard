@@ -30,6 +30,7 @@ type NewTaskSpec struct {
 	RoutineID       string
 	UserID          *string
 	Metadata        map[string]any
+	Applications    []string
 }
 
 // TaskCreateFunc materializes a pipeline task and returns its ID. Wired at the
@@ -86,7 +87,8 @@ func (m *Materializer) Materialize(ctx context.Context, s *ent.TaskSchedule, fir
 		Metadata:        s.Metadata,
 		// The schedule IS the routine: its id is what a "routine" capability
 		// grant is anchored to, so every task it materializes carries it.
-		RoutineID: s.ID,
+		RoutineID:    s.ID,
+		Applications: s.Applications,
 	}
 	if s.ProjectID != nil {
 		spec.ProjectID = *s.ProjectID

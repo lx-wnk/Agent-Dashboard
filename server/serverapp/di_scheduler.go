@@ -41,6 +41,7 @@ func provideScheduler(client *ent.Client, taskHandler *tasks.Handler, tb *sse.Ta
 			ProjectID:       spec.ProjectID,
 			SpawnerID:       spec.SpawnerID,
 			RoutineID:       spec.RoutineID,
+			Applications:    spec.Applications,
 			UserID:          spec.UserID,
 			Metadata:        spec.Metadata,
 		})

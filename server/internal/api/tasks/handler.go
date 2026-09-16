@@ -340,10 +340,15 @@ type CreateTaskParams struct {
 	// a task a human created. Deliberately absent from the HTTP create body:
 	// the scheduler is the only writer (see the schema field's comment).
 	RoutineID string
-	UserID    *string
-	Metadata  map[string]any
-	Autonomy  *string
-	PlanMode  *bool
+	// Applications is copied from the routine by the scheduler and is not part
+	// of the HTTP create body: attaching a mailbox is an authority decision, and
+	// a caller able to name applications on a task it creates could hand itself
+	// any mailbox.
+	Applications []string
+	UserID       *string
+	Metadata     map[string]any
+	Autonomy     *string
+	PlanMode     *bool
 }
 
 // CreateTaskFromInput is the reusable task-creation core: it checks slug
@@ -453,6 +458,7 @@ func (h *Handler) CreateTaskFromInput(ctx context.Context, p CreateTaskParams) (
 		ProjectID:           projectIDPtr,
 		SpawnerID:           spawnerIDPtr,
 		RoutineID:           routineIDPtr,
+		Applications:        p.Applications,
 		Autonomy:            p.Autonomy,
 		Metadata:            p.Metadata,
 		PlanMode:            planMode,

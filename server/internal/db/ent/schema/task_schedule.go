@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"entgo.io/ent"
+	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
 )
@@ -52,6 +53,9 @@ func (TaskSchedule) Fields() []ent.Field {
 		field.String("last_task_id").Optional().Nillable(),
 
 		field.String("resource_id").Optional().Default(""),
+		field.JSON("applications", []string{}).
+			Default([]string{}).
+			Annotations(entsql.Default("[]")),
 
 		field.String("user_id").Optional().Nillable(),
 		field.Time("created_at").Default(time.Now).Immutable(),

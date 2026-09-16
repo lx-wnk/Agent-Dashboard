@@ -10,6 +10,7 @@ import (
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"entgo.io/ent/dialect/sql/sqljson"
 	"entgo.io/ent/schema/field"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/predicate"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/taskschedule"
@@ -510,6 +511,18 @@ func (_u *TaskScheduleUpdate) ClearResourceID() *TaskScheduleUpdate {
 	return _u
 }
 
+// SetApplications sets the "applications" field.
+func (_u *TaskScheduleUpdate) SetApplications(v []string) *TaskScheduleUpdate {
+	_u.mutation.SetApplications(v)
+	return _u
+}
+
+// AppendApplications appends value to the "applications" field.
+func (_u *TaskScheduleUpdate) AppendApplications(v []string) *TaskScheduleUpdate {
+	_u.mutation.AppendApplications(v)
+	return _u
+}
+
 // SetUserID sets the "user_id" field.
 func (_u *TaskScheduleUpdate) SetUserID(v string) *TaskScheduleUpdate {
 	_u.mutation.SetUserID(v)
@@ -748,6 +761,14 @@ func (_u *TaskScheduleUpdate) sqlSave(ctx context.Context) (_node int, err error
 	}
 	if _u.mutation.ResourceIDCleared() {
 		_spec.ClearField(taskschedule.FieldResourceID, field.TypeString)
+	}
+	if value, ok := _u.mutation.Applications(); ok {
+		_spec.SetField(taskschedule.FieldApplications, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedApplications(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, taskschedule.FieldApplications, value)
+		})
 	}
 	if value, ok := _u.mutation.UserID(); ok {
 		_spec.SetField(taskschedule.FieldUserID, field.TypeString, value)
@@ -1260,6 +1281,18 @@ func (_u *TaskScheduleUpdateOne) ClearResourceID() *TaskScheduleUpdateOne {
 	return _u
 }
 
+// SetApplications sets the "applications" field.
+func (_u *TaskScheduleUpdateOne) SetApplications(v []string) *TaskScheduleUpdateOne {
+	_u.mutation.SetApplications(v)
+	return _u
+}
+
+// AppendApplications appends value to the "applications" field.
+func (_u *TaskScheduleUpdateOne) AppendApplications(v []string) *TaskScheduleUpdateOne {
+	_u.mutation.AppendApplications(v)
+	return _u
+}
+
 // SetUserID sets the "user_id" field.
 func (_u *TaskScheduleUpdateOne) SetUserID(v string) *TaskScheduleUpdateOne {
 	_u.mutation.SetUserID(v)
@@ -1528,6 +1561,14 @@ func (_u *TaskScheduleUpdateOne) sqlSave(ctx context.Context) (_node *TaskSchedu
 	}
 	if _u.mutation.ResourceIDCleared() {
 		_spec.ClearField(taskschedule.FieldResourceID, field.TypeString)
+	}
+	if value, ok := _u.mutation.Applications(); ok {
+		_spec.SetField(taskschedule.FieldApplications, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedApplications(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, taskschedule.FieldApplications, value)
+		})
 	}
 	if value, ok := _u.mutation.UserID(); ok {
 		_spec.SetField(taskschedule.FieldUserID, field.TypeString, value)

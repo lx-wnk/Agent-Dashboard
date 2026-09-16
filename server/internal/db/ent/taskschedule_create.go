@@ -353,6 +353,12 @@ func (_c *TaskScheduleCreate) SetNillableResourceID(v *string) *TaskScheduleCrea
 	return _c
 }
 
+// SetApplications sets the "applications" field.
+func (_c *TaskScheduleCreate) SetApplications(v []string) *TaskScheduleCreate {
+	_c.mutation.SetApplications(v)
+	return _c
+}
+
 // SetUserID sets the "user_id" field.
 func (_c *TaskScheduleCreate) SetUserID(v string) *TaskScheduleCreate {
 	_c.mutation.SetUserID(v)
@@ -472,6 +478,10 @@ func (_c *TaskScheduleCreate) defaults() {
 		v := taskschedule.DefaultResourceID
 		_c.mutation.SetResourceID(v)
 	}
+	if _, ok := _c.mutation.Applications(); !ok {
+		v := taskschedule.DefaultApplications
+		_c.mutation.SetApplications(v)
+	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		v := taskschedule.DefaultCreatedAt()
 		_c.mutation.SetCreatedAt(v)
@@ -542,6 +552,9 @@ func (_c *TaskScheduleCreate) check() error {
 	}
 	if _, ok := _c.mutation.SilverBullet(); !ok {
 		return &ValidationError{Name: "silver_bullet", err: errors.New(`ent: missing required field "TaskSchedule.silver_bullet"`)}
+	}
+	if _, ok := _c.mutation.Applications(); !ok {
+		return &ValidationError{Name: "applications", err: errors.New(`ent: missing required field "TaskSchedule.applications"`)}
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "TaskSchedule.created_at"`)}
@@ -692,6 +705,10 @@ func (_c *TaskScheduleCreate) createSpec() (*TaskSchedule, *sqlgraph.CreateSpec)
 	if value, ok := _c.mutation.ResourceID(); ok {
 		_spec.SetField(taskschedule.FieldResourceID, field.TypeString, value)
 		_node.ResourceID = value
+	}
+	if value, ok := _c.mutation.Applications(); ok {
+		_spec.SetField(taskschedule.FieldApplications, field.TypeJSON, value)
+		_node.Applications = value
 	}
 	if value, ok := _c.mutation.UserID(); ok {
 		_spec.SetField(taskschedule.FieldUserID, field.TypeString, value)
@@ -1186,6 +1203,18 @@ func (u *TaskScheduleUpsert) UpdateResourceID() *TaskScheduleUpsert {
 // ClearResourceID clears the value of the "resource_id" field.
 func (u *TaskScheduleUpsert) ClearResourceID() *TaskScheduleUpsert {
 	u.SetNull(taskschedule.FieldResourceID)
+	return u
+}
+
+// SetApplications sets the "applications" field.
+func (u *TaskScheduleUpsert) SetApplications(v []string) *TaskScheduleUpsert {
+	u.Set(taskschedule.FieldApplications, v)
+	return u
+}
+
+// UpdateApplications sets the "applications" field to the value that was provided on create.
+func (u *TaskScheduleUpsert) UpdateApplications() *TaskScheduleUpsert {
+	u.SetExcluded(taskschedule.FieldApplications)
 	return u
 }
 
@@ -1771,6 +1800,20 @@ func (u *TaskScheduleUpsertOne) UpdateResourceID() *TaskScheduleUpsertOne {
 func (u *TaskScheduleUpsertOne) ClearResourceID() *TaskScheduleUpsertOne {
 	return u.Update(func(s *TaskScheduleUpsert) {
 		s.ClearResourceID()
+	})
+}
+
+// SetApplications sets the "applications" field.
+func (u *TaskScheduleUpsertOne) SetApplications(v []string) *TaskScheduleUpsertOne {
+	return u.Update(func(s *TaskScheduleUpsert) {
+		s.SetApplications(v)
+	})
+}
+
+// UpdateApplications sets the "applications" field to the value that was provided on create.
+func (u *TaskScheduleUpsertOne) UpdateApplications() *TaskScheduleUpsertOne {
+	return u.Update(func(s *TaskScheduleUpsert) {
+		s.UpdateApplications()
 	})
 }
 
@@ -2528,6 +2571,20 @@ func (u *TaskScheduleUpsertBulk) UpdateResourceID() *TaskScheduleUpsertBulk {
 func (u *TaskScheduleUpsertBulk) ClearResourceID() *TaskScheduleUpsertBulk {
 	return u.Update(func(s *TaskScheduleUpsert) {
 		s.ClearResourceID()
+	})
+}
+
+// SetApplications sets the "applications" field.
+func (u *TaskScheduleUpsertBulk) SetApplications(v []string) *TaskScheduleUpsertBulk {
+	return u.Update(func(s *TaskScheduleUpsert) {
+		s.SetApplications(v)
+	})
+}
+
+// UpdateApplications sets the "applications" field to the value that was provided on create.
+func (u *TaskScheduleUpsertBulk) UpdateApplications() *TaskScheduleUpsertBulk {
+	return u.Update(func(s *TaskScheduleUpsert) {
+		s.UpdateApplications()
 	})
 }
 

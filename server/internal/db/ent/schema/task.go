@@ -47,6 +47,9 @@ func (Task) Fields() []ent.Field {
 		// the scheduler only and never accepted from a request body — a
 		// caller-writable routine id would let any task claim a routine's grants.
 		field.String("routine_id").Optional().Nillable(),
+		field.JSON("applications", []string{}).
+			Default([]string{}).
+			Annotations(entsql.Default("[]")),
 		field.Float("rank").Optional().Nillable(),
 		field.Time("created_at").Default(time.Now).Immutable(),
 		field.Time("updated_at").Default(time.Now).UpdateDefault(time.Now),

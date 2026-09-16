@@ -67,6 +67,8 @@ const (
 	FieldLastTaskID = "last_task_id"
 	// FieldResourceID holds the string denoting the resource_id field in the database.
 	FieldResourceID = "resource_id"
+	// FieldApplications holds the string denoting the applications field in the database.
+	FieldApplications = "applications"
 	// FieldUserID holds the string denoting the user_id field in the database.
 	FieldUserID = "user_id"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
@@ -107,6 +109,7 @@ var Columns = []string{
 	FieldLastRunAt,
 	FieldLastTaskID,
 	FieldResourceID,
+	FieldApplications,
 	FieldUserID,
 	FieldCreatedAt,
 	FieldUpdatedAt,
@@ -149,6 +152,8 @@ var (
 	DefaultSilverBullet bool
 	// DefaultResourceID holds the default value on creation for the "resource_id" field.
 	DefaultResourceID string
+	// DefaultApplications holds the default value on creation for the "applications" field.
+	DefaultApplications []string
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 	// DefaultUpdatedAt holds the default value on creation for the "updated_at" field.

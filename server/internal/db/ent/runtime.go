@@ -699,12 +699,16 @@ func init() {
 	taskDescAutonomy := taskFields[18].Descriptor()
 	// task.DefaultAutonomy holds the default value on creation for the autonomy field.
 	task.DefaultAutonomy = taskDescAutonomy.Default.(string)
+	// taskDescApplications is the schema descriptor for applications field.
+	taskDescApplications := taskFields[23].Descriptor()
+	// task.DefaultApplications holds the default value on creation for the applications field.
+	task.DefaultApplications = taskDescApplications.Default.([]string)
 	// taskDescCreatedAt is the schema descriptor for created_at field.
-	taskDescCreatedAt := taskFields[24].Descriptor()
+	taskDescCreatedAt := taskFields[25].Descriptor()
 	// task.DefaultCreatedAt holds the default value on creation for the created_at field.
 	task.DefaultCreatedAt = taskDescCreatedAt.Default.(func() time.Time)
 	// taskDescUpdatedAt is the schema descriptor for updated_at field.
-	taskDescUpdatedAt := taskFields[25].Descriptor()
+	taskDescUpdatedAt := taskFields[26].Descriptor()
 	// task.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	task.DefaultUpdatedAt = taskDescUpdatedAt.Default.(func() time.Time)
 	// task.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
@@ -787,12 +791,16 @@ func init() {
 	taskscheduleDescResourceID := taskscheduleFields[27].Descriptor()
 	// taskschedule.DefaultResourceID holds the default value on creation for the resource_id field.
 	taskschedule.DefaultResourceID = taskscheduleDescResourceID.Default.(string)
+	// taskscheduleDescApplications is the schema descriptor for applications field.
+	taskscheduleDescApplications := taskscheduleFields[28].Descriptor()
+	// taskschedule.DefaultApplications holds the default value on creation for the applications field.
+	taskschedule.DefaultApplications = taskscheduleDescApplications.Default.([]string)
 	// taskscheduleDescCreatedAt is the schema descriptor for created_at field.
-	taskscheduleDescCreatedAt := taskscheduleFields[29].Descriptor()
+	taskscheduleDescCreatedAt := taskscheduleFields[30].Descriptor()
 	// taskschedule.DefaultCreatedAt holds the default value on creation for the created_at field.
 	taskschedule.DefaultCreatedAt = taskscheduleDescCreatedAt.Default.(func() time.Time)
 	// taskscheduleDescUpdatedAt is the schema descriptor for updated_at field.
-	taskscheduleDescUpdatedAt := taskscheduleFields[30].Descriptor()
+	taskscheduleDescUpdatedAt := taskscheduleFields[31].Descriptor()
 	// taskschedule.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	taskschedule.DefaultUpdatedAt = taskscheduleDescUpdatedAt.Default.(func() time.Time)
 	// taskschedule.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

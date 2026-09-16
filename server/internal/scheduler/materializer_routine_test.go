@@ -38,3 +38,30 @@ func TestMaterialize_StampsRoutineID(t *testing.T) {
 		t.Fatalf("RoutineID = %q, want the schedule id %q", got.RoutineID, sched.ID)
 	}
 }
+
+func TestMaterialize_CopiesAttachedApplications(t *testing.T) {
+	bundle, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+
+	schedRepo := repo.NewTaskScheduleRepo(bundle.Client)
+	sched := mkSchedule(t, schedRepo, repo.CreateTaskScheduleInput{Applications: []string{"res-mail"}})
+	if len(sched.Applications) != 1 || sched.Applications[0] != "res-mail" {
+		t.Fatalf("schedule applications = %v, want [res-mail]", sched.Applications)
+	}
+
+	var got NewTaskSpec
+	create := func(_ context.Context, spec NewTaskSpec) (string, error) {
+		got = spec
+		return "task-1", nil
+	}
+	m := NewMaterializer(create, nil, nil)
+	if _, err := m.Materialize(context.Background(), sched, time.Now()); err != nil {
+		t.Fatalf("materialize: %v", err)
+	}
+	if len(got.Applications) != 1 || got.Applications[0] != "res-mail" {
+		t.Fatalf("task applications = %v, want [res-mail] — a routine's mailbox must reach the tasks it creates", got.Applications)
+	}
+}

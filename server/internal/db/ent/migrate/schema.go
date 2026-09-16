@@ -955,6 +955,7 @@ var (
 		{Name: "project_id", Type: field.TypeString, Nullable: true},
 		{Name: "spawner_id", Type: field.TypeString, Nullable: true},
 		{Name: "routine_id", Type: field.TypeString, Nullable: true},
+		{Name: "applications", Type: field.TypeJSON, Default: "[]"},
 		{Name: "rank", Type: field.TypeFloat64, Nullable: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
@@ -983,7 +984,7 @@ var (
 			{
 				Name:    "task_silver_bullet_priority_rank_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{TasksColumns[16], TasksColumns[9], TasksColumns[23], TasksColumns[24]},
+				Columns: []*schema.Column{TasksColumns[16], TasksColumns[9], TasksColumns[24], TasksColumns[25]},
 			},
 		},
 	}
@@ -1096,6 +1097,7 @@ var (
 		{Name: "last_run_at", Type: field.TypeTime, Nullable: true},
 		{Name: "last_task_id", Type: field.TypeString, Nullable: true},
 		{Name: "resource_id", Type: field.TypeString, Nullable: true, Default: ""},
+		{Name: "applications", Type: field.TypeJSON, Default: "[]"},
 		{Name: "user_id", Type: field.TypeString, Nullable: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},

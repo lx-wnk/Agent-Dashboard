@@ -25291,6 +25291,8 @@ type TaskMutation struct {
 	project_id               *string
 	spawner_id               *string
 	routine_id               *string
+	applications             *[]string
+	appendapplications       []string
 	rank                     *float64
 	addrank                  *float64
 	created_at               *time.Time
@@ -26447,6 +26449,57 @@ func (m *TaskMutation) ResetRoutineID() {
 	delete(m.clearedFields, task.FieldRoutineID)
 }
 
+// SetApplications sets the "applications" field.
+func (m *TaskMutation) SetApplications(s []string) {
+	m.applications = &s
+	m.appendapplications = nil
+}
+
+// Applications returns the value of the "applications" field in the mutation.
+func (m *TaskMutation) Applications() (r []string, exists bool) {
+	v := m.applications
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldApplications returns the old "applications" field's value of the Task entity.
+// If the Task object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TaskMutation) OldApplications(ctx context.Context) (v []string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldApplications is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldApplications requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldApplications: %w", err)
+	}
+	return oldValue.Applications, nil
+}
+
+// AppendApplications adds s to the "applications" field.
+func (m *TaskMutation) AppendApplications(s []string) {
+	m.appendapplications = append(m.appendapplications, s...)
+}
+
+// AppendedApplications returns the list of values that were appended to the "applications" field in this mutation.
+func (m *TaskMutation) AppendedApplications() ([]string, bool) {
+	if len(m.appendapplications) == 0 {
+		return nil, false
+	}
+	return m.appendapplications, true
+}
+
+// ResetApplications resets all changes to the "applications" field.
+func (m *TaskMutation) ResetApplications() {
+	m.applications = nil
+	m.appendapplications = nil
+}
+
 // SetRank sets the "rank" field.
 func (m *TaskMutation) SetRank(f float64) {
 	m.rank = &f
@@ -26839,7 +26892,7 @@ func (m *TaskMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *TaskMutation) Fields() []string {
-	fields := make([]string, 0, 25)
+	fields := make([]string, 0, 26)
 	if m.slug != nil {
 		fields = append(fields, task.FieldSlug)
 	}
@@ -26906,6 +26959,9 @@ func (m *TaskMutation) Fields() []string {
 	if m.routine_id != nil {
 		fields = append(fields, task.FieldRoutineID)
 	}
+	if m.applications != nil {
+		fields = append(fields, task.FieldApplications)
+	}
 	if m.rank != nil {
 		fields = append(fields, task.FieldRank)
 	}
@@ -26967,6 +27023,8 @@ func (m *TaskMutation) Field(name string) (ent.Value, bool) {
 		return m.SpawnerID()
 	case task.FieldRoutineID:
 		return m.RoutineID()
+	case task.FieldApplications:
+		return m.Applications()
 	case task.FieldRank:
 		return m.Rank()
 	case task.FieldCreatedAt:
@@ -27026,6 +27084,8 @@ func (m *TaskMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldSpawnerID(ctx)
 	case task.FieldRoutineID:
 		return m.OldRoutineID(ctx)
+	case task.FieldApplications:
+		return m.OldApplications(ctx)
 	case task.FieldRank:
 		return m.OldRank(ctx)
 	case task.FieldCreatedAt:
@@ -27194,6 +27254,13 @@ func (m *TaskMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetRoutineID(v)
+		return nil
+	case task.FieldApplications:
+		v, ok := value.([]string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetApplications(v)
 		return nil
 	case task.FieldRank:
 		v, ok := value.(float64)
@@ -27474,6 +27541,9 @@ func (m *TaskMutation) ResetField(name string) error {
 		return nil
 	case task.FieldRoutineID:
 		m.ResetRoutineID()
+		return nil
+	case task.FieldApplications:
+		m.ResetApplications()
 		return nil
 	case task.FieldRank:
 		m.ResetRank()
@@ -29178,6 +29248,8 @@ type TaskScheduleMutation struct {
 	last_run_at              *time.Time
 	last_task_id             *string
 	resource_id              *string
+	applications             *[]string
+	appendapplications       []string
 	user_id                  *string
 	created_at               *time.Time
 	updated_at               *time.Time
@@ -30527,6 +30599,57 @@ func (m *TaskScheduleMutation) ResetResourceID() {
 	delete(m.clearedFields, taskschedule.FieldResourceID)
 }
 
+// SetApplications sets the "applications" field.
+func (m *TaskScheduleMutation) SetApplications(s []string) {
+	m.applications = &s
+	m.appendapplications = nil
+}
+
+// Applications returns the value of the "applications" field in the mutation.
+func (m *TaskScheduleMutation) Applications() (r []string, exists bool) {
+	v := m.applications
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldApplications returns the old "applications" field's value of the TaskSchedule entity.
+// If the TaskSchedule object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TaskScheduleMutation) OldApplications(ctx context.Context) (v []string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldApplications is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldApplications requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldApplications: %w", err)
+	}
+	return oldValue.Applications, nil
+}
+
+// AppendApplications adds s to the "applications" field.
+func (m *TaskScheduleMutation) AppendApplications(s []string) {
+	m.appendapplications = append(m.appendapplications, s...)
+}
+
+// AppendedApplications returns the list of values that were appended to the "applications" field in this mutation.
+func (m *TaskScheduleMutation) AppendedApplications() ([]string, bool) {
+	if len(m.appendapplications) == 0 {
+		return nil, false
+	}
+	return m.appendapplications, true
+}
+
+// ResetApplications resets all changes to the "applications" field.
+func (m *TaskScheduleMutation) ResetApplications() {
+	m.applications = nil
+	m.appendapplications = nil
+}
+
 // SetUserID sets the "user_id" field.
 func (m *TaskScheduleMutation) SetUserID(s string) {
 	m.user_id = &s
@@ -30682,7 +30805,7 @@ func (m *TaskScheduleMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *TaskScheduleMutation) Fields() []string {
-	fields := make([]string, 0, 30)
+	fields := make([]string, 0, 31)
 	if m.name != nil {
 		fields = append(fields, taskschedule.FieldName)
 	}
@@ -30764,6 +30887,9 @@ func (m *TaskScheduleMutation) Fields() []string {
 	if m.resource_id != nil {
 		fields = append(fields, taskschedule.FieldResourceID)
 	}
+	if m.applications != nil {
+		fields = append(fields, taskschedule.FieldApplications)
+	}
 	if m.user_id != nil {
 		fields = append(fields, taskschedule.FieldUserID)
 	}
@@ -30835,6 +30961,8 @@ func (m *TaskScheduleMutation) Field(name string) (ent.Value, bool) {
 		return m.LastTaskID()
 	case taskschedule.FieldResourceID:
 		return m.ResourceID()
+	case taskschedule.FieldApplications:
+		return m.Applications()
 	case taskschedule.FieldUserID:
 		return m.UserID()
 	case taskschedule.FieldCreatedAt:
@@ -30904,6 +31032,8 @@ func (m *TaskScheduleMutation) OldField(ctx context.Context, name string) (ent.V
 		return m.OldLastTaskID(ctx)
 	case taskschedule.FieldResourceID:
 		return m.OldResourceID(ctx)
+	case taskschedule.FieldApplications:
+		return m.OldApplications(ctx)
 	case taskschedule.FieldUserID:
 		return m.OldUserID(ctx)
 	case taskschedule.FieldCreatedAt:
@@ -31107,6 +31237,13 @@ func (m *TaskScheduleMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetResourceID(v)
+		return nil
+	case taskschedule.FieldApplications:
+		v, ok := value.([]string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetApplications(v)
 		return nil
 	case taskschedule.FieldUserID:
 		v, ok := value.(string)
@@ -31402,6 +31539,9 @@ func (m *TaskScheduleMutation) ResetField(name string) error {
 		return nil
 	case taskschedule.FieldResourceID:
 		m.ResetResourceID()
+		return nil
+	case taskschedule.FieldApplications:
+		m.ResetApplications()
 		return nil
 	case taskschedule.FieldUserID:
 		m.ResetUserID()
