@@ -26,6 +26,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/admin"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/agents"
 	apianalytics "github.com/lx-wnk/agent-dashboard/server/internal/api/analytics"
+	apiapplications "github.com/lx-wnk/agent-dashboard/server/internal/api/applications"
 	coordapi "github.com/lx-wnk/agent-dashboard/server/internal/api/coord"
 	apicost "github.com/lx-wnk/agent-dashboard/server/internal/api/cost"
 	apieval "github.com/lx-wnk/agent-dashboard/server/internal/api/eval"
@@ -732,6 +733,22 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		}, routerConfig.BypassAuth)
 	}
 
+	var applicationsHandler *apiapplications.Handler
+	if entClient != nil {
+		applicationsHandler = apiapplications.NewHandler(
+			repo.NewMCPApplicationRepo(entClient),
+			repo.NewApplicationSecretRepo(entClient, box),
+			mcpapps.Refresher{
+				Apps:         repo.NewMCPApplicationRepo(entClient),
+				Secrets:      repo.NewApplicationSecretRepo(entClient, box),
+				Capabilities: repo.NewCapabilityRepo(entClient),
+				ReadServers:  claudeconfig.UserMCPServers,
+				Transport:    mcpapps.StdioTransport,
+				Now:          time.Now,
+			},
+		)
+	}
+
 	// Obsidian manual trigger — POST /api/obsidian/index. Unlike memoryHandler
 	// just above (built with askerArg because a human is waiting on that
 	// request), this Gate carries no Asker: the same reasoning
@@ -1014,6 +1031,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		HistoryHandler:         historyHandler,
 		MemoryHandler:          memoryHandler,
 		ResourcesHandler:       resourcesHandler,
+		ApplicationsHandler:    applicationsHandler,
 		SkillsHandler:          skillsHandler,
 		ObsidianHandler:        obsidianHandler,
 		GitHubHandler:          githubHandler,

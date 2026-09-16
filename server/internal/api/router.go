@@ -21,6 +21,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/agents"
 	apianalytics "github.com/lx-wnk/agent-dashboard/server/internal/api/analytics"
 	apikeyhandler "github.com/lx-wnk/agent-dashboard/server/internal/api/apikeys"
+	apiapplications "github.com/lx-wnk/agent-dashboard/server/internal/api/applications"
 	apiauth "github.com/lx-wnk/agent-dashboard/server/internal/api/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/capabilities"
 	apiconfig "github.com/lx-wnk/agent-dashboard/server/internal/api/config"
@@ -177,6 +178,7 @@ type RouterDeps struct {
 	HistoryHandler         *apihistory.Handler
 	MemoryHandler          *apimemory.Handler
 	ResourcesHandler       *resources.Handler
+	ApplicationsHandler    *apiapplications.Handler
 	SkillsHandler          *apiskills.Handler
 	ObsidianHandler        *apiobsidian.Handler
 	GitHubHandler          *apigithub.Handler
@@ -432,6 +434,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 		// hook/MCP bearer-token group.
 		if deps.ResourcesHandler != nil {
 			deps.ResourcesHandler.Mount(r)
+		}
+
+		if deps.ApplicationsHandler != nil {
+			deps.ApplicationsHandler.Mount(r)
 		}
 
 		// Obsidian's manual index trigger stays session-authenticated like
