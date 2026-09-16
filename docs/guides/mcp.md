@@ -177,6 +177,8 @@ agent-dashboard grants add mcp__mail__send_email --scope global --mode deny
 
 Grants resolve from the most specific context: task, routine, project (the task's working directory), global. An allow lands in the run's `--allowedTools`, a deny in `--disallowedTools`.
 
+A **grant preset** writes a server's usual grants in one call: `POST /api/applications/{resourceId}/presets/{preset}` with `{"routineId": "<schedule id>"}` allows the preset's read and draft tools for that routine and denies its sending, deleting and account tools globally. It answers with the capability names it `created`, the ones that already `existing`, and the tool names it `skipped` because the last refresh did not list them — so refresh first. Only a grant exactly like the preset's counts as existing; a revoked, expiring, patterned or rate-limited grant for the same tool does not. The response is `400` without a routine, `404` for an unknown application or preset, and `409` for a preset whose tool classification no human has confirmed yet. The one shipped preset, `imap-mcp-server`, is still unconfirmed, so it is refused until its file is reviewed and marked `"confirmed": true`.
+
 **No grant is not an allow.** Pipeline runs are headless, so an ungranted tool is refused; the agent can ask through a permission request, and a human's approval is honoured for that task. Allow-all autonomy (`spec_gated`, `full`) does not allow application tools.
 
 ## Connect the dashboard to Claude
