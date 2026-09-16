@@ -122,6 +122,55 @@ The rest of this page is for **your own** Claude Code client — a session you s
 terminal — which still needs a key from **Settings → API Keys**, because there is no stage run to
 attribute it to.
 
+## MCP applications
+
+An MCP server registered with `claude mcp add --scope user <name> -- <command>` is mirrored into the dashboard's resource registry on startup, and can be attached to routines, given secrets, and granted to agents on a per-task or per-routine basis.
+
+### Register an MCP server
+
+```sh
+claude mcp add --scope user my-mail -- mail-mcp --config ~/.mail-mcp.json
+```
+
+That server appears in **Settings → Applications** after the dashboard restarts. Its slug is `mcp-<name>` (e.g. `mcp-my-mail`). Reserved names `dashboard-channel` and `dashboard-tasks` are never mirrored. A server whose name is not a valid slug (lowercase letters, digits, hyphens only) is not mirrored — the log says `mcpapps: server not mirrored` — and since runs only receive mirrored applications, such a server reaches no agent at all. To fix it, unregister and re-register with a valid name:
+
+```sh
+claude mcp remove my-mail-server
+claude mcp add --scope user my-mail-server -- mail-mcp --config ~/.mail-mcp.json
+```
+
+### Attach to routines
+
+Create or edit a routine in **Pipeline → Routines** or via `POST /api/schedules`. Under **Applications**, check which applications this routine's tasks may use. The routine's list is copied onto every task it creates. A run receives:
+
+- The dashboard's own servers (always)
+- Applications marked **Attach to every run** (persistent, editable in Settings → Applications)
+- Applications attached to the routine that created this task
+
+### Set secrets
+
+Each application lists its required environment variables. In **Settings → Applications**, click the application and enter the secret values. They are encrypted with AES-256-GCM using the dashboard's key and never returned by any API — only the name and last-changed date are shown. At spawn time, the values are written into that server's `env` block in the run's temporary MCP config file (mode 0600, deleted when the run cleans up).
+
+If a secret is missing at spawn, the stage run fails **before** the agent starts, with a reason beginning `MCP applications:`. Restart the agent after adding the secret.
+
+If `~/.claude.json` cannot be read, the run gets no MCP applications but still runs.
+
+### Grant and refresh tools
+
+Click **Refresh tool list** to start the server with its secrets and read its available tools. Only stdio servers (with a `command`) are supported; HTTP and SSE servers are refused with an error. A failed refresh keeps the tool list from the previous refresh.
+
+Each tool becomes a capability named exactly as Claude Code names it: `mcp__<server>__<tool>`, class `tool`. Grant it with:
+
+```bash
+agent-dashboard grants add mcp__my-mail__search_emails --scope routine:<schedule-id> --mode allow
+agent-dashboard grants add mcp__my-mail__send_email --scope global --mode deny
+```
+
+Or use **Settings → Grants**. Without an explicit grant, the tool is refused in a headless run; an interactive session can still ask through its normal permission prompt.
+
+The server's `readOnlyHint` and `destructiveHint` are shown as hints only — the MCP specification says clients must not trust them.
+
+An allow-all autonomy (`spec_gated`, `full`) does **not** grant application tools. Each tool requires its own explicit allow grant.
 ## Connect the dashboard to Claude
 
 The fastest way to wire a Claude Code session to the dashboard's task tools is the one-command

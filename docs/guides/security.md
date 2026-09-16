@@ -338,6 +338,17 @@ matcher onto the deny side would make deny rules match *less*, and start
 offering Allow on calls the user's own settings already forbid. The two
 matchers stay separate on purpose.
 
+### Application secrets and MCP applications
+
+An agent spawned by the dashboard receives MCP applications and their secrets in a temporary config file (`~/.cache/agent-dashboard/mcp-config-<stage-run-id>.json`, mode 0600) that exists only for that run and is deleted when the run cleans up. The agent runs as the same OS user as the dashboard and the MCP server processes, so **it can read the plaintext secrets of any application attached to its own run** — the AES-256-GCM encryption in the database protects data at rest, not a running process. To mitigate this risk:
+
+- Use application-specific passwords, not account passwords. For mail, most providers (Gmail, Outlook, iCloud, OVH) offer credentials scoped to mail only and revokable without touching the main account.
+- Never grant an untrusted agent access to applications holding secrets you cannot afford to lose.
+- Secrets are stored per-application, not per-task, so a single leaked secret could affect any task that future attaches it.
+
+Under `auth.mode=none` (the default local-trust posture), no authentication guards `/api`, so any local process — including an agent's Bash tool — can call the schedules and applications API, attach an application to a routine, or change its secrets. With authentication enabled, those routes require a session.
+
+Refreshing the tool list for an application runs exactly the command in `~/.claude.json` — the same command Claude Code runs for that server — as the same OS user, without a shell.
 ### Obsidian's TLS trust model
 
 The Obsidian Application (`server/internal/apps/obsidian`) talks to Obsidian's
