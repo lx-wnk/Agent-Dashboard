@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
+	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/mcpapps"
@@ -21,10 +22,11 @@ type Handler struct {
 	apps      repo.MCPApplicationRepo
 	secrets   repo.ApplicationSecretRepo
 	refresher mcpapps.Refresher
+	grants    repo.GrantRepo
 }
 
-func NewHandler(apps repo.MCPApplicationRepo, secrets repo.ApplicationSecretRepo, refresher mcpapps.Refresher) *Handler {
-	return &Handler{apps: apps, secrets: secrets, refresher: refresher}
+func NewHandler(apps repo.MCPApplicationRepo, secrets repo.ApplicationSecretRepo, refresher mcpapps.Refresher, grants repo.GrantRepo) *Handler {
+	return &Handler{apps: apps, secrets: secrets, refresher: refresher, grants: grants}
 }
 
 func (h *Handler) Mount(r chi.Router) {
@@ -33,6 +35,7 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Put("/api/applications/{resourceId}/secrets/{envName}", apierr.ErrorMiddleware(h.putSecret))
 	r.Delete("/api/applications/{resourceId}/secrets/{envName}", apierr.ErrorMiddleware(h.deleteSecret))
 	r.Post("/api/applications/{resourceId}/refresh", apierr.ErrorMiddleware(h.refresh))
+	r.Post("/api/applications/{resourceId}/presets/{preset}", apierr.ErrorMiddleware(h.applyPreset))
 }
 
 type toolView struct {
@@ -213,4 +216,36 @@ func (h *Handler) refresh(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	return writeJSON(w, http.StatusOK, v)
+}
+
+func (h *Handler) applyPreset(w http.ResponseWriter, r *http.Request) error {
+	app, err := h.load(r)
+	if err != nil {
+		return err
+	}
+	preset, err := mcpapps.LoadPreset(chi.URLParam(r, "preset"))
+	if err != nil {
+		return apierr.NewAppError(http.StatusNotFound, err.Error())
+	}
+	var body struct {
+		RoutineID string `json:"routineId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		return apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
+	}
+	payload, ok := auth.PayloadFromContext(r.Context())
+	if !ok {
+		// Missing payload ⟹ bypass mode (DASHBOARD_AUTH=none); act as local admin.
+		payload = auth.BypassPayload()
+	}
+	res, err := mcpapps.ApplyPreset(r.Context(), h.grants, app, preset, body.RoutineID, payload.Sub)
+	switch {
+	case errors.Is(err, mcpapps.ErrRoutineRequired):
+		return apierr.NewAppError(http.StatusBadRequest, err.Error())
+	case errors.Is(err, mcpapps.ErrPresetUnconfirmed):
+		return apierr.NewAppError(http.StatusConflict, err.Error())
+	case err != nil:
+		return err
+	}
+	return writeJSON(w, http.StatusOK, res)
 }

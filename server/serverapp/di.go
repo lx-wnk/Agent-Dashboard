@@ -746,6 +746,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 				Transport:    mcpapps.StdioTransport,
 				Now:          time.Now,
 			},
+			repo.NewGrantRepo(entClient),
 		)
 	}
 

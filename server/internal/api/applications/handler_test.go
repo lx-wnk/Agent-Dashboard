@@ -20,7 +20,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/secretbox"
 )
 
-func newMux(t *testing.T) (*chi.Mux, repo.MCPApplicationRepo) {
+func newMux(t *testing.T) (*chi.Mux, repo.MCPApplicationRepo, repo.GrantRepo) {
 	t.Helper()
 	bundle, err := db.Open(":memory:")
 	require.NoError(t, err)
@@ -29,11 +29,12 @@ func newMux(t *testing.T) (*chi.Mux, repo.MCPApplicationRepo) {
 	require.NoError(t, err)
 	apps := repo.NewMCPApplicationRepo(bundle.Client)
 	secrets := repo.NewApplicationSecretRepo(bundle.Client, box)
+	grants := repo.NewGrantRepo(bundle.Client)
 	_, err = apps.Upsert(context.Background(), repo.UpsertMCPApplicationInput{ResourceID: "res-mail", ServerName: "mail"})
 	require.NoError(t, err)
 	mux := chi.NewRouter()
-	applications.NewHandler(apps, secrets, mcpapps.Refresher{Now: time.Now}).Mount(mux)
-	return mux, apps
+	applications.NewHandler(apps, secrets, mcpapps.Refresher{Now: time.Now}, grants).Mount(mux)
+	return mux, apps, grants
 }
 
 func do(t *testing.T, mux http.Handler, method, path string, body any) *httptest.ResponseRecorder {
@@ -48,7 +49,7 @@ func do(t *testing.T, mux http.Handler, method, path string, body any) *httptest
 }
 
 func TestSecrets_AreWriteOnly(t *testing.T) {
-	mux, _ := newMux(t)
+	mux, _, _ := newMux(t)
 	rec := do(t, mux, http.MethodPut, "/api/applications/res-mail/secrets/MAIL_PASSWORD", map[string]string{"value": "hunter2"})
 	require.Equal(t, http.StatusNoContent, rec.Code, rec.Body.String())
 
@@ -59,13 +60,13 @@ func TestSecrets_AreWriteOnly(t *testing.T) {
 }
 
 func TestSecrets_RejectInvalidVariableNames(t *testing.T) {
-	mux, _ := newMux(t)
+	mux, _, _ := newMux(t)
 	rec := do(t, mux, http.MethodPut, "/api/applications/res-mail/secrets/not-an-env-name", map[string]string{"value": "x"})
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
 func TestPatch_SetsAttachAllAndRequiredEnv(t *testing.T) {
-	mux, apps := newMux(t)
+	mux, apps, _ := newMux(t)
 	rec := do(t, mux, http.MethodPatch, "/api/applications/res-mail", map[string]any{
 		"attachAll": true, "requiredEnv": []string{"MAIL_PASSWORD"},
 	})
@@ -78,8 +79,30 @@ func TestPatch_SetsAttachAllAndRequiredEnv(t *testing.T) {
 }
 
 func TestUnknownApplicationIs404(t *testing.T) {
-	mux, _ := newMux(t)
+	mux, _, _ := newMux(t)
 	rec := do(t, mux, http.MethodPatch, "/api/applications/nope", map[string]any{"attachAll": true})
 	require.Equal(t, http.StatusNotFound, rec.Code)
 	require.False(t, strings.Contains(rec.Body.String(), "panic"))
+}
+
+func TestApplyPreset_MissingRoutineIdIs400(t *testing.T) {
+	mux, _, _ := newMux(t)
+	rec := do(t, mux, http.MethodPost, "/api/applications/res-mail/presets/imap-mcp-server", map[string]any{})
+	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+}
+
+func TestApplyPreset_UnconfirmedPresetIs409(t *testing.T) {
+	mux, _, grants := newMux(t)
+	rec := do(t, mux, http.MethodPost, "/api/applications/res-mail/presets/imap-mcp-server", map[string]any{"routineId": "routine-1"})
+	require.Equal(t, http.StatusConflict, rec.Code, rec.Body.String())
+
+	rows, err := grants.List(context.Background())
+	require.NoError(t, err)
+	require.Empty(t, rows)
+}
+
+func TestApplyPreset_UnknownPresetIs404(t *testing.T) {
+	mux, _, _ := newMux(t)
+	rec := do(t, mux, http.MethodPost, "/api/applications/res-mail/presets/no-such-preset", map[string]any{"routineId": "routine-1"})
+	require.Equal(t, http.StatusNotFound, rec.Code, rec.Body.String())
 }
