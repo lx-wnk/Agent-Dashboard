@@ -275,6 +275,35 @@ jobs:
       - name: ${{ matrix.check }}
         run: pnpm ${{ matrix.check }}
 
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: .go-version
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: pnpm
+      - name: Install frontend deps
+        run: pnpm install --frozen-lockfile
+      - name: Install Playwright browser
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Build server binary with embedded SPA
+        # scripts/e2e-server.sh rebuilds through `task` only when bin/agent-dashboard
+        # is missing or older than a source file; building it here keeps go-task
+        # out of the runner.
+        run: |
+          pnpm build
+          cd server && go build -o ../bin/agent-dashboard ./cmd/serve/...
+      - name: Run Playwright suite
+        run: pnpm test:e2e
+
   frontend-build:
     name: Frontend Build & Bundle Size
     runs-on: ubuntu-latest
