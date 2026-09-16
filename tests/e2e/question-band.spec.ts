@@ -1,5 +1,6 @@
 import type { Page, Route } from '@playwright/test'
 import { expect, test } from '@playwright/test'
+import { parkPointerOffNav } from './helpers'
 
 async function stubAuthDisabled(page: Page) {
   await page.route('/api/me', route => route.fulfill({
@@ -103,6 +104,7 @@ test.describe('AskUserQuestion in the needs-you band', () => {
     })
 
     await page.goto('/')
+    await parkPointerOffNav(page)
 
     // The answerable question card surfaces in the band.
     // The card renders the question twice — as its visible heading and as the
@@ -133,6 +135,7 @@ test.describe('AskUserQuestion in the needs-you band', () => {
     })
 
     await page.goto('/')
+    await parkPointerOffNav(page)
     // The card renders the question twice — as its visible heading and as the
     // radio group's sr-only legend — so match the group, which is unambiguous.
     await expect(page.getByRole('group', { name: 'Which colour do you prefer?' })).toBeVisible()
@@ -161,6 +164,7 @@ test.describe('AskUserQuestion in the needs-you band', () => {
     })
 
     await page.goto('/')
+    await parkPointerOffNav(page)
 
     await expect(page.getByText('Ready to submit your answers?')).toBeVisible()
     await expect(page.getByText('Submit answers')).toBeVisible()

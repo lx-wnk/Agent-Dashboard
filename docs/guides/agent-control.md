@@ -26,7 +26,7 @@ Click **"+ New Agent"** in the header to open the spawn dialog.
 |---|---|---|
 | Prompt | Yes | What the agent should do |
 | Working Directory | Yes | Project path the agent runs in |
-| Model | No | e.g. `claude-opus-4-6`, `claude-sonnet-4-6`, `claude-haiku-4-5` |
+| Model | No | e.g. `claude-opus-5`, `claude-sonnet-5`, `claude-haiku-4-5` |
 | System Prompt | No | Custom system instructions |
 | Enable Channel | No | Dashboard control channel (default: on) |
 

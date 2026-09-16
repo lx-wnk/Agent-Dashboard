@@ -55,7 +55,7 @@ function task(title: string, slug: string) {
     worktreePath: null,
     sourceBranch: null,
     targetBranch: null,
-    currentStage: 'concept',
+    currentStage: 'backlog',
     parentTaskId: null,
     maxIterations: 10,
     tokenBudget: null,
