@@ -58,6 +58,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/askgate"
 	authpkg "github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/capability"
+	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/checkpoint"
 	"github.com/lx-wnk/agent-dashboard/server/internal/claudeconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/claudesettings"
@@ -353,6 +354,12 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 			slog.Warn("mcpapps: reconcile failed", "err", err)
 		} else {
 			slog.Info("mcpapps: applications reconciled", "mirrored", n)
+		}
+
+		if n, err := channelconfig.SweepOrphanedConfigs(time.Now()); err != nil {
+			slog.Warn("channelconfig: orphaned config sweep failed", "err", err)
+		} else if n > 0 {
+			slog.Info("channelconfig: removed orphaned MCP configs", "count", n)
 		}
 
 		// Seed the capability catalogue from the tool allow-list, then load it

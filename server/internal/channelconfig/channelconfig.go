@@ -5,10 +5,13 @@ package channelconfig
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
+	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/mcp"
 )
@@ -174,6 +177,41 @@ func WriteTempConfig(binaryPath string, taskAPI *TaskAPI, userServers map[string
 		return "", fmt.Errorf("channelconfig: write temp file: %w", err)
 	}
 	return f.Name(), nil
+}
+
+const OrphanedConfigMaxAge = 24 * time.Hour
+
+// SweepOrphanedConfigs removes temp MCP configs a crashed or restarted
+// dashboard never cleaned up. They can hold application secrets, which, unlike
+// a stage run's key, do not expire.
+func SweepOrphanedConfigs(now time.Time) (int, error) {
+	dir := filepath.Join(os.TempDir(), "dashboard-"+strconv.Itoa(os.Getuid()))
+	return sweepOrphanedConfigsIn(dir, OrphanedConfigMaxAge, now)
+}
+
+func sweepOrphanedConfigsIn(dir string, maxAge time.Duration, now time.Time) (int, error) {
+	matches, err := filepath.Glob(filepath.Join(dir, "dashboard-channel-mcp-*.json"))
+	if err != nil {
+		return 0, fmt.Errorf("channelconfig: sweep: %w", err)
+	}
+	removed := 0
+	for _, path := range matches {
+		info, err := os.Stat(path)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return removed, fmt.Errorf("channelconfig: sweep: %w", err)
+		}
+		if now.Sub(info.ModTime()) < maxAge {
+			continue
+		}
+		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return removed, fmt.Errorf("channelconfig: sweep: %w", err)
+		}
+		removed++
+	}
+	return removed, nil
 }
 
 // SelfBinaryPath returns the absolute path of the currently running binary.
