@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/lx-wnk/agent-dashboard/sdk"
+	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pricing"
 	"github.com/stretchr/testify/require"
 )
@@ -54,25 +55,25 @@ func TestEstimateCost_Sonnet(t *testing.T) {
 }
 
 // TestEstimateCost_Opus verifies known pricing for claude-opus-4-6.
-// Rates: input $15/M, output $75/M.
+// Rates: input $5/M, output $25/M.
 func TestEstimateCost_Opus(t *testing.T) {
 	usage := sdk.TokenUsage{InputTokens: 1_000_000, OutputTokens: 1_000_000}
 	got := pricing.EstimateCost(usage, "claude-opus-4-6")
-	require.InDelta(t, 90.0, got, 0.001)
+	require.InDelta(t, 30.0, got, 0.001)
 }
 
 // TestEstimateCost_Haiku verifies known pricing for claude-haiku-4-5.
-// Rates: input $0.8/M, output $4/M.
+// Rates: input $1/M, output $5/M.
 func TestEstimateCost_Haiku(t *testing.T) {
 	usage := sdk.TokenUsage{InputTokens: 1_000_000, OutputTokens: 1_000_000}
 	got := pricing.EstimateCost(usage, "claude-haiku-4-5")
-	require.InDelta(t, 4.8, got, 0.001)
+	require.InDelta(t, 6.0, got, 0.001)
 }
 
-// TestEstimateCost_UnknownModel falls back to the sonnet-4-6 default.
+// TestEstimateCost_UnknownModel falls back to the newest Sonnet.
 func TestEstimateCost_UnknownModel(t *testing.T) {
 	usage := sdk.TokenUsage{InputTokens: 1_000_000, OutputTokens: 1_000_000}
-	sonnet := pricing.EstimateCost(usage, "claude-sonnet-4-6")
+	sonnet := pricing.EstimateCost(usage, pipeline.LatestModel(pipeline.SeriesSonnet))
 	unknown := pricing.EstimateCost(usage, "claude-fictional-model")
 	require.InDelta(t, sonnet, unknown, 0.0001)
 }
@@ -111,11 +112,40 @@ func TestEstimateCacheReadCost_Sonnet(t *testing.T) {
 	require.InDelta(t, 0.3, got, 0.001)
 }
 
-// TestEstimateCacheReadCost_Opus verifies opus cache-read pricing ($1.5/M).
+// TestEstimateCacheReadCost_Opus verifies opus cache-read pricing ($0.5/M).
 func TestEstimateCacheReadCost_Opus(t *testing.T) {
 	usage := sdk.TokenUsage{CacheReadTokens: 1_000_000}
 	got := pricing.EstimateCacheReadCost(usage, "claude-opus-4-6")
-	require.InDelta(t, 1.5, got, 0.001)
+	require.InDelta(t, 0.5, got, 0.001)
+}
+
+// A model the pipeline can run but the table does not price would be costed
+// silently at the fallback rate.
+func TestHasPricing_EveryAllowedPipelineModel(t *testing.T) {
+	for _, id := range pipeline.AllowedModels() {
+		if !pricing.HasPricing(id) {
+			t.Errorf("HasPricing(%q) = false: add its published rates to modelPricing", id)
+		}
+	}
+}
+
+func TestEstimateCost_CurrentModels(t *testing.T) {
+	usage := sdk.TokenUsage{InputTokens: 1_000_000, OutputTokens: 1_000_000, CacheReadTokens: 1_000_000, CacheCreationTokens: 1_000_000}
+	cases := map[string]float64{
+		"claude-fable-5-1": 10 + 50 + 0.25 + 12.5,
+		"claude-opus-5":    5 + 25 + 0.5 + 6.25,
+		"claude-sonnet-5":  2 + 10 + 0.2 + 2.5,
+		"claude-haiku-4-5": 1 + 5 + 0.1 + 1.25,
+	}
+	for model, want := range cases {
+		require.InDelta(t, want, pricing.EstimateCost(usage, model), 0.001, model)
+	}
+}
+
+func TestEstimateCost_DatedIDPricedLikeItsAlias(t *testing.T) {
+	usage := sdk.TokenUsage{InputTokens: 1_000_000, OutputTokens: 1_000_000}
+	require.True(t, pricing.HasPricing("claude-haiku-4-5-20251001"))
+	require.InDelta(t, pricing.EstimateCost(usage, "claude-haiku-4-5"), pricing.EstimateCost(usage, "claude-haiku-4-5-20251001"), 0.0001)
 }
 
 // TestEstimateCost_PartialTokenCounts verifies fractional pricing (500k tokens each).

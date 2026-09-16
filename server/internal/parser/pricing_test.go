@@ -5,6 +5,7 @@ import (
 
 	"github.com/lx-wnk/agent-dashboard/sdk"
 	"github.com/lx-wnk/agent-dashboard/server/internal/parser"
+	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 	"github.com/stretchr/testify/require"
 )
 
@@ -18,7 +19,7 @@ func TestEstimateCost(t *testing.T) {
 func TestEstimateCost_UnknownModel_UsesDefault(t *testing.T) {
 	usage := sdk.TokenUsage{InputTokens: 1_000_000, OutputTokens: 1_000_000}
 	got := parser.EstimateCost(usage, "claude-unknown-model")
-	require.InDelta(t, 18.0, got, 0.001)
+	require.InDelta(t, parser.EstimateCost(usage, pipeline.LatestModel(pipeline.SeriesSonnet)), got, 0.001)
 }
 
 func TestEstimateCacheCreationCost(t *testing.T) {
