@@ -37,7 +37,7 @@ type spawnResult struct {
 	SessionFile string
 }
 
-const defaultModel = "claude-opus-4-8"
+const defaultModel = "claude-opus-5"
 
 // spawnTimeout bounds a single API call so a stalled stream or request cannot
 // hang the refine turn — SpawnStream applies no timeout of its own.

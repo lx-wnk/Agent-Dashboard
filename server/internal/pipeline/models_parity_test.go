@@ -37,3 +37,19 @@ func TestAllowedModelIDs_MatchFrontendList(t *testing.T) {
 		t.Fatalf("model lists drifted:\n  src/utils/models.ts: %v\n  allowedModelIDs:     %v", frontend, server)
 	}
 }
+
+// The anthropic-spawner plugin is its own Go module and cannot import this
+// package, so its fallback model is a literal that must track the newest Opus.
+func TestAnthropicSpawnerDefault_IsLatestOpus(t *testing.T) {
+	src, err := os.ReadFile(filepath.Join("..", "..", "..", "plugins", "anthropic-spawner", "main.go"))
+	if err != nil {
+		t.Fatalf("read plugins/anthropic-spawner/main.go: %v", err)
+	}
+	m := regexp.MustCompile(`const defaultModel = "([^"]+)"`).FindSubmatch(src)
+	if m == nil {
+		t.Fatal("defaultModel constant not found in plugins/anthropic-spawner/main.go")
+	}
+	if got, want := string(m[1]), LatestModel(SeriesOpus); got != want {
+		t.Fatalf("anthropic-spawner defaultModel = %q, want the newest Opus %q", got, want)
+	}
+}
