@@ -124,53 +124,61 @@ attribute it to.
 
 ## MCP applications
 
-An MCP server registered with `claude mcp add --scope user <name> -- <command>` is mirrored into the dashboard's resource registry on startup, and can be attached to routines, given secrets, and granted to agents on a per-task or per-routine basis.
+MCP servers you register for Claude Code at user scope become *applications* in the dashboard. A pipeline run gets an application only when its routine attaches it, the dashboard holds the application's secrets, and grants decide which of its tools an agent may call.
 
-### Register an MCP server
-
-```sh
-claude mcp add --scope user my-mail -- mail-mcp --config ~/.mail-mcp.json
-```
-
-That server appears in **Settings → Applications** after the dashboard restarts. Its slug is `mcp-<name>` (e.g. `mcp-my-mail`). Reserved names `dashboard-channel` and `dashboard-tasks` are never mirrored. A server whose name is not a valid slug (lowercase letters, digits, hyphens only) is not mirrored — the log says `mcpapps: server not mirrored` — and since runs only receive mirrored applications, such a server reaches no agent at all. To fix it, unregister and re-register with a valid name:
-
-```sh
-claude mcp remove my-mail-server
-claude mcp add --scope user my-mail-server -- mail-mcp --config ~/.mail-mcp.json
-```
-
-### Attach to routines
-
-Create or edit a routine in **Pipeline → Routines** or via `POST /api/schedules`. Under **Applications**, check which applications this routine's tasks may use. The routine's list is copied onto every task it creates. A run receives:
-
-- The dashboard's own servers (always)
-- Applications marked **Attach to every run** (persistent, editable in Settings → Applications)
-- Applications attached to the routine that created this task
-
-### Set secrets
-
-Each application lists its required environment variables. In **Settings → Applications**, click the application and enter the secret values. They are encrypted with AES-256-GCM using the dashboard's key and never returned by any API — only the name and last-changed date are shown. At spawn time, the values are written into that server's `env` block in the run's temporary MCP config file (mode 0600, deleted when the run cleans up).
-
-If a secret is missing at spawn, the stage run fails **before** the agent starts, with a reason beginning `MCP applications:`. Restart the agent after adding the secret.
-
-If `~/.claude.json` cannot be read, the run gets no MCP applications but still runs.
-
-### Grant and refresh tools
-
-Click **Refresh tool list** to start the server with its secrets and read its available tools. Only stdio servers (with a `command`) are supported; HTTP and SSE servers are refused with an error. A failed refresh keeps the tool list from the previous refresh.
-
-Each tool becomes a capability named exactly as Claude Code names it: `mcp__<server>__<tool>`, class `tool`. Grant it with:
+### Register a server
 
 ```bash
-agent-dashboard grants add mcp__my-mail__search_emails --scope routine:<schedule-id> --mode allow
-agent-dashboard grants add mcp__my-mail__send_email --scope global --mode deny
+claude mcp add --scope user mail -- npx -y imap-mcp-server
 ```
 
-Or use **Settings → Grants**. Without an explicit grant, the tool is refused in a headless run; an interactive session can still ask through its normal permission prompt.
+The dashboard mirrors user-scope servers from `~/.claude.json` when it starts, so restart it after adding one. The server then appears in **Settings → Applications** and in the resource registry as `kind = application` with the slug `mcp-<name>`.
 
-The server's `readOnlyHint` and `destructiveHint` are shown as hints only — the MCP specification says clients must not trust them.
+- Only user-scope servers are mirrored; `local` and `project` scope servers are not.
+- `dashboard-channel` and `dashboard-tasks` are the dashboard's own servers and are never mirrored.
+- The name must be a valid slug — lowercase letters, digits and hyphens. A server with any other name is skipped with the log line `mcpapps: server not mirrored`, and because runs only receive mirrored applications, **it reaches no run at all**. Register it again under a valid name:
 
-An allow-all autonomy (`spec_gated`, `full`) does **not** grant application tools. Each tool requires its own explicit allow grant.
+```bash
+claude mcp remove --scope user My_Mail
+claude mcp add --scope user my-mail -- npx -y imap-mcp-server
+```
+
+### Which runs get a server
+
+A run receives the dashboard's own servers, every application marked **Attach to every run**, and the applications of the routine that created its task — nothing else from `~/.claude.json`.
+
+- The first time the dashboard mirrors servers, every server that already exists is marked **Attach to every run**, so existing setups keep working. Servers added later start unattached. Change it per application in Settings → Applications.
+- To attach an application to a routine, tick it under **Applications** in the routine form (**Build → Schedules**), or send `applications` — a list of application resource ids — with `POST` or `PATCH /api/schedules`. An unknown id is rejected with `400`.
+- The scheduler copies the routine's list onto every task it creates. The task API does not accept `applications`; a task gets applications only from its routine.
+
+### Secrets
+
+In Settings → Applications, add the environment variable names the server reads its credentials from with **Add variable** (names match `^[A-Z_][A-Z0-9_]*$`), then enter a value for each. A server that takes per-account passwords from the environment might, for example, need `IMAP_MCP_ACCOUNT_OVH_IMAP_PASSWORD` and `IMAP_MCP_ACCOUNT_OVH_SMTP_PASSWORD`.
+
+- Values are encrypted with AES-256-GCM using the dashboard's secret key and never returned by any API; the panel only shows whether a value is set and when it last changed. Without a configured key, storing a value fails with `503`.
+- At spawn, the values are written into the `env` of that application's entry in the run's temporary MCP config. No other server in the run sees them.
+- If an attached application is missing a required value, or its server is no longer in `~/.claude.json`, the stage run **fails before the agent starts**, with a reason beginning `MCP applications:`. Add the value and retry the task.
+- If `~/.claude.json` cannot be read, the run gets no applications but still starts.
+
+The same over HTTP: `PATCH /api/applications/{resourceId}` with `{"requiredEnv": [...]}` or `{"attachAll": true}`; `PUT /api/applications/{resourceId}/secrets/{NAME}` with `{"value": "..."}`; `DELETE` on the same path.
+
+### Tools and grants
+
+**Refresh tool list** (`POST /api/applications/{resourceId}/refresh`) starts the server with its secrets and reads its tool list. Only stdio servers — entries with a `command` — are supported; `http` and `sse` servers are refused with an error. A failed refresh keeps the previous list and shows the error.
+
+Each tool becomes a capability named the way Claude Code names it, `mcp__<server>__<tool>`, with class `tool`. A later refresh never changes the class of a capability that already exists. The server's `readOnlyHint` and `destructiveHint` are shown for orientation only; the MCP specification says clients must not trust them.
+
+Refresh before granting — the grants API rejects capability names it does not know. Then:
+
+```bash
+agent-dashboard grants add mcp__mail__search_emails --scope routine:<schedule id> --mode allow
+agent-dashboard grants add mcp__mail__send_email --scope global --mode deny
+```
+
+Grants resolve from the most specific context: task, routine, project (the task's working directory), global. An allow lands in the run's `--allowedTools`, a deny in `--disallowedTools`.
+
+**No grant is not an allow.** Pipeline runs are headless, so an ungranted tool is refused; the agent can ask through a permission request, and a human's approval is honoured for that task. Allow-all autonomy (`spec_gated`, `full`) does not allow application tools.
+
 ## Connect the dashboard to Claude
 
 The fastest way to wire a Claude Code session to the dashboard's task tools is the one-command

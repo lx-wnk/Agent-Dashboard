@@ -340,15 +340,15 @@ matchers stay separate on purpose.
 
 ### Application secrets and MCP applications
 
-An agent spawned by the dashboard receives MCP applications and their secrets in a temporary config file (`~/.cache/agent-dashboard/mcp-config-<stage-run-id>.json`, mode 0600) that exists only for that run and is deleted when the run cleans up. The agent runs as the same OS user as the dashboard and the MCP server processes, so **it can read the plaintext secrets of any application attached to its own run** — the AES-256-GCM encryption in the database protects data at rest, not a running process. To mitigate this risk:
+Application secrets (see [MCP applications](mcp.md#mcp-applications)) are encrypted at rest with AES-256-GCM and never returned by the API. That protects the database, not a running agent.
 
-- Use application-specific passwords, not account passwords. For mail, most providers (Gmail, Outlook, iCloud, OVH) offer credentials scoped to mail only and revokable without touching the main account.
-- Never grant an untrusted agent access to applications holding secrets you cannot afford to lose.
-- Secrets are stored per-application, not per-task, so a single leaked secret could affect any task that future attaches it.
+- At spawn, the secrets of a run's attached applications are written in clear into the `env` of each server's own entry in the run's temporary MCP config, `$TMPDIR/dashboard-<uid>/dashboard-channel-mcp-*.json` (`/tmp/dashboard-<uid>/…` when `TMPDIR` is unset), mode `0600`. The file is removed when the run is cleaned up. A file a crash left behind is removed at the next dashboard start once it is a day old; a younger one may belong to another dashboard instance's live run.
+- **An agent with Bash runs as the same OS user as that file and as the MCP server process, so it can read the secrets of every application attached to its own run.** Separate OS users per run are not implemented.
+- Use credentials you can revoke on their own — app-specific passwords where the provider offers them, never an account's main password — and attach an application only to routines whose agents you would trust with that credential.
+- Under `auth.mode=none` (see [Authentication and the local-trust default](#authentication-and-the-local-trust-default)), no authentication guards `/api`, so any local process, an agent's Bash included, can call the schedules and applications API — for example to attach an application to a routine or replace a secret. With authentication enabled, these routes require a session.
+- **Refresh tool list** runs the command from `~/.claude.json` — the command Claude Code itself runs for that server — as the same OS user, without a shell. Anyone able to change that file already runs as that user.
+- Application tools default to refusal: a tool without an allow grant is not in a run's allow list, and allow-all autonomy does not change that.
 
-Under `auth.mode=none` (the default local-trust posture), no authentication guards `/api`, so any local process — including an agent's Bash tool — can call the schedules and applications API, attach an application to a routine, or change its secrets. With authentication enabled, those routes require a session.
-
-Refreshing the tool list for an application runs exactly the command in `~/.claude.json` — the same command Claude Code runs for that server — as the same OS user, without a shell.
 ### Obsidian's TLS trust model
 
 The Obsidian Application (`server/internal/apps/obsidian`) talks to Obsidian's
