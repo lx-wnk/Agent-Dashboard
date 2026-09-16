@@ -148,3 +148,16 @@ func TestResolveRun_GrantsDecideAllowDenyAndSilenceMeansAsk(t *testing.T) {
 	require.NoError(t, err)
 	require.NotContains(t, other.Allow, "mcp__mail__search", "a routine's grant does not leak into another task")
 }
+
+func TestResolveRun_UnreadableClaudeConfigCostsTheServersNotTheRun(t *testing.T) {
+	f := newResolveFixture(t, nil)
+	f.addApp(t, "res-notes", "notes", true)
+	f.resolver.ReadServers = func() (map[string]json.RawMessage, error) {
+		return nil, errors.New("claudeconfig: parse ~/.claude.json: unexpected end of JSON input")
+	}
+
+	out, err := f.resolver.ResolveRun(f.ctx, &ent.Task{ID: "t1", Cwd: "/repo"})
+	require.NoError(t, err, "a file the dashboard does not own must never stop a spawn")
+	require.Empty(t, out.Servers)
+	require.Empty(t, out.Allow)
+}
