@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/tasks"
 	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
+	"github.com/lx-wnk/agent-dashboard/server/internal/claudemodel"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
@@ -139,10 +140,10 @@ func TestPutPipelineConfig_StageModelOverrideRoundTrip(t *testing.T) {
 		t.Errorf("after PUT: self_review=%q, want claude-haiku-4-5", resp.StageModels["self_review"])
 	}
 	// Other stages should still return coded defaults.
-	if want := pipeline.LatestModel(pipeline.SeriesOpus); resp.StageModels["implementation"] != want {
+	if want := claudemodel.Latest(claudemodel.Opus); resp.StageModels["implementation"] != want {
 		t.Errorf("after PUT: implementation=%q, want coded default %s", resp.StageModels["implementation"], want)
 	}
-	if want := pipeline.LatestModel(pipeline.SeriesHaiku); resp.StageModels["finalization"] != want {
+	if want := claudemodel.Latest(claudemodel.Haiku); resp.StageModels["finalization"] != want {
 		t.Errorf("after PUT: finalization=%q, want coded default %s", resp.StageModels["finalization"], want)
 	}
 
@@ -195,7 +196,7 @@ func TestPutPipelineConfig_EmptyModelClearsRow(t *testing.T) {
 	if err := json.Unmarshal(rr2.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if want := pipeline.LatestModel(pipeline.SeriesSonnet); resp.StageModels["self_review"] != want {
+	if want := claudemodel.Latest(claudemodel.Sonnet); resp.StageModels["self_review"] != want {
 		t.Errorf("after clear: self_review=%q, want coded default %s", resp.StageModels["self_review"], want)
 	}
 }

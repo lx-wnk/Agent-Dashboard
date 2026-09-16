@@ -3,6 +3,7 @@ package pipeline
 import (
 	"context"
 
+	"github.com/lx-wnk/agent-dashboard/server/internal/claudemodel"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 )
 
@@ -10,13 +11,13 @@ import (
 const stageModelKeyPrefix = "stageModel."
 
 // Balanced defaults: implementation gets the most capable series, finalization
-// the fastest, each at its newest allowed model. An explicit DB row or
+// the fastest, each at its newest known model. An explicit DB row or
 // task/spawner override takes precedence.
 var (
-	defaultModelImplementation = LatestModel(SeriesOpus)
-	defaultModelSelfReview     = LatestModel(SeriesSonnet)
-	defaultModelPlanReview     = LatestModel(SeriesSonnet)
-	defaultModelFinalization   = LatestModel(SeriesHaiku)
+	defaultModelImplementation = claudemodel.Latest(claudemodel.Opus)
+	defaultModelSelfReview     = claudemodel.Latest(claudemodel.Sonnet)
+	defaultModelPlanReview     = claudemodel.Latest(claudemodel.Sonnet)
+	defaultModelFinalization   = claudemodel.Latest(claudemodel.Haiku)
 )
 
 // modelResolver resolves the effective per-stage model, applying coded default

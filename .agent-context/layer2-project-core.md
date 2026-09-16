@@ -25,7 +25,8 @@
 | Shared type constants | `src/types.ts` | `AGENT_STATUSES`, `AgentStatus` |
 | Shared UI utilities | `src/utils/format.ts`, `src/utils/agentSort.ts`, `src/utils/sse.ts` | `formatCost`, `STATUS_ORDER`, `SSE_RETRY_DELAY_MS` |
 | Shared form helper text (client) | `src/utils/slugHint.ts` | `SLUG_FORMAT_HINT`, `derivedSlugHint` |
-| Shared model/config lists | `src/utils/models.ts` | `AVAILABLE_MODELS` |
+| Shared model/config lists | `src/utils/models.ts` | `AVAILABLE_MODELS`, `latestModel` |
+| Claude model catalog + default models (Go) | `server/internal/claudemodel/catalog.go` | `IDs`, `IsKnown`, `Latest` — never pin a default model ID |
 | Server defaults (Go) | `server/internal/db/defaults.go` | `DefaultStage`, `DefaultStageTimeoutSeconds` |
 | Server validation (Go) | `server/internal/validation/slug.go` | `SlugPattern`, `SlugPatternMessage` |
 | Server status thresholds (Go) | `server/internal/merger/merger.go` | `activeThreshold`, `waitingThreshold` |
