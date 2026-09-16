@@ -50,7 +50,7 @@ Every schedule mutation that changes registry-relevant state must propagate:
 | **Update name** | `resources.Upsert` (name refresh, state unchanged) |
 | **SetEnabled(true)** | `resources.SetState(id, "enabled")` |
 | **SetEnabled(false)** | `resources.SetState(id, "disabled")` |
-| **Delete** | `resources.SetState(id, "archived")` — see §4.4 |
+| **Delete** | `resources.SetState(id, "orphaned")` — see §4.4 |
 
 ### 2.4 Handler: remove projection, unify read path
 
@@ -115,20 +115,20 @@ Delete `routineViews()` and the `if kind == repo.ResourceKindRoutine` special ca
 
 The projection test file (`routine_projection_test.go`) is also deleted — its assertions validate behavior that no longer exists.
 
-### 4.4 Delete behavior: archived state, not row deletion
+### 4.4 Delete behavior: orphaned state, not row deletion
 
-**Question:** Deleting a `task_schedule` — does the resource row go, or become `state: archived`?
+**Question:** Deleting a `task_schedule` — does the resource row go, or become `state: orphaned`?
 
 **Trade-offs:**
 
 | Strategy | Pro | Con |
 |---|---|---|
 | **Hard delete resource** | Clean; no orphan rows | Grants with `context_ref = <schedule_id>` lose their anchor; audit trail lost |
-| **Archived state** | Grants remain valid (they reference a resource that exists, just archived); audit trail preserved; reversible | Archived rows accumulate; requires eventual cleanup policy |
+| **Orphaned state** | Grants remain valid (they reference a resource that exists, just orphaned); audit trail preserved; reversible | Orphaned rows accumulate; requires eventual cleanup policy |
 
-**Decision:** Set resource state to `"archived"`. The schedule row itself is hard-deleted (existing behavior in `schedule_repo.Delete`), but the resource row persists with `state: archived`. Grants that reference the schedule continue to resolve — an archived resource is a valid, if inactive, grant context.
+**Decision:** Set resource state to `"orphaned"` (`repo.ResourceStateOrphaned`; the registry has exactly five states — discovered, installed, enabled, disabled, orphaned — and no `archived`). The schedule row itself is hard-deleted (existing behavior in `schedule_repo.Delete`), but the resource row persists with `state: orphaned`. Grants that reference the schedule continue to resolve — an orphaned resource is a valid, if inactive, grant context.
 
-Cleanup of archived resources is a follow-up concern, not a blocker. The plugin reconciler has the same implicit contract: if a plugin is uninstalled and its row deleted, the resource row would need the same treatment.
+Cleanup of orphaned resources is a follow-up concern, not a blocker. The plugin reconciler has the same implicit contract: if a plugin is uninstalled and its row deleted, the resource row would need the same treatment.
 
 ---
 
@@ -162,6 +162,6 @@ After migration, these invariants hold:
 2. `SELECT count(*) FROM resources WHERE kind = 'routine'` equals `SELECT count(*) FROM task_schedules`.
 3. `GET /api/resources?kind=routine` returns rows from the `resources` table, not projections.
 4. Creating a new schedule produces a `resources` row in the same transaction.
-5. Deleting a schedule sets the resource row to `state: archived`.
+5. Deleting a schedule sets the resource row to `state: orphaned`.
 6. `SetEnabled(false)` on a schedule sets the resource to `state: disabled`.
 7. No routine appears twice in the resource list.
