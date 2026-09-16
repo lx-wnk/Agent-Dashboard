@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { CreateScheduleBody, SchedulePreview, ScheduleView, UpdateScheduleBody } from '../composables/useSchedules'
-import { ref, watch } from 'vue'
+import { onMounted, ref, watch } from 'vue'
+import { useApplications } from '@/features/settings/composables/useApplications'
 import { createSchedule, previewSchedule, updateSchedule } from '../composables/useSchedules'
 import { formatDateTime } from '../utils/format'
 import { TASK_PRIORITY_OPTIONS } from '../utils/taskOptions'
@@ -28,6 +29,12 @@ const cwd = ref(props.schedule?.cwd ?? '')
 const priority = ref(props.schedule?.priority ?? 'medium')
 const maxIterations = ref(props.schedule?.maxIterations ?? 20)
 const permissionTemplate = ref(props.schedule?.permissionTemplate ?? '')
+
+const { applications, fetchApplications } = useApplications()
+const selectedApplications = ref<string[]>([...(props.schedule?.applications ?? [])])
+onMounted(() => {
+  void fetchApplications()
+})
 
 const CATCHUP_OPTIONS: Array<{ value: 'none' | 'once', label: string }> = [
   { value: 'none', label: 'None' },
@@ -80,6 +87,7 @@ async function onSubmit() {
       priority: priority.value || undefined,
       maxIterations: maxIterations.value || undefined,
       permissionTemplate: permissionTemplate.value.trim() || undefined,
+      applications: selectedApplications.value,
     }
 
     let saved: ScheduleView
@@ -220,6 +228,26 @@ async function onSubmit() {
       label="Permission Template"
       placeholder="Optional permission template name"
     />
+
+    <fieldset v-if="applications.length" class="flex flex-col gap-1">
+      <legend class="text-sm font-medium text-fg">
+        Applications
+      </legend>
+      <p class="text-xs text-fg-mute">
+        MCP servers this routine's tasks may use. Tools still run only where a grant allows them.
+      </p>
+      <label v-for="app in applications" :key="app.resourceId" class="flex items-center gap-2 text-sm">
+        <input
+          v-model="selectedApplications"
+          type="checkbox"
+          :value="app.resourceId"
+          :disabled="app.attachAll"
+          :data-testid="`schedule-application-${app.resourceId}`"
+        >
+        {{ app.serverName }}
+        <span v-if="app.attachAll" class="text-xs text-fg-mute">attached to every run</span>
+      </label>
+    </fieldset>
 
     <div
       v-if="submitError"

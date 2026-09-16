@@ -25,6 +25,7 @@ export interface ScheduleView {
   lastTaskId?: string | null
   createdAt: string
   updatedAt: string
+  applications: string[]
 }
 
 export interface SchedulePreview {
@@ -53,6 +54,7 @@ export interface CreateScheduleBody {
   targetBranch?: string
   silverBullet?: boolean
   enabled?: boolean
+  applications?: string[]
 }
 
 export type UpdateScheduleBody = Partial<CreateScheduleBody>
