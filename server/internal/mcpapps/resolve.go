@@ -1,0 +1,137 @@
+package mcpapps
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+
+	"github.com/lx-wnk/agent-dashboard/server/internal/capability"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	"github.com/lx-wnk/agent-dashboard/server/internal/memory"
+)
+
+type RunApplications struct {
+	Servers        map[string]json.RawMessage
+	Allow          []string
+	Deny           []string
+	CatalogueTools map[string]bool
+}
+
+type MissingSecretError struct{ Server, EnvName string }
+
+func (e *MissingSecretError) Error() string {
+	return fmt.Sprintf("application %q is attached but its secret %s is not set", e.Server, e.EnvName)
+}
+
+type MissingServerError struct{ Server string }
+
+func (e *MissingServerError) Error() string {
+	return fmt.Sprintf("application %q is attached but no longer registered in ~/.claude.json", e.Server)
+}
+
+type Resolver struct {
+	Apps         repo.MCPApplicationRepo
+	Secrets      repo.ApplicationSecretRepo
+	Grants       repo.GrantRepo
+	Capabilities repo.CapabilityRepo
+	ReadServers  func() (map[string]json.RawMessage, error)
+}
+
+// ResolveRun decides what one run gets. It calls capability.Decide directly and
+// not memory.Gate.Authorize: rendering an allow list is not a use of the tool,
+// and Authorize books rate-limit usage.
+func (r Resolver) ResolveRun(ctx context.Context, task *ent.Task) (RunApplications, error) {
+	out := RunApplications{Servers: map[string]json.RawMessage{}, CatalogueTools: map[string]bool{}}
+
+	servers, err := r.ReadServers()
+	if err != nil {
+		slog.Warn("mcpapps: ~/.claude.json unreadable — run gets no MCP applications", "task", task.ID, "err", err)
+		return out, nil
+	}
+	apps, err := r.Apps.List(ctx)
+	if err != nil {
+		return RunApplications{}, fmt.Errorf("mcpapps.ResolveRun: %w", err)
+	}
+
+	attached := make(map[string]bool, len(task.Applications))
+	for _, id := range task.Applications {
+		attached[id] = true
+	}
+	contexts := runContexts(task)
+
+	for _, app := range apps {
+		explicit := attached[app.ResourceID]
+		if !explicit && !app.AttachAll {
+			continue
+		}
+		raw, ok := servers[app.ServerName]
+		if !ok {
+			if explicit {
+				return RunApplications{}, &MissingServerError{Server: app.ServerName}
+			}
+			continue
+		}
+		values, err := r.Secrets.Values(ctx, app.ResourceID)
+		if err != nil {
+			return RunApplications{}, fmt.Errorf("mcpapps.ResolveRun: %s: %w", app.ServerName, err)
+		}
+		for _, name := range app.RequiredEnv {
+			if _, ok := values[name]; !ok {
+				return RunApplications{}, &MissingSecretError{Server: app.ServerName, EnvName: name}
+			}
+		}
+		merged, err := WithEnv(raw, values)
+		if err != nil {
+			return RunApplications{}, err
+		}
+		out.Servers[app.ServerName] = merged
+
+		for _, tool := range app.Catalogue {
+			name := CapabilityName(app.ServerName, tool.Name)
+			out.CatalogueTools[name] = true
+			decision, err := r.decide(ctx, name, contexts)
+			if err != nil {
+				return RunApplications{}, err
+			}
+			switch decision.Effect {
+			case capability.EffectAllow:
+				out.Allow = append(out.Allow, name)
+			case capability.EffectDeny:
+				out.Deny = append(out.Deny, name)
+			}
+		}
+	}
+	return out, nil
+}
+
+func (r Resolver) decide(ctx context.Context, capName string, contexts []capability.Context) (capability.Decision, error) {
+	var view capability.CapabilityView
+	if row, err := r.Capabilities.Get(ctx, capName); err == nil {
+		view = capability.CapabilityView{Name: row.Name, Class: row.Class, EnforceableBy: row.EnforceableBy}
+	}
+	rows, err := r.Grants.ListForCapability(ctx, capName)
+	if err != nil {
+		return capability.Decision{}, fmt.Errorf("mcpapps: grants for %s: %w", capName, err)
+	}
+	return capability.Decide(
+		capability.Request{Capability: capName, Contexts: contexts},
+		repo.GrantViewsFromRows(rows),
+		view,
+	), nil
+}
+
+// runContexts mirrors the chain the memory push uses: task, the routine that
+// created it, the project scope — which the memory gate keys by working
+// directory (stage_handlers.go) — and global.
+func runContexts(task *ent.Task) []capability.Context {
+	out := []capability.Context{{Kind: repo.GrantContextTask, Ref: task.ID}}
+	if task.RoutineID != nil {
+		out = append(out, memory.RoutineContext(*task.RoutineID)...)
+	}
+	if task.Cwd != "" {
+		out = append(out, capability.Context{Kind: repo.GrantContextProject, Ref: task.Cwd})
+	}
+	return append(out, capability.Context{Kind: repo.GrantContextGlobal})
+}

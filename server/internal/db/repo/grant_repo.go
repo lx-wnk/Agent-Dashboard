@@ -74,6 +74,25 @@ type GrantRepo interface {
 	Revoke(ctx context.Context, id, revokedBy string) error
 }
 
+func GrantViewsFromRows(rows []*ent.Grant) []capability.GrantView {
+	views := make([]capability.GrantView, len(rows))
+	for i, gr := range rows {
+		views[i] = capability.GrantView{
+			ID:                 gr.ID,
+			Capability:         gr.CapabilityName,
+			ContextKind:        gr.ContextKind,
+			ContextRef:         gr.ContextRef,
+			Pattern:            gr.Pattern,
+			Mode:               gr.Mode,
+			LimitCount:         gr.LimitCount,
+			LimitWindowSeconds: gr.LimitWindowSeconds,
+			ExpiresAt:          gr.ExpiresAt,
+			RevokedAt:          gr.RevokedAt,
+		}
+	}
+	return views
+}
+
 type entGrantRepo struct {
 	client *ent.Client
 }
