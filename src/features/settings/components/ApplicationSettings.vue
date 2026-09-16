@@ -4,9 +4,10 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useApplications } from '@/features/settings/composables/useApplications'
 import { formatDateTime } from '@/utils/format'
 
-const { applications, loading, error, fetchApplications, setAttachAll, setSecret, deleteSecret, refreshCatalogue } = useApplications()
+const { applications, loading, error, fetchApplications, setAttachAll, setRequiredEnv, setSecret, deleteSecret, refreshCatalogue } = useApplications()
 const actionError = ref<string | null>(null)
 const drafts = reactive<Record<string, string>>({})
+const requiredEnvDrafts = reactive<Record<string, string>>({})
 
 onMounted(() => {
   void fetchApplications()
@@ -46,6 +47,26 @@ async function saveSecret(app: ApplicationView, envName: string) {
     return
   await run(() => setSecret(app.resourceId, envName, value))
   drafts[key] = ''
+}
+
+const ENV_NAME_RE = /^[A-Z_][A-Z0-9_]*$/
+
+async function addRequiredEnv(app: ApplicationView) {
+  const name = (requiredEnvDrafts[app.resourceId] ?? '').trim()
+  if (!name)
+    return
+  if (!ENV_NAME_RE.test(name)) {
+    actionError.value = `${name} is not an environment variable name`
+    return
+  }
+  if (app.requiredEnv.includes(name))
+    return
+  await run(() => setRequiredEnv(app.resourceId, [...app.requiredEnv, name]))
+  requiredEnvDrafts[app.resourceId] = ''
+}
+
+async function removeRequiredEnv(app: ApplicationView, envName: string) {
+  await run(() => setRequiredEnv(app.resourceId, app.requiredEnv.filter(n => n !== envName)))
 }
 </script>
 
@@ -95,10 +116,13 @@ async function saveSecret(app: ApplicationView, envName: string) {
         </label>
       </div>
 
-      <div v-if="app.requiredEnv.length" class="flex flex-col gap-2">
+      <div class="flex flex-col gap-2">
         <h5 class="text-sm font-medium text-fg">
           Secrets
         </h5>
+        <p v-if="!app.requiredEnv.length" class="text-sm text-fg-mute">
+          No secrets declared. Add the environment variable names this server reads its credentials from.
+        </p>
         <div v-for="envName in app.requiredEnv" :key="envName" class="flex items-center gap-2 text-sm">
           <code class="min-w-48">{{ envName }}</code>
           <span v-if="isSet(app, envName)" class="text-fg-mute">set</span>
@@ -126,6 +150,31 @@ async function saveSecret(app: ApplicationView, envName: string) {
             @click="run(() => deleteSecret(app.resourceId, envName))"
           >
             Remove
+          </button>
+          <button
+            type="button"
+            class="px-2 py-1 rounded border border-line"
+            :data-testid="`required-env-remove-${app.resourceId}-${envName}`"
+            @click="removeRequiredEnv(app, envName)"
+          >
+            Stop requiring
+          </button>
+        </div>
+        <div class="flex items-center gap-2 text-sm">
+          <input
+            v-model="requiredEnvDrafts[app.resourceId]"
+            type="text"
+            placeholder="VARIABLE_NAME"
+            class="border border-line rounded px-2 py-1 bg-raised"
+            :data-testid="`required-env-input-${app.resourceId}`"
+          >
+          <button
+            type="button"
+            class="px-2 py-1 rounded border border-line"
+            :data-testid="`required-env-add-${app.resourceId}`"
+            @click="addRequiredEnv(app)"
+          >
+            Add variable
           </button>
         </div>
       </div>

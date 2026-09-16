@@ -63,4 +63,54 @@ describe('applicationSettings', () => {
     expect(wrapper.html()).not.toContain('hunter2')
     wrapper.unmount()
   })
+
+  it('adds a required variable', async () => {
+    const calls = stubFetch({
+      'GET /api/applications': [{ ...MAIL, requiredEnv: [] }],
+      'PATCH /api/applications/res-mail': { ...MAIL, requiredEnv: ['MAIL_PASSWORD'] },
+    })
+    const wrapper = mount(ApplicationSettings)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('No secrets declared. Add the environment variable names this server reads its credentials from.')
+
+    await wrapper.find('[data-testid="required-env-input-res-mail"]').setValue('MAIL_PASSWORD')
+    await wrapper.find('[data-testid="required-env-add-res-mail"]').trigger('click')
+    await flushPromises()
+
+    const patch = calls.find(c => c.init?.method === 'PATCH')
+    expect(JSON.parse(String(patch?.init?.body))).toEqual({ requiredEnv: ['MAIL_PASSWORD'] })
+    expect(wrapper.find('[data-testid="secret-input-res-mail-MAIL_PASSWORD"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('rejects an invalid name without a request', async () => {
+    const calls = stubFetch({ 'GET /api/applications': [{ ...MAIL, requiredEnv: [] }] })
+    const wrapper = mount(ApplicationSettings)
+    await flushPromises()
+
+    await wrapper.find('[data-testid="required-env-input-res-mail"]').setValue('mail-password')
+    await wrapper.find('[data-testid="required-env-add-res-mail"]').trigger('click')
+    await flushPromises()
+
+    expect(calls.some(c => c.init?.method === 'PATCH')).toBe(false)
+    expect(wrapper.text()).toContain('is not an environment variable name')
+    wrapper.unmount()
+  })
+
+  it('stops requiring a variable', async () => {
+    const calls = stubFetch({
+      'GET /api/applications': [MAIL],
+      'PATCH /api/applications/res-mail': { ...MAIL, requiredEnv: [] },
+    })
+    const wrapper = mount(ApplicationSettings)
+    await flushPromises()
+
+    await wrapper.find('[data-testid="required-env-remove-res-mail-MAIL_PASSWORD"]').trigger('click')
+    await flushPromises()
+
+    const patch = calls.find(c => c.init?.method === 'PATCH')
+    expect(JSON.parse(String(patch?.init?.body))).toEqual({ requiredEnv: [] })
+    wrapper.unmount()
+  })
 })
