@@ -43,15 +43,7 @@ func Reconcile(ctx context.Context, servers map[string]json.RawMessage, resource
 
 	mirrored := 0
 	for _, name := range names {
-		res, err := resources.Upsert(ctx, repo.UpsertResourceInput{
-			Kind:      repo.ResourceKindApplication,
-			Slug:      ResourceSlug(name),
-			Name:      name,
-			Scope:     repo.GlobalScope(),
-			State:     repo.ResourceStateDiscovered,
-			Origin:    repo.ResourceOriginLocal,
-			OriginRef: name,
-		})
+		res, err := EnsureResource(ctx, resources, name)
 		if err != nil {
 			slog.Warn("mcpapps: server not mirrored", "server", name, "err", err)
 			continue

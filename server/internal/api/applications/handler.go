@@ -11,9 +11,11 @@ import (
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
 	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
+	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/mcpapps"
+	"github.com/lx-wnk/agent-dashboard/server/internal/validation"
 )
 
 var envNameRE = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
@@ -23,14 +25,16 @@ type Handler struct {
 	secrets   repo.ApplicationSecretRepo
 	refresher mcpapps.Refresher
 	grants    repo.GrantRepo
+	resources repo.ResourceRepo
 }
 
-func NewHandler(apps repo.MCPApplicationRepo, secrets repo.ApplicationSecretRepo, refresher mcpapps.Refresher, grants repo.GrantRepo) *Handler {
-	return &Handler{apps: apps, secrets: secrets, refresher: refresher, grants: grants}
+func NewHandler(apps repo.MCPApplicationRepo, secrets repo.ApplicationSecretRepo, refresher mcpapps.Refresher, grants repo.GrantRepo, resources repo.ResourceRepo) *Handler {
+	return &Handler{apps: apps, secrets: secrets, refresher: refresher, grants: grants, resources: resources}
 }
 
 func (h *Handler) Mount(r chi.Router) {
 	r.Get("/api/applications", apierr.ErrorMiddleware(h.list))
+	r.Post("/api/applications", apierr.ErrorMiddleware(h.create))
 	r.Patch("/api/applications/{resourceId}", apierr.ErrorMiddleware(h.patch))
 	r.Put("/api/applications/{resourceId}/secrets/{envName}", apierr.ErrorMiddleware(h.putSecret))
 	r.Delete("/api/applications/{resourceId}/secrets/{envName}", apierr.ErrorMiddleware(h.deleteSecret))
@@ -52,14 +56,16 @@ type secretView struct {
 }
 
 type applicationView struct {
-	ResourceID           string       `json:"resourceId"`
-	ServerName           string       `json:"serverName"`
-	AttachAll            bool         `json:"attachAll"`
-	RequiredEnv          []string     `json:"requiredEnv"`
-	Secrets              []secretView `json:"secrets"`
-	Tools                []toolView   `json:"tools"`
-	CatalogueError       string       `json:"catalogueError,omitempty"`
-	CatalogueRefreshedAt *string      `json:"catalogueRefreshedAt,omitempty"`
+	ResourceID           string              `json:"resourceId"`
+	ServerName           string              `json:"serverName"`
+	AttachAll            bool                `json:"attachAll"`
+	RequiredEnv          []string            `json:"requiredEnv"`
+	Entry                mcpapps.ServerEntry `json:"entry"`
+	ExportToClaude       bool                `json:"exportToClaude"`
+	Secrets              []secretView        `json:"secrets"`
+	Tools                []toolView          `json:"tools"`
+	CatalogueError       string              `json:"catalogueError,omitempty"`
+	CatalogueRefreshedAt *string             `json:"catalogueRefreshedAt,omitempty"`
 }
 
 func (h *Handler) view(r *http.Request, app *ent.MCPApplication) (applicationView, error) {
@@ -72,12 +78,20 @@ func (h *Handler) view(r *http.Request, app *ent.MCPApplication) (applicationVie
 		ServerName:     app.ServerName,
 		AttachAll:      app.AttachAll,
 		RequiredEnv:    app.RequiredEnv,
+		ExportToClaude: app.ExportToClaude,
 		Secrets:        make([]secretView, 0, len(meta)),
 		Tools:          make([]toolView, 0, len(app.Catalogue)),
 		CatalogueError: app.CatalogueError,
 	}
 	if v.RequiredEnv == nil {
 		v.RequiredEnv = []string{}
+	}
+	if !mcpapps.IsEmptyEntry(app.Entry) {
+		entry, err := mcpapps.ParseEntry(app.Entry)
+		if err != nil {
+			return applicationView{}, err
+		}
+		v.Entry = entry
 	}
 	for _, m := range meta {
 		v.Secrets = append(v.Secrets, secretView{EnvName: m.EnvName, UpdatedAt: m.UpdatedAt.UTC().Format(time.RFC3339)})
@@ -134,8 +148,9 @@ func (h *Handler) patch(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	var body struct {
-		AttachAll   *bool     `json:"attachAll"`
-		RequiredEnv *[]string `json:"requiredEnv"`
+		AttachAll   *bool                `json:"attachAll"`
+		RequiredEnv *[]string            `json:"requiredEnv"`
+		Entry       *mcpapps.ServerEntry `json:"entry"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		return apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
@@ -155,11 +170,78 @@ func (h *Handler) patch(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 	}
+	if body.Entry != nil {
+		raw, err := mcpapps.MergeEntry(app.Entry, *body.Entry)
+		if err != nil {
+			return err
+		}
+		if app, err = h.apps.SetEntry(r.Context(), app.ResourceID, raw); err != nil {
+			return err
+		}
+	}
 	v, err := h.view(r, app)
 	if err != nil {
 		return err
 	}
 	return writeJSON(w, http.StatusOK, v)
+}
+
+func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
+	var body struct {
+		Name    string            `json:"name"`
+		Command string            `json:"command"`
+		Args    []string          `json:"args"`
+		Env     map[string]string `json:"env"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		return apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
+	}
+	if !validation.IsValidSlug(body.Name) {
+		return apierr.NewAppError(http.StatusBadRequest, validation.SlugPatternMessage)
+	}
+	if channelconfig.IsReservedServerName(body.Name) {
+		return apierr.NewAppError(http.StatusBadRequest, body.Name+" is a reserved server name")
+	}
+	if body.Command == "" {
+		return apierr.NewAppError(http.StatusBadRequest, "command is required")
+	}
+	for name := range body.Env {
+		if !envNameRE.MatchString(name) {
+			return apierr.NewAppError(http.StatusBadRequest, "env: "+name+" is not an environment variable name")
+		}
+	}
+
+	existing, err := h.apps.List(r.Context())
+	if err != nil {
+		return err
+	}
+	for _, app := range existing {
+		if app.ServerName == body.Name {
+			return apierr.NewAppError(http.StatusConflict, body.Name+" already exists")
+		}
+	}
+
+	res, err := mcpapps.EnsureResource(r.Context(), h.resources, body.Name)
+	if err != nil {
+		return err
+	}
+	entry, err := json.Marshal(mcpapps.ServerEntry{Command: body.Command, Args: body.Args, Env: body.Env})
+	if err != nil {
+		return err
+	}
+	app, err := h.apps.Upsert(r.Context(), repo.UpsertMCPApplicationInput{
+		ResourceID: res.ID,
+		ServerName: body.Name,
+		Entry:      entry,
+	})
+	if err != nil {
+		return err
+	}
+	v, err := h.view(r, app)
+	if err != nil {
+		return err
+	}
+	return writeJSON(w, http.StatusCreated, v)
 }
 
 func (h *Handler) putSecret(w http.ResponseWriter, r *http.Request) error {
