@@ -12,6 +12,8 @@ const MAIL = {
     { capability: 'mcp__mail__search', name: 'search', readOnlyHint: true },
     { capability: 'mcp__mail__send', name: 'send', readOnlyHint: false, destructiveHint: true },
   ],
+  entry: { command: 'node', args: ['mail-server.js'], env: {} },
+  exportToClaude: false,
 }
 
 function stubFetch(responses: Record<string, unknown>) {
@@ -111,6 +113,147 @@ describe('applicationSettings', () => {
 
     const patch = calls.find(c => c.init?.method === 'PATCH')
     expect(JSON.parse(String(patch?.init?.body))).toEqual({ requiredEnv: [] })
+    wrapper.unmount()
+  })
+
+  it('adds a server via the form and refetches the list', async () => {
+    const calls = stubFetch({
+      'GET /api/applications': [MAIL],
+      'POST /api/applications': { ...MAIL, resourceId: 'res-cal', serverName: 'calendar' },
+    })
+    const wrapper = mount(ApplicationSettings)
+    await flushPromises()
+
+    await wrapper.find('[data-testid="application-add-toggle"]').trigger('click')
+    await wrapper.find('[data-testid="application-add-name"]').setValue('calendar')
+    await wrapper.find('[data-testid="application-add-command"]').setValue('npx')
+    await wrapper.find('[data-testid="application-add-args"]').setValue('-y calendar-mcp')
+    await wrapper.find('[data-testid="application-add-env"]').setValue('API_KEY=abc')
+    await wrapper.find('[data-testid="application-add-form"]').trigger('submit')
+    await flushPromises()
+
+    const post = calls.find(c => c.init?.method === 'POST')
+    expect(post?.url).toBe('/api/applications')
+    expect(JSON.parse(String(post?.init?.body))).toEqual({
+      name: 'calendar',
+      command: 'npx',
+      args: ['-y', 'calendar-mcp'],
+      env: { API_KEY: 'abc' },
+    })
+    expect(calls.filter(c => (c.init?.method ?? 'GET') === 'GET').length).toBe(2)
+    wrapper.unmount()
+  })
+
+  it('shows a create error and leaves the form open', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === 'POST')
+        return { ok: false, status: 400, json: async () => ({ error: 'slug must match ^[a-z0-9-]+$' }) }
+      return { ok: true, status: 200, json: async () => [MAIL] }
+    }))
+    const wrapper = mount(ApplicationSettings)
+    await flushPromises()
+
+    await wrapper.find('[data-testid="application-add-toggle"]').trigger('click')
+    await wrapper.find('[data-testid="application-add-name"]').setValue('Bad Name!')
+    await wrapper.find('[data-testid="application-add-command"]').setValue('npx')
+    await wrapper.find('[data-testid="application-add-form"]').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('slug must match')
+    expect(wrapper.find('[data-testid="application-add-form"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('edits the server entry', async () => {
+    const calls = stubFetch({
+      'GET /api/applications': [MAIL],
+      'PATCH /api/applications/res-mail': { ...MAIL, entry: { command: 'node', args: ['server.js'], env: { FOO: 'bar' } } },
+    })
+    const wrapper = mount(ApplicationSettings)
+    await flushPromises()
+
+    await wrapper.find('[data-testid="application-edit-res-mail"]').trigger('click')
+    await wrapper.find('[data-testid="application-edit-command-res-mail"]').setValue('node')
+    await wrapper.find('[data-testid="application-edit-args-res-mail"]').setValue('server.js')
+    await wrapper.find('[data-testid="application-edit-env-res-mail"]').setValue('FOO=bar')
+    await wrapper.find('[data-testid="application-edit-save-res-mail"]').trigger('click')
+    await flushPromises()
+
+    const patch = calls.find(c => c.init?.method === 'PATCH')
+    expect(JSON.parse(String(patch?.init?.body))).toEqual({
+      entry: { command: 'node', args: ['server.js'], env: { FOO: 'bar' } },
+    })
+    wrapper.unmount()
+  })
+
+  it('toggles export to Claude and reflects the response', async () => {
+    const calls = stubFetch({
+      'GET /api/applications': [MAIL],
+      'PATCH /api/applications/res-mail': { ...MAIL, exportToClaude: true },
+    })
+    const wrapper = mount(ApplicationSettings)
+    await flushPromises()
+
+    const toggle = wrapper.find('[data-testid="application-export-res-mail"]')
+    expect(toggle.attributes('aria-checked')).toBe('false')
+    await toggle.trigger('click')
+    await flushPromises()
+
+    const patch = calls.find(c => c.init?.method === 'PATCH')
+    expect(JSON.parse(String(patch?.init?.body))).toEqual({ exportToClaude: true })
+    expect(wrapper.find('[data-testid="application-export-res-mail"]').attributes('aria-checked')).toBe('true')
+    wrapper.unmount()
+  })
+
+  it('shows a 502 export error and keeps the switch off', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === 'PATCH')
+        return { ok: false, status: 502, json: async () => ({ error: 'failed to write Claude config' }) }
+      return { ok: true, status: 200, json: async () => [MAIL] }
+    }))
+    const wrapper = mount(ApplicationSettings)
+    await flushPromises()
+
+    await wrapper.find('[data-testid="application-export-res-mail"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('failed to write Claude config')
+    expect(wrapper.find('[data-testid="application-export-res-mail"]').attributes('aria-checked')).toBe('false')
+    wrapper.unmount()
+  })
+
+  it('removes a server after confirming in place', async () => {
+    const calls = stubFetch({ 'GET /api/applications': [MAIL] })
+    const wrapper = mount(ApplicationSettings)
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="application-remove-confirm-res-mail"]').exists()).toBe(false)
+    await wrapper.find('[data-testid="application-remove-res-mail"]').trigger('click')
+    expect(wrapper.find('[data-testid="application-remove-confirm-res-mail"]').exists()).toBe(true)
+
+    await wrapper.find('[data-testid="application-remove-confirm-res-mail"]').trigger('click')
+    await flushPromises()
+
+    const del = calls.find(c => c.init?.method === 'DELETE')
+    expect(del?.url).toBe('/api/applications/res-mail')
+    wrapper.unmount()
+  })
+
+  it('shows a 409 error naming attached routines and keeps the card', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === 'DELETE')
+        return { ok: false, status: 409, json: async () => ({ error: 'still attached to: inbox' }) }
+      return { ok: true, status: 200, json: async () => [MAIL] }
+    }))
+    const wrapper = mount(ApplicationSettings)
+    await flushPromises()
+
+    await wrapper.find('[data-testid="application-remove-res-mail"]').trigger('click')
+    await wrapper.find('[data-testid="application-remove-confirm-res-mail"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('still attached to: inbox')
+    expect(wrapper.find('[data-testid="application-res-mail"]').exists()).toBe(true)
     wrapper.unmount()
   })
 })

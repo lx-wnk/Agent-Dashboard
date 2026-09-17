@@ -13,6 +13,14 @@ export interface ApplicationSecret {
   updatedAt: string
 }
 
+export interface ApplicationEntry {
+  type?: string
+  command?: string
+  args?: string[]
+  url?: string
+  env?: Record<string, string>
+}
+
 export interface ApplicationView {
   resourceId: string
   serverName: string
@@ -22,6 +30,8 @@ export interface ApplicationView {
   tools: ApplicationTool[]
   catalogueError?: string
   catalogueRefreshedAt?: string
+  entry: ApplicationEntry
+  exportToClaude: boolean
 }
 
 async function readError(res: Response, fallback: string): Promise<string> {
@@ -68,6 +78,26 @@ export function useApplications() {
 
   const setAttachAll = (resourceId: string, attachAll: boolean) => patch(resourceId, { attachAll })
   const setRequiredEnv = (resourceId: string, names: string[]) => patch(resourceId, { requiredEnv: names })
+  const setEntry = (resourceId: string, entry: ApplicationEntry) => patch(resourceId, { entry })
+  const setExport = (resourceId: string, exportToClaude: boolean) => patch(resourceId, { exportToClaude })
+
+  async function createApplication(input: { name: string, command: string, args: string[], env: Record<string, string> }): Promise<void> {
+    const res = await fetch('/api/applications', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    })
+    if (!res.ok)
+      throw new Error(await readError(res, 'Failed to create application'))
+    await fetchApplications()
+  }
+
+  async function deleteApplication(resourceId: string): Promise<void> {
+    const res = await fetch(`/api/applications/${encodeURIComponent(resourceId)}`, { method: 'DELETE' })
+    if (!res.ok)
+      throw new Error(await readError(res, 'Failed to remove application'))
+    await fetchApplications()
+  }
 
   async function setSecret(resourceId: string, envName: string, value: string): Promise<void> {
     const res = await fetch(`/api/applications/${encodeURIComponent(resourceId)}/secrets/${encodeURIComponent(envName)}`, {
@@ -94,5 +124,5 @@ export function useApplications() {
     replace(await res.json() as ApplicationView)
   }
 
-  return { applications, loading, error, fetchApplications, setAttachAll, setRequiredEnv, setSecret, deleteSecret, refreshCatalogue }
+  return { applications, loading, error, fetchApplications, setAttachAll, setRequiredEnv, setSecret, deleteSecret, refreshCatalogue, createApplication, deleteApplication, setEntry, setExport }
 }
