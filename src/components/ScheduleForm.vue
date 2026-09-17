@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import type { CreateScheduleBody, SchedulePreview, ScheduleView, UpdateScheduleBody } from '../composables/useSchedules'
+import type { CreateScheduleBody, RunMode, SchedulePreview, ScheduleView, UpdateScheduleBody } from '../composables/useSchedules'
 import { onMounted, ref, watch } from 'vue'
 import { useApplications } from '@/features/settings/composables/useApplications'
 import { createSchedule, previewSchedule, updateSchedule } from '../composables/useSchedules'
 import { formatDateTime } from '../utils/format'
+import { nextRadioGroupName } from '../utils/radioGroup'
 import { TASK_PRIORITY_OPTIONS } from '../utils/taskOptions'
 import AppButton from './ui/AppButton.vue'
 import AppInput from './ui/AppInput.vue'
@@ -21,7 +22,9 @@ const emit = defineEmits<{
 const name = ref(props.schedule?.name ?? '')
 const nlText = ref(props.schedule?.nlText ?? '')
 const timezone = ref(props.schedule?.timezone ?? 'UTC')
-const catchup = ref<'none' | 'once'>(props.schedule?.catchup ? 'once' : 'none')
+const catchup = ref<'none' | 'once'>(props.schedule?.catchup ?? 'none')
+const runMode = ref<RunMode>(props.schedule?.runMode ?? 'job')
+const runModeGroup = nextRadioGroupName('schedule-run-mode')
 const slugPrefix = ref(props.schedule?.slugPrefix ?? '')
 const title = ref(props.schedule?.title ?? '')
 const description = ref(props.schedule?.description ?? '')
@@ -79,7 +82,8 @@ async function onSubmit() {
       name: name.value.trim(),
       nlText: nlText.value.trim() || undefined,
       timezone: timezone.value || undefined,
-      catchup: catchup.value === 'once',
+      catchup: catchup.value,
+      runMode: runMode.value,
       slugPrefix: slugPrefix.value.trim(),
       title: title.value.trim(),
       description: description.value.trim() || undefined,
@@ -195,6 +199,40 @@ async function onSubmit() {
       :rows="2"
       resize="y"
     />
+
+    <fieldset class="flex flex-col gap-2">
+      <legend class="text-sm font-medium text-fg">
+        Run mode
+      </legend>
+      <label class="flex items-start gap-2 text-sm">
+        <input
+          v-model="runMode"
+          type="radio"
+          :name="runModeGroup"
+          value="job"
+          data-testid="schedule-run-mode-job"
+          class="mt-0.5"
+        >
+        <span class="flex flex-col">
+          <span class="font-medium text-fg">Job</span>
+          <span class="text-xs text-fg-mute">One agent run in the working directory. Not shown on the board.</span>
+        </span>
+      </label>
+      <label class="flex items-start gap-2 text-sm">
+        <input
+          v-model="runMode"
+          type="radio"
+          :name="runModeGroup"
+          value="pipeline"
+          data-testid="schedule-run-mode-pipeline"
+          class="mt-0.5"
+        >
+        <span class="flex flex-col">
+          <span class="font-medium text-fg">Pipeline task</span>
+          <span class="text-xs text-fg-mute">Starts in Ready and runs the full pipeline. The working directory must be a git repository.</span>
+        </span>
+      </label>
+    </fieldset>
 
     <AppInput
       v-model="cwd"

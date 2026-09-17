@@ -118,6 +118,26 @@ Submit your result as your FINAL action by calling the `+"`set_stage_output`"+` 
 	}
 }
 
+const jobPermissionsDirective = `## Permissions — declare upfront, in bulk
+
+Before any tool call, list every tool this job will need — file tools, Bash patterns, WebFetch URLs, MCP application tools. Then call ` + "`request_permission`" + ` ONCE with the full ` + "`permissions: [...]`" + ` array. A human decides and the job continues afterwards. NEVER write prose like "please grant me X" — only ` + "`request_permission`" + ` is actionable.`
+
+// JobPrompt builds the prompt for a job: one agent run for a routine's
+// instruction, with no repository or stage sequence around it.
+func JobPrompt(t *ent.Task) PromptBundle {
+	systemPrompt := sharedContext + "\n\nYou run one unattended job for a routine. Work in the current directory.\n\n" + jobPermissionsDirective
+	userPrompt := fmt.Sprintf(`## Job: %s
+
+%s
+
+When finished, submit your result as your FINAL action by calling the `+"`set_stage_output`"+` MCP tool with an `+"`output`"+` object of exactly this shape:
+{"summary": string, "result": string}
+"summary" says in one or two sentences what you did; "result" holds what the routine produced.
+If `+"`set_stage_output`"+` is unavailable, instead emit the same object as a `+"```json```"+` block.`,
+		t.Title, strOrEmpty(t.Description))
+	return PromptBundle{SystemPrompt: systemPrompt, UserPrompt: userPrompt}
+}
+
 func strOrEmpty(s *string) string {
 	if s == nil {
 		return ""

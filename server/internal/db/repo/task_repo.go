@@ -31,6 +31,8 @@ type TaskRepo interface {
 	// that use the given source_branch, optionally excluding one task ID. A branch can
 	// back at most one git worktree, so two active tasks must never share one.
 	CountActiveBySourceBranch(ctx context.Context, branch, excludeID string) (int, error)
+	// ListByRoutine returns routineID's tasks, newest first, at most limit.
+	ListByRoutine(ctx context.Context, routineID string, limit int) ([]*ent.Task, error)
 }
 
 type CreateTaskInput struct {
@@ -57,6 +59,7 @@ type CreateTaskInput struct {
 	ProjectID           *string
 	SpawnerID           *string
 	RoutineID           *string
+	Kind                string
 	Applications        []string
 	Rank                *float64
 }
@@ -143,6 +146,9 @@ func (r *entTaskRepo) Create(ctx context.Context, in CreateTaskInput) (*ent.Task
 		q = q.SetApplications(in.Applications)
 	}
 	q = q.SetNillableProjectID(in.ProjectID).SetNillableSpawnerID(in.SpawnerID).SetNillableRoutineID(in.RoutineID).SetNillableAutonomy(in.Autonomy)
+	if in.Kind != "" {
+		q = q.SetKind(in.Kind)
+	}
 	if in.Rank != nil {
 		q = q.SetRank(*in.Rank)
 	} else {
@@ -384,4 +390,16 @@ func (r *entTaskRepo) CountActiveBySourceBranch(ctx context.Context, branch, exc
 		return 0, fmt.Errorf("task.CountActiveBySourceBranch: %w", err)
 	}
 	return n, nil
+}
+
+func (r *entTaskRepo) ListByRoutine(ctx context.Context, routineID string, limit int) ([]*ent.Task, error) {
+	tasks, err := r.client.Task.Query().
+		Where(task.RoutineID(routineID)).
+		Order(ent.Desc(task.FieldCreatedAt)).
+		Limit(limit).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("task.ListByRoutine: %w", err)
+	}
+	return tasks, nil
 }

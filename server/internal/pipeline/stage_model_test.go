@@ -54,10 +54,12 @@ func TestStageModelDefault_BalancedDefaults(t *testing.T) {
 	cases := []struct {
 		stage     string
 		wantModel string
+		kind      string
 	}{
-		{"implementation", claudemodel.Latest(claudemodel.Opus)},
-		{"self_review", claudemodel.Latest(claudemodel.Sonnet)},
-		{"finalization", claudemodel.Latest(claudemodel.Haiku)},
+		{"implementation", claudemodel.Latest(claudemodel.Opus), ""},
+		{"self_review", claudemodel.Latest(claudemodel.Sonnet), ""},
+		{"finalization", claudemodel.Latest(claudemodel.Haiku), ""},
+		{"job", claudemodel.Latest(claudemodel.Sonnet), pipeline.TaskKindJob},
 	}
 
 	for _, tc := range cases {
@@ -79,6 +81,7 @@ func TestStageModelDefault_BalancedDefaults(t *testing.T) {
 				Priority:            "medium",
 				MaxIterations:       3,
 				StageTimeoutSeconds: 1800,
+				Kind:                tc.kind,
 			})
 			require.NoError(t, err)
 

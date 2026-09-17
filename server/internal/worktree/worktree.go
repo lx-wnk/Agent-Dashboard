@@ -126,6 +126,12 @@ func BranchCheckedOutAt(ctx context.Context, repoCwd, branch string) (string, er
 	return branches[branch], nil
 }
 
+// IsGitWorkTree reports whether dir lies inside a git working tree.
+func IsGitWorkTree(ctx context.Context, dir string) bool {
+	out, err := NewRunner().Output(ctx, dir, "rev-parse", "--is-inside-work-tree")
+	return err == nil && strings.TrimSpace(out) == "true"
+}
+
 // DefaultRoot returns root unchanged when set, else $HOME/dashboard-worktrees.
 func DefaultRoot(root string) string {
 	if root != "" {

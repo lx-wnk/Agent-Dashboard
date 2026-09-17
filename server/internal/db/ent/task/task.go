@@ -58,6 +58,8 @@ const (
 	FieldSpawnerID = "spawner_id"
 	// FieldRoutineID holds the string denoting the routine_id field in the database.
 	FieldRoutineID = "routine_id"
+	// FieldKind holds the string denoting the kind field in the database.
+	FieldKind = "kind"
 	// FieldApplications holds the string denoting the applications field in the database.
 	FieldApplications = "applications"
 	// FieldRank holds the string denoting the rank field in the database.
@@ -131,6 +133,7 @@ var Columns = []string{
 	FieldProjectID,
 	FieldSpawnerID,
 	FieldRoutineID,
+	FieldKind,
 	FieldApplications,
 	FieldRank,
 	FieldCreatedAt,
@@ -166,6 +169,8 @@ var (
 	DefaultPlanMode bool
 	// DefaultAutonomy holds the default value on creation for the "autonomy" field.
 	DefaultAutonomy string
+	// DefaultKind holds the default value on creation for the "kind" field.
+	DefaultKind string
 	// DefaultApplications holds the default value on creation for the "applications" field.
 	DefaultApplications []string
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
@@ -287,6 +292,11 @@ func BySpawnerID(opts ...sql.OrderTermOption) OrderOption {
 // ByRoutineID orders the results by the routine_id field.
 func ByRoutineID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldRoutineID, opts...).ToFunc()
+}
+
+// ByKind orders the results by the kind field.
+func ByKind(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldKind, opts...).ToFunc()
 }
 
 // ByRank orders the results by the rank field.

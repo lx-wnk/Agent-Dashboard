@@ -113,6 +113,9 @@ func (f *fakeTaskRepo) ListByIDs(_ context.Context, _ []string) ([]*ent.Task, er
 func (f *fakeTaskRepo) CountActiveBySourceBranch(_ context.Context, _, _ string) (int, error) {
 	return 0, nil
 }
+func (f *fakeTaskRepo) ListByRoutine(_ context.Context, _ string, _ int) ([]*ent.Task, error) {
+	return nil, nil
+}
 
 // --- helpers ---
 

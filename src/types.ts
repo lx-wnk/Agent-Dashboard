@@ -200,6 +200,10 @@ export interface PipelineTask {
   // Project and spawner associations (Projects/Folders/Spawners feature).
   projectId?: string | null
   spawnerId?: string | null
+  // Distinguishes routine-owned background jobs from pipeline tasks. Jobs are
+  // excluded from board/stage groupings but still flow through needs-you.
+  kind?: 'pipeline' | 'job'
+  routineId?: string | null
   autonomy?: TaskAutonomy
   availableActions?: AvailableAction[]
   childCount?: number

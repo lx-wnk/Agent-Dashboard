@@ -7,6 +7,9 @@ import { createSseResource } from '@/composables/useSseResource'
 import { errorMessage } from '@/utils/errorMessage'
 
 const tasks = shallowRef<PipelineTask[]>([])
+// Routine-owned jobs never appear on the pipeline board — filter once here so
+// every stage grouping (tasksByStage, tasksByStageMap) inherits the exclusion.
+const pipelineTasks = computed(() => tasks.value.filter(t => t.kind !== 'job'))
 const selectedTask = ref<PipelineTask | null>(null)
 const isLoading = ref(true)
 const error = ref<string | null>(null)
@@ -92,7 +95,7 @@ function midpointRank(before?: PipelineTask, after?: PipelineTask): number {
 
 async function fetchTasks() {
   try {
-    const res = await fetch('/api/tasks')
+    const res = await fetch('/api/tasks?kind=all')
     if (!res.ok)
       throw new Error(`HTTP ${res.status}`)
     tasks.value = await res.json() as PipelineTask[]
@@ -340,11 +343,13 @@ export async function fetchPendingPermissionRequests(taskId: string): Promise<Pe
   return await res.json() as PermissionRequest[]
 }
 
-export async function resolvePermissionRequest(taskId: string, requestId: string, outcome: 'granted' | 'denied'): Promise<void> {
+export type PermissionDecision = 'allow_once' | 'allow_routine' | 'deny_routine' | 'deny_once'
+
+export async function resolvePermissionRequest(taskId: string, requestId: string, decision: PermissionDecision): Promise<void> {
   const res = await fetch(`/api/tasks/${taskId}/permission-requests/${requestId}/resolve`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ outcome }),
+    body: JSON.stringify({ decision }),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
@@ -360,13 +365,13 @@ export interface BulkResolveResponse {
 export async function bulkResolvePermissionRequests(
   taskId: string,
   permissionIds: string[],
-  outcome: 'granted' | 'denied',
+  decision: PermissionDecision,
   remember = false,
 ): Promise<BulkResolveResponse> {
   const res = await fetch(`/api/permission-requests/bulk-resolve`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ taskId, outcome, permissionIds, remember }),
+    body: JSON.stringify({ taskId, decision, permissionIds, remember }),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
@@ -427,12 +432,12 @@ export function useTasks(options?: { autoStart?: boolean }) {
   }
 
   function tasksByStage(stage: PipelineStage): PipelineTask[] {
-    return tasks.value.filter(t => t.currentStage === stage).sort(byRank)
+    return pipelineTasks.value.filter(t => t.currentStage === stage).sort(byRank)
   }
 
   const tasksByStageMap = computed(() => {
     const map: Partial<Record<PipelineStage, PipelineTask[]>> = {}
-    for (const task of tasks.value) {
+    for (const task of pipelineTasks.value) {
       if (!map[task.currentStage])
         map[task.currentStage] = []
       map[task.currentStage]!.push(task)
@@ -444,6 +449,7 @@ export function useTasks(options?: { autoStart?: boolean }) {
 
   return {
     tasks,
+    pipelineTasks,
     selectedTask,
     isLoading,
     error,

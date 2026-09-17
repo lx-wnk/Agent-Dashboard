@@ -14,6 +14,7 @@ let mockStageMap: Partial<Record<PipelineStage, PipelineTask[]>> = {}
 vi.mock('@/features/pipeline/composables/useTasks', () => ({
   useTasks: () => ({
     tasks: { value: [] as PipelineTask[] },
+    pipelineTasks: { value: [] as PipelineTask[] },
     tasksByStageMap: {
       // Plain object — not reactive. Tests rely on initial render only.
       get value() { return mockStageMap },

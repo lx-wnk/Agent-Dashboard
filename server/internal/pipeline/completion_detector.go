@@ -33,6 +33,8 @@ func ValidateStageOutput(stage string, output map[string]any) ValidationResult {
 		return validateSelfReview(output)
 	case "finalization":
 		return validateFinalization(output)
+	case StageJob:
+		return validateJob(output)
 	default:
 		return ValidationResult{OK: true}
 	}
@@ -67,6 +69,16 @@ func validateFinalization(o map[string]any) ValidationResult {
 	}
 	if _, ok := o["testPlan"].([]any); !ok {
 		return missing("testPlan (string array)")
+	}
+	return ValidationResult{OK: true}
+}
+
+func validateJob(o map[string]any) ValidationResult {
+	if s, ok := o["summary"].(string); !ok || s == "" {
+		return missing("summary (non-empty string)")
+	}
+	if _, ok := o["result"].(string); !ok {
+		return missing("result (string)")
 	}
 	return ValidationResult{OK: true}
 }

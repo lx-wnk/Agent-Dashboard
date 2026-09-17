@@ -157,6 +157,9 @@ func (s *Scheduler) fireOne(ctx context.Context, sched *ent.TaskSchedule, now ti
 
 	if s.overlaps(ctx, sched) {
 		slog.Info("scheduler: skip fire (prior task in flight)", "schedule", sched.ID, "lastTask", deref(sched.LastTaskID))
+		if _, err := s.schedules.RecordSkip(ctx, sched.ID, now); err != nil {
+			slog.Warn("scheduler: record skipped fire", "schedule", sched.ID, "err", err)
+		}
 		s.advance(ctx, sched, next)
 		return
 	}

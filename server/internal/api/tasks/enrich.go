@@ -30,6 +30,8 @@ type TaskResponse struct {
 	SourceBranch        *string                `json:"sourceBranch"`
 	TargetBranch        *string                `json:"targetBranch"`
 	CurrentStage        string                 `json:"currentStage"`
+	Kind                string                 `json:"kind"`
+	RoutineID           *string                `json:"routineId"`
 	Priority            string                 `json:"priority"`
 	Autonomy            string                 `json:"autonomy"`
 	UserID              *string                `json:"userId"`
@@ -61,6 +63,8 @@ func ToTaskResponse(t *ent.Task) TaskResponse {
 		SourceBranch:        t.SourceBranch,
 		TargetBranch:        t.TargetBranch,
 		CurrentStage:        t.CurrentStage,
+		Kind:                t.Kind,
+		RoutineID:           t.RoutineID,
 		Priority:            t.Priority,
 		Autonomy:            t.Autonomy,
 		UserID:              t.UserID,

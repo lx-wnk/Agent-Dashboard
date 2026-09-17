@@ -66,7 +66,7 @@ func (o *PipelineOrchestrator) runProgressTaskLocked(ctx context.Context, taskID
 	// Triggered when: ForceWorktrees is set (global) OR task has an explicit SourceBranch.
 	// A failure here (e.g. branch already checked out in another worktree) is recorded
 	// as a failed stage_run rather than a swallowed error that silently re-queues forever.
-	needsWorktree := handler.RequiresAgent() &&
+	needsWorktree := handler.RequiresAgent() && task.Kind != TaskKindJob &&
 		(task.WorktreePath == nil || *task.WorktreePath == "") &&
 		(o.opts.ForceWorktrees || (task.SourceBranch != nil && *task.SourceBranch != ""))
 	if needsWorktree {

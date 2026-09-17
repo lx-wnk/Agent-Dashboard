@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os/exec"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -28,6 +31,8 @@ func newServerWithApps(t *testing.T) (*httptest.Server, repo.MCPApplicationRepo)
 		scheduler.NewNLCron(nil),
 		nil,
 		apps,
+		repo.NewTaskRepo(bundle.Client),
+		repo.NewStageRunRepo(bundle.Client),
 		true,
 	)
 	r := chi.NewRouter()
@@ -171,5 +176,150 @@ func TestCreate_InvalidPhrase422(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want 422", resp.StatusCode)
+	}
+}
+
+func patch(t *testing.T, url string, body any) *http.Response {
+	t.Helper()
+	b, _ := json.Marshal(body)
+	req, err := http.NewRequest(http.MethodPatch, url, bytes.NewReader(b))
+	if err != nil {
+		t.Fatalf("build PATCH %s: %v", url, err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PATCH %s: %v", url, err)
+	}
+	return resp
+}
+
+// gitDir returns a temp dir initialized as a git repo, skipping the test when
+// git is not on PATH.
+func gitDir(t *testing.T) string {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	dir := t.TempDir()
+	if err := exec.Command("git", "init", dir).Run(); err != nil {
+		t.Fatalf("git init: %v", err)
+	}
+	return dir
+}
+
+func bodyString(t *testing.T, resp *http.Response) string {
+	t.Helper()
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	return string(b)
+}
+
+func TestCreate_DefaultRunModeIsJob(t *testing.T) {
+	srv := newServer(t)
+	resp := post(t, srv.URL+"/api/schedules", scheduleWith(nil))
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want 201", resp.StatusCode)
+	}
+	var got struct {
+		RunMode      string `json:"runMode"`
+		SkippedCount int    `json:"skippedCount"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got.RunMode != "job" {
+		t.Fatalf("runMode = %q, want job", got.RunMode)
+	}
+	if got.SkippedCount != 0 {
+		t.Fatalf("skippedCount = %d, want 0", got.SkippedCount)
+	}
+}
+
+func TestCreate_PipelineRunModeRequiresGitCwd(t *testing.T) {
+	srv := newServer(t)
+	body := scheduleWith(nil)
+	body["runMode"] = "pipeline"
+	body["cwd"] = t.TempDir()
+	resp := post(t, srv.URL+"/api/schedules", body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	}
+	if got := bodyString(t, resp); !strings.Contains(got, "working directory is not a git repository") {
+		t.Fatalf("body = %q, want git-repo error", got)
+	}
+}
+
+func TestCreate_PipelineRunModeAcceptsGitCwd(t *testing.T) {
+	srv := newServer(t)
+	body := scheduleWith(nil)
+	body["runMode"] = "pipeline"
+	body["cwd"] = gitDir(t)
+	resp := post(t, srv.URL+"/api/schedules", body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want 201, body = %s", resp.StatusCode, bodyString(t, resp))
+	}
+}
+
+func TestCreate_InvalidRunMode400(t *testing.T) {
+	srv := newServer(t)
+	body := scheduleWith(nil)
+	body["runMode"] = "cron"
+	resp := post(t, srv.URL+"/api/schedules", body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	}
+	if got := bodyString(t, resp); !strings.Contains(got, "runMode must be job or pipeline") {
+		t.Fatalf("body = %q, want runMode error", got)
+	}
+}
+
+func TestUpdate_JobToPipelineRequiresGitCwd(t *testing.T) {
+	srv := newServer(t)
+	createResp := post(t, srv.URL+"/api/schedules", scheduleWith(nil))
+	var created struct {
+		ID string `json:"id"`
+	}
+	_ = json.NewDecoder(createResp.Body).Decode(&created)
+	createResp.Body.Close()
+
+	resp := patch(t, srv.URL+"/api/schedules/"+created.ID, map[string]any{"runMode": "pipeline"})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400, body = %s", resp.StatusCode, bodyString(t, resp))
+	}
+}
+
+func TestUpdate_PipelineCwdChangeRequiresGit(t *testing.T) {
+	srv := newServer(t)
+	body := scheduleWith(nil)
+	body["runMode"] = "pipeline"
+	body["cwd"] = gitDir(t)
+	createResp := post(t, srv.URL+"/api/schedules", body)
+	var created struct {
+		ID string `json:"id"`
+	}
+	_ = json.NewDecoder(createResp.Body).Decode(&created)
+	createResp.Body.Close()
+
+	resp := patch(t, srv.URL+"/api/schedules/"+created.ID, map[string]any{"cwd": t.TempDir()})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400, body = %s", resp.StatusCode, bodyString(t, resp))
+	}
+}
+
+func TestView_NeverContainsCurrentStage(t *testing.T) {
+	srv := newServer(t)
+	resp := post(t, srv.URL+"/api/schedules", scheduleWith(nil))
+	defer resp.Body.Close()
+	if got := bodyString(t, resp); strings.Contains(got, "currentStage") {
+		t.Fatalf("view contains currentStage: %s", got)
 	}
 }

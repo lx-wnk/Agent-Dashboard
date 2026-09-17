@@ -31,6 +31,9 @@ type NewTaskSpec struct {
 	UserID          *string
 	Metadata        map[string]any
 	Applications    []string
+	Kind            string
+	Stage           string
+	Autonomy        *string
 }
 
 // TaskCreateFunc materializes a pipeline task and returns its ID. Wired at the
@@ -71,6 +74,13 @@ func (m *Materializer) Materialize(ctx context.Context, s *ent.TaskSchedule, fir
 	if err != nil {
 		return "", err
 	}
+	// job run mode skips the pipeline entirely: the task starts and stays on
+	// the "job" stage instead of entering "ready".
+	kind, stage := "pipeline", "ready"
+	if s.RunMode == repo.RunModeJob {
+		kind, stage = "job", "job"
+	}
+	full := "full"
 	spec := NewTaskSpec{
 		Slug:            slug,
 		Title:           s.Title,
@@ -89,6 +99,9 @@ func (m *Materializer) Materialize(ctx context.Context, s *ent.TaskSchedule, fir
 		// grant is anchored to, so every task it materializes carries it.
 		RoutineID:    s.ID,
 		Applications: s.Applications,
+		Kind:         kind,
+		Stage:        stage,
+		Autonomy:     &full,
 	}
 	if s.ProjectID != nil {
 		spec.ProjectID = *s.ProjectID

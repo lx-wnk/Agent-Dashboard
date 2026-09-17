@@ -235,16 +235,16 @@ func (_u *TaskScheduleUpdate) SetNillablePriority(v *string) *TaskScheduleUpdate
 	return _u
 }
 
-// SetCurrentStage sets the "current_stage" field.
-func (_u *TaskScheduleUpdate) SetCurrentStage(v string) *TaskScheduleUpdate {
-	_u.mutation.SetCurrentStage(v)
+// SetRunMode sets the "run_mode" field.
+func (_u *TaskScheduleUpdate) SetRunMode(v string) *TaskScheduleUpdate {
+	_u.mutation.SetRunMode(v)
 	return _u
 }
 
-// SetNillableCurrentStage sets the "current_stage" field if the given value is not nil.
-func (_u *TaskScheduleUpdate) SetNillableCurrentStage(v *string) *TaskScheduleUpdate {
+// SetNillableRunMode sets the "run_mode" field if the given value is not nil.
+func (_u *TaskScheduleUpdate) SetNillableRunMode(v *string) *TaskScheduleUpdate {
 	if v != nil {
-		_u.SetCurrentStage(*v)
+		_u.SetRunMode(*v)
 	}
 	return _u
 }
@@ -491,6 +491,47 @@ func (_u *TaskScheduleUpdate) ClearLastTaskID() *TaskScheduleUpdate {
 	return _u
 }
 
+// SetLastSkippedAt sets the "last_skipped_at" field.
+func (_u *TaskScheduleUpdate) SetLastSkippedAt(v time.Time) *TaskScheduleUpdate {
+	_u.mutation.SetLastSkippedAt(v)
+	return _u
+}
+
+// SetNillableLastSkippedAt sets the "last_skipped_at" field if the given value is not nil.
+func (_u *TaskScheduleUpdate) SetNillableLastSkippedAt(v *time.Time) *TaskScheduleUpdate {
+	if v != nil {
+		_u.SetLastSkippedAt(*v)
+	}
+	return _u
+}
+
+// ClearLastSkippedAt clears the value of the "last_skipped_at" field.
+func (_u *TaskScheduleUpdate) ClearLastSkippedAt() *TaskScheduleUpdate {
+	_u.mutation.ClearLastSkippedAt()
+	return _u
+}
+
+// SetSkippedCount sets the "skipped_count" field.
+func (_u *TaskScheduleUpdate) SetSkippedCount(v int) *TaskScheduleUpdate {
+	_u.mutation.ResetSkippedCount()
+	_u.mutation.SetSkippedCount(v)
+	return _u
+}
+
+// SetNillableSkippedCount sets the "skipped_count" field if the given value is not nil.
+func (_u *TaskScheduleUpdate) SetNillableSkippedCount(v *int) *TaskScheduleUpdate {
+	if v != nil {
+		_u.SetSkippedCount(*v)
+	}
+	return _u
+}
+
+// AddSkippedCount adds value to the "skipped_count" field.
+func (_u *TaskScheduleUpdate) AddSkippedCount(v int) *TaskScheduleUpdate {
+	_u.mutation.AddSkippedCount(v)
+	return _u
+}
+
 // SetResourceID sets the "resource_id" field.
 func (_u *TaskScheduleUpdate) SetResourceID(v string) *TaskScheduleUpdate {
 	_u.mutation.SetResourceID(v)
@@ -678,8 +719,8 @@ func (_u *TaskScheduleUpdate) sqlSave(ctx context.Context) (_node int, err error
 	if value, ok := _u.mutation.Priority(); ok {
 		_spec.SetField(taskschedule.FieldPriority, field.TypeString, value)
 	}
-	if value, ok := _u.mutation.CurrentStage(); ok {
-		_spec.SetField(taskschedule.FieldCurrentStage, field.TypeString, value)
+	if value, ok := _u.mutation.RunMode(); ok {
+		_spec.SetField(taskschedule.FieldRunMode, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.MaxIterations(); ok {
 		_spec.SetField(taskschedule.FieldMaxIterations, field.TypeInt, value)
@@ -755,6 +796,18 @@ func (_u *TaskScheduleUpdate) sqlSave(ctx context.Context) (_node int, err error
 	}
 	if _u.mutation.LastTaskIDCleared() {
 		_spec.ClearField(taskschedule.FieldLastTaskID, field.TypeString)
+	}
+	if value, ok := _u.mutation.LastSkippedAt(); ok {
+		_spec.SetField(taskschedule.FieldLastSkippedAt, field.TypeTime, value)
+	}
+	if _u.mutation.LastSkippedAtCleared() {
+		_spec.ClearField(taskschedule.FieldLastSkippedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.SkippedCount(); ok {
+		_spec.SetField(taskschedule.FieldSkippedCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedSkippedCount(); ok {
+		_spec.AddField(taskschedule.FieldSkippedCount, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.ResourceID(); ok {
 		_spec.SetField(taskschedule.FieldResourceID, field.TypeString, value)
@@ -1005,16 +1058,16 @@ func (_u *TaskScheduleUpdateOne) SetNillablePriority(v *string) *TaskScheduleUpd
 	return _u
 }
 
-// SetCurrentStage sets the "current_stage" field.
-func (_u *TaskScheduleUpdateOne) SetCurrentStage(v string) *TaskScheduleUpdateOne {
-	_u.mutation.SetCurrentStage(v)
+// SetRunMode sets the "run_mode" field.
+func (_u *TaskScheduleUpdateOne) SetRunMode(v string) *TaskScheduleUpdateOne {
+	_u.mutation.SetRunMode(v)
 	return _u
 }
 
-// SetNillableCurrentStage sets the "current_stage" field if the given value is not nil.
-func (_u *TaskScheduleUpdateOne) SetNillableCurrentStage(v *string) *TaskScheduleUpdateOne {
+// SetNillableRunMode sets the "run_mode" field if the given value is not nil.
+func (_u *TaskScheduleUpdateOne) SetNillableRunMode(v *string) *TaskScheduleUpdateOne {
 	if v != nil {
-		_u.SetCurrentStage(*v)
+		_u.SetRunMode(*v)
 	}
 	return _u
 }
@@ -1261,6 +1314,47 @@ func (_u *TaskScheduleUpdateOne) ClearLastTaskID() *TaskScheduleUpdateOne {
 	return _u
 }
 
+// SetLastSkippedAt sets the "last_skipped_at" field.
+func (_u *TaskScheduleUpdateOne) SetLastSkippedAt(v time.Time) *TaskScheduleUpdateOne {
+	_u.mutation.SetLastSkippedAt(v)
+	return _u
+}
+
+// SetNillableLastSkippedAt sets the "last_skipped_at" field if the given value is not nil.
+func (_u *TaskScheduleUpdateOne) SetNillableLastSkippedAt(v *time.Time) *TaskScheduleUpdateOne {
+	if v != nil {
+		_u.SetLastSkippedAt(*v)
+	}
+	return _u
+}
+
+// ClearLastSkippedAt clears the value of the "last_skipped_at" field.
+func (_u *TaskScheduleUpdateOne) ClearLastSkippedAt() *TaskScheduleUpdateOne {
+	_u.mutation.ClearLastSkippedAt()
+	return _u
+}
+
+// SetSkippedCount sets the "skipped_count" field.
+func (_u *TaskScheduleUpdateOne) SetSkippedCount(v int) *TaskScheduleUpdateOne {
+	_u.mutation.ResetSkippedCount()
+	_u.mutation.SetSkippedCount(v)
+	return _u
+}
+
+// SetNillableSkippedCount sets the "skipped_count" field if the given value is not nil.
+func (_u *TaskScheduleUpdateOne) SetNillableSkippedCount(v *int) *TaskScheduleUpdateOne {
+	if v != nil {
+		_u.SetSkippedCount(*v)
+	}
+	return _u
+}
+
+// AddSkippedCount adds value to the "skipped_count" field.
+func (_u *TaskScheduleUpdateOne) AddSkippedCount(v int) *TaskScheduleUpdateOne {
+	_u.mutation.AddSkippedCount(v)
+	return _u
+}
+
 // SetResourceID sets the "resource_id" field.
 func (_u *TaskScheduleUpdateOne) SetResourceID(v string) *TaskScheduleUpdateOne {
 	_u.mutation.SetResourceID(v)
@@ -1478,8 +1572,8 @@ func (_u *TaskScheduleUpdateOne) sqlSave(ctx context.Context) (_node *TaskSchedu
 	if value, ok := _u.mutation.Priority(); ok {
 		_spec.SetField(taskschedule.FieldPriority, field.TypeString, value)
 	}
-	if value, ok := _u.mutation.CurrentStage(); ok {
-		_spec.SetField(taskschedule.FieldCurrentStage, field.TypeString, value)
+	if value, ok := _u.mutation.RunMode(); ok {
+		_spec.SetField(taskschedule.FieldRunMode, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.MaxIterations(); ok {
 		_spec.SetField(taskschedule.FieldMaxIterations, field.TypeInt, value)
@@ -1555,6 +1649,18 @@ func (_u *TaskScheduleUpdateOne) sqlSave(ctx context.Context) (_node *TaskSchedu
 	}
 	if _u.mutation.LastTaskIDCleared() {
 		_spec.ClearField(taskschedule.FieldLastTaskID, field.TypeString)
+	}
+	if value, ok := _u.mutation.LastSkippedAt(); ok {
+		_spec.SetField(taskschedule.FieldLastSkippedAt, field.TypeTime, value)
+	}
+	if _u.mutation.LastSkippedAtCleared() {
+		_spec.ClearField(taskschedule.FieldLastSkippedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.SkippedCount(); ok {
+		_spec.SetField(taskschedule.FieldSkippedCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedSkippedCount(); ok {
+		_spec.AddField(taskschedule.FieldSkippedCount, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.ResourceID(); ok {
 		_spec.SetField(taskschedule.FieldResourceID, field.TypeString, value)

@@ -302,6 +302,20 @@ func (_c *TaskCreate) SetNillableRoutineID(v *string) *TaskCreate {
 	return _c
 }
 
+// SetKind sets the "kind" field.
+func (_c *TaskCreate) SetKind(v string) *TaskCreate {
+	_c.mutation.SetKind(v)
+	return _c
+}
+
+// SetNillableKind sets the "kind" field if the given value is not nil.
+func (_c *TaskCreate) SetNillableKind(v *string) *TaskCreate {
+	if v != nil {
+		_c.SetKind(*v)
+	}
+	return _c
+}
+
 // SetApplications sets the "applications" field.
 func (_c *TaskCreate) SetApplications(v []string) *TaskCreate {
 	_c.mutation.SetApplications(v)
@@ -479,6 +493,10 @@ func (_c *TaskCreate) defaults() {
 		v := task.DefaultAutonomy
 		_c.mutation.SetAutonomy(v)
 	}
+	if _, ok := _c.mutation.Kind(); !ok {
+		v := task.DefaultKind
+		_c.mutation.SetKind(v)
+	}
 	if _, ok := _c.mutation.Applications(); !ok {
 		v := task.DefaultApplications
 		_c.mutation.SetApplications(v)
@@ -534,6 +552,9 @@ func (_c *TaskCreate) check() error {
 	}
 	if _, ok := _c.mutation.Autonomy(); !ok {
 		return &ValidationError{Name: "autonomy", err: errors.New(`ent: missing required field "Task.autonomy"`)}
+	}
+	if _, ok := _c.mutation.Kind(); !ok {
+		return &ValidationError{Name: "kind", err: errors.New(`ent: missing required field "Task.kind"`)}
 	}
 	if _, ok := _c.mutation.Applications(); !ok {
 		return &ValidationError{Name: "applications", err: errors.New(`ent: missing required field "Task.applications"`)}
@@ -667,6 +688,10 @@ func (_c *TaskCreate) createSpec() (*Task, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.RoutineID(); ok {
 		_spec.SetField(task.FieldRoutineID, field.TypeString, value)
 		_node.RoutineID = &value
+	}
+	if value, ok := _c.mutation.Kind(); ok {
+		_spec.SetField(task.FieldKind, field.TypeString, value)
+		_node.Kind = value
 	}
 	if value, ok := _c.mutation.Applications(); ok {
 		_spec.SetField(task.FieldApplications, field.TypeJSON, value)
@@ -1157,6 +1182,18 @@ func (u *TaskUpsert) UpdateRoutineID() *TaskUpsert {
 // ClearRoutineID clears the value of the "routine_id" field.
 func (u *TaskUpsert) ClearRoutineID() *TaskUpsert {
 	u.SetNull(task.FieldRoutineID)
+	return u
+}
+
+// SetKind sets the "kind" field.
+func (u *TaskUpsert) SetKind(v string) *TaskUpsert {
+	u.Set(task.FieldKind, v)
+	return u
+}
+
+// UpdateKind sets the "kind" field to the value that was provided on create.
+func (u *TaskUpsert) UpdateKind() *TaskUpsert {
+	u.SetExcluded(task.FieldKind)
 	return u
 }
 
@@ -1676,6 +1713,20 @@ func (u *TaskUpsertOne) UpdateRoutineID() *TaskUpsertOne {
 func (u *TaskUpsertOne) ClearRoutineID() *TaskUpsertOne {
 	return u.Update(func(s *TaskUpsert) {
 		s.ClearRoutineID()
+	})
+}
+
+// SetKind sets the "kind" field.
+func (u *TaskUpsertOne) SetKind(v string) *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetKind(v)
+	})
+}
+
+// UpdateKind sets the "kind" field to the value that was provided on create.
+func (u *TaskUpsertOne) UpdateKind() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateKind()
 	})
 }
 
@@ -2370,6 +2421,20 @@ func (u *TaskUpsertBulk) UpdateRoutineID() *TaskUpsertBulk {
 func (u *TaskUpsertBulk) ClearRoutineID() *TaskUpsertBulk {
 	return u.Update(func(s *TaskUpsert) {
 		s.ClearRoutineID()
+	})
+}
+
+// SetKind sets the "kind" field.
+func (u *TaskUpsertBulk) SetKind(v string) *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetKind(v)
+	})
+}
+
+// UpdateKind sets the "kind" field to the value that was provided on create.
+func (u *TaskUpsertBulk) UpdateKind() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateKind()
 	})
 }
 

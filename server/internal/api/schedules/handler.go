@@ -39,14 +39,16 @@ type Handler struct {
 	translator Translator
 	runner     Runner
 	apps       repo.MCPApplicationRepo
+	tasks      repo.TaskRepo
+	stageRuns  repo.StageRunRepo
 	bypassAuth bool
 }
 
 // NewHandler builds the schedules handler. runner may be nil (run-now disabled).
 // bypassAuth is the loopback single-user mode, in which the listing is not
 // scoped to a user id because there is only one implicit user.
-func NewHandler(r repo.TaskScheduleRepo, t Translator, runner Runner, apps repo.MCPApplicationRepo, bypassAuth bool) *Handler {
-	return &Handler{repo: r, translator: t, runner: runner, apps: apps, bypassAuth: bypassAuth}
+func NewHandler(r repo.TaskScheduleRepo, t Translator, runner Runner, apps repo.MCPApplicationRepo, tasks repo.TaskRepo, stageRuns repo.StageRunRepo, bypassAuth bool) *Handler {
+	return &Handler{repo: r, translator: t, runner: runner, apps: apps, tasks: tasks, stageRuns: stageRuns, bypassAuth: bypassAuth}
 }
 
 // validateApplications checks that every id names an existing MCP application.
@@ -75,6 +77,7 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Patch("/api/schedules/{id}", apierr.ErrorMiddleware(h.update))
 	r.Delete("/api/schedules/{id}", apierr.ErrorMiddleware(h.delete))
 	r.Post("/api/schedules/{id}/run-now", apierr.ErrorMiddleware(h.runNow))
+	r.Get("/api/schedules/{id}/runs", apierr.ErrorMiddleware(h.listRuns))
 }
 
 func jsonReply(w http.ResponseWriter, status int, v any) error {
@@ -128,6 +131,13 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 	if err := h.validateApplications(r.Context(), body.Applications); err != nil {
 		return err
 	}
+	runMode := body.RunMode
+	if runMode == "" {
+		runMode = repo.RunModeJob
+	}
+	if err := scheduler.CheckRunMode(r.Context(), runMode, body.Cwd); err != nil {
+		return apierr.NewAppError(http.StatusBadRequest, err.Error())
+	}
 	cronExpr, err := h.resolveCron(r.Context(), body.NLText, body.CronExpr)
 	if err != nil {
 		return err
@@ -164,6 +174,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 		PermissionTemplate:  body.PermissionTemplate,
 		UserID:              &userID,
 		NextRunAt:           next,
+		RunMode:             runMode,
 	}
 	if body.Applications != nil {
 		in.Applications = *body.Applications
@@ -181,7 +192,8 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) error {
 	id := chi.URLParam(r, "id")
-	if _, err := h.repo.GetByID(r.Context(), id); err != nil {
+	existing, err := h.repo.GetByID(r.Context(), id)
+	if err != nil {
 		return apierr.ErrNotFound
 	}
 	var body scheduleBody
@@ -189,6 +201,22 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) error {
 		return apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
 	}
 	in := repo.UpdateTaskScheduleInput{}
+	if body.RunMode != "" || body.Cwd != "" {
+		effectiveMode := body.RunMode
+		if effectiveMode == "" {
+			effectiveMode = existing.RunMode
+		}
+		effectiveCwd := body.Cwd
+		if effectiveCwd == "" {
+			effectiveCwd = existing.Cwd
+		}
+		if err := scheduler.CheckRunMode(r.Context(), effectiveMode, effectiveCwd); err != nil {
+			return apierr.NewAppError(http.StatusBadRequest, err.Error())
+		}
+		if body.RunMode != "" {
+			in.RunMode = &body.RunMode
+		}
+	}
 	if body.Name != "" {
 		in.Name = &body.Name
 	}

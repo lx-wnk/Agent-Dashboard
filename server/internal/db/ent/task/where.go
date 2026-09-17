@@ -170,6 +170,11 @@ func RoutineID(v string) predicate.Task {
 	return predicate.Task(sql.FieldEQ(FieldRoutineID, v))
 }
 
+// Kind applies equality check predicate on the "kind" field. It's identical to KindEQ.
+func Kind(v string) predicate.Task {
+	return predicate.Task(sql.FieldEQ(FieldKind, v))
+}
+
 // Rank applies equality check predicate on the "rank" field. It's identical to RankEQ.
 func Rank(v float64) predicate.Task {
 	return predicate.Task(sql.FieldEQ(FieldRank, v))
@@ -1458,6 +1463,71 @@ func RoutineIDEqualFold(v string) predicate.Task {
 // RoutineIDContainsFold applies the ContainsFold predicate on the "routine_id" field.
 func RoutineIDContainsFold(v string) predicate.Task {
 	return predicate.Task(sql.FieldContainsFold(FieldRoutineID, v))
+}
+
+// KindEQ applies the EQ predicate on the "kind" field.
+func KindEQ(v string) predicate.Task {
+	return predicate.Task(sql.FieldEQ(FieldKind, v))
+}
+
+// KindNEQ applies the NEQ predicate on the "kind" field.
+func KindNEQ(v string) predicate.Task {
+	return predicate.Task(sql.FieldNEQ(FieldKind, v))
+}
+
+// KindIn applies the In predicate on the "kind" field.
+func KindIn(vs ...string) predicate.Task {
+	return predicate.Task(sql.FieldIn(FieldKind, vs...))
+}
+
+// KindNotIn applies the NotIn predicate on the "kind" field.
+func KindNotIn(vs ...string) predicate.Task {
+	return predicate.Task(sql.FieldNotIn(FieldKind, vs...))
+}
+
+// KindGT applies the GT predicate on the "kind" field.
+func KindGT(v string) predicate.Task {
+	return predicate.Task(sql.FieldGT(FieldKind, v))
+}
+
+// KindGTE applies the GTE predicate on the "kind" field.
+func KindGTE(v string) predicate.Task {
+	return predicate.Task(sql.FieldGTE(FieldKind, v))
+}
+
+// KindLT applies the LT predicate on the "kind" field.
+func KindLT(v string) predicate.Task {
+	return predicate.Task(sql.FieldLT(FieldKind, v))
+}
+
+// KindLTE applies the LTE predicate on the "kind" field.
+func KindLTE(v string) predicate.Task {
+	return predicate.Task(sql.FieldLTE(FieldKind, v))
+}
+
+// KindContains applies the Contains predicate on the "kind" field.
+func KindContains(v string) predicate.Task {
+	return predicate.Task(sql.FieldContains(FieldKind, v))
+}
+
+// KindHasPrefix applies the HasPrefix predicate on the "kind" field.
+func KindHasPrefix(v string) predicate.Task {
+	return predicate.Task(sql.FieldHasPrefix(FieldKind, v))
+}
+
+// KindHasSuffix applies the HasSuffix predicate on the "kind" field.
+func KindHasSuffix(v string) predicate.Task {
+	return predicate.Task(sql.FieldHasSuffix(FieldKind, v))
+}
+
+// KindEqualFold applies the EqualFold predicate on the "kind" field.
+func KindEqualFold(v string) predicate.Task {
+	return predicate.Task(sql.FieldEqualFold(FieldKind, v))
+}
+
+// KindContainsFold applies the ContainsFold predicate on the "kind" field.
+func KindContainsFold(v string) predicate.Task {
+	return predicate.Task(sql.FieldContainsFold(FieldKind, v))
 }
 
 // RankEQ applies the EQ predicate on the "rank" field.

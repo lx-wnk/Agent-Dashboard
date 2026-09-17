@@ -80,7 +80,7 @@ onMounted(() => {
 
 const { agents, costTrend, filteredAgents, attentionAgents, attentionCount, pendingCapabilityDecisions, selectedAgent, isLoading, error, selectAgent, selectAgentWhenAvailable, startStream: startAgents } = useAgents({ autoStart: false })
 const { tasks, selectedTask, selectTask, startStream: startTasks } = useTasks({ autoStart: false })
-const { items: permissionItems, approve: approvePermission, deny: denyPermission } = usePendingPermissions(tasks)
+const { items: permissionItems, approve: approvePermission, deny: denyPermission, decide: decidePermission } = usePendingPermissions(tasks)
 const combinedAttentionCount = computed(() => attentionCount.value + permissionItems.value.length + pendingCapabilityDecisions.value.length)
 // Today's persisted spend — reuses the shared cost-summary logic so the footer
 // and Cost view agree. Distinct from totalCost (cost of agents running now).
@@ -316,6 +316,7 @@ onMounted(() => usageComposable.start())
           :focused-session-id="focusedSessionId"
           @approve="(taskId, ids, remember) => approvePermission(taskId, ids, remember)"
           @deny="(taskId, ids) => denyPermission(taskId, ids)"
+          @decide="(taskId, ids, decision) => decidePermission(taskId, ids, decision)"
         />
 
         <PipelineBoard

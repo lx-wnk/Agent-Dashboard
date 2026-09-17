@@ -44,8 +44,8 @@ type TaskSchedule struct {
 	TargetBranch *string `json:"target_branch,omitempty"`
 	// Priority holds the value of the "priority" field.
 	Priority string `json:"priority,omitempty"`
-	// CurrentStage holds the value of the "current_stage" field.
-	CurrentStage string `json:"current_stage,omitempty"`
+	// RunMode holds the value of the "run_mode" field.
+	RunMode string `json:"run_mode,omitempty"`
 	// MaxIterations holds the value of the "max_iterations" field.
 	MaxIterations int `json:"max_iterations,omitempty"`
 	// TokenBudget holds the value of the "token_budget" field.
@@ -70,6 +70,10 @@ type TaskSchedule struct {
 	LastRunAt *time.Time `json:"last_run_at,omitempty"`
 	// LastTaskID holds the value of the "last_task_id" field.
 	LastTaskID *string `json:"last_task_id,omitempty"`
+	// LastSkippedAt holds the value of the "last_skipped_at" field.
+	LastSkippedAt *time.Time `json:"last_skipped_at,omitempty"`
+	// SkippedCount holds the value of the "skipped_count" field.
+	SkippedCount int `json:"skipped_count,omitempty"`
 	// ResourceID holds the value of the "resource_id" field.
 	ResourceID string `json:"resource_id,omitempty"`
 	// Applications holds the value of the "applications" field.
@@ -92,11 +96,11 @@ func (*TaskSchedule) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case taskschedule.FieldEnabled, taskschedule.FieldSilverBullet:
 			values[i] = new(sql.NullBool)
-		case taskschedule.FieldMaxIterations, taskschedule.FieldTokenBudget, taskschedule.FieldCostBudgetCents, taskschedule.FieldStageTimeoutSeconds:
+		case taskschedule.FieldMaxIterations, taskschedule.FieldTokenBudget, taskschedule.FieldCostBudgetCents, taskschedule.FieldStageTimeoutSeconds, taskschedule.FieldSkippedCount:
 			values[i] = new(sql.NullInt64)
-		case taskschedule.FieldID, taskschedule.FieldName, taskschedule.FieldNlText, taskschedule.FieldCronExpr, taskschedule.FieldTimezone, taskschedule.FieldCatchup, taskschedule.FieldSlugPrefix, taskschedule.FieldTitle, taskschedule.FieldDescription, taskschedule.FieldCwd, taskschedule.FieldSourceBranch, taskschedule.FieldTargetBranch, taskschedule.FieldPriority, taskschedule.FieldCurrentStage, taskschedule.FieldProjectID, taskschedule.FieldSpawnerID, taskschedule.FieldPermissionTemplate, taskschedule.FieldLastTaskID, taskschedule.FieldResourceID, taskschedule.FieldUserID:
+		case taskschedule.FieldID, taskschedule.FieldName, taskschedule.FieldNlText, taskschedule.FieldCronExpr, taskschedule.FieldTimezone, taskschedule.FieldCatchup, taskschedule.FieldSlugPrefix, taskschedule.FieldTitle, taskschedule.FieldDescription, taskschedule.FieldCwd, taskschedule.FieldSourceBranch, taskschedule.FieldTargetBranch, taskschedule.FieldPriority, taskschedule.FieldRunMode, taskschedule.FieldProjectID, taskschedule.FieldSpawnerID, taskschedule.FieldPermissionTemplate, taskschedule.FieldLastTaskID, taskschedule.FieldResourceID, taskschedule.FieldUserID:
 			values[i] = new(sql.NullString)
-		case taskschedule.FieldNextRunAt, taskschedule.FieldLastRunAt, taskschedule.FieldCreatedAt, taskschedule.FieldUpdatedAt:
+		case taskschedule.FieldNextRunAt, taskschedule.FieldLastRunAt, taskschedule.FieldLastSkippedAt, taskschedule.FieldCreatedAt, taskschedule.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -201,11 +205,11 @@ func (_m *TaskSchedule) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.Priority = value.String
 			}
-		case taskschedule.FieldCurrentStage:
+		case taskschedule.FieldRunMode:
 			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field current_stage", values[i])
+				return fmt.Errorf("unexpected type %T for field run_mode", values[i])
 			} else if value.Valid {
-				_m.CurrentStage = value.String
+				_m.RunMode = value.String
 			}
 		case taskschedule.FieldMaxIterations:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -288,6 +292,19 @@ func (_m *TaskSchedule) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.LastTaskID = new(string)
 				*_m.LastTaskID = value.String
+			}
+		case taskschedule.FieldLastSkippedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field last_skipped_at", values[i])
+			} else if value.Valid {
+				_m.LastSkippedAt = new(time.Time)
+				*_m.LastSkippedAt = value.Time
+			}
+		case taskschedule.FieldSkippedCount:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field skipped_count", values[i])
+			} else if value.Valid {
+				_m.SkippedCount = int(value.Int64)
 			}
 		case taskschedule.FieldResourceID:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -405,8 +422,8 @@ func (_m *TaskSchedule) String() string {
 	builder.WriteString("priority=")
 	builder.WriteString(_m.Priority)
 	builder.WriteString(", ")
-	builder.WriteString("current_stage=")
-	builder.WriteString(_m.CurrentStage)
+	builder.WriteString("run_mode=")
+	builder.WriteString(_m.RunMode)
 	builder.WriteString(", ")
 	builder.WriteString("max_iterations=")
 	builder.WriteString(fmt.Sprintf("%v", _m.MaxIterations))
@@ -459,6 +476,14 @@ func (_m *TaskSchedule) String() string {
 		builder.WriteString("last_task_id=")
 		builder.WriteString(*v)
 	}
+	builder.WriteString(", ")
+	if v := _m.LastSkippedAt; v != nil {
+		builder.WriteString("last_skipped_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("skipped_count=")
+	builder.WriteString(fmt.Sprintf("%v", _m.SkippedCount))
 	builder.WriteString(", ")
 	builder.WriteString("resource_id=")
 	builder.WriteString(_m.ResourceID)

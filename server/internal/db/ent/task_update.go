@@ -432,6 +432,20 @@ func (_u *TaskUpdate) ClearRoutineID() *TaskUpdate {
 	return _u
 }
 
+// SetKind sets the "kind" field.
+func (_u *TaskUpdate) SetKind(v string) *TaskUpdate {
+	_u.mutation.SetKind(v)
+	return _u
+}
+
+// SetNillableKind sets the "kind" field if the given value is not nil.
+func (_u *TaskUpdate) SetNillableKind(v *string) *TaskUpdate {
+	if v != nil {
+		_u.SetKind(*v)
+	}
+	return _u
+}
+
 // SetApplications sets the "applications" field.
 func (_u *TaskUpdate) SetApplications(v []string) *TaskUpdate {
 	_u.mutation.SetApplications(v)
@@ -802,6 +816,9 @@ func (_u *TaskUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.RoutineIDCleared() {
 		_spec.ClearField(task.FieldRoutineID, field.TypeString)
+	}
+	if value, ok := _u.mutation.Kind(); ok {
+		_spec.SetField(task.FieldKind, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Applications(); ok {
 		_spec.SetField(task.FieldApplications, field.TypeJSON, value)
@@ -1423,6 +1440,20 @@ func (_u *TaskUpdateOne) ClearRoutineID() *TaskUpdateOne {
 	return _u
 }
 
+// SetKind sets the "kind" field.
+func (_u *TaskUpdateOne) SetKind(v string) *TaskUpdateOne {
+	_u.mutation.SetKind(v)
+	return _u
+}
+
+// SetNillableKind sets the "kind" field if the given value is not nil.
+func (_u *TaskUpdateOne) SetNillableKind(v *string) *TaskUpdateOne {
+	if v != nil {
+		_u.SetKind(*v)
+	}
+	return _u
+}
+
 // SetApplications sets the "applications" field.
 func (_u *TaskUpdateOne) SetApplications(v []string) *TaskUpdateOne {
 	_u.mutation.SetApplications(v)
@@ -1823,6 +1854,9 @@ func (_u *TaskUpdateOne) sqlSave(ctx context.Context) (_node *Task, err error) {
 	}
 	if _u.mutation.RoutineIDCleared() {
 		_spec.ClearField(task.FieldRoutineID, field.TypeString)
+	}
+	if value, ok := _u.mutation.Kind(); ok {
+		_spec.SetField(task.FieldKind, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Applications(); ok {
 		_spec.SetField(task.FieldApplications, field.TypeJSON, value)

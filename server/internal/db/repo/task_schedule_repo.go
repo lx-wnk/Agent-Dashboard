@@ -24,6 +24,21 @@ type TaskScheduleRepo interface {
 	ListDue(ctx context.Context, now time.Time) ([]*ent.TaskSchedule, error)
 	SetEnabled(ctx context.Context, id string, enabled bool) (*ent.TaskSchedule, error)
 	UpdateFireState(ctx context.Context, id string, in FireStateInput) (*ent.TaskSchedule, error)
+	// RecordSkip increments skipped_count and stamps last_skipped_at for a fire
+	// refused because the routine's previous run was still in flight.
+	RecordSkip(ctx context.Context, id string, at time.Time) (*ent.TaskSchedule, error)
+}
+
+// Run modes select what a fired schedule spawns: a single job task or a full
+// pipeline. Empty CreateTaskScheduleInput.RunMode defaults to RunModeJob.
+const (
+	RunModeJob      = "job"
+	RunModePipeline = "pipeline"
+)
+
+// IsValidRunMode reports whether mode is one of the known run modes.
+func IsValidRunMode(mode string) bool {
+	return mode == RunModeJob || mode == RunModePipeline
 }
 
 // CreateTaskScheduleInput carries the schedule definition plus its task template.
@@ -41,7 +56,6 @@ type CreateTaskScheduleInput struct {
 	SourceBranch        *string
 	TargetBranch        *string
 	Priority            string
-	CurrentStage        string
 	MaxIterations       int
 	TokenBudget         *int
 	CostBudgetCents     *int
@@ -54,6 +68,7 @@ type CreateTaskScheduleInput struct {
 	UserID              *string
 	NextRunAt           *time.Time
 	Applications        []string
+	RunMode             string
 }
 
 // UpdateTaskScheduleInput patches schedule fields. Nil pointers leave a field
@@ -83,6 +98,7 @@ type UpdateTaskScheduleInput struct {
 	Metadata            map[string]any
 	NextRunAt           *time.Time
 	Applications        *[]string
+	RunMode             *string
 }
 
 // FireStateInput records the result of a fire: the spawned task and the next
@@ -131,8 +147,11 @@ func (r *entTaskScheduleRepo) Create(ctx context.Context, in CreateTaskScheduleI
 	if in.Priority != "" {
 		q = q.SetPriority(in.Priority)
 	}
-	if in.CurrentStage != "" {
-		q = q.SetCurrentStage(in.CurrentStage)
+	if in.RunMode != "" {
+		if !IsValidRunMode(in.RunMode) {
+			return nil, fmt.Errorf("task_schedule.create: invalid run mode %q", in.RunMode)
+		}
+		q = q.SetRunMode(in.RunMode)
 	}
 	q = q.SetNillableNlText(in.NLText).
 		SetNillableDescription(in.Description).
@@ -208,6 +227,12 @@ func (r *entTaskScheduleRepo) Update(ctx context.Context, id string, in UpdateTa
 	}
 	if in.SilverBullet != nil {
 		q = q.SetSilverBullet(*in.SilverBullet)
+	}
+	if in.RunMode != nil {
+		if !IsValidRunMode(*in.RunMode) {
+			return nil, fmt.Errorf("task_schedule.update: invalid run mode %q", *in.RunMode)
+		}
+		q = q.SetRunMode(*in.RunMode)
 	}
 	// Nillable pointer fields: a non-nil pointer sets the value. Clearing is not
 	// exposed here (absent = unchanged) to mirror the task repo's update contract.
@@ -325,6 +350,18 @@ func (r *entTaskScheduleRepo) UpdateFireState(ctx context.Context, id string, in
 	s, err := q.Save(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("taskschedule.UpdateFireState: %w", err)
+	}
+	return s, nil
+}
+
+func (r *entTaskScheduleRepo) RecordSkip(ctx context.Context, id string, at time.Time) (*ent.TaskSchedule, error) {
+	s, err := r.client.TaskSchedule.UpdateOneID(id).
+		AddSkippedCount(1).
+		SetLastSkippedAt(at).
+		SetUpdatedAt(time.Now()).
+		Save(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("taskschedule.RecordSkip: %w", err)
 	}
 	return s, nil
 }

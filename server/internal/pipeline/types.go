@@ -231,6 +231,26 @@ func IsTerminalStage(s string) bool {
 	return s == "done" || s == "cancelled"
 }
 
+const (
+	TaskKindPipeline = "pipeline"
+	TaskKindJob      = "job"
+	StageJob         = "job"
+)
+
+// StageKindViolation reports why a task of kind may not enter stage, or "".
+func StageKindViolation(kind, stage string) string {
+	if IsTerminalStage(stage) {
+		return ""
+	}
+	if kind == TaskKindJob && stage != StageJob {
+		return "job tasks run only the job stage, refused move to " + stage
+	}
+	if kind != TaskKindJob && stage == StageJob {
+		return "only job tasks run the job stage"
+	}
+	return ""
+}
+
 // OrchestratorOptions configures the PipelineOrchestrator.
 type OrchestratorOptions struct {
 	PollInterval     time.Duration

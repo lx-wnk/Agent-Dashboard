@@ -247,6 +247,8 @@ These keys live in the `pipeline_config` table, not in environment variables. Wr
 | `scheduleTickIntervalMs` | `30000` | How often the scheduler checks for due schedules (ms). Minimum enforced: 1000 ms |
 | `scheduleCatchup` | `none` | Global fallback catchup policy after downtime. `none` = skip missed windows; `once` = fire a single catch-up run. Overridable per schedule via its `catchup` field |
 
+Each routine also carries a **run mode**, stored on the routine itself rather than in config: `job` (the default for new routines) fires one agent run in the routine's working directory with no git worktree, `pipeline` fires a pipeline task that starts in `ready` and therefore needs a git working directory. Both run with `full` autonomy. Routines that existed before run modes were migrated to `pipeline` once. A fire that is refused because the routine's previous run is still in flight is counted on the routine (`skippedCount`, `lastSkippedAt`) and shown on its card.
+
 ## Plugin lifecycle
 
 Plugins are discovered from `DASHBOARD_PLUGIN_DIR` and tracked in the database `plugin`

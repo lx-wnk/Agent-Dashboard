@@ -14,7 +14,7 @@ export function usePermissionResolve() {
       await bulkResolvePermissionRequests(
         agent.pipelineTaskId,
         agent.pendingPermissions.map(p => p.id),
-        outcome,
+        outcome === 'granted' ? 'allow_once' : 'deny_once',
         remember,
       )
       return null
@@ -44,7 +44,7 @@ export function usePermissionResolve() {
     await Promise.all(
       Array.from(byTask.entries()).map(async ([taskId, ids]) => {
         try {
-          await bulkResolvePermissionRequests(taskId, ids, outcome, remember)
+          await bulkResolvePermissionRequests(taskId, ids, outcome === 'granted' ? 'allow_once' : 'deny_once', remember)
         }
         catch (err) {
           errors.push(err instanceof Error ? err.message : 'Unknown error')

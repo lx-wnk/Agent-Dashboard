@@ -421,6 +421,10 @@ func finalizationBuilder(ctx *StageContext) PromptBundle {
 	return FinalizationPrompt(ctx.Task, ctx.AllStageRuns)
 }
 
+func jobBuilder(ctx *StageContext) PromptBundle {
+	return JobPrompt(ctx.Task)
+}
+
 func planReviewBuilder(ctx *StageContext) PromptBundle {
 	feedback := ""
 	if ctx.Task.Metadata != nil {
@@ -443,6 +447,7 @@ func NewStageHandlers(spawnFn SpawnFunc) map[string]StageHandler {
 		"self_review":    createAgentStage("self_review", selfReviewBuilder, spawnFn),
 		"plan_review":    createAgentStage("plan_review", planReviewBuilder, spawnFn),
 		"finalization":   createAgentStage("finalization", finalizationBuilder, spawnFn),
+		StageJob:         createAgentStage(StageJob, jobBuilder, spawnFn),
 	}
 }
 

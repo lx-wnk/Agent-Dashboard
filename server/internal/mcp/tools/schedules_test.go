@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"os/exec"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -108,6 +109,89 @@ func TestManageSchedule_ScopedToCallingKey(t *testing.T) {
 	resB, err := registry["list_schedules"].Handler(keyB, map[string]any{})
 	require.NoError(t, err)
 	require.Equal(t, "[]", resB.Content[0].Text)
+}
+
+func TestManageSchedule_CreateDefaultsToJobRunMode(t *testing.T) {
+	registry, r := newScheduleRegistry(t)
+	ctx := context.Background()
+
+	res, err := registry["manage_schedule"].Handler(ctx, map[string]any{
+		"action": "create", "name": "job-default", "nlText": "every day at 3am",
+		"slugPrefix": "job-default", "title": "Job Default", "cwd": "/tmp",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+
+	rows, err := r.ListForUser(ctx, "", true)
+	require.NoError(t, err)
+	require.NotEmpty(t, rows)
+	require.Equal(t, repo.RunModeJob, rows[len(rows)-1].RunMode)
+}
+
+func TestManageSchedule_CreatePipelineNonGitCwdFails(t *testing.T) {
+	registry, _ := newScheduleRegistry(t)
+	_, err := registry["manage_schedule"].Handler(context.Background(), map[string]any{
+		"action": "create", "name": "bad-pipeline", "nlText": "every day at 3am",
+		"slugPrefix": "bad-pipeline", "title": "Bad Pipeline", "cwd": t.TempDir(), "runMode": "pipeline",
+	})
+	require.ErrorContains(t, err, "working directory is not a git repository")
+}
+
+func TestManageSchedule_CreatePipelineGitCwdPersists(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	dir := t.TempDir()
+	require.NoError(t, exec.Command("git", "init", dir).Run())
+
+	registry, r := newScheduleRegistry(t)
+	ctx := context.Background()
+	_, err := registry["manage_schedule"].Handler(ctx, map[string]any{
+		"action": "create", "name": "pipeline", "nlText": "every day at 3am",
+		"slugPrefix": "pipeline", "title": "Pipeline", "cwd": dir, "runMode": "pipeline",
+	})
+	require.NoError(t, err)
+
+	rows, err := r.ListForUser(ctx, "", true)
+	require.NoError(t, err)
+	require.NotEmpty(t, rows)
+	require.Equal(t, repo.RunModePipeline, rows[len(rows)-1].RunMode)
+}
+
+func TestManageSchedule_UpdateInvalidRunModeFails(t *testing.T) {
+	registry, r := newScheduleRegistry(t)
+	ctx := context.Background()
+
+	s, err := r.Create(ctx, repo.CreateTaskScheduleInput{
+		Name: "u", CronExpr: "0 9 * * *", SlugPrefix: "u", Title: "U", Cwd: "/tmp",
+		MaxIterations: 20, StageTimeoutSeconds: 1800,
+	})
+	require.NoError(t, err)
+
+	_, err = registry["manage_schedule"].Handler(ctx, map[string]any{
+		"action": "update", "id": s.ID, "runMode": "cron",
+	})
+	require.ErrorContains(t, err, "runMode must be job or pipeline")
+}
+
+func TestManageSchedule_UpdateToPipelineOutsideGitFails(t *testing.T) {
+	registry, r := newScheduleRegistry(t)
+	ctx := context.Background()
+
+	s, err := r.Create(ctx, repo.CreateTaskScheduleInput{
+		Name: "g", CronExpr: "0 9 * * *", SlugPrefix: "g", Title: "G", Cwd: t.TempDir(),
+		MaxIterations: 20, StageTimeoutSeconds: 1800,
+	})
+	require.NoError(t, err)
+
+	_, err = registry["manage_schedule"].Handler(ctx, map[string]any{
+		"action": "update", "id": s.ID, "runMode": "pipeline",
+	})
+	require.ErrorContains(t, err, "working directory is not a git repository")
+
+	got, err := r.GetByID(ctx, s.ID)
+	require.NoError(t, err)
+	require.Equal(t, repo.RunModeJob, got.RunMode, "a refused update must not change the run mode")
 }
 
 // Regression: a timezone-only update (no nlText/cronExpr) must persist the new

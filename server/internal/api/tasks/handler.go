@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -15,6 +16,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/rawrepo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	"github.com/lx-wnk/agent-dashboard/server/internal/mcpapps"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 	"github.com/lx-wnk/agent-dashboard/server/internal/taskcontrol"
@@ -75,6 +77,7 @@ type Handler struct {
 	refineReader      RefineStatusReader
 	checkpointSvc     CheckpointServiceIface
 	notifier          PermissionNotifier
+	grantRepo         repo.GrantRepo
 	allowGitPull      bool
 	bypassAuth        bool
 }
@@ -107,6 +110,9 @@ type Deps struct {
 	// Notifier tells the operator that a run waits for a permission decision.
 	// Nil disables push notifications (no webpush service configured).
 	Notifier PermissionNotifier
+	// GrantRepo persists allow_routine/deny_routine decisions. Nil disables
+	// routine decisions (allow_once/deny_once keep working without it).
+	GrantRepo repo.GrantRepo
 	// AllowGitPull permits the git "pull" action; resolved from the git.allowPull
 	// setting at startup (ApplyRestart).
 	AllowGitPull bool
@@ -135,6 +141,7 @@ func NewHandler(deps Deps) *Handler {
 		refineReader:      deps.RefineReader,
 		checkpointSvc:     deps.CheckpointSvc,
 		notifier:          deps.Notifier,
+		grantRepo:         deps.GrantRepo,
 		allowGitPull:      deps.AllowGitPull,
 		bypassAuth:        deps.BypassAuth,
 	}
@@ -276,12 +283,22 @@ func (h *Handler) broadcastEnrichedEvent(ctx context.Context, eventType string, 
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) error {
+	q := r.URL.Query()
+	kind := q.Get("kind")
+	if kind == "" {
+		kind = pipeline.TaskKindPipeline
+	}
+	if kind != "all" && kind != pipeline.TaskKindPipeline && kind != pipeline.TaskKindJob {
+		return apierr.NewAppError(http.StatusBadRequest, "kind must be pipeline, job or all")
+	}
+	routineID := q.Get("routineId")
+
 	payload, _ := auth.PayloadFromContext(r.Context())
 	tasks, err := h.taskRepo.ListForUser(r.Context(), payload.Sub, h.bypassAuth)
 	if err != nil {
 		return fmt.Errorf("tasks.list: %w", err)
 	}
-	stage := r.URL.Query().Get("stage")
+	stage := q.Get("stage")
 	if stage != "" {
 		var filtered []*ent.Task
 		for _, t := range tasks {
@@ -291,6 +308,12 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) error {
 		}
 		tasks = filtered
 	}
+	tasks = slices.DeleteFunc(tasks, func(t *ent.Task) bool {
+		if kind != "all" && t.Kind != kind {
+			return true
+		}
+		return routineID != "" && (t.RoutineID == nil || *t.RoutineID != routineID)
+	})
 	enriched, err := EnrichTasksBulkWithDeps(r.Context(), tasks, h.srRepo, h.permRepo, h.srBulkRepo, h.depRepo, h.taskRepo)
 	if err != nil {
 		return fmt.Errorf("tasks.list.enrich: %w", err)
@@ -350,6 +373,11 @@ type CreateTaskParams struct {
 	// a task a human created. Deliberately absent from the HTTP create body:
 	// the scheduler is the only writer (see the schema field's comment).
 	RoutineID string
+	// Kind is "pipeline" or "job" (empty defaults to "pipeline" in the repo).
+	// Deliberately absent from the HTTP create body: the scheduler is the only
+	// writer, same as RoutineID above — a caller able to name it could bypass
+	// every stage gate on its own task.
+	Kind string
 	// Applications is copied from the routine by the scheduler and is not part
 	// of the HTTP create body: attaching a mailbox is an authority decision, and
 	// a caller able to name applications on a task it creates could hand itself
@@ -433,6 +461,13 @@ func (h *Handler) CreateTaskFromInput(ctx context.Context, p CreateTaskParams) (
 	if stage == "" {
 		stage = db.DefaultStage
 	}
+	kind := p.Kind
+	if kind == "" {
+		kind = pipeline.TaskKindPipeline
+	}
+	if reason := pipeline.StageKindViolation(kind, stage); reason != "" {
+		return nil, apierr.NewAppError(http.StatusBadRequest, reason)
+	}
 	maxIter := p.MaxIterations
 	if maxIter <= 0 {
 		maxIter = db.DefaultMaxIterations
@@ -472,6 +507,7 @@ func (h *Handler) CreateTaskFromInput(ctx context.Context, p CreateTaskParams) (
 		Autonomy:            p.Autonomy,
 		Metadata:            p.Metadata,
 		PlanMode:            planMode,
+		Kind:                p.Kind,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("tasks.create: %w", err)
@@ -859,10 +895,14 @@ func (h *Handler) resume(w http.ResponseWriter, r *http.Request) error {
 		AdditionalPrompt string `json:"additionalPrompt"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
-	// When on_hold: move back to implementation before re-queuing.
+	// When on_hold: move back to its runnable stage before re-queuing. A held
+	// job returns to the job stage; every other kind returns to implementation.
 	if t.CurrentStage == "on_hold" {
-		impl := "implementation"
-		if _, err := h.taskRepo.Update(r.Context(), id, repo.UpdateTaskInput{CurrentStage: &impl}); err != nil {
+		target := "implementation"
+		if t.Kind == pipeline.TaskKindJob {
+			target = pipeline.StageJob
+		}
+		if _, err := h.taskRepo.Update(r.Context(), id, repo.UpdateTaskInput{CurrentStage: &target}); err != nil {
 			return fmt.Errorf("tasks.resume.unstage: %w", err)
 		}
 	}
@@ -1097,13 +1137,15 @@ func (h *Handler) resolvePermissionRequest(w http.ResponseWriter, r *http.Reques
 	id := chi.URLParam(r, "id")
 	reqID := chi.URLParam(r, "reqID")
 	var body struct {
-		Outcome string `json:"outcome"`
+		Decision string `json:"decision"`
+		Outcome  string `json:"outcome"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		return apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
 	}
-	if body.Outcome != repo.OutcomeGranted && body.Outcome != repo.OutcomeDenied {
-		return apierr.NewAppError(http.StatusBadRequest, "outcome must be granted or denied")
+	decision, err := parseDecision(body.Decision, body.Outcome)
+	if err != nil {
+		return err
 	}
 	// Object-level authz: the request must belong to the task in the URL,
 	// otherwise the nested {taskId}/{reqID} path is not an enforced scope.
@@ -1118,27 +1160,48 @@ func (h *Handler) resolvePermissionRequest(w http.ResponseWriter, r *http.Reques
 	if err != nil || sr.TaskID != id {
 		return apierr.ErrNotFound
 	}
-	if err := h.permRepo.ResolvePermissionRequest(r.Context(), reqID, body.Outcome); err != nil {
+	task, err := h.taskRepo.GetByID(r.Context(), id)
+	if err != nil {
+		return apierr.ErrNotFound
+	}
+	// Validate everything before writing anything: a refused decision must
+	// leave the request pending and the run un-resumed.
+	if err := validateDecision(decision, task, []string{pr.Tool}); err != nil {
+		return err
+	}
+	if (decision == DecisionAllowRoutine || decision == DecisionDenyRoutine) && h.grantRepo == nil {
+		return apierr.NewAppError(http.StatusServiceUnavailable, "grants unavailable")
+	}
+
+	outcome := repo.OutcomeDenied
+	if decision == DecisionAllowOnce || decision == DecisionAllowRoutine {
+		outcome = repo.OutcomeGranted
+	}
+	if err := h.permRepo.ResolvePermissionRequest(r.Context(), reqID, outcome); err != nil {
 		return fmt.Errorf("tasks.resolvePermissionRequest: %w", err)
 	}
 	resolved, err := h.permRepo.GetPermissionRequest(r.Context(), reqID)
 	if err != nil {
 		return fmt.Errorf("tasks.resolvePermissionRequest.get: %w", err)
 	}
-	if body.Outcome == repo.OutcomeGranted {
+
+	if decision == DecisionAllowOnce {
 		entries := []repo.GrantEntry{{Tool: pr.Tool, Pattern: pr.Pattern, DecidedBy: decidedByFromRequest(r)}}
 		if _, errs := h.grantValidatedEntries(r.Context(), id, entries); len(errs) > 0 {
 			slog.Warn("resolvePermissionRequest: grant failed", "taskID", id, "errs", errs)
 		}
-		if _, err := h.orchestrator.ResumeFromUser(r.Context(), id, ""); err != nil {
-			slog.Warn("resolvePermissionRequest: ResumeFromUser failed", "taskID", id, "err", err)
+	}
+	if h.grantRepo != nil {
+		for _, row := range decisionGrants(decision, task, pr.Tool, decidedByFromRequest(r)) {
+			if _, err := mcpapps.EnsureGrant(r.Context(), h.grantRepo, row); err != nil {
+				slog.Warn("resolvePermissionRequest: EnsureGrant failed", "taskID", id, "tool", pr.Tool, "err", err)
+			}
 		}
 	}
-	if body.Outcome == repo.OutcomeDenied {
-		if _, err := h.orchestrator.ResumeFromUser(r.Context(), id, deniedResumePrompt([]string{pr.Tool})); err != nil {
-			slog.Warn("resolvePermissionRequest: ResumeFromUser after refusal failed", "taskID", id, "err", err)
-		}
+	if _, err := h.orchestrator.ResumeFromUser(r.Context(), id, decisionResumePrompt(decision, []string{pr.Tool})); err != nil {
+		slog.Warn("resolvePermissionRequest: ResumeFromUser failed", "taskID", id, "err", err)
 	}
+
 	h.broadcastEnrichedUpdate(r.Context(), id)
 	return jsonReply(w, http.StatusOK, toPermissionRequestResponse(resolved))
 }

@@ -18,6 +18,7 @@ var (
 	defaultModelSelfReview     = claudemodel.Latest(claudemodel.Sonnet)
 	defaultModelPlanReview     = claudemodel.Latest(claudemodel.Sonnet)
 	defaultModelFinalization   = claudemodel.Latest(claudemodel.Haiku)
+	defaultModelJob            = claudemodel.Latest(claudemodel.Sonnet)
 )
 
 // modelResolver resolves the effective per-stage model, applying coded default
@@ -47,6 +48,8 @@ func (r *modelResolver) StageDefault(ctx context.Context, stage string, projectI
 		coded = defaultModelPlanReview
 	case "finalization":
 		coded = defaultModelFinalization
+	case StageJob:
+		coded = defaultModelJob
 	}
 	if projectID == nil {
 		// Global-only path: use the cached global lookup.

@@ -16,7 +16,7 @@ const emit = defineEmits<{
   navigateAgent: [sessionId: string]
 }>()
 
-const { tasks: allTasks, tasksByStageMap } = useTasks()
+const { pipelineTasks: allTasks, tasksByStageMap } = useTasks()
 const { projects } = useProjects()
 
 const projectById = computed(() => {

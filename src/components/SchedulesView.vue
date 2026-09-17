@@ -4,6 +4,8 @@ import { ref, watch } from 'vue'
 import { deleteSchedule, runScheduleNow, updateSchedule, useSchedules } from '../composables/useSchedules'
 import { toast } from '../composables/useToast'
 import { formatDateTime } from '../utils/format'
+import RoutineGrants from './RoutineGrants.vue'
+import RoutineRuns from './RoutineRuns.vue'
 import ScheduleForm from './ScheduleForm.vue'
 import AppButton from './ui/AppButton.vue'
 import AppModal from './ui/AppModal.vue'
@@ -68,6 +70,17 @@ async function onDelete(s: ScheduleView) {
     toast.error((err as Error).message)
   }
 }
+
+const expandedRuns = ref<Set<string>>(new Set())
+
+function toggleRuns(id: string) {
+  const next = new Set(expandedRuns.value)
+  if (next.has(id))
+    next.delete(id)
+  else
+    next.add(id)
+  expandedRuns.value = next
+}
 </script>
 
 <template>
@@ -93,46 +106,73 @@ async function onDelete(s: ScheduleView) {
       <div
         v-for="s in schedules"
         :key="s.id"
-        class="bg-card border border-line rounded-lg px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3"
+        class="bg-card border border-line rounded-lg px-4 py-3 flex flex-col gap-3"
       >
-        <div class="flex-1 min-w-0">
-          <div class="flex items-center gap-2">
-            <span class="font-semibold text-fg truncate">{{ s.name }}</span>
-            <span
-              class="text-[11px] px-1.5 py-0.5 rounded-full font-medium shrink-0"
-              :class="s.enabled ? 'bg-green-900/40 text-green-400' : 'bg-raised text-fg-faint'"
+        <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2">
+              <span class="font-semibold text-fg truncate">{{ s.name }}</span>
+              <span
+                class="text-[11px] px-1.5 py-0.5 rounded-full font-medium shrink-0"
+                :class="s.enabled ? 'bg-green-900/40 text-green-400' : 'bg-raised text-fg-faint'"
+              >
+                {{ s.enabled ? 'enabled' : 'disabled' }}
+              </span>
+              <span
+                :data-testid="`schedule-run-mode-${s.id}`"
+                class="text-[11px] px-1.5 py-0.5 rounded-full font-medium shrink-0 bg-raised text-fg-mute"
+              >
+                {{ s.runMode === 'pipeline' ? 'Pipeline task' : 'Job' }}
+              </span>
+            </div>
+            <div class="text-fg-mute text-sm mt-0.5">
+              {{ s.human }}
+            </div>
+            <div class="flex gap-4 mt-1 text-xs text-fg-faint flex-wrap">
+              <span class="font-mono">{{ s.cronExpr }}</span>
+              <span>Next: {{ formatDateTime(s.nextRunAt) }}</span>
+              <span v-if="s.lastRunAt">Last: {{ formatDateTime(s.lastRunAt) }}</span>
+              <span v-if="s.skippedCount > 0" :data-testid="`schedule-skipped-${s.id}`" class="text-warning-text">
+                Skipped {{ s.skippedCount }} times, last {{ formatDateTime(s.lastSkippedAt) }}
+              </span>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2 shrink-0 flex-wrap">
+            <button
+              type="button"
+              class="text-xs px-2 py-1 rounded border border-line text-fg-mute hover:text-fg hover:border-fg-mute transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              :aria-label="s.enabled ? 'Disable schedule' : 'Enable schedule'"
+              @click="onToggleEnabled(s)"
             >
-              {{ s.enabled ? 'enabled' : 'disabled' }}
-            </span>
-          </div>
-          <div class="text-fg-mute text-sm mt-0.5">
-            {{ s.human }}
-          </div>
-          <div class="flex gap-4 mt-1 text-xs text-fg-faint flex-wrap">
-            <span class="font-mono">{{ s.cronExpr }}</span>
-            <span>Next: {{ formatDateTime(s.nextRunAt) }}</span>
-            <span v-if="s.lastRunAt">Last: {{ formatDateTime(s.lastRunAt) }}</span>
+              {{ s.enabled ? 'Disable' : 'Enable' }}
+            </button>
+            <AppButton variant="secondary" size="sm" @click="onRunNow(s)">
+              Run Now
+            </AppButton>
+            <AppButton
+              variant="ghost"
+              size="sm"
+              :aria-expanded="expandedRuns.has(s.id)"
+              :aria-controls="`schedule-runs-${s.id}`"
+              @click="toggleRuns(s.id)"
+            >
+              Runs
+            </AppButton>
+            <AppButton variant="ghost" size="sm" @click="openEdit(s)">
+              Edit
+            </AppButton>
+            <AppButton variant="danger" size="sm" @click="onDelete(s)">
+              Delete
+            </AppButton>
           </div>
         </div>
 
-        <div class="flex items-center gap-2 shrink-0 flex-wrap">
-          <button
-            type="button"
-            class="text-xs px-2 py-1 rounded border border-line text-fg-mute hover:text-fg hover:border-fg-mute transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            :aria-label="s.enabled ? 'Disable schedule' : 'Enable schedule'"
-            @click="onToggleEnabled(s)"
-          >
-            {{ s.enabled ? 'Disable' : 'Enable' }}
-          </button>
-          <AppButton variant="secondary" size="sm" @click="onRunNow(s)">
-            Run Now
-          </AppButton>
-          <AppButton variant="ghost" size="sm" @click="openEdit(s)">
-            Edit
-          </AppButton>
-          <AppButton variant="danger" size="sm" @click="onDelete(s)">
-            Delete
-          </AppButton>
+        <div v-if="expandedRuns.has(s.id)" :id="`schedule-runs-${s.id}`">
+          <RoutineRuns :schedule-id="s.id" />
+          <div class="mt-3 pt-3 border-t border-line">
+            <RoutineGrants :schedule-id="s.id" />
+          </div>
         </div>
       </div>
     </div>

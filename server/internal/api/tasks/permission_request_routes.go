@@ -427,6 +427,7 @@ func deniedResumePrompt(tools []string) string {
 func (h *Handler) bulkResolvePermissionRequests(w http.ResponseWriter, r *http.Request) error {
 	var body struct {
 		TaskID        string   `json:"taskId"`
+		Decision      string   `json:"decision"`
 		Outcome       string   `json:"outcome"`
 		PermissionIDs []string `json:"permissionIds"`
 		All           bool     `json:"all"`
@@ -438,11 +439,14 @@ func (h *Handler) bulkResolvePermissionRequests(w http.ResponseWriter, r *http.R
 	if body.TaskID == "" {
 		return apierr.NewAppError(http.StatusBadRequest, "taskId is required")
 	}
-	if body.Outcome != repo.OutcomeGranted && body.Outcome != repo.OutcomeDenied {
-		return apierr.NewAppError(http.StatusBadRequest, "outcome must be granted or denied")
+	decision, err := parseDecision(body.Decision, body.Outcome)
+	if err != nil {
+		return err
 	}
-
-	outcome := body.Outcome
+	task, err := h.taskRepo.GetByID(r.Context(), body.TaskID)
+	if err != nil {
+		return apierr.ErrNotFound
+	}
 
 	// Object-level authz: only the task's own pending requests are resolvable,
 	// so a caller cannot flip permission requests belonging to a different task.
@@ -479,6 +483,31 @@ func (h *Handler) bulkResolvePermissionRequests(w http.ResponseWriter, r *http.R
 		}
 	}
 
+	resolveSet := make(map[string]bool, len(idsToResolve))
+	for _, id := range idsToResolve {
+		resolveSet[id] = true
+	}
+	var tools []string
+	for _, req := range pending {
+		if resolveSet[req.ID] {
+			tools = append(tools, req.Tool)
+		}
+	}
+
+	// Validate the decision against every selected tool before resolving anything:
+	// a refused routine decision must leave every request pending and not resume.
+	if err := validateDecision(decision, task, tools); err != nil {
+		return err
+	}
+	if (decision == DecisionAllowRoutine || decision == DecisionDenyRoutine) && h.grantRepo == nil {
+		return apierr.NewAppError(http.StatusServiceUnavailable, "grants unavailable")
+	}
+
+	outcome := repo.OutcomeDenied
+	if decision == DecisionAllowOnce || decision == DecisionAllowRoutine {
+		outcome = repo.OutcomeGranted
+	}
+
 	resolvedCount := 0
 	for _, id := range idsToResolve {
 		if err := h.permRepo.ResolvePermissionRequest(r.Context(), id, outcome); err != nil {
@@ -488,34 +517,24 @@ func (h *Handler) bulkResolvePermissionRequests(w http.ResponseWriter, r *http.R
 		resolvedCount++
 	}
 
-	// When granted, create task_permissions from the resolved requests so the
-	// respawned agent's allow-list includes the newly approved tools, then resume.
-	if outcome == repo.OutcomeGranted && len(idsToResolve) > 0 {
-		resolveSet := make(map[string]bool, len(idsToResolve))
-		for _, id := range idsToResolve {
-			resolveSet[id] = true
-		}
+	if len(idsToResolve) > 0 {
 		decidedBy := decidedByFromRequest(r)
-		var entries []repo.GrantEntry
-		for _, req := range pending {
-			if !resolveSet[req.ID] {
-				continue
-			}
-			entries = append(entries, repo.GrantEntry{Tool: req.Tool, Pattern: req.Pattern, DecidedBy: decidedBy})
-		}
-		if _, errs := h.grantValidatedEntries(r.Context(), body.TaskID, entries); len(errs) > 0 {
-			resolveErrors = append(resolveErrors, errs...)
-		}
-		if _, err := h.orchestrator.ResumeFromUser(r.Context(), body.TaskID, ""); err != nil {
-			slog.Warn("bulk_resolve: ResumeFromUser failed", "taskID", body.TaskID, "err", err)
-		}
 
-		// Persist presets so future requests for this project cwd are auto-approved.
-		if body.Remember && h.presetRepo != nil && resolvedCount > 0 {
-			task, taskErr := h.taskRepo.GetByID(r.Context(), body.TaskID)
-			if taskErr != nil {
-				slog.Warn("bulk_resolve: remember: failed to get task", "taskID", body.TaskID, "err", taskErr)
-			} else {
+		// allow_once additionally writes task_permissions so the respawned
+		// agent's allow-list includes the newly approved tools.
+		if decision == DecisionAllowOnce {
+			var entries []repo.GrantEntry
+			for _, req := range pending {
+				if resolveSet[req.ID] {
+					entries = append(entries, repo.GrantEntry{Tool: req.Tool, Pattern: req.Pattern, DecidedBy: decidedBy})
+				}
+			}
+			if _, errs := h.grantValidatedEntries(r.Context(), body.TaskID, entries); len(errs) > 0 {
+				resolveErrors = append(resolveErrors, errs...)
+			}
+
+			// Persist presets so future requests for this project cwd are auto-approved.
+			if body.Remember && h.presetRepo != nil && resolvedCount > 0 {
 				var userID *string
 				if payload, ok := auth.PayloadFromContext(r.Context()); ok && payload.Sub != "" {
 					s := payload.Sub
@@ -535,20 +554,22 @@ func (h *Handler) bulkResolvePermissionRequests(w http.ResponseWriter, r *http.R
 				}
 			}
 		}
-	}
-	if outcome == repo.OutcomeDenied && len(idsToResolve) > 0 {
-		resolveSet := make(map[string]bool, len(idsToResolve))
-		for _, id := range idsToResolve {
-			resolveSet[id] = true
-		}
-		var tools []string
-		for _, req := range pending {
-			if resolveSet[req.ID] {
-				tools = append(tools, req.Tool)
+
+		if h.grantRepo != nil {
+			for _, req := range pending {
+				if !resolveSet[req.ID] {
+					continue
+				}
+				for _, row := range decisionGrants(decision, task, req.Tool, decidedBy) {
+					if _, err := mcpapps.EnsureGrant(r.Context(), h.grantRepo, row); err != nil {
+						resolveErrors = append(resolveErrors, fmt.Sprintf("grant %s: %v", req.Tool, err))
+					}
+				}
 			}
 		}
-		if _, err := h.orchestrator.ResumeFromUser(r.Context(), body.TaskID, deniedResumePrompt(tools)); err != nil {
-			slog.Warn("bulk_resolve: ResumeFromUser after refusal failed", "taskID", body.TaskID, "err", err)
+
+		if _, err := h.orchestrator.ResumeFromUser(r.Context(), body.TaskID, decisionResumePrompt(decision, tools)); err != nil {
+			slog.Warn("bulk_resolve: ResumeFromUser failed", "taskID", body.TaskID, "err", err)
 		}
 	}
 
