@@ -1718,7 +1718,7 @@ type DenyResult struct {
 
 **Files:**
 - Modify: `server/internal/api/applications/handler.go` (`create`, `importApplication`, `refresh`)
-- Modify: `server/internal/mcpapps/catalogue.go:93-125` (`Refresh` reports whether this is the first catalogue)
+- (The plan first had `Refresh` report whether this was the first catalogue. It does not need to: `ApplyDefaultDenies` is idempotent, so the handler calls it unconditionally after a refresh and `catalogue.go` stays a catalogue reader.)
 - Test: `server/internal/api/applications/handler_test.go` (extend)
 
 **Interfaces:**

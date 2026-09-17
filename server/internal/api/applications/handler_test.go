@@ -552,3 +552,73 @@ func TestDeleteApplication_TakesItsMirrorOutOfClaudeConfig(t *testing.T) {
 	require.NotContains(t, servers, "notes", "a mirror the app wrote is removed with the application")
 	require.Contains(t, servers, "mine", "a server the app never mirrored stays")
 }
+
+func liveDenies(t *testing.T, grants repo.GrantRepo, capName string) int {
+	t.Helper()
+	rows, err := grants.ListForCapability(context.Background(), capName)
+	require.NoError(t, err)
+	n := 0
+	for _, g := range rows {
+		if g.RevokedAt == nil && g.Mode == repo.GrantModeDeny && g.ContextKind == repo.GrantContextGlobal {
+			n++
+		}
+	}
+	return n
+}
+
+func TestCreateApplication_DeniesTheDangerousToolsAtOnce(t *testing.T) {
+	mux, _, grants, _, _, _ := newMux(t)
+
+	rec := do(t, mux, http.MethodPost, "/api/applications", map[string]any{
+		"name": "inbox", "command": "npx", "args": []string{"-y", "imap-mcp-server"},
+	})
+	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
+
+	require.Equal(t, 1, liveDenies(t, grants, mcpapps.CapabilityName("inbox", "imap_send_email")),
+		"a new server's dangerous tools are denied before anyone refreshes its catalogue")
+	require.Equal(t, 1, liveDenies(t, grants, mcpapps.CapabilityName("inbox", "imap_bulk_delete")))
+}
+
+func TestCreateApplication_UnknownServerGetsNoGrants(t *testing.T) {
+	mux, _, grants, _, _, _ := newMux(t)
+
+	rec := do(t, mux, http.MethodPost, "/api/applications", map[string]any{
+		"name": "notes", "command": "npx", "args": []string{"-y", "notes-mcp"},
+	})
+	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
+
+	rows, err := grants.List(context.Background())
+	require.NoError(t, err)
+	require.Empty(t, rows, "a server with no preset gets no grants at all")
+}
+
+func TestImportApplication_DeniesTheDangerousTools(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	require.NoError(t, os.WriteFile(dir+"/.claude.json",
+		[]byte(`{"mcpServers":{"inbox":{"command":"npx","args":["-y","imap-mcp-server"]}}}`), 0o600))
+	mux, _, grants, _, _, _ := newMux(t)
+
+	rec := do(t, mux, http.MethodPost, "/api/applications/import", map[string]any{"name": "inbox"})
+	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
+
+	require.Equal(t, 1, liveDenies(t, grants, mcpapps.CapabilityName("inbox", "imap_send_email")))
+}
+
+func TestDenies_AppliedTwiceLeavesOneGrant(t *testing.T) {
+	mux, _, grants, _, _, _ := newMux(t)
+	rec := do(t, mux, http.MethodPost, "/api/applications", map[string]any{
+		"name": "inbox", "command": "npx", "args": []string{"-y", "imap-mcp-server"},
+	})
+	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
+	var created struct {
+		ResourceID string `json:"resourceId"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &created))
+
+	rec = do(t, mux, http.MethodPost, "/api/applications/"+created.ResourceID+"/denies", nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	require.Equal(t, 1, liveDenies(t, grants, mcpapps.CapabilityName("inbox", "imap_send_email")),
+		"re-applying the denies must not stack a second grant")
+}

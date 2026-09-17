@@ -280,6 +280,11 @@ func (h *Handler) importApplication(w http.ResponseWriter, r *http.Request) erro
 	if err != nil {
 		return err
 	}
+	// A server whose dangerous tools are not denied yet is the state this
+	// exists to prevent, so a failure here fails the request.
+	if err := h.applyDenies(r, app); err != nil {
+		return err
+	}
 	v, err := h.view(r, app)
 	if err != nil {
 		return err
@@ -338,6 +343,11 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	// A server whose dangerous tools are not denied yet is the state this
+	// exists to prevent, so a failure here fails the request.
+	if err := h.applyDenies(r, app); err != nil {
+		return err
+	}
 	v, err := h.view(r, app)
 	if err != nil {
 		return err
@@ -394,11 +404,27 @@ func (h *Handler) refresh(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	if err := h.applyDenies(r, app); err != nil {
+		return err
+	}
 	v, err := h.view(r, app)
 	if err != nil {
 		return err
 	}
 	return writeJSON(w, http.StatusOK, v)
+}
+
+// applyDenies writes the preset's default denies for app. It runs wherever an
+// application's definition appears or changes, and is idempotent, so the
+// window between adding a server and reading its tool list is never open.
+func (h *Handler) applyDenies(r *http.Request, app *ent.MCPApplication) error {
+	payload, ok := auth.PayloadFromContext(r.Context())
+	if !ok {
+		// Missing payload ⟹ bypass mode (DASHBOARD_AUTH=none); act as local admin.
+		payload = auth.BypassPayload()
+	}
+	_, err := mcpapps.ApplyDefaultDenies(r.Context(), h.grants, app, payload.Sub)
+	return err
 }
 
 func (h *Handler) denies(w http.ResponseWriter, r *http.Request) error {
