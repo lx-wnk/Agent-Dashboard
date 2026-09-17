@@ -44,6 +44,9 @@ func provideScheduler(client *ent.Client, taskHandler *tasks.Handler, tb *sse.Ta
 			Applications:    spec.Applications,
 			UserID:          spec.UserID,
 			Metadata:        spec.Metadata,
+			Kind:            spec.Kind,
+			Stage:           spec.Stage,
+			Autonomy:        spec.Autonomy,
 		})
 		if err != nil {
 			return "", err

@@ -350,6 +350,11 @@ type CreateTaskParams struct {
 	// a task a human created. Deliberately absent from the HTTP create body:
 	// the scheduler is the only writer (see the schema field's comment).
 	RoutineID string
+	// Kind is "pipeline" or "job" (empty defaults to "pipeline" in the repo).
+	// Deliberately absent from the HTTP create body: the scheduler is the only
+	// writer, same as RoutineID above — a caller able to name it could bypass
+	// every stage gate on its own task.
+	Kind string
 	// Applications is copied from the routine by the scheduler and is not part
 	// of the HTTP create body: attaching a mailbox is an authority decision, and
 	// a caller able to name applications on a task it creates could hand itself
@@ -472,6 +477,7 @@ func (h *Handler) CreateTaskFromInput(ctx context.Context, p CreateTaskParams) (
 		Autonomy:            p.Autonomy,
 		Metadata:            p.Metadata,
 		PlanMode:            planMode,
+		Kind:                p.Kind,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("tasks.create: %w", err)

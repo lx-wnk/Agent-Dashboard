@@ -113,3 +113,54 @@ func TestCreateTaskFromInput_EmptyRoutineIDStaysNull(t *testing.T) {
 		t.Fatalf("routine_id = %q, want nil", *row.RoutineID)
 	}
 }
+
+// TestCreateTaskFromInput_PersistsKind covers the scheduler's job-run path: it
+// is the only caller that sets Kind, and the value has to survive to the row
+// because that is what stage advancement reads to skip the pipeline.
+func TestCreateTaskFromInput_PersistsKind(t *testing.T) {
+	h, taskRepo, _ := newRoutineIDTestEnv(t)
+
+	created, err := h.CreateTaskFromInput(context.Background(), tasks.CreateTaskParams{
+		Slug:  "job-task",
+		Title: "Job task",
+		Cwd:   "/tmp",
+		Kind:  "job",
+		Stage: "job",
+	})
+	if err != nil {
+		t.Fatalf("CreateTaskFromInput: %v", err)
+	}
+	row, err := taskRepo.GetByID(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if row.Kind != "job" {
+		t.Fatalf("kind = %q, want %q", row.Kind, "job")
+	}
+}
+
+// TestCreateTask_HTTPBodyCannotSetKind mirrors the routineId guard: kind
+// decides whether a task skips the pipeline, so a caller able to name it in a
+// create body could bypass every stage gate on its own task. The create body
+// has no such field; this test fails the moment someone adds one.
+func TestCreateTask_HTTPBodyCannotSetKind(t *testing.T) {
+	_, taskRepo, r := newRoutineIDTestEnv(t)
+
+	body := postCreateTask(t, r, map[string]any{
+		"slug":  "hand-made-kind",
+		"title": "Hand made kind",
+		"cwd":   "/tmp",
+		"kind":  "job",
+	})
+	id, _ := body["id"].(string)
+	if id == "" {
+		t.Fatalf("create did not return an id: %v", body)
+	}
+	row, err := taskRepo.GetByID(context.Background(), id)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if row.Kind != "pipeline" {
+		t.Fatalf("kind = %q, want %q — the create body must not be able to set kind", row.Kind, "pipeline")
+	}
+}
