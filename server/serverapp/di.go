@@ -763,8 +763,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 			slog.Warn("claudeconfig: watch failed — outside changes are noticed on refresh only", "err", err)
 			stopConfigWatch()
 		} else {
-			prev := cleanup
-			cleanup = func() { stopConfigWatch(); prev() }
+			cleanup = chainCleanup(cleanup, stopConfigWatch)
 		}
 	}
 
