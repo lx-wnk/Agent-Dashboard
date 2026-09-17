@@ -91,26 +91,45 @@ func TestUnknownApplicationIs404(t *testing.T) {
 	require.False(t, strings.Contains(rec.Body.String(), "panic"))
 }
 
-func TestApplyPreset_MissingRoutineIdIs400(t *testing.T) {
-	mux, _, _, _, _, _ := newMux(t)
-	rec := do(t, mux, http.MethodPost, "/api/applications/res-mail/presets/imap-mcp-server", map[string]any{})
-	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
-}
-
-func TestApplyPreset_UnconfirmedPresetIs409(t *testing.T) {
-	mux, _, grants, _, _, _ := newMux(t)
-	rec := do(t, mux, http.MethodPost, "/api/applications/res-mail/presets/imap-mcp-server", map[string]any{"routineId": "routine-1"})
-	require.Equal(t, http.StatusConflict, rec.Code, rec.Body.String())
-
-	rows, err := grants.List(context.Background())
+func TestDenies_AppliesPresetAndIsIdempotent(t *testing.T) {
+	mux, apps, grants, _, _, _ := newMux(t)
+	ctx := context.Background()
+	_, err := apps.SetEntry(ctx, "res-mail", json.RawMessage(`{"command":"npx","args":["-y","imap-mcp-server"]}`))
 	require.NoError(t, err)
-	require.Empty(t, rows)
+
+	rec := do(t, mux, http.MethodPost, "/api/applications/res-mail/denies", nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var first mcpapps.DenyResult
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &first))
+	require.Equal(t, "imap-mcp-server", first.Preset)
+	require.NotEmpty(t, first.Created)
+	require.Empty(t, first.Existing)
+
+	rec = do(t, mux, http.MethodPost, "/api/applications/res-mail/denies", nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var second mcpapps.DenyResult
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &second))
+	require.Empty(t, second.Created, "applying twice must not duplicate grants")
+	require.ElementsMatch(t, first.Created, second.Existing)
+
+	rows, err := grants.List(ctx)
+	require.NoError(t, err)
+	require.NotEmpty(t, rows)
 }
 
-func TestApplyPreset_UnknownPresetIs404(t *testing.T) {
+func TestDenies_NoMatchingPresetIsEmptyResult(t *testing.T) {
 	mux, _, _, _, _, _ := newMux(t)
-	rec := do(t, mux, http.MethodPost, "/api/applications/res-mail/presets/no-such-preset", map[string]any{"routineId": "routine-1"})
-	require.Equal(t, http.StatusNotFound, rec.Code, rec.Body.String())
+	rec := do(t, mux, http.MethodPost, "/api/applications/res-mail/denies", nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var res mcpapps.DenyResult
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &res))
+	require.Equal(t, mcpapps.DenyResult{Created: []string{}, Existing: []string{}}, res)
+}
+
+func TestDenies_UnknownApplicationIs404(t *testing.T) {
+	mux, _, _, _, _, _ := newMux(t)
+	rec := do(t, mux, http.MethodPost, "/api/applications/nope/denies", nil)
+	require.Equal(t, http.StatusNotFound, rec.Code)
 }
 
 func TestCreateApplication_Succeeds(t *testing.T) {

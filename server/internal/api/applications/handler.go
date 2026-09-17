@@ -46,7 +46,7 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Put("/api/applications/{resourceId}/secrets/{envName}", apierr.ErrorMiddleware(h.putSecret))
 	r.Delete("/api/applications/{resourceId}/secrets/{envName}", apierr.ErrorMiddleware(h.deleteSecret))
 	r.Post("/api/applications/{resourceId}/refresh", apierr.ErrorMiddleware(h.refresh))
-	r.Post("/api/applications/{resourceId}/presets/{preset}", apierr.ErrorMiddleware(h.applyPreset))
+	r.Post("/api/applications/{resourceId}/denies", apierr.ErrorMiddleware(h.denies))
 	r.Delete("/api/applications/{resourceId}", apierr.ErrorMiddleware(h.delete))
 }
 
@@ -401,33 +401,18 @@ func (h *Handler) refresh(w http.ResponseWriter, r *http.Request) error {
 	return writeJSON(w, http.StatusOK, v)
 }
 
-func (h *Handler) applyPreset(w http.ResponseWriter, r *http.Request) error {
+func (h *Handler) denies(w http.ResponseWriter, r *http.Request) error {
 	app, err := h.load(r)
 	if err != nil {
 		return err
-	}
-	preset, err := mcpapps.LoadPreset(chi.URLParam(r, "preset"))
-	if err != nil {
-		return apierr.NewAppError(http.StatusNotFound, err.Error())
-	}
-	var body struct {
-		RoutineID string `json:"routineId"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		return apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
 	}
 	payload, ok := auth.PayloadFromContext(r.Context())
 	if !ok {
 		// Missing payload ⟹ bypass mode (DASHBOARD_AUTH=none); act as local admin.
 		payload = auth.BypassPayload()
 	}
-	res, err := mcpapps.ApplyPreset(r.Context(), h.grants, app, preset, body.RoutineID, payload.Sub)
-	switch {
-	case errors.Is(err, mcpapps.ErrRoutineRequired):
-		return apierr.NewAppError(http.StatusBadRequest, err.Error())
-	case errors.Is(err, mcpapps.ErrPresetUnconfirmed):
-		return apierr.NewAppError(http.StatusConflict, err.Error())
-	case err != nil:
+	res, err := mcpapps.ApplyDefaultDenies(r.Context(), h.grants, app, payload.Sub)
+	if err != nil {
 		return err
 	}
 	return writeJSON(w, http.StatusOK, res)
