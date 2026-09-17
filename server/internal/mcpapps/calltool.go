@@ -36,6 +36,12 @@ func CallTool(ctx context.Context, transport mcp.Transport, name string, args ma
 	}
 	defer func() { _ = session.Close() }()
 
+	// An empty object, never nil: a nil map marshals to "arguments": null, and
+	// a server validating its input against a schema rejects that outright —
+	// the published mail server answers "expected record, received null".
+	if args == nil {
+		args = map[string]any{}
+	}
 	res, err := session.CallTool(ctx, &mcp.CallToolParams{Name: name, Arguments: args})
 	if err != nil {
 		return nil, fmt.Errorf("mcpapps.CallTool %s: %w", name, err)
