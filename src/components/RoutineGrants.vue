@@ -61,9 +61,13 @@ async function handleRevoke(id: string) {
           class="px-1.5 py-0.5 rounded-full bg-green-900/40 text-green-400"
         >Allowed</span>
         <span
-          v-else
+          v-else-if="g.mode === 'deny'"
           class="px-1.5 py-0.5 rounded-full bg-red-900/40 text-red-400"
         >Denied</span>
+        <span
+          v-else
+          class="px-1.5 py-0.5 rounded-full bg-raised text-fg-mute"
+        >Ask</span>
         <span class="text-fg-faint">{{ formatDateTime(g.grantedAt) }}</span>
         <template v-if="confirmRevokeId === g.id">
           <AppButton variant="danger" size="sm" :disabled="revokingId === g.id" :data-testid="`routine-grant-revoke-confirm-${g.id}`" @click="handleRevoke(g.id)">

@@ -83,6 +83,18 @@ describe('routineGrants', () => {
     wrapper.unmount()
   })
 
+  it('labels an ask grant as Ask, not Denied', async () => {
+    grantsResponse.body = [makeGrant({ id: 'g1', mode: 'ask' })]
+    const wrapper = mount(RoutineGrants, { props: { scheduleId: SCHEDULE_ID } })
+    await flushPromises()
+
+    const row = wrapper.get('[data-testid="routine-grant-g1"]')
+    expect(row.text()).toContain('Ask')
+    expect(row.text()).not.toContain('Denied')
+
+    wrapper.unmount()
+  })
+
   it('revokes a grant after confirming, and sends nothing on cancel', async () => {
     grantsResponse.body = [makeGrant({ id: 'g1' })]
     const wrapper = mount(RoutineGrants, { props: { scheduleId: SCHEDULE_ID } })
