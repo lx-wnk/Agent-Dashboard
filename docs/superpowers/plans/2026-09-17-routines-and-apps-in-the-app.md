@@ -881,19 +881,20 @@ If `+"`set_stage_output`"+` is unavailable, instead emit the same object as a `+
 - Modify: `server/internal/pipeline/transitions.go:335` (`decideCompletedTransition`, first check)
 - Modify: `server/internal/pipeline/progress_guards.go:65-67` (`needsWorktree`)
 - Modify: `server/internal/pipeline/model_resolver.go:15-21, 42-51` (`defaultModelJob`, `case StageJob`)
-- Test: `server/internal/pipeline/job_run_test.go` (new)
+- Test: `server/internal/pipeline/job_run_test.go` (new), `server/internal/pipeline/stage_model_test.go` (one table row)
 
 **Interfaces:**
 - Consumes: Tasks 2.1–2.3.
-- Produces: completed `job` stage run → `DoneTransition`; `needsWorktree` false for jobs; `StageDefault(ctx, "job", nil)` = `claudemodel.Latest(claudemodel.Sonnet)`.
+- Produces: a completed `job` stage run decides `DoneTransition`; `needsWorktree` false for jobs; the coded model default for stage `job` is `claudemodel.Latest(claudemodel.Sonnet)`.
 
-- [ ] **Step 1: Write the failing tests** (pattern: `orchWithWorktreeFn`, `worktree_failure_test.go:22-39`; build the orchestrator with `ForceWorktrees: true` and an `EnsureWorktreeFn` stub that counts calls, and a `SpawnFn` that records `opts.Task` and returns a PID):
-  - `TestJob_NeverCreatesWorktreeEvenWhenForced`: job task (`Kind: "job"`, `CurrentStage: "job"`, `Cwd: t.TempDir()`, `SourceBranch: nil`), `ProgressTask` → stub calls == 0; recorded spawn task `WorktreePath` nil or empty; recorded `Cwd` == the temp dir.
-  - `TestJob_CompletedOutputFinishesTheTask`: job task with a running `job` stage run whose output is `{"summary":"s","result":"r"}` → after the completion sweep (`FinalizeCompletedAsyncRunsForTest` if exported, otherwise export it) the task is `done`, the run `done` with its output kept, and the task's audit trail holds `task_done` and no `stage_transition` (`DoneTransition` records `task_done`, `transitions.go:125`; `NextTransition` records `stage_transition`, `:109` — without the explicit branch the fallthrough `NextStage("job")` returns `"done"` through `NextTransition`, which skips `handleDependentTasks`).
-  - `TestPipeline_StillCreatesWorktreeWhenForced`: pipeline task in `implementation` with the same orchestrator → stub calls == 1 (unchanged behaviour).
-  - `TestStageDefault_JobUsesNewestSonnet` in the existing model resolver test file pattern (`stage_model_test.go:40`).
-  - `TestPick_IncludesJobTasks`: with one free runner slot and only a job task pickable, the pick function that calls `sortByStageIndex` (`server/internal/pipeline/scheduler.go:113`) returns it. `job` is not in `StageOrder`, so its stage index is -1 (`scheduler.go:129-136`) and it sorts behind every pipeline stage — accepted: jobs are picked whenever a slot is free and no pipeline task is waiting for one.
-- [ ] **Step 2: Run** `go test ./internal/pipeline/ -run 'TestJob_|TestPipeline_StillCreatesWorktreeWhenForced|TestStageDefault_Job'` — FAIL (stub called once; `stage_transition` audit instead of `task_done`).
+- [ ] **Step 1: Write the failing tests** in `job_run_test.go` (package `pipeline_test`):
+  - `TestJob_NeverCreatesWorktreeEvenWhenForced`: build the orchestrator like `makeOrchWithCaptureSpawn` (`requeue_for_user_test.go:289-310`) plus `ForceWorktrees: true` and an `EnsureWorktreeFn` stub counting calls; create a task `Kind: "job"`, `CurrentStage: "job"`, `Cwd: t.TempDir()`; `orch.ProgressTask(ctx, task.ID, nil)` → stub calls == 0, the captured spawn options' `Task.Cwd` is the temp dir and `Task.WorktreePath` is nil or empty.
+  - `TestPipeline_StillCreatesWorktreeWhenForced`: same orchestrator, pipeline task in `implementation` → stub calls == 1 (unchanged behaviour).
+  - `TestJob_CompletedRunFinishesTheTask`: `orch.DecideCompletedTransitionForTest(ctx, task, &ent.StageRun{Stage: "job"}, map[string]any{"summary": "s", "result": "r"})` returns a `pipeline.DoneTransition` carrying that output. Without the explicit branch the fallthrough `NextStage("job")` yields `NextTransition{Stage: "done"}`, which skips the dependency handling and lock release of `DoneTransition` (`transitions.go:115-133`).
+  - `stage_model_test.go`, `TestStageModelDefault_BalancedDefaults` table: add `{"job", claudemodel.Latest(claudemodel.Sonnet)}` (create that case's task with `Kind: "job"`).
+
+  The pipeline's pick loop (`scheduler.go:54-113`) has no stage filter; `job` is not in `StageOrder`, so `sortByStageIndex` ranks it -1 behind every pipeline stage (`scheduler.go:129-136`) — a job is picked whenever a slot is free and no pipeline task is ahead of it. Accepted; no test, `Pick` has no test seam.
+- [ ] **Step 2: Run** `go test ./internal/pipeline/ -run 'TestJob_|TestPipeline_StillCreatesWorktreeWhenForced|TestStageModelDefault_BalancedDefaults'` — FAIL (stub called once for the job; `NextTransition` instead of `DoneTransition`; model empty for `job`).
 - [ ] **Step 3: Implement.** `decideCompletedTransition`, before the `finalization` check:
 
 ```go
@@ -912,7 +913,7 @@ If `+"`set_stage_output`"+` is unavailable, instead emit the same object as a `+
 
   `model_resolver.go`: `defaultModelJob = claudemodel.Latest(claudemodel.Sonnet)` in the var block and `case StageJob: coded = defaultModelJob`.
 - [ ] **Step 4: Run** — PASS; `go test ./internal/pipeline/...` PASS; `TestNoPinnedModelIDsOutsideTheCatalog` PASS.
-- [ ] **Step 5: Mutation** — remove `task.Kind != TaskKindJob &&` → `TestJob_NeverCreatesWorktreeEvenWhenForced` red; restore identical. Remove the `StageJob` branch in `decideCompletedTransition` → the completion test red on the audit assertion. Paste both red outputs.
+- [ ] **Step 5: Mutation** — remove `task.Kind != TaskKindJob &&` → `TestJob_NeverCreatesWorktreeEvenWhenForced` red; remove the `StageJob` branch in `decideCompletedTransition` → `TestJob_CompletedRunFinishesTheTask` red. Restore identical each time; paste both red outputs.
 - [ ] **Step 6: Commit** `feat(pipeline): run a job in its own directory and finish it after one stage`.
 
 ### Task 2.5: Routines store a run mode and skipped fires; the stage column goes
