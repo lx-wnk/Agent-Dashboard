@@ -234,6 +234,11 @@ type PendingPermission struct {
 	DeniedByElided int     `json:"deniedByElided,omitempty"`
 	Reason         *string `json:"reason"`
 	RequestedAt    string  `json:"requestedAt"`
+	// DeniedByDefault is true when a grant already denies this capability in
+	// this run's contexts — the same resolution the run's allow list uses. The
+	// client offers no decision for such a request; the answer is to change the
+	// grant, not to answer the prompt.
+	DeniedByDefault bool `json:"deniedByDefault,omitempty"`
 }
 
 // PendingCapabilityDecision is a capability decision waiting for a human at a

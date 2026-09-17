@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
 	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
+	"github.com/lx-wnk/agent-dashboard/server/internal/capability"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/mcpapps"
@@ -33,6 +34,10 @@ type permissionRequestResponse struct {
 	// OutsideSafeList is true when the request is for a Bash command not in the
 	// safe allow-list, meaning a Grant is a conscious human override.
 	OutsideSafeList bool `json:"outsideSafeList"`
+	// DeniedByDefault is true when a grant already denies this capability in
+	// this task's contexts — the same resolution the run's allow list uses. An
+	// answer here would not reach the agent; the grant has to change instead.
+	DeniedByDefault bool `json:"deniedByDefault"`
 }
 
 func toPermissionRequestResponse(req *ent.PermissionRequest) permissionRequestResponse {
@@ -78,8 +83,10 @@ func (h *Handler) listPermissionRequests(w http.ResponseWriter, r *http.Request)
 		return fmt.Errorf("permission_requests.list: %w", err)
 	}
 	resp := make([]permissionRequestResponse, len(reqs))
+	denied := h.deniedByDefault(r.Context(), taskID, reqs)
 	for i, req := range reqs {
 		resp[i] = toPermissionRequestResponse(req)
+		resp[i].DeniedByDefault = denied[req.ID]
 	}
 	return jsonReply(w, http.StatusOK, resp)
 }
@@ -664,4 +671,37 @@ func resolveTemplate(name string) ([]repo.GrantEntry, error) {
 		entries[i] = repo.GrantEntry{Tool: t}
 	}
 	return entries, nil
+}
+
+// deniedByDefault answers, per request id, whether that request's capability
+// already resolves to a deny in the task's contexts. It uses mcpapps.Decide —
+// the resolution the run's allow list is built from — so the card and the
+// spawner can never disagree about what an answer would achieve. Built-in
+// tools are skipped, and any failure leaves every entry false: a request that
+// cannot be classified is still worth asking about.
+func (h *Handler) deniedByDefault(ctx context.Context, taskID string, reqs []*ent.PermissionRequest) map[string]bool {
+	out := make(map[string]bool, len(reqs))
+	if h.grantRepo == nil || h.capabilityRepo == nil {
+		return out
+	}
+	task, err := h.taskRepo.GetByID(ctx, taskID)
+	if err != nil || task == nil {
+		return out
+	}
+	contexts := mcpapps.RunContexts(task)
+	cache := make(map[string]bool, len(reqs))
+	for _, req := range reqs {
+		if !mcpapps.IsApplicationTool(req.Tool) {
+			continue
+		}
+		if denied, ok := cache[req.Tool]; ok {
+			out[req.ID] = denied
+			continue
+		}
+		decision, derr := mcpapps.Decide(ctx, h.grantRepo, h.capabilityRepo, req.Tool, contexts)
+		denied := derr == nil && decision.Effect == capability.EffectDeny
+		cache[req.Tool] = denied
+		out[req.ID] = denied
+	}
+	return out
 }

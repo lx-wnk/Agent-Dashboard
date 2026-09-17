@@ -78,6 +78,7 @@ type Handler struct {
 	checkpointSvc     CheckpointServiceIface
 	notifier          PermissionNotifier
 	grantRepo         repo.GrantRepo
+	capabilityRepo    repo.CapabilityRepo
 	allowGitPull      bool
 	bypassAuth        bool
 }
@@ -113,6 +114,9 @@ type Deps struct {
 	// GrantRepo persists allow_routine/deny_routine decisions. Nil disables
 	// routine decisions (allow_once/deny_once keep working without it).
 	GrantRepo repo.GrantRepo
+	// CapabilityRepo resolves a capability's class so a pending request can say
+	// whether it is already denied. Nil leaves that field false.
+	CapabilityRepo repo.CapabilityRepo
 	// AllowGitPull permits the git "pull" action; resolved from the git.allowPull
 	// setting at startup (ApplyRestart).
 	AllowGitPull bool
@@ -142,6 +146,7 @@ func NewHandler(deps Deps) *Handler {
 		checkpointSvc:     deps.CheckpointSvc,
 		notifier:          deps.Notifier,
 		grantRepo:         deps.GrantRepo,
+		capabilityRepo:    deps.CapabilityRepo,
 		allowGitPull:      deps.AllowGitPull,
 		bypassAuth:        deps.BypassAuth,
 	}

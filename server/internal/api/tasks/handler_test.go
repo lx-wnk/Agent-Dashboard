@@ -65,6 +65,10 @@ func newTestHandler(t *testing.T) (*tasks.Handler, *chi.Mux) {
 		CfgRepo:      cfgRepo,
 		Orchestrator: &noopOrchestrator{},
 		Broadcaster:  broadcaster,
+		// The grant and capability repos are what let a listed request say it
+		// is already denied; production wires both.
+		GrantRepo:      repo.NewGrantRepo(client),
+		CapabilityRepo: repo.NewCapabilityRepo(client),
 	})
 
 	r := chi.NewRouter()
@@ -86,13 +90,15 @@ func newTestHandlerWithBroadcaster(t *testing.T, client *ent.Client) (*sse.TaskB
 	broadcaster := sse.NewTaskBroadcaster(sse.NewBroadcaster())
 
 	h := tasks.NewHandler(tasks.Deps{
-		TaskRepo:     taskRepo,
-		SRRepo:       srRepo,
-		PermRepo:     permRepo,
-		AuditRepo:    auditRepo,
-		CfgRepo:      cfgRepo,
-		Orchestrator: &noopOrchestrator{},
-		Broadcaster:  broadcaster,
+		TaskRepo:       taskRepo,
+		SRRepo:         srRepo,
+		PermRepo:       permRepo,
+		AuditRepo:      auditRepo,
+		CfgRepo:        cfgRepo,
+		Orchestrator:   &noopOrchestrator{},
+		Broadcaster:    broadcaster,
+		GrantRepo:      repo.NewGrantRepo(client),
+		CapabilityRepo: repo.NewCapabilityRepo(client),
 	})
 
 	r := chi.NewRouter()

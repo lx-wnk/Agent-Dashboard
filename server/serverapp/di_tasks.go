@@ -44,6 +44,7 @@ func provideTaskHandler(client *ent.Client, db *sql.DB, orch *pipeline.PipelineO
 		CheckpointSvc:     cpIface,
 		Notifier:          notifier,
 		GrantRepo:         repo.NewGrantRepo(client),
+		CapabilityRepo:    repo.NewCapabilityRepo(client),
 		AllowGitPull:      allowGitPull,
 		BypassAuth:        bypassAuth,
 	})

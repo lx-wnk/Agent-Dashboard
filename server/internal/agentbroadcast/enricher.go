@@ -7,8 +7,10 @@ import (
 	"time"
 
 	sdk "github.com/lx-wnk/agent-dashboard/sdk"
+	"github.com/lx-wnk/agent-dashboard/server/internal/capability"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	"github.com/lx-wnk/agent-dashboard/server/internal/mcpapps"
 	"github.com/lx-wnk/agent-dashboard/server/internal/merger"
 )
 
@@ -20,9 +22,19 @@ import (
 // When perms is non-nil, it also attaches any pending permission requests for
 // the resolved stage run to PendingPermissions.
 //
-// All three lookups are batched to one query each per tick (session IDs →
-// stage runs, resolved task IDs → tasks, resolved stage run IDs → pending
-// permissions) instead of per-agent round-trips, then joined in-memory.
+// When both grants and caps are non-nil, each application-tool pending
+// request is also labelled DeniedByDefault using the same resolution
+// mcpapps.Resolver uses for a run's allow list, so the UI can tell "asking"
+// apart from "already denied — change the grant instead". Built-in tools
+// (mcpapps.IsApplicationTool is false) and requests with no resolved task are
+// left false without a grants lookup. Results are cached per capability name
+// for the pass, so a burst of pending requests for the same tool costs one
+// lookup, not one per request.
+//
+// All three (or four, with grants) lookups are batched to one query each per
+// tick (session IDs → stage runs, resolved task IDs → tasks, resolved stage
+// run IDs → pending permissions) instead of per-agent round-trips, then
+// joined in-memory.
 //
 // The crossing is one-way (pipeline → agent annotation) and best-effort: nil
 // repos, a session with no stage_run (the common case for ad-hoc sessions), or
@@ -31,7 +43,7 @@ import (
 //
 // agentbroadcast is a peer of merger and may import db/repo, which keeps merger
 // itself free of any db dependency (Go layer direction).
-func NewPipelineTaskEnricher(stageRuns repo.StageRunRepo, tasks repo.TaskRepo, perms repo.PermissionRepo) merger.Enricher {
+func NewPipelineTaskEnricher(stageRuns repo.StageRunRepo, tasks repo.TaskRepo, perms repo.PermissionRepo, grants repo.GrantRepo, caps repo.CapabilityRepo) merger.Enricher {
 	return func(ctx context.Context, agents []sdk.Agent) {
 		if stageRuns == nil || tasks == nil {
 			return
@@ -98,6 +110,8 @@ func NewPipelineTaskEnricher(stageRuns repo.StageRunRepo, tasks repo.TaskRepo, p
 			}
 		}
 
+		deniedCache := make(map[string]bool)
+
 		// Iterate by index so writes land on the slice elements, not on copies.
 		for i := range agents {
 			sr, ok := stageRunBySession[agents[i].SessionID]
@@ -106,7 +120,8 @@ func NewPipelineTaskEnricher(stageRuns repo.StageRunRepo, tasks repo.TaskRepo, p
 			}
 			agents[i].PipelineTaskID = sr.TaskID
 
-			if task, ok := taskByID[sr.TaskID]; ok {
+			task, hasTask := taskByID[sr.TaskID]
+			if hasTask {
 				agents[i].PipelineTaskTitle = task.Title
 			}
 
@@ -120,9 +135,35 @@ func NewPipelineTaskEnricher(stageRuns repo.StageRunRepo, tasks repo.TaskRepo, p
 						Reason:      req.Reason,
 						RequestedAt: req.RequestedAt.UTC().Format(time.RFC3339),
 					}
+					if grants != nil && caps != nil && hasTask {
+						pp[j].DeniedByDefault = isDeniedByDefault(ctx, grants, caps, req.Tool, task, deniedCache)
+					}
 				}
 				agents[i].PendingPermissions = pp
 			}
 		}
 	}
+}
+
+// isDeniedByDefault reports whether tool already resolves to a deny in task's
+// contexts, per the same mcpapps.Decide a run's allow list uses. Only
+// application tools (mcpapps.IsApplicationTool) are ever checked — built-in
+// tools like Bash and Read have no capability row and no grant to look up.
+// Any error degrades to false: the request stays listed and askable rather
+// than silently dropped.
+func isDeniedByDefault(ctx context.Context, grants repo.GrantRepo, caps repo.CapabilityRepo, tool string, task *ent.Task, cache map[string]bool) bool {
+	if !mcpapps.IsApplicationTool(tool) {
+		return false
+	}
+	// Keyed by task as well as tool: a routine- or task-scoped deny answers
+	// differently for another task in the same tick, and one pass can carry
+	// tasks of several routines.
+	key := task.ID + "\x00" + tool
+	if denied, ok := cache[key]; ok {
+		return denied
+	}
+	decision, err := mcpapps.Decide(ctx, grants, caps, tool, mcpapps.RunContexts(task))
+	denied := err == nil && decision.Effect == capability.EffectDeny
+	cache[key] = denied
+	return denied
 }

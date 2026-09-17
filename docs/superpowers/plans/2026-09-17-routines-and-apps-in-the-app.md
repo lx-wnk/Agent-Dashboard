@@ -1632,15 +1632,257 @@ func Watch(ctx context.Context, onChange func()) error
 - [ ] **Isolated run** — never the production database, and **never set `CLAUDE_CONFIG_DIR` for the server** (that breaks the spawned agent's login; see the ledger correction): temp `DASHBOARD_DB_PATH`, `DASHBOARD_PORT`, `DASHBOARD_WORKTREE_ROOT`, and a temp `HOME`-independent config only where a test needs to write Claude's config — for the export check, point the API at a temp config dir by starting the server with `CLAUDE_CONFIG_DIR` set **and** accept that spawning is then untestable in that instance; run the two halves as two instances if both are needed. Check: create a server in the UI payload shape → it appears in `GET /api/applications` with its entry; attach it to a routine and fire the routine → the run's temp MCP config contains the entry; turn the export switch on → `mcpServers.<name>` appears in the temp config file with every other key intact; edit the file by hand → `GET /api/applications/drift` reports it as changed; delete the application while the routine attaches it → 409 naming the routine. Paste every response; remove the temp instances afterwards.
 - [ ] **PR:** push `feat/applications-in-db`, open it with the evidence, wait for CI on the head commit, merge with `gh pr merge --squash --admin` when green, then `main` CI green.
 
-## PR 4 — Setup UI, grants from use, default denies (detailed before start)
+## PR 4 — Setup UI, grants from use, default denies
 
-Spec: applications §2.3, §2.4.
+Branch `feat/applications-setup-and-grants`, worktree `/Users/alexanderwink/dashboard-worktrees/apps-setup-grants`, from `main` at `a0ebcfc6` (PR 3 merged). Spec: applications §2.3, §2.4. Every anchor below was re-read on `a0ebcfc6`.
 
-- Task 4.1: Verify `imap_list_accounts` output against the published server; record the shape.
-- Task 4.2: Preset file format: `match`, `denyGlobal`, `setup`, `secretTemplates`; remove `allowForRoutine`, `confirmed`, `ErrPresetUnconfirmed`.
-- Task 4.3: Default denies applied on add, import and first recognition; idempotent re-apply endpoint.
-- Task 4.4: Setup launcher: free port, readiness, one process per application, stop on done/idle/max/shutdown.
-- Task 4.5: Secret names from `imap_list_accounts` with `secretTemplates` and name normalisation.
-- Task 4.6: Needs-you: no decision buttons for default-denied tools; per-tool state list in Settings → Applications.
-- Task 4.7: Setup panel UI (iframe + new-window fallback, network warning, password step).
-- Task 4.8: Docs, full gates, isolated-instance acceptance of the mail flow without console, PR.
+**What exists today (`VERIFIED`):** a preset is `mcpapps.Preset{Server, Version, Confirmed, AllowForRoutine, DenyGlobal}` (`preset.go:22-28`), embedded via `go:embed presets/*.json` (`preset.go:14-15`) and loaded **by filename stem the caller names** (`LoadPreset`, `preset.go:36-46`). The only shipped file, `presets/imap-mcp-server.json`, has `"confirmed": false`, 12 `allowForRoutine` and 16 `denyGlobal` tools, so `ApplyPreset` (`preset.go:48`) always returns `ErrPresetUnconfirmed` (`preset.go:19,53`) and its single call site answers 409 (`api/applications/handler.go:424-429`). `mcpapps.EnsureGrant` (`grant.go:11-26`) is already the idempotent writer — it skips when a live grant with the same capability, pattern, mode and context exists. Grant modes and context kinds are `repo.GrantModeAllow|Deny|Ask` (`grant_repo.go:17-21`) and `repo.GrantContextTask|Routine|Application|Project|Global` (`grant_repo.go:25-32`). The needs-you band decides between two and four decision buttons with `isRoutineDecidable` (`AgentTriageBand.vue:282-284`), and the payload it renders, `sdk.PendingPermission` (`sdk/types.go:219-237`), **carries no grant state at all**; it is built in `agentbroadcast/enricher.go:117-124`. The applications panel lists tools with the server's own hints only (`ApplicationSettings.vue:403-428`) and says outright that grants decide. Nothing in `server/` calls a *named tool* on an application's MCP server — only `tools/list` through `ListTools` (`catalogue.go:42-63`) over `StdioTransport` (`catalogue.go:65-81`). Nothing starts a child process on a free port and waits for a readiness URL; the closest shapes are the pty host and the channel bridge opening their **own** listener with `net.Listen("tcp", "127.0.0.1:0")` (`channel/ptyhost.go:120-130`, `channel/bridge.go:209-222`). There is no `<iframe>` in `src/`, and `window.open` is deliberately absent — it silently does nothing in the desktop WKWebView (`CHANGELOG.md:424`), which is why downloads go through `utils/download.ts` and external links through `<a target="_blank" rel="noopener noreferrer">`.
+
+**Design decisions for this PR:**
+
+- **G-1 — a preset is found, not named.** `match` replaces the caller-supplied filename: the preset whose `match` string occurs in the application's entry (command plus args, joined by a space) wins, longest `match` first so a more specific package beats a generic one. `LoadPreset(name)` stays for tests; production goes through `FindPreset(entry)`. `Confirmed`, `AllowForRoutine` and `ErrPresetUnconfirmed` are deleted — a preset now carries only denies, a `setup` block and `secretTemplates`, and the denies are safe to apply unattended precisely because they only ever take authority away.
+- **G-2 — denies are applied where the application changes, not on a schedule.** `mcpapps.ApplyDefaultDenies(ctx, grants, app, grantedBy)` runs when an application is created, imported, and when a refresh stores a catalogue that matches a preset for the first time. It is `EnsureGrant` in a loop, so re-running it is free, and `POST /api/applications/{resourceId}/denies` exposes exactly the same call to the panel. A tool named by the preset but absent from the catalogue is still denied — a deny for a tool the server does not currently advertise costs nothing and closes the window where a refresh has not run yet.
+- **G-3 — "denied by default" is computed from the grants, not from the preset.** The needs-you payload gains `DeniedBy` state per request via `capability.Decide` over the request's own contexts, the same function the run's allow-list build uses (`mcpapps/resolve.go:105-130`), so the band can never disagree with what the spawner did. No second source of truth, and a deny the operator later revokes disappears from the card by itself.
+- **G-4 — one setup process per application, owned by a manager.** A new `server/internal/appsetup` package holds a `Manager` with one entry per application resource id: a free port (`net.Listen("tcp","127.0.0.1:0")`, read `Addr().(*net.TCPAddr).Port`, close the listener, hand the number to the child), the child process started from the preset's `setup` command with `{port}` substituted, and a readiness poll against `http://127.0.0.1:<port><readiness>`. It stops on **Done**, on panel close, after 15 minutes idle, after 30 minutes absolutely, and at shutdown through `serverapp.chainCleanup`. Starting a second one for the same application stops the first.
+- **G-5 — the setup page is an iframe with a plain-link fallback.** `window.open` is not available (it does nothing in the desktop webview), so the fallback is an `<a target="_blank" rel="noopener noreferrer">`. The panel carries the warning the spec requires — the setup server listens on all interfaces, so it is reachable from the local network until it is stopped — as a standing notice next to the frame, not a dismissible toast.
+- **G-6 — account names are read once, with a manual path always available.** A new `mcpapps.CallTool` gives the server a way to call one named tool on an application's own MCP server; it is used for `imap_list_accounts` only, as an operator action, and the plan says so in the docs because it deliberately bypasses grants (a human clicked it; no agent is involved). Task 4.1 verifies the tool's real output shape before 4.5 depends on it, and if the shape does not carry usable names, the panel asks the operator to type them.
+
+### Task 4.1: What `imap_list_accounts` actually returns
+
+**Files:**
+- Create: `docs/superpowers/notes/2026-09-17-imap-list-accounts-shape.md`
+
+This task writes no production code. Later tasks derive secret names from this tool's output, and the spec says the shape is verified first.
+
+- [ ] **Step 1:** Run the published server's tool list and one call, on a throwaway `HOME` so nothing touches the operator's mail config:
+```bash
+HOME=$(mktemp -d) npx -y -p imap-mcp-server@2.0.0 imap-mcp-server
+```
+  It speaks MCP over stdio; drive it with a short Go program under `/tmp` that uses the SDK the repo already vendors (`mcp.NewClient`, `mcp.CommandTransport`, `session.CallTool`) — the same calls `ListTools` makes (`catalogue.go:42-63`). Ask for `tools/list` first, then call `imap_list_accounts` with no arguments.
+- [ ] **Step 2:** Write down, verbatim: the tool's input schema, the JSON of its result, and where an account's name sits in it. If the call fails without a configured account, record the error text too — that is the state a fresh install is in, and Task 4.5 has to handle it.
+- [ ] **Step 3:** State the derivation rule that follows from the observed shape: which field becomes `{ACCOUNT}` in `IMAP_MCP_ACCOUNT_{ACCOUNT}_IMAP_PASSWORD`, and the normalisation (upper-case, every character outside `[A-Z0-9]` to `_`) with two worked examples from the real output.
+- [ ] **Step 4:** If the output carries no usable names, write that down as the finding. Task 4.5 then ships only the manual path and the plan is amended in the same commit.
+- [ ] **Step 5: Commit** `docs: record what the mail server's account list returns`.
+
+### Task 4.2: A preset carries denies, a setup block and secret templates
+
+**Files:**
+- Modify: `server/internal/mcpapps/preset.go:14-46` (struct, loader, new finder), `:48-92` (`ApplyPreset` becomes `ApplyDefaultDenies`)
+- Modify: `server/internal/mcpapps/presets/imap-mcp-server.json`
+- Modify: `server/internal/api/applications/handler.go:403-433` (the preset route becomes the denies route)
+- Test: `server/internal/mcpapps/preset_test.go` (extend), `server/internal/api/applications/handler_test.go` (extend)
+
+**Interfaces:**
+- Produces:
+```go
+type PresetSetup struct {
+	Command   string   `json:"command"`
+	Args      []string `json:"args"`   // one element may contain the literal {port}
+	Readiness string   `json:"readiness"` // path on the started server, e.g. /api/health
+}
+
+type Preset struct {
+	Server          string            `json:"server"`
+	Version         string            `json:"version"`
+	Match           string            `json:"match"`           // substring of the entry's command line
+	DenyGlobal      []string          `json:"denyGlobal"`
+	Setup           *PresetSetup      `json:"setup,omitempty"`
+	SecretTemplates []string          `json:"secretTemplates,omitempty"` // e.g. IMAP_MCP_ACCOUNT_{ACCOUNT}_IMAP_PASSWORD
+}
+
+// FindPreset returns the preset whose Match occurs in the entry's command line
+// (command and args joined by a space), longest Match first so a specific
+// package beats a generic one. ok is false when nothing matches.
+func FindPreset(entry ServerEntry) (p Preset, ok bool)
+
+// ApplyDefaultDenies writes a global deny for every tool the preset names.
+// It is idempotent: an existing live deny is left alone.
+func ApplyDefaultDenies(ctx context.Context, grants repo.GrantRepo, app *ent.MCPApplication, grantedBy string) (DenyResult, error)
+
+type DenyResult struct {
+	Preset  string   `json:"preset"`
+	Created []string `json:"created"`
+	Existing []string `json:"existing"`
+}
+```
+  `Confirmed`, `AllowForRoutine`, `ErrPresetUnconfirmed` and `ErrRoutineRequired` are deleted along with the `presets/{preset}` route. The new route is `POST /api/applications/{resourceId}/denies` → 200 `DenyResult`, 404 for an unknown application, and 200 with an empty `Preset` when no preset matches.
+
+- [ ] **Step 1: Write the failing tests:** `FindPreset` matches `{Command: "npx", Args: []string{"-y", "imap-mcp-server"}}` and does not match `{Command: "npx", Args: []string{"-y", "notes-mcp"}}`; with two presets whose `Match` values are `mcp` and `imap-mcp-server`, the longer one wins. `ApplyDefaultDenies` writes one global deny per `denyGlobal` tool **including tools absent from the catalogue**, returns them in `Created`, reports the second call's tools as `Existing` and creates nothing, and returns an empty result with no error for an application whose entry matches no preset. Handler: `POST …/denies` answers 200 with the created names, a second call reports them as existing, an unknown id is 404.
+- [ ] **Step 2: Run** `go test ./internal/mcpapps/ ./internal/api/applications/ -run 'Preset|Denies'` — FAIL. Paste it.
+- [ ] **Step 3: Implement.** Keep `//go:embed presets/*.json`, add a package-level parse of every embedded file at init (`fs.ReadDir`), sorted by `len(Match)` descending. The JSON file loses `confirmed` and `allowForRoutine` and gains `match: "imap-mcp-server"`, the `setup` block from the spec (`npx`, `["-y","-p","imap-mcp-server@2.0.0","imap-setup","--no-open","--skip-claude","--port","{port}"]`, readiness `/api/health`) and `secretTemplates` as Task 4.1 recorded them: `IMAP_MCP_ACCOUNT_{ACCOUNT}_IMAP_PASSWORD` and `IMAP_MCP_ACCOUNT_{ACCOUNT}_SMTP_PASSWORD` (the server also knows `_IMAP_USERNAME` and `_SMTP_USERNAME`, which are not secrets and stay out).
+- [ ] **Step 4: Run** — PASS; `go test ./internal/mcpapps/... ./internal/api/applications/... ./serverapp/...` PASS.
+- [ ] **Step 5: Mutation** — skip a tool that is not in the catalogue → the "denies a tool the catalogue does not list" test red; restore identical.
+- [ ] **Step 6: Commit** `feat(applications): a preset denies the dangerous tools by itself`.
+
+### Task 4.3: Denies apply when the application changes
+
+**Files:**
+- Modify: `server/internal/api/applications/handler.go` (`create`, `importApplication`, `refresh`)
+- (The plan first had `Refresh` report whether this was the first catalogue. It does not need to: `ApplyDefaultDenies` is idempotent, so the handler calls it unconditionally after a refresh and `catalogue.go` stays a catalogue reader.)
+- Test: `server/internal/api/applications/handler_test.go` (extend)
+
+**Interfaces:**
+- Consumes: `ApplyDefaultDenies` (4.2).
+- Produces: creating, importing or refreshing an application applies its preset's denies. The handler owns the call — `Refresher` stays a catalogue reader and does not write grants.
+
+- [ ] **Step 1: Write the failing tests:** `POST /api/applications` with `{"name":"mail","command":"npx","args":["-y","imap-mcp-server"]}` → the global deny grants exist afterwards (assert through `grants.ListForCapability(mcpapps.CapabilityName("mail","imap_send_email"))`, one live row with mode `deny` and context kind `global`); the same for `POST /api/applications/import`; a create whose command matches no preset writes no grant at all; creating the same application twice does not double the grants (the second create is a 409, so drive this through `POST …/denies` instead and assert one row).
+- [ ] **Step 2: Run** `go test ./internal/api/applications/ -run 'Denies|Create'` — FAIL.
+- [ ] **Step 3: Implement.** Apply the denies **after** the row exists and before the response is written; a failure to write them fails the request rather than leaving a server half-protected (fail fast at the boundary — an application whose denies are missing is exactly the state this PR exists to prevent).
+- [ ] **Step 4: Run** — PASS; package tests PASS.
+- [ ] **Step 5: Mutation** — apply the denies only on import, not on create → the create test red; restore identical.
+- [ ] **Step 6: Commit** `feat(applications): a new server starts with its dangerous tools denied`.
+
+### Task 4.4: A denied tool asks nobody
+
+**Files:**
+- Modify: `sdk/types.go:219-237` (`PendingPermission` gains one field), regenerate `src/types/sdk.generated.ts` if the repo's tygo step owns it
+- Modify: `server/internal/agentbroadcast/enricher.go:89-124`
+- Test: `server/internal/agentbroadcast/enricher_test.go` (extend)
+
+**Interfaces:**
+- Consumes: `capability.Decide` the way `mcpapps/resolve.go:105-130` calls it, so the band and the run's allow list can never disagree.
+- Produces: `PendingPermission.DeniedByDefault bool` — true when the capability for that request resolves to `deny` in the request's own contexts.
+
+- [ ] **Step 1: Write the failing tests:** a pending request for an application tool with a live global deny → `DeniedByDefault` true; the same tool with the deny revoked → false; a request for a built-in tool (not `mcp__…`) → false without consulting grants; a grants lookup that errors → false and the request is still listed (the band degrades to asking rather than vanishing).
+- [ ] **Step 2: Run** `go test ./internal/agentbroadcast/ -run Denied` — FAIL.
+- [ ] **Step 3: Implement.** One lookup per distinct capability per enrich pass, cached in a map for that pass — the band re-renders on every tick and a grants query per request per tick would be a per-second cost for a screen that rarely changes.
+- [ ] **Step 4: Run** — PASS; `go test ./internal/agentbroadcast/... ./serverapp/...` PASS; if `sdk.generated.ts` regenerated, `git diff` shows only the new field (see the repo's tygo trap: a local run rewrites the whole file with CRLF — if that happens, take only the intended hunk).
+- [ ] **Step 5: Mutation** — report `DeniedByDefault` for every application tool regardless of grants → the "deny revoked" test red; restore identical.
+- [ ] **Step 6: Commit** `feat(permissions): a request says when the tool is already denied`.
+
+### Task 4.5: The needs-you card offers no decision for a denied tool
+
+**Files:**
+- Modify: `src/features/agents/components/AgentTriageBand.vue:752-810`
+- Test: `src/features/agents/components/AgentTriageBand.test.ts` (extend)
+
+**Interfaces:**
+- Consumes: `deniedByDefault` on each pending permission (4.4).
+
+- [ ] **Step 1: Write the failing tests:** an item whose requests are all `deniedByDefault` renders neither the two-button nor the four-button row, and instead the text `denied by default — change it under Settings → Grants` with a link to the grants panel; a mixed item (one denied, one not) keeps the decision buttons, because the operator still has to answer the other request; an item with nothing denied is unchanged. Every mount is unmounted.
+- [ ] **Step 2: Run** `pnpm vitest run src/features/agents/components/AgentTriageBand.test.ts` — FAIL. Paste it.
+- [ ] **Step 3: Implement.** Add `allDenied(item)` next to `isRoutineDecidable` (`AgentTriageBand.vue:282-284`) and branch the template before the existing `v-if`/`v-else` pair, so the two existing variants keep their exact conditions.
+- [ ] **Step 4: Run** — PASS; `pnpm vitest run src/features/agents` PASS; `pnpm lint`; `pnpm typecheck`.
+- [ ] **Step 5: Mutation** — treat a mixed item as fully denied → the mixed test red; restore identical.
+- [ ] **Step 6: Commit** `feat(permissions): a denied tool is explained instead of asked about`.
+
+### Task 4.6: Calling one named tool on an application's server
+
+**Files:**
+- Create: `server/internal/mcpapps/calltool.go`, `server/internal/mcpapps/calltool_test.go`
+
+**Interfaces:**
+- Consumes: `ListTools`'s client setup (`catalogue.go:42-63`) and `StdioTransport` (`catalogue.go:65-81`).
+- Produces:
+```go
+// CallTool runs one tool on the application's own MCP server and returns the
+// raw JSON of its result. It is an operator action: the caller is a human in
+// the UI, not an agent, so no grant is consulted — the callers document that.
+func CallTool(ctx context.Context, transport mcp.Transport, name string, args map[string]any) (json.RawMessage, error)
+```
+
+- [ ] **Step 1: Write the failing tests** against a fake in-process MCP server the way `catalogue_test.go` builds one for `ListTools` (copy that fixture): a tool returning structured content comes back as its JSON; an unknown tool returns an error naming the tool; a server that errors on the call returns that error; a context deadline is honoured (call with an already-cancelled context and assert the error wraps `context.Canceled`).
+- [ ] **Step 2: Run** `go test ./internal/mcpapps/ -run TestCallTool` — FAIL.
+- [ ] **Step 3: Implement.** Connect, `session.CallTool`, close the session with a `defer`, and take the tool result's structured content if present, otherwise the first text content. A 30-second timeout like `Refresher.list` uses.
+- [ ] **Step 4: Run** — PASS; `go test ./internal/mcpapps/...` PASS.
+- [ ] **Step 5: Mutation** — swallow the call's error and return an empty result → the "server errors" test red; restore identical. (The repo has no `goleak`, so a leaked-goroutine assertion is out of scope here; the `defer` closing the session is covered by the deadline test instead.)
+- [ ] **Step 6: Commit** `feat(applications): call one tool on a server from the app`.
+
+### Task 4.7: The setup process manager
+
+**Files:**
+- Create: `server/internal/appsetup/manager.go`, `server/internal/appsetup/manager_test.go`
+- Modify: `server/serverapp/di.go` (construct it, stop it through `chainCleanup`)
+- Modify: `server/internal/api/applications/handler.go` (three routes)
+
+**Interfaces:**
+- Consumes: `mcpapps.FindPreset` (4.2) for the `setup` block, `mcpapps.ParseEntry`, the application's secrets for the child's environment.
+- Produces:
+```go
+type Session struct {
+	ResourceID string    `json:"resourceId"`
+	Port       int       `json:"port"`
+	URL        string    `json:"url"`       // http://127.0.0.1:<port>
+	StartedAt  time.Time `json:"startedAt"`
+	Warning    string    `json:"warning"`   // the local-network notice, so one text serves API and UI
+}
+
+type Manager struct{ /* mu, sessions map[string]*session, Now func() time.Time, ReadinessTimeout, IdleTimeout, MaxLifetime time.Duration */ }
+
+func NewManager() *Manager
+// Start stops any session already running for this application, picks a free
+// port, starts the preset's setup command with {port} substituted and the
+// application's own entry env plus its secrets, and waits for the readiness
+// path to answer 200.
+func (m *Manager) Start(ctx context.Context, app *ent.MCPApplication, env map[string]string) (Session, error)
+func (m *Manager) Stop(resourceID string) error
+func (m *Manager) Get(resourceID string) (Session, bool)
+func (m *Manager) StopAll()
+```
+  Routes: `POST /api/applications/{resourceId}/setup` → 200 `Session`, 404 unknown application, 409 when the preset has no `setup` block, 502 when the command fails to start or never becomes ready (with the last 2 KiB of its stderr in the message). `DELETE /api/applications/{resourceId}/setup` → 204, idempotent. `GET /api/applications/{resourceId}/setup` → 200 `Session` or 404.
+
+- [ ] **Step 1: Write the failing tests** (no network beyond loopback; the "setup command" in tests is `os.Args[0]` re-executed as a helper process the way Go's own `exec_test` does, serving a tiny HTTP server on the port it is given): a start returns a session whose `URL` answers 200 on the readiness path; a second start for the same application stops the first (assert the first process is gone); a command that exits immediately answers an error containing its stderr; a command that never serves the readiness path is killed after `ReadinessTimeout` and reports it; `Stop` is idempotent; `StopAll` ends everything; with `Now` moved past `IdleTimeout` the sweep stops the session; the same for `MaxLifetime`. Run the package with `-race`.
+- [ ] **Step 2: Run** `go test -race ./internal/appsetup/` — compile error. Paste it.
+- [ ] **Step 3: Implement.** Free port: `net.Listen("tcp","127.0.0.1:0")`, read `Addr().(*net.TCPAddr).Port`, close it, then start the child — the same shape `channel/ptyhost.go:120-130` uses for its own listener, with the one difference that here the port is handed to a child, so the window between close and start is accepted and a failure to bind surfaces as "never became ready". Readiness: poll every 200 ms until `ReadinessTimeout` (60 s default). Kill with `SIGKILL` after a `SIGTERM` that goes unanswered for 5 s. Capture stderr into a bounded 2 KiB ring buffer.
+- [ ] **Step 4: Run** — PASS with `-race`; `go test ./internal/appsetup/... ./internal/api/applications/... ./serverapp/...` PASS.
+- [ ] **Step 5: Two mutations, one at a time:** skip stopping the previous session on a second start → that test red; never kill a child that missed its readiness deadline → the timeout test red (it will hang until the test's own deadline, which is the point — note the run time in the paste). Restore identical each time.
+- [ ] **Step 6: Commit** `feat(applications): run a server's setup page from the app`.
+
+### Task 4.8: Secret names from the accounts the server knows
+
+**Files:**
+- Modify: `server/internal/api/applications/handler.go` (one route)
+- Test: `server/internal/api/applications/handler_test.go` (extend)
+
+**Interfaces:**
+- Consumes: `mcpapps.CallTool` (4.6), `mcpapps.FindPreset`'s `SecretTemplates` (4.2), and the shape Task 4.1 recorded in `docs/superpowers/notes/2026-09-17-imap-list-accounts-shape.md`: the tool answers with **text content holding JSON** (`{"accounts":[{"id","name","host","port","user","tls"}]}`), an empty list is a fresh install and not an error, and the environment variable key comes from the account's **`name`** — upper-cased, every character outside `[A-Z0-9]` replaced by `_`.
+- Produces: `POST /api/applications/{resourceId}/accounts` → 200 `{"names": ["IMAP_MCP_ACCOUNT_WORK_IMAP_PASSWORD", …]}` — the derived secret names, not the accounts themselves. 409 when the preset has no `secretTemplates`, 502 with the tool's error text when the call fails. The handler stores nothing: the operator sees the names and fills them through the existing secrets route.
+
+- [ ] **Step 1: Write the failing tests** with a fake transport returning the real shape — a single text content whose body is `{"accounts":[{"id":"a1","name":"work@example.com",…},{"id":"a2","name":"Work Gmail",…}]}`: those two accounts produce two names per template, in the template's order, with the normalisation applied (`work@example.com` → `WORK_EXAMPLE_COM`, `Work Gmail` → `WORK_GMAIL`); an empty `accounts` array answers 200 with an empty list (a fresh install, not an error); an account whose name normalises to underscores only is skipped; a tool error answers 502 and stores nothing; an application whose preset has no templates answers 409.
+- [ ] **Step 2: Run** `go test ./internal/api/applications/ -run Accounts` — FAIL.
+- [ ] **Step 3: Implement.** Normalisation in `mcpapps` next to the templates so the client never re-implements it: upper-case, every character outside `[A-Z0-9]` to `_`.
+- [ ] **Step 4: Run** — PASS; package tests PASS.
+- [ ] **Step 5: Mutation** — leave the account name unnormalised → the `work@example.com` test red; restore identical.
+- [ ] **Step 6: Commit** `feat(applications): derive the secret names from a server's accounts`.
+
+### Task 4.9: The setup panel
+
+**Files:**
+- Modify: `src/features/settings/composables/useApplications.ts`, `src/features/settings/components/ApplicationSettings.vue`
+- Test: `src/features/settings/components/ApplicationSettings.test.ts` (extend)
+
+**Interfaces:**
+- Consumes: the three setup routes (4.7) and the accounts route (4.8).
+- Produces on the composable: `setupSession` (a ref, per application), `startSetup(resourceId)`, `stopSetup(resourceId)`, `fetchAccounts(resourceId)`.
+
+- [ ] **Step 1: Write the failing tests** (every mount unmounted): an application whose preset offers setup shows a **Set up** button; clicking it posts to `…/setup` and renders an `<iframe>` whose `src` is the returned `URL`, with the warning text `Setup is reachable on your local network until you click Done` visible next to it and an `<a target="_blank" rel="noopener noreferrer">` to the same URL as the fallback — assert the anchor's attributes, because `window.open` does nothing in the desktop webview; **Done** sends `DELETE …/setup` and removes the frame; a 502 from the start shows the message and renders no frame; after **Done** the panel calls `…/accounts` and renders one write-only password field per returned name; a 502 from the accounts call shows the message and offers a field to type an account name instead; an application whose preset has no setup shows no **Set up** button.
+- [ ] **Step 2: Run** `pnpm vitest run src/features/settings/components/ApplicationSettings.test.ts` — FAIL. Paste it.
+- [ ] **Step 3: Implement.** The iframe gets `sandbox="allow-forms allow-scripts allow-same-origin"` and a fixed height; the warning is a standing `role="note"` next to the frame, never a dismissible toast. Reuse the existing `run()` error wrapper.
+- [ ] **Step 4: Run** — PASS; `pnpm vitest run src/features/settings` PASS; `pnpm lint`; `pnpm typecheck`.
+- [ ] **Step 5: Mutation** — render the frame without the warning → the warning test red; restore identical.
+- [ ] **Step 6: Commit** `feat(applications): set a server up from inside the app`.
+
+### Task 4.10: Every tool with its current state
+
+**Files:**
+- Modify: `server/internal/api/applications/handler.go` (the tool view), `server/internal/db/repo/grant_repo.go` only if a bulk lookup is missing
+- Modify: `src/features/settings/components/ApplicationSettings.vue:403-428`
+- Test: `server/internal/api/applications/handler_test.go`, `src/features/settings/components/ApplicationSettings.test.ts`
+
+**Interfaces:**
+- Produces: `toolView` gains `state: "denied" | "asks" | "allowed"` and, for `allowed`, `allowedIn: string[]` naming the contexts (`routine:<id>`, `global`, …). Computed with the same `capability.Decide` call as 4.4 — one resolution per tool, not a second rulebook.
+
+- [ ] **Step 1: Write the failing tests:** an application with a global deny on one tool and a routine allow on another renders `denied by default` for the first and `allowed for routine <name>` for the second, and `asks` for a tool with no grant; revoking the deny flips that tool to `asks` on the next fetch. SPA: the three states render with their own `data-testid`s and the server's hints stay visible but separate.
+- [ ] **Step 2: Run** both suites — FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** — PASS; Go and SPA package tests PASS; lint; typecheck.
+- [ ] **Step 5: Mutation** — report `asks` for a tool that has a deny → that test red; restore identical.
+- [ ] **Step 6: Commit** `feat(applications): every tool shows whether it is denied, asks or is allowed`.
+
+### Task 4.11: Docs, full gates, isolated run, PR
+
+- [ ] **Docs:** `CHANGELOG.md` — `### Added`: default denies applied on add, import and first recognition, with the one-click re-apply; the setup page run from the app with its local-network warning; secret names derived from a server's accounts; every tool's state in Settings → Applications. `### Changed`: a preset is found by what the entry runs instead of being named by the caller, and `confirmed`/`allowForRoutine`/`ErrPresetUnconfirmed` and the `presets/{preset}` route are gone; a request for a denied tool is explained instead of asked about. `docs/guides/mcp.md`: replace the preset section — no confirmation flag, denies are automatic, allows come from answering a request once; document `POST …/denies`, `…/setup`, `…/accounts`. `docs/guides/security.md`: the setup process runs as the same OS user with the application's secrets in its environment and listens on all interfaces until stopped; `imap_list_accounts` is called as an operator action and deliberately bypasses grants; default denies close the window between adding a server and refreshing its catalogue. Verify every claim against the code.
+- [ ] **Full gates** (paste raw output): `cd server && go vet ./... && go test -race ./...`, `cd sdk && go vet ./...`, `GOTOOLCHAIN=go1.26.6 golangci-lint run ./...` in both modules, `pnpm lint && pnpm typecheck && pnpm test`, `pnpm test:e2e`, then `git checkout HEAD -- server/frontend/dist/.gitkeep` and `git status --short` empty.
+- [ ] **Isolated run** — temp `DASHBOARD_DB_PATH`, `DASHBOARD_PORT`, `DASHBOARD_WORKTREE_ROOT` and `CLAUDE_CONFIG_DIR`, never the production database, `Origin` header on every mutating call. Check: create `mail` with the imap command → its deny grants exist immediately; `GET /api/applications` shows the tools as `denied`/`asks`; `POST …/denies` a second time reports them as existing and creates nothing; `POST …/setup` starts the page and `GET` returns the same session, `DELETE` stops it and the process is gone (`pgrep`); a permission request for a denied tool shows no decision in the payload (`deniedByDefault: true`). Paste every response; remove the instance and state the production database hash before and after.
+- [ ] **PR:** push, open with the evidence, wait for CI on the head commit, merge with `gh pr merge --squash --admin` when green, then `main` CI green.
+

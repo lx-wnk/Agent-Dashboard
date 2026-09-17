@@ -6,6 +6,10 @@ export interface ApplicationTool {
   description?: string
   readOnlyHint: boolean
   destructiveHint?: boolean
+  /** What happens with nothing but the global context: denied, asks, or allowed. */
+  state?: 'denied' | 'asks' | 'allowed'
+  /** Contexts carrying a live allow grant, e.g. `routine:<id>`. */
+  allowedIn?: string[]
 }
 
 export interface ApplicationSecret {
@@ -39,6 +43,14 @@ export interface ApplicationDrift {
   changed: string[]
 }
 
+export interface SetupSession {
+  resourceId: string
+  port: number
+  url: string
+  startedAt: string
+  warning: string
+}
+
 async function readError(res: Response, fallback: string): Promise<string> {
   const body = await res.json().catch(() => null) as { error?: string } | null
   return body?.error || fallback
@@ -49,6 +61,7 @@ export function useApplications() {
   const loading = ref(false)
   const error = ref<string | null>(null)
   const drift = ref<ApplicationDrift>({ found: [], changed: [] })
+  const setupSessions = ref<Record<string, SetupSession>>({})
   let eventSource: EventSource | null = null
 
   function replace(updated: ApplicationView) {
@@ -144,6 +157,31 @@ export function useApplications() {
     }
   }
 
+  async function startSetup(resourceId: string): Promise<void> {
+    const res = await fetch(`/api/applications/${encodeURIComponent(resourceId)}/setup`, { method: 'POST' })
+    if (!res.ok)
+      throw new Error(await readError(res, 'Failed to start setup'))
+    const session = await res.json() as SetupSession
+    setupSessions.value = { ...setupSessions.value, [resourceId]: session }
+  }
+
+  async function stopSetup(resourceId: string): Promise<void> {
+    const res = await fetch(`/api/applications/${encodeURIComponent(resourceId)}/setup`, { method: 'DELETE' })
+    if (!res.ok)
+      throw new Error(await readError(res, 'Failed to stop setup'))
+    const next = { ...setupSessions.value }
+    delete next[resourceId]
+    setupSessions.value = next
+  }
+
+  async function fetchAccountNames(resourceId: string): Promise<string[]> {
+    const res = await fetch(`/api/applications/${encodeURIComponent(resourceId)}/accounts`, { method: 'POST' })
+    if (!res.ok)
+      throw new Error(await readError(res, 'Failed to read account names'))
+    const body = await res.json() as { names: string[] }
+    return body.names
+  }
+
   async function importApplication(name: string): Promise<void> {
     const res = await fetch('/api/applications/import', {
       method: 'POST',
@@ -175,5 +213,5 @@ export function useApplications() {
     eventSource = null
   }
 
-  return { applications, loading, error, drift, fetchApplications, setAttachAll, setRequiredEnv, setSecret, deleteSecret, refreshCatalogue, createApplication, deleteApplication, setEntry, setExport, fetchDrift, importApplication, subscribe, unsubscribe }
+  return { applications, loading, error, drift, setupSessions, fetchApplications, setAttachAll, setRequiredEnv, setSecret, deleteSecret, refreshCatalogue, createApplication, deleteApplication, setEntry, setExport, fetchDrift, importApplication, startSetup, stopSetup, fetchAccountNames, subscribe, unsubscribe }
 }

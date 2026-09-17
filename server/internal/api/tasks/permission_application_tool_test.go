@@ -117,3 +117,73 @@ func TestBulkCreatePermissionRequests_AllowAll_ApplicationToolStaysPending(t *te
 		}
 	}
 }
+
+func TestListPermissionRequests_SaysWhenTheToolIsAlreadyDenied(t *testing.T) {
+	bundle, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("db.Open: %v", err)
+	}
+	client := bundle.Client
+	t.Cleanup(func() { _ = client.Close() })
+	_, r := newTestHandlerWithBroadcaster(t, client)
+	ctx := testCtx(t)
+
+	task, err := repo.NewTaskRepo(client).Create(ctx, repo.CreateTaskInput{
+		Slug: "denied-tool", Title: "Denied tool", Cwd: "/tmp/dt", CurrentStage: "implementation", Priority: "medium",
+	})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+	sr, err := repo.NewStageRunRepo(client).Create(ctx, repo.CreateStageRunInput{TaskID: task.ID, Stage: "implementation", Iteration: 1})
+	if err != nil {
+		t.Fatalf("create stage run: %v", err)
+	}
+	const denied = "mcp__mail__imap_send_email"
+	const asks = "mcp__mail__imap_search_emails"
+	caps := repo.NewCapabilityRepo(client)
+	for _, name := range []string{denied, asks} {
+		if _, err := caps.Upsert(ctx, repo.UpsertCapabilityInput{Name: name, Class: repo.CapClassTool}); err != nil {
+			t.Fatalf("upsert capability: %v", err)
+		}
+	}
+	if _, err := repo.NewGrantRepo(client).Create(ctx, repo.CreateGrantInput{
+		CapabilityName: denied, Context: repo.GrantContextFor(repo.GrantContextGlobal, ""),
+		Mode: repo.GrantModeDeny, GrantedBy: "tester",
+	}); err != nil {
+		t.Fatalf("create deny grant: %v", err)
+	}
+	for _, tool := range []string{denied, asks} {
+		b, _ := json.Marshal(map[string]any{"stageRunId": sr.ID, "tool": tool})
+		req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/permission-requests", bytes.NewReader(b)))
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		if rr.Code != http.StatusCreated {
+			t.Fatalf("create request for %s: %d %s", tool, rr.Code, rr.Body.String())
+		}
+	}
+
+	listReq := withAuth(t, httptest.NewRequest(http.MethodGet, "/api/tasks/"+task.ID+"/permission-requests", nil))
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, listReq)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("list: %d %s", rr.Code, rr.Body.String())
+	}
+	var out []struct {
+		Tool            string `json:"tool"`
+		DeniedByDefault bool   `json:"deniedByDefault"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	byTool := map[string]bool{}
+	for _, e := range out {
+		byTool[e.Tool] = e.DeniedByDefault
+	}
+	if !byTool[denied] {
+		t.Fatalf("%s carries a global deny grant and must be reported as denied by default: %s", denied, rr.Body.String())
+	}
+	if byTool[asks] {
+		t.Fatalf("%s has no deny grant and must stay askable: %s", asks, rr.Body.String())
+	}
+}

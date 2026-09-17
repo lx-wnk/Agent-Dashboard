@@ -56,6 +56,7 @@ import (
 	apiwp "github.com/lx-wnk/agent-dashboard/server/internal/api/wphandler"
 	"github.com/lx-wnk/agent-dashboard/server/internal/apps/github"
 	"github.com/lx-wnk/agent-dashboard/server/internal/apps/obsidian"
+	"github.com/lx-wnk/agent-dashboard/server/internal/appsetup"
 	"github.com/lx-wnk/agent-dashboard/server/internal/askgate"
 	authpkg "github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/capability"
@@ -158,7 +159,10 @@ type ServerComponents struct {
 	HistImporter *histsvc.Importer
 	// ApiKeyRepo feeds mcp.SweepExpiredKeys in runComponents; nil when no
 	// database is configured, same as HistImporter and Eval above.
-	ApiKeyRepo          repo.ApiKeyRepo
+	ApiKeyRepo repo.ApiKeyRepo
+	// SetupManager feeds its own sweep loop in runComponents; the idle and
+	// lifetime limits are what end a setup page nobody closed.
+	SetupManager        *appsetup.Manager
 	Baseline            agentbroadcast.BaselineProvider
 	Enricher            merger.Enricher
 	CapabilityDecisions agentbroadcast.CapabilityDecisionProvider
@@ -309,6 +313,9 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	// Hoisted out of the block below so the resources HTTP handler, built near
 	// the other handlers, can share this one instance.
 	var resourceRepo repo.ResourceRepo
+	// setupManager is hoisted so runComponents can drive its sweep loop; it is
+	// nil when no database is configured, like every other repo-backed piece.
+	var setupManager *appsetup.Manager
 	// obsidianClient is nil when the vault is unconfigured (buildObsidianClient's
 	// own doc comment covers why that is not an error) and stays nil without
 	// a database, since Register and the capability catalogue it depends on
@@ -741,6 +748,9 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 
 	var applicationsHandler *apiapplications.Handler
 	if entClient != nil {
+		setupManager = appsetup.NewManager(appsetup.Options{})
+		cleanup = chainCleanup(cleanup, setupManager.StopAll)
+
 		applicationsHandler = apiapplications.NewHandler(
 			repo.NewMCPApplicationRepo(entClient),
 			repo.NewApplicationSecretRepo(entClient, box),
@@ -754,6 +764,9 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 			repo.NewGrantRepo(entClient),
 			resourceRepo,
 			repo.NewTaskScheduleRepo(entClient),
+			setupManager,
+			apiapplications.StdioToolCaller{},
+			repo.NewCapabilityRepo(entClient),
 		)
 
 		watchCtx, stopConfigWatch := context.WithCancel(context.Background())
@@ -913,7 +926,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	// the crossing is applied consistently.
 	var pipelineEnricher merger.Enricher
 	if entClient != nil {
-		pipelineEnricher = agentbroadcast.NewPipelineTaskEnricher(repo.NewStageRunRepo(entClient), taskRepoForResolver, repo.NewPermissionRepo(entClient))
+		pipelineEnricher = agentbroadcast.NewPipelineTaskEnricher(repo.NewStageRunRepo(entClient), taskRepoForResolver, repo.NewPermissionRepo(entClient), repo.NewGrantRepo(entClient), repo.NewCapabilityRepo(entClient))
 	}
 
 	// Hook-event store + enricher: the opt-in receiver records per-event hook
@@ -1089,6 +1102,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		CapabilityDecisions: capabilityDecisions,
 		Eval:                evalService,
 		Settings:            settingsSvc,
+		SetupManager:        setupManager,
 		Obsidian:            obsidianClient,
 		GitHub:              githubClient,
 		Cleanup:             cleanup,

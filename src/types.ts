@@ -273,6 +273,8 @@ export interface PermissionRequest {
   reRequestCount?: number
   /** True when the Bash pattern is outside the server's safe allow-list; granting is a conscious human override. */
   outsideSafeList?: boolean
+  /** True when a grant already denies this capability in the task's contexts. An answer here would not reach the agent; the grant has to change instead. */
+  deniedByDefault?: boolean
 }
 
 // `FeedbackStage` is the subset of stages on which user-authored feedback

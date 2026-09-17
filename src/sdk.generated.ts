@@ -251,6 +251,13 @@ export interface PendingPermission {
   deniedByElided?: number
   reason?: string
   requestedAt: string
+  /**
+   * DeniedByDefault is true when a grant already denies this capability in
+   * this run's contexts — the same resolution the run's allow list uses. The
+   * client offers no decision for such a request; the answer is to change the
+   * grant, not to answer the prompt.
+   */
+  deniedByDefault?: boolean
 }
 /**
  * PendingCapabilityDecision is a capability decision waiting for a human at a

@@ -115,6 +115,15 @@ func runComponents(runCtx context.Context, cancel context.CancelFunc, comps *Ser
 		})
 	}
 
+	if comps.SetupManager != nil {
+		g.Go(func() error {
+			// One minute: the limits themselves are minutes and hours, so the
+			// loop only has to be finer than they are.
+			comps.SetupManager.RunSweeps(gCtx, time.Minute)
+			return nil
+		})
+	}
+
 	if comps.ApiKeyRepo != nil {
 		g.Go(func() error {
 			// One hour: these rows are already unusable the moment they expire
