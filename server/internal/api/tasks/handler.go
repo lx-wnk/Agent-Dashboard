@@ -39,6 +39,11 @@ type RefineStatusReader interface {
 	State(taskID string) (status, errMsg string)
 }
 
+// PermissionNotifier tells the operator that a run waits for a permission decision.
+type PermissionNotifier interface {
+	PermissionRequested(ctx context.Context, taskID, taskTitle, tool string)
+}
+
 // OrchestratorIface is the subset of PipelineOrchestrator consumed by the handler.
 type OrchestratorIface interface {
 	ProgressTask(ctx context.Context, taskID string, opts *pipeline.ProgressOpts) (*ent.StageRun, error)
@@ -69,6 +74,7 @@ type Handler struct {
 	worktreeMgr       WorktreeStatusProvider
 	refineReader      RefineStatusReader
 	checkpointSvc     CheckpointServiceIface
+	notifier          PermissionNotifier
 	allowGitPull      bool
 	bypassAuth        bool
 }
@@ -98,6 +104,9 @@ type Deps struct {
 	// CheckpointSvc drives the per-turn checkpoint list + revert endpoints.
 	// When nil, the checkpoint routes are not mounted.
 	CheckpointSvc CheckpointServiceIface
+	// Notifier tells the operator that a run waits for a permission decision.
+	// Nil disables push notifications (no webpush service configured).
+	Notifier PermissionNotifier
 	// AllowGitPull permits the git "pull" action; resolved from the git.allowPull
 	// setting at startup (ApplyRestart).
 	AllowGitPull bool
@@ -125,6 +134,7 @@ func NewHandler(deps Deps) *Handler {
 		worktreeMgr:       deps.WorktreeMgr,
 		refineReader:      deps.RefineReader,
 		checkpointSvc:     deps.CheckpointSvc,
+		notifier:          deps.Notifier,
 		allowGitPull:      deps.AllowGitPull,
 		bypassAuth:        deps.BypassAuth,
 	}
@@ -1122,6 +1132,11 @@ func (h *Handler) resolvePermissionRequest(w http.ResponseWriter, r *http.Reques
 		}
 		if _, err := h.orchestrator.ResumeFromUser(r.Context(), id, ""); err != nil {
 			slog.Warn("resolvePermissionRequest: ResumeFromUser failed", "taskID", id, "err", err)
+		}
+	}
+	if body.Outcome == repo.OutcomeDenied {
+		if _, err := h.orchestrator.ResumeFromUser(r.Context(), id, deniedResumePrompt([]string{pr.Tool})); err != nil {
+			slog.Warn("resolvePermissionRequest: ResumeFromUser after refusal failed", "taskID", id, "err", err)
 		}
 	}
 	h.broadcastEnrichedUpdate(r.Context(), id)

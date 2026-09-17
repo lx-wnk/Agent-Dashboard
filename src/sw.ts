@@ -3,6 +3,7 @@
 import type { PendingMessage } from './utils/pendingMessages'
 import { cleanupOutdatedCaches, precacheAndRoute } from 'workbox-precaching'
 import { DB_NAME, DB_VERSION, STORE } from './utils/pendingMessages'
+import { parsePushNotice } from './utils/pushPayload'
 import { BACKGROUND_SYNC_TAG, SW_MSG_MESSAGES_REPLAYED, SW_MSG_SKIP_WAITING } from './utils/swConstants'
 
 declare const self: ServiceWorkerGlobalScope
@@ -137,4 +138,34 @@ self.addEventListener('sync', (event) => {
 self.addEventListener('message', (event) => {
   if (event.data?.type === SW_MSG_SKIP_WAITING)
     self.skipWaiting()
+})
+
+self.addEventListener('push', (event) => {
+  let raw: unknown = null
+  try {
+    raw = event.data?.json()
+  }
+  catch {
+    raw = null
+  }
+  const notice = parsePushNotice(raw)
+  if (!notice)
+    return
+  event.waitUntil(self.registration.showNotification(notice.title, {
+    body: notice.body,
+    tag: notice.tag,
+    data: { url: notice.url },
+  }))
+})
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  const url = (event.notification.data as { url?: string } | undefined)?.url ?? '/'
+  event.waitUntil((async () => {
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+    const open = windows.find(w => 'focus' in w)
+    if (open)
+      return (open as WindowClient).focus()
+    return self.clients.openWindow(url)
+  })())
 })

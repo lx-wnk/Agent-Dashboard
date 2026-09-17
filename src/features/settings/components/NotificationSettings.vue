@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import type { NotifPref } from '@/features/settings/composables/useNotificationConfig'
-import { onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import { toast } from '@/composables/useToast'
 import { useNotificationConfig } from '@/features/settings/composables/useNotificationConfig'
+import { usePushSubscription } from '@/features/settings/composables/usePushSubscription'
 import { errorMessage } from '@/utils/errorMessage'
 
 const KNOWN_EVENTS: { type: string, label: string, description: string }[] = [
@@ -19,6 +20,18 @@ const CHANNELS = ['webhook', 'email', 'browser', 'system'] as const
 type Channel = typeof CHANNELS[number]
 
 const { prefs, config, loading, savePref, saveConfig } = useNotificationConfig()
+const { supported: pushSupported, state: pushState, error: pushError, refresh: pushRefresh, enable: pushEnable } = usePushSubscription()
+onMounted(() => void pushRefresh())
+
+const pushStatusText = computed(() => {
+  if (pushState.value === 'subscribed')
+    return 'Push is on for this device'
+  if (pushState.value === 'denied')
+    return 'Blocked in browser settings'
+  if (pushState.value === 'error')
+    return pushError.value ?? 'Push subscription error'
+  return 'Push is off for this device'
+})
 
 const savingPref = ref<string | null>(null)
 const savingConfig = ref(false)
@@ -103,6 +116,26 @@ async function handleSaveConfig() {
       <p class="text-xs text-fg-mute mt-0.5">
         Configure which pipeline events trigger notifications and via which channels.
       </p>
+    </div>
+
+    <div class="border border-line rounded-lg p-3 space-y-2">
+      <h4 class="text-xs font-semibold text-fg-mute uppercase tracking-wide">
+        Push on this device
+      </h4>
+      <p v-if="!pushSupported" class="text-xs text-fg-faint">
+        This browser does not support push notifications
+      </p>
+      <template v-else>
+        <p class="text-xs" :class="pushState === 'subscribed' ? 'text-success-text' : 'text-fg-faint'">
+          {{ pushStatusText }}
+        </p>
+        <AppButton v-if="pushState !== 'subscribed'" size="sm" @click="pushEnable">
+          Enable push on this device
+        </AppButton>
+        <p class="text-[10px] text-fg-faint">
+          Approval notifications also need the Browser channel ticked for Approval Needed below.
+        </p>
+      </template>
     </div>
 
     <!-- F011 — role="status" rendered unconditionally so announcements fire when content changes -->

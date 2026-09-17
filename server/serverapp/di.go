@@ -186,10 +186,11 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	}
 
 	var webPushHandler *apiwp.Handler
+	var wpSvc *wpservice.Service
 	if bundle != nil {
 		notifCfgRepo := rawrepo.NewNotificationConfigRepo(bundle.DB)
 		subRepo := rawrepo.NewPushSubscriptionRepo(bundle.DB)
-		wpSvc := wpservice.NewService(notifCfgRepo, subRepo)
+		wpSvc = wpservice.NewService(notifCfgRepo, subRepo)
 		webPushHandler = apiwp.NewHandler(wpSvc)
 	}
 
@@ -657,7 +658,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	if bundle != nil {
 		rawDB = bundle.DB
 	}
-	taskHandler := provideTaskHandler(entClient, rawDB, orch, taskBroadcaster, refineReaderArg, settingsSvc.Bool("git.allowPull"), routerConfig.BypassAuth, checkpointSvc)
+	taskHandler := provideTaskHandler(entClient, rawDB, orch, taskBroadcaster, refineReaderArg, settingsSvc.Bool("git.allowPull"), routerConfig.BypassAuth, checkpointSvc, newPushPermissionNotifier(wpSvc))
 
 	// Scheduler: recurring task firing engine + its REST handler. Reuses the task
 	// handler's create core, so it must be built after taskHandler. nil when no DB.

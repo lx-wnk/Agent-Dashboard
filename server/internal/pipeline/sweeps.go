@@ -39,7 +39,9 @@ func (o *PipelineOrchestrator) sweepAwaitingUserRuns(ctx context.Context, allRun
 			}
 			continue
 		}
-		if timeoutSec > 0 {
+		// Only a live agent can busy-wait. A run whose agent already exited is
+		// waiting for a human, and a human wait has no limit.
+		if timeoutSec > 0 && run.Pid != nil {
 			anchor := run.StartedAt
 			if run.LastGrantAt != nil {
 				anchor = run.LastGrantAt

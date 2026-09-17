@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/capability"
+	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/schema"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
@@ -21,6 +23,21 @@ import (
 // --allowedTools and --disallowedTools, so a decision renders without mapping.
 func CapabilityName(serverName, toolName string) string {
 	return "mcp__" + serverName + "__" + toolName
+}
+
+// IsApplicationTool reports whether tool names a tool of an attached MCP
+// application — mcp__<server>__<tool> with a server the dashboard does not
+// reserve for itself.
+func IsApplicationTool(tool string) bool {
+	rest, ok := strings.CutPrefix(tool, "mcp__")
+	if !ok {
+		return false
+	}
+	server, name, ok := strings.Cut(rest, "__")
+	if !ok || server == "" || name == "" {
+		return false
+	}
+	return !channelconfig.IsReservedServerName(server)
 }
 
 func ListTools(ctx context.Context, transport mcp.Transport) ([]schema.CatalogueTool, error) {

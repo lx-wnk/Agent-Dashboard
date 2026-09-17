@@ -347,7 +347,7 @@ Application secrets (see [MCP applications](mcp.md#mcp-applications)) are encryp
 - Use credentials you can revoke on their own — app-specific passwords where the provider offers them, never an account's main password — and attach an application only to routines whose agents you would trust with that credential.
 - Under `auth.mode=none` (see [Authentication and the local-trust default](#authentication-and-the-local-trust-default)), no authentication guards `/api`, so any local process, an agent's Bash included, can call the schedules and applications API — for example to attach an application to a routine or replace a secret. With authentication enabled, these routes require a session.
 - **Refresh tool list** runs the command from `~/.claude.json` — the command Claude Code itself runs for that server — as the same OS user, without a shell. Anyone able to change that file already runs as that user.
-- Application tools default to refusal: a tool without an allow grant is not in a run's allow list, and allow-all autonomy does not change that.
+- Application tools default to refusal: a tool without an allow grant is not in a run's allow list, and allow-all autonomy does not change that. An agent's permission request for an application tool is never approved automatically either, whatever the task's autonomy — a human decides (`server/internal/api/tasks/permission_request_routes.go`).
 
 ### Obsidian's TLS trust model
 

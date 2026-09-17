@@ -133,9 +133,12 @@ func (o *PipelineOrchestrator) applyTransitionWrites(
 		})
 
 	case FailTransition:
-		output := tr.Output
-		if output == nil {
-			output = map[string]any{}
+		output := make(map[string]any, len(sr.Output)+len(tr.Output)+1)
+		for k, v := range sr.Output {
+			output[k] = v
+		}
+		for k, v := range tr.Output {
+			output[k] = v
 		}
 		output["error"] = tr.Reason
 		if _, err := srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{

@@ -154,3 +154,8 @@ func ChannelAllowForTest() []string { return channelAllow }
 // SharedContextForTest exposes sharedContext, the system prompt every stage
 // spawn carries, for the output-channel test in stage_output_channel_test.go.
 const SharedContextForTest = sharedContext
+
+// SweepAwaitingUserRunsForTest exposes sweepAwaitingUserRuns for testing.
+func (o *PipelineOrchestrator) SweepAwaitingUserRunsForTest(ctx context.Context, runs []*ent.StageRun) error {
+	return o.sweepAwaitingUserRuns(ctx, runs)
+}

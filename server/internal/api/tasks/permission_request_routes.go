@@ -14,6 +14,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	"github.com/lx-wnk/agent-dashboard/server/internal/mcpapps"
 	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
 	"github.com/lx-wnk/agent-dashboard/server/internal/taskcontrol"
 )
@@ -113,7 +114,7 @@ func (h *Handler) createPermissionRequest(w http.ResponseWriter, r *http.Request
 	sr, srErr := h.srRepo.GetByID(r.Context(), body.StageRunID)
 	if srErr == nil {
 		task, taskErr := h.taskRepo.GetByID(r.Context(), sr.TaskID)
-		if taskErr == nil && taskcontrol.IsAllowAll(task.Autonomy) {
+		if taskErr == nil && taskcontrol.IsAllowAll(task.Autonomy) && !mcpapps.IsApplicationTool(body.Tool) {
 			// Auto-approve: task operates in allow-all mode — no human gating needed.
 			if resolveErr := h.permRepo.ResolvePermissionRequest(r.Context(), req.ID, repo.OutcomeGranted); resolveErr != nil {
 				slog.Warn("createPermissionRequest: auto-approve failed", "reqID", req.ID, "err", resolveErr)
@@ -139,6 +140,13 @@ func (h *Handler) createPermissionRequest(w http.ResponseWriter, r *http.Request
 				slog.Warn("createPermissionRequest: flip to awaiting_user failed", "stageRunID", body.StageRunID, "err", err2)
 			}
 			h.broadcastEnrichedEvent(r.Context(), "permission_request", sr.TaskID)
+		}
+		if req.Outcome == nil && h.notifier != nil && h.approvalPushWanted(r.Context()) {
+			title := ""
+			if taskErr == nil {
+				title = task.Title
+			}
+			h.notifier.PermissionRequested(r.Context(), sr.TaskID, title, body.Tool)
 		}
 	} else {
 		// Stage-run lookup failed: the request was created but can be neither
@@ -349,6 +357,7 @@ func (h *Handler) bulkCreatePermissionRequests(w http.ResponseWriter, r *http.Re
 	task, taskErr := h.taskRepo.GetByID(r.Context(), sr.TaskID)
 	taskIsAllowAll := taskErr == nil && taskcontrol.IsAllowAll(task.Autonomy)
 
+	pushWanted := h.approvalPushWanted(r.Context())
 	for _, e := range body.Entries {
 		if e.Tool == "" {
 			continue
@@ -366,7 +375,7 @@ func (h *Handler) bulkCreatePermissionRequests(w http.ResponseWriter, r *http.Re
 		if err2 != nil {
 			return fmt.Errorf("bulk_perm_req: create: %w", err2)
 		}
-		if taskIsAllowAll {
+		if taskIsAllowAll && !mcpapps.IsApplicationTool(e.Tool) {
 			// Auto-approve: task operates in allow-all mode.
 			if resolveErr := h.permRepo.ResolvePermissionRequest(r.Context(), req.ID, repo.OutcomeGranted); resolveErr != nil {
 				slog.Warn("bulkCreatePermissionRequests: auto-approve failed", "reqID", req.ID, "err", resolveErr)
@@ -382,6 +391,13 @@ func (h *Handler) bulkCreatePermissionRequests(w http.ResponseWriter, r *http.Re
 		}
 		hasNewRequests = true
 		id := req.ID
+		if h.notifier != nil && pushWanted {
+			title := ""
+			if taskErr == nil {
+				title = task.Title
+			}
+			h.notifier.PermissionRequested(r.Context(), sr.TaskID, title, e.Tool)
+		}
 		results = append(results, result{Tool: e.Tool, Pattern: e.Pattern, AutoGranted: false, RequestID: &id})
 	}
 
@@ -399,6 +415,12 @@ func (h *Handler) bulkCreatePermissionRequests(w http.ResponseWriter, r *http.Re
 	}
 
 	return jsonReply(w, http.StatusOK, results)
+}
+
+// deniedResumePrompt is what a resumed agent is told after a human refused tools.
+func deniedResumePrompt(tools []string) string {
+	return "A human refused permission to use: " + strings.Join(tools, ", ") +
+		". Continue without these tools and state in your output what you could not do because of that."
 }
 
 // bulkResolvePermissionRequests handles POST /api/permission-requests/bulk-resolve.
@@ -512,6 +534,21 @@ func (h *Handler) bulkResolvePermissionRequests(w http.ResponseWriter, r *http.R
 					slog.Warn("bulk_resolve: remember: UpsertBatch failed", "taskID", body.TaskID, "err", err)
 				}
 			}
+		}
+	}
+	if outcome == repo.OutcomeDenied && len(idsToResolve) > 0 {
+		resolveSet := make(map[string]bool, len(idsToResolve))
+		for _, id := range idsToResolve {
+			resolveSet[id] = true
+		}
+		var tools []string
+		for _, req := range pending {
+			if resolveSet[req.ID] {
+				tools = append(tools, req.Tool)
+			}
+		}
+		if _, err := h.orchestrator.ResumeFromUser(r.Context(), body.TaskID, deniedResumePrompt(tools)); err != nil {
+			slog.Warn("bulk_resolve: ResumeFromUser after refusal failed", "taskID", body.TaskID, "err", err)
 		}
 	}
 
