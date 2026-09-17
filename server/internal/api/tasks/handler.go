@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -276,12 +277,22 @@ func (h *Handler) broadcastEnrichedEvent(ctx context.Context, eventType string, 
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) error {
+	q := r.URL.Query()
+	kind := q.Get("kind")
+	if kind == "" {
+		kind = pipeline.TaskKindPipeline
+	}
+	if kind != "all" && kind != pipeline.TaskKindPipeline && kind != pipeline.TaskKindJob {
+		return apierr.NewAppError(http.StatusBadRequest, "kind must be pipeline, job or all")
+	}
+	routineID := q.Get("routineId")
+
 	payload, _ := auth.PayloadFromContext(r.Context())
 	tasks, err := h.taskRepo.ListForUser(r.Context(), payload.Sub, h.bypassAuth)
 	if err != nil {
 		return fmt.Errorf("tasks.list: %w", err)
 	}
-	stage := r.URL.Query().Get("stage")
+	stage := q.Get("stage")
 	if stage != "" {
 		var filtered []*ent.Task
 		for _, t := range tasks {
@@ -291,6 +302,12 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) error {
 		}
 		tasks = filtered
 	}
+	tasks = slices.DeleteFunc(tasks, func(t *ent.Task) bool {
+		if kind != "all" && t.Kind != kind {
+			return true
+		}
+		return routineID != "" && (t.RoutineID == nil || *t.RoutineID != routineID)
+	})
 	enriched, err := EnrichTasksBulkWithDeps(r.Context(), tasks, h.srRepo, h.permRepo, h.srBulkRepo, h.depRepo, h.taskRepo)
 	if err != nil {
 		return fmt.Errorf("tasks.list.enrich: %w", err)
