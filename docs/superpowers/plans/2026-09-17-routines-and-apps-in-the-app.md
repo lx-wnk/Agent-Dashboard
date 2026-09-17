@@ -1236,7 +1236,7 @@ func EnsureGrant(ctx context.Context, grants repo.GrantRepo, in repo.CreateGrant
 | --- | --- | --- | --- |
 | `allow_once` | any | today's `task_permissions` grant (`grantValidatedEntries`); for an application tool additionally a grant `allow`, context `task=<taskID>` (B-1) | `""` |
 | `allow_routine` | application tool, task has `routineId` | grant `allow`, context `routine=<routineID>` | `""` |
-| `deny_routine` | application tool, task has `routineId` | grant `deny`, context `routine=<routineID>` | `routineDeniedResumePrompt(tools)` |
+| `deny_routine` | application tool, task has `routineId` | grant `deny`, context `routine=<routineID>` | `decisionResumePrompt(deny_routine, tools)` |
 | `deny_once` | any | nothing | `deniedResumePrompt(tools)` |
 
   Refusals (400, request stays pending): unknown decision → `decision must be allow_once, allow_routine, deny_routine or deny_once`; routine decision on a task without `routineId` → `routine decisions need a task started by a routine`; routine decision for a non-application tool → `routine decisions apply to application tools only`. Validate before `ResolvePermissionRequest`, so a refused call changes nothing.
@@ -1254,7 +1254,7 @@ func EnsureGrant(ctx context.Context, grants repo.GrantRepo, in repo.CreateGrant
 - [ ] **Step 3: Implement.** `EnsureGrant` is the body of `preset.go`'s `apply` closure from `ListForCapability` to `Create`, with the equivalence check unchanged (`RevokedAt == nil && ExpiresAt == nil && Pattern == "" && LimitCount == 0 && Mode && ContextKind && ContextRef`); the closure keeps its `known`/`Skipped`/`Existing`/`Created` bookkeeping around it. In `permission_decision.go`:
 
 ```go
-func routineDeniedResumePrompt(tools []string) string {
+func decisionResumePrompt(decision string, tools []string) string { // deny_routine branch
 	return "A human denied these tools for this routine, permanently: " + strings.Join(tools, ", ") +
 		". Continue without them and state in your output what you could not do because of that."
 }
