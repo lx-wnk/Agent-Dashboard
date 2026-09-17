@@ -52,7 +52,7 @@ func (r Resolver) ResolveRun(ctx context.Context, task *ent.Task) (RunApplicatio
 	for _, id := range task.Applications {
 		attached[id] = true
 	}
-	contexts := runContexts(task)
+	contexts := RunContexts(task)
 
 	for _, app := range apps {
 		explicit := attached[app.ResourceID]
@@ -99,11 +99,20 @@ func (r Resolver) ResolveRun(ctx context.Context, task *ent.Task) (RunApplicatio
 }
 
 func (r Resolver) decide(ctx context.Context, capName string, contexts []capability.Context) (capability.Decision, error) {
+	return Decide(ctx, r.Grants, r.Capabilities, capName, contexts)
+}
+
+// Decide resolves one capability against the given contexts, reading the
+// capability's class (for the default-effect fallback) and its live grants.
+// Exported so a caller outside Resolver — the pipeline enricher labels a
+// pending permission with the same resolution a run's allow list uses — can
+// reuse it without constructing a Resolver.
+func Decide(ctx context.Context, grants repo.GrantRepo, caps repo.CapabilityRepo, capName string, contexts []capability.Context) (capability.Decision, error) {
 	var view capability.CapabilityView
-	if row, err := r.Capabilities.Get(ctx, capName); err == nil {
+	if row, err := caps.Get(ctx, capName); err == nil {
 		view = capability.CapabilityView{Name: row.Name, Class: row.Class, EnforceableBy: row.EnforceableBy}
 	}
-	rows, err := r.Grants.ListForCapability(ctx, capName)
+	rows, err := grants.ListForCapability(ctx, capName)
 	if err != nil {
 		return capability.Decision{}, fmt.Errorf("mcpapps: grants for %s: %w", capName, err)
 	}
@@ -114,10 +123,10 @@ func (r Resolver) decide(ctx context.Context, capName string, contexts []capabil
 	), nil
 }
 
-// runContexts mirrors the chain the memory push uses: task, the routine that
+// RunContexts mirrors the chain the memory push uses: task, the routine that
 // created it, the project scope — which the memory gate keys by working
 // directory (stage_handlers.go) — and global.
-func runContexts(task *ent.Task) []capability.Context {
+func RunContexts(task *ent.Task) []capability.Context {
 	out := []capability.Context{{Kind: repo.GrantContextTask, Ref: task.ID}}
 	if task.RoutineID != nil {
 		out = append(out, memory.RoutineContext(*task.RoutineID)...)
