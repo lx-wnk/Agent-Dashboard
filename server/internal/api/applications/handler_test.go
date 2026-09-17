@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/applications"
+	"github.com/lx-wnk/agent-dashboard/server/internal/appsetup"
 	"github.com/lx-wnk/agent-dashboard/server/internal/claudeconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
@@ -39,7 +40,7 @@ func newMux(t *testing.T) (*chi.Mux, repo.MCPApplicationRepo, repo.GrantRepo, re
 	_, err = apps.Upsert(context.Background(), repo.UpsertMCPApplicationInput{ResourceID: "res-mail", ServerName: "mail"})
 	require.NoError(t, err)
 	mux := chi.NewRouter()
-	applications.NewHandler(apps, secrets, mcpapps.Refresher{Now: time.Now}, grants, resources, schedules).Mount(mux)
+	applications.NewHandler(apps, secrets, mcpapps.Refresher{Now: time.Now}, grants, resources, schedules, appsetup.NewManager(appsetup.Options{})).Mount(mux)
 	return mux, apps, grants, secrets, resources, schedules
 }
 

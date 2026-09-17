@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
+	"github.com/lx-wnk/agent-dashboard/server/internal/appsetup"
 	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/claudeconfig"
@@ -31,10 +32,11 @@ type Handler struct {
 	grants    repo.GrantRepo
 	resources repo.ResourceRepo
 	schedules repo.TaskScheduleRepo
+	setup     *appsetup.Manager
 }
 
-func NewHandler(apps repo.MCPApplicationRepo, secrets repo.ApplicationSecretRepo, refresher mcpapps.Refresher, grants repo.GrantRepo, resources repo.ResourceRepo, schedules repo.TaskScheduleRepo) *Handler {
-	return &Handler{apps: apps, secrets: secrets, refresher: refresher, grants: grants, resources: resources, schedules: schedules}
+func NewHandler(apps repo.MCPApplicationRepo, secrets repo.ApplicationSecretRepo, refresher mcpapps.Refresher, grants repo.GrantRepo, resources repo.ResourceRepo, schedules repo.TaskScheduleRepo, setup *appsetup.Manager) *Handler {
+	return &Handler{apps: apps, secrets: secrets, refresher: refresher, grants: grants, resources: resources, schedules: schedules, setup: setup}
 }
 
 func (h *Handler) Mount(r chi.Router) {
@@ -47,6 +49,9 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Delete("/api/applications/{resourceId}/secrets/{envName}", apierr.ErrorMiddleware(h.deleteSecret))
 	r.Post("/api/applications/{resourceId}/refresh", apierr.ErrorMiddleware(h.refresh))
 	r.Post("/api/applications/{resourceId}/denies", apierr.ErrorMiddleware(h.denies))
+	r.Post("/api/applications/{resourceId}/setup", apierr.ErrorMiddleware(h.startSetup))
+	r.Delete("/api/applications/{resourceId}/setup", apierr.ErrorMiddleware(h.stopSetup))
+	r.Get("/api/applications/{resourceId}/setup", apierr.ErrorMiddleware(h.getSetup))
 	r.Delete("/api/applications/{resourceId}", apierr.ErrorMiddleware(h.delete))
 }
 
@@ -512,4 +517,65 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) error {
 
 	w.WriteHeader(http.StatusNoContent)
 	return nil
+}
+
+// startSetup runs the application's preset setup wizard as a child process so
+// an operator can complete first-time configuration, replacing any setup
+// already running for this application.
+func (h *Handler) startSetup(w http.ResponseWriter, r *http.Request) error {
+	app, err := h.load(r)
+	if err != nil {
+		return err
+	}
+	var entry mcpapps.ServerEntry
+	if !mcpapps.IsEmptyEntry(app.Entry) {
+		entry, err = mcpapps.ParseEntry(app.Entry)
+		if err != nil {
+			return err
+		}
+	}
+	preset, ok := mcpapps.FindPreset(entry)
+	if !ok || preset.Setup == nil {
+		return apierr.NewAppError(http.StatusConflict, "this server has no setup page")
+	}
+	secretValues, err := h.secrets.Values(r.Context(), app.ResourceID)
+	if err != nil {
+		return err
+	}
+	env := make(map[string]string, len(entry.Env)+len(secretValues))
+	for k, v := range entry.Env {
+		env[k] = v
+	}
+	for k, v := range secretValues {
+		env[k] = v
+	}
+	sess, err := h.setup.Start(r.Context(), app.ResourceID, *preset.Setup, env)
+	if err != nil {
+		return apierr.NewAppError(http.StatusBadGateway, err.Error())
+	}
+	return writeJSON(w, http.StatusOK, sess)
+}
+
+func (h *Handler) stopSetup(w http.ResponseWriter, r *http.Request) error {
+	app, err := h.load(r)
+	if err != nil {
+		return err
+	}
+	if err := h.setup.Stop(app.ResourceID); err != nil {
+		return err
+	}
+	w.WriteHeader(http.StatusNoContent)
+	return nil
+}
+
+func (h *Handler) getSetup(w http.ResponseWriter, r *http.Request) error {
+	app, err := h.load(r)
+	if err != nil {
+		return err
+	}
+	sess, ok := h.setup.Get(app.ResourceID)
+	if !ok {
+		return apierr.ErrNotFound
+	}
+	return writeJSON(w, http.StatusOK, sess)
 }
