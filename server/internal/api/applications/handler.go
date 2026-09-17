@@ -34,6 +34,26 @@ type Handler struct {
 	resources repo.ResourceRepo
 	schedules repo.TaskScheduleRepo
 	setup     SetupRunner
+	tools     ToolCaller
+}
+
+// ToolCaller runs one tool on an application's own MCP server. It is an
+// interface so a route can be tested without launching a server, and because
+// the handler has no business knowing how a transport is built.
+type ToolCaller interface {
+	Call(ctx context.Context, entry mcpapps.ServerEntry, env map[string]string, tool string, args map[string]any) (json.RawMessage, error)
+}
+
+// StdioToolCaller is the production ToolCaller: it starts the application's
+// own server over stdio and calls the tool there.
+type StdioToolCaller struct{}
+
+func (StdioToolCaller) Call(ctx context.Context, entry mcpapps.ServerEntry, env map[string]string, tool string, args map[string]any) (json.RawMessage, error) {
+	transport, err := mcpapps.StdioTransport(entry, env)
+	if err != nil {
+		return nil, err
+	}
+	return mcpapps.CallTool(ctx, transport, tool, args)
 }
 
 // SetupRunner is the part of appsetup.Manager these routes use. It is an
@@ -45,8 +65,11 @@ type SetupRunner interface {
 	Get(resourceID string) (appsetup.Session, bool)
 }
 
-func NewHandler(apps repo.MCPApplicationRepo, secrets repo.ApplicationSecretRepo, refresher mcpapps.Refresher, grants repo.GrantRepo, resources repo.ResourceRepo, schedules repo.TaskScheduleRepo, setup SetupRunner) *Handler {
-	return &Handler{apps: apps, secrets: secrets, refresher: refresher, grants: grants, resources: resources, schedules: schedules, setup: setup}
+func NewHandler(apps repo.MCPApplicationRepo, secrets repo.ApplicationSecretRepo, refresher mcpapps.Refresher, grants repo.GrantRepo, resources repo.ResourceRepo, schedules repo.TaskScheduleRepo, setup SetupRunner, tools ToolCaller) *Handler {
+	if tools == nil {
+		tools = StdioToolCaller{}
+	}
+	return &Handler{apps: apps, secrets: secrets, refresher: refresher, grants: grants, resources: resources, schedules: schedules, setup: setup, tools: tools}
 }
 
 func (h *Handler) Mount(r chi.Router) {
@@ -62,6 +85,7 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Post("/api/applications/{resourceId}/setup", apierr.ErrorMiddleware(h.startSetup))
 	r.Delete("/api/applications/{resourceId}/setup", apierr.ErrorMiddleware(h.stopSetup))
 	r.Get("/api/applications/{resourceId}/setup", apierr.ErrorMiddleware(h.getSetup))
+	r.Post("/api/applications/{resourceId}/accounts", apierr.ErrorMiddleware(h.accounts))
 	r.Delete("/api/applications/{resourceId}", apierr.ErrorMiddleware(h.delete))
 }
 
@@ -588,4 +612,41 @@ func (h *Handler) getSetup(w http.ResponseWriter, r *http.Request) error {
 		return apierr.ErrNotFound
 	}
 	return writeJSON(w, http.StatusOK, sess)
+}
+
+// accounts asks the application's own server which accounts it knows and
+// answers with the secret names those accounts need — never the accounts
+// themselves, and nothing is stored. The operator fills the names through the
+// secrets route.
+//
+// The tool call is an operator action, so it consults no grant: a human
+// clicked it, and no agent is involved.
+func (h *Handler) accounts(w http.ResponseWriter, r *http.Request) error {
+	app, err := h.load(r)
+	if err != nil {
+		return err
+	}
+	var entry mcpapps.ServerEntry
+	if !mcpapps.IsEmptyEntry(app.Entry) {
+		if entry, err = mcpapps.ParseEntry(app.Entry); err != nil {
+			return err
+		}
+	}
+	preset, ok := mcpapps.FindPreset(entry)
+	if !ok || len(preset.SecretTemplates) == 0 {
+		return apierr.NewAppError(http.StatusConflict, "this server declares no per-account secrets")
+	}
+	values, err := h.secrets.Values(r.Context(), app.ResourceID)
+	if err != nil {
+		return err
+	}
+	raw, err := h.tools.Call(r.Context(), entry, values, "imap_list_accounts", nil)
+	if err != nil {
+		return apierr.NewAppError(http.StatusBadGateway, err.Error())
+	}
+	names, err := mcpapps.AccountNames(raw)
+	if err != nil {
+		return apierr.NewAppError(http.StatusBadGateway, err.Error())
+	}
+	return writeJSON(w, http.StatusOK, map[string]any{"names": mcpapps.SecretNamesForAccounts(preset.SecretTemplates, names)})
 }

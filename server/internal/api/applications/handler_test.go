@@ -41,7 +41,7 @@ func newMux(t *testing.T) (*chi.Mux, repo.MCPApplicationRepo, repo.GrantRepo, re
 	_, err = apps.Upsert(context.Background(), repo.UpsertMCPApplicationInput{ResourceID: "res-mail", ServerName: "mail"})
 	require.NoError(t, err)
 	mux := chi.NewRouter()
-	applications.NewHandler(apps, secrets, mcpapps.Refresher{Now: time.Now}, grants, resources, schedules, appsetup.NewManager(appsetup.Options{})).Mount(mux)
+	applications.NewHandler(apps, secrets, mcpapps.Refresher{Now: time.Now}, grants, resources, schedules, appsetup.NewManager(appsetup.Options{}), nil).Mount(mux)
 	return mux, apps, grants, secrets, resources, schedules
 }
 
@@ -675,7 +675,7 @@ func newMuxWithSetup(t *testing.T, setup applications.SetupRunner) (*chi.Mux, re
 	mux := chi.NewRouter()
 	applications.NewHandler(apps, secrets, mcpapps.Refresher{Now: time.Now},
 		repo.NewGrantRepo(bundle.Client), repo.NewResourceRepo(bundle.Client),
-		repo.NewTaskScheduleRepo(bundle.Client), setup).Mount(mux)
+		repo.NewTaskScheduleRepo(bundle.Client), setup, nil).Mount(mux)
 	return mux, apps, secrets
 }
 
@@ -740,4 +740,93 @@ func TestGetSetup_NothingRunningIs404AndStopIsIdempotent(t *testing.T) {
 		require.Equal(t, http.StatusNoContent, rec.Code, rec.Body.String())
 	}
 	require.Equal(t, 2, setup.stopped, "stopping twice is not an error")
+}
+
+type fakeTools struct {
+	raw     json.RawMessage
+	err     error
+	lastEnv map[string]string
+	calls   int
+}
+
+func (f *fakeTools) Call(_ context.Context, _ mcpapps.ServerEntry, env map[string]string, _ string, _ map[string]any) (json.RawMessage, error) {
+	f.calls++
+	f.lastEnv = env
+	return f.raw, f.err
+}
+
+func newMuxWithTools(t *testing.T, tools applications.ToolCaller) (*chi.Mux, repo.MCPApplicationRepo, repo.ApplicationSecretRepo) {
+	t.Helper()
+	bundle, err := db.Open(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+	box, err := secretbox.New(make([]byte, 32))
+	require.NoError(t, err)
+	apps := repo.NewMCPApplicationRepo(bundle.Client)
+	secrets := repo.NewApplicationSecretRepo(bundle.Client, box)
+	_, err = apps.Upsert(context.Background(), repo.UpsertMCPApplicationInput{ResourceID: "res-mail", ServerName: "mail"})
+	require.NoError(t, err)
+	mux := chi.NewRouter()
+	applications.NewHandler(apps, secrets, mcpapps.Refresher{Now: time.Now},
+		repo.NewGrantRepo(bundle.Client), repo.NewResourceRepo(bundle.Client),
+		repo.NewTaskScheduleRepo(bundle.Client), &fakeSetup{}, tools).Mount(mux)
+	return mux, apps, secrets
+}
+
+func imapApp(t *testing.T, apps repo.MCPApplicationRepo) {
+	t.Helper()
+	_, err := apps.SetEntry(context.Background(), "res-mail",
+		json.RawMessage(`{"command":"npx","args":["-y","imap-mcp-server"]}`))
+	require.NoError(t, err)
+}
+
+func TestAccounts_DerivesOneSecretNamePerTemplatePerAccount(t *testing.T) {
+	tools := &fakeTools{raw: json.RawMessage(`{"accounts":[{"id":"a1","name":"work@example.com"},{"id":"a2","name":"Work Gmail"}]}`)}
+	mux, apps, secrets := newMuxWithTools(t, tools)
+	imapApp(t, apps)
+	require.NoError(t, secrets.Set(context.Background(), "res-mail", "IMAP_HOST", "imap.example.com"))
+
+	rec := do(t, mux, http.MethodPost, "/api/applications/res-mail/accounts", nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.JSONEq(t, `{"names":[
+		"IMAP_MCP_ACCOUNT_WORK_EXAMPLE_COM_IMAP_PASSWORD",
+		"IMAP_MCP_ACCOUNT_WORK_GMAIL_IMAP_PASSWORD",
+		"IMAP_MCP_ACCOUNT_WORK_EXAMPLE_COM_SMTP_PASSWORD",
+		"IMAP_MCP_ACCOUNT_WORK_GMAIL_SMTP_PASSWORD"]}`, rec.Body.String())
+	require.Equal(t, "imap.example.com", tools.lastEnv["IMAP_HOST"], "the server is started with the application's own secrets")
+	require.NotContains(t, rec.Body.String(), "work@example.com", "the accounts themselves are not part of the answer")
+}
+
+func TestAccounts_EmptyListIsAnEmptyAnswerNotAnError(t *testing.T) {
+	tools := &fakeTools{raw: json.RawMessage(`{"accounts":[]}`)}
+	mux, apps, _ := newMuxWithTools(t, tools)
+	imapApp(t, apps)
+
+	rec := do(t, mux, http.MethodPost, "/api/applications/res-mail/accounts", nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.JSONEq(t, `{"names":[]}`, rec.Body.String())
+}
+
+func TestAccounts_ToolFailureIs502AndStoresNothing(t *testing.T) {
+	tools := &fakeTools{err: errors.New("mcpapps.CallTool imap_list_accounts: mailbox unreachable")}
+	mux, apps, secrets := newMuxWithTools(t, tools)
+	imapApp(t, apps)
+
+	rec := do(t, mux, http.MethodPost, "/api/applications/res-mail/accounts", nil)
+	require.Equal(t, http.StatusBadGateway, rec.Code)
+	require.Contains(t, rec.Body.String(), "mailbox unreachable")
+	meta, err := secrets.List(context.Background(), "res-mail")
+	require.NoError(t, err)
+	require.Empty(t, meta, "a failed lookup must not leave a secret behind")
+}
+
+func TestAccounts_ServerWithoutTemplatesIs409(t *testing.T) {
+	tools := &fakeTools{raw: json.RawMessage(`{"accounts":[]}`)}
+	mux, apps, _ := newMuxWithTools(t, tools)
+	_, err := apps.SetEntry(context.Background(), "res-mail", json.RawMessage(`{"command":"npx","args":["-y","notes-mcp"]}`))
+	require.NoError(t, err)
+
+	rec := do(t, mux, http.MethodPost, "/api/applications/res-mail/accounts", nil)
+	require.Equal(t, http.StatusConflict, rec.Code, rec.Body.String())
+	require.Equal(t, 0, tools.calls, "a server with no per-account secrets is never started")
 }
