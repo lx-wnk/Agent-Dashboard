@@ -659,6 +659,63 @@ self.addEventListener('notificationclick', (event) => {
 
 - [ ] **Step 7: Commit** — `feat: push a notification when a run waits for a permission decision`
 
+### Task 5c: Push only when the operator asked for it
+
+Found while documenting Task 5 (`VERIFIED`): Settings → Notifications stores per-event preferences in `pipeline_configs` under `notif:pref:<eventType>` as JSON `{"channels": [...], "enabled": bool}` (`server/internal/api/tasks/notification_routes.go:80-87`), and nothing on the server reads them. The approval push must honour the `approval_needed` preference: send only when it exists, is `enabled`, and lists the `browser` channel. No stored preference means no push, matching what the settings panel shows for an unset event (disabled).
+
+**Files:**
+- Modify: `server/internal/api/tasks/notification_routes.go` (add `func (h *Handler) approvalPushWanted(ctx context.Context) bool`)
+- Modify: `server/internal/api/tasks/permission_request_routes.go` (both notifier call sites also require `h.approvalPushWanted(r.Context())`)
+- Modify: `server/internal/api/tasks/permission_notify_test.go`
+
+- [ ] **Step 1: Failing tests** — in `permission_notify_test.go` add a helper that writes the preference through the existing route `PUT /api/notifications/preferences/approval_needed` with body `{"eventType":"approval_needed","channels":["browser"],"enabled":true}` (check the handler's accepted body in `putNotificationPreference`), call it in the three tests that expect a notification, and add: `TestPermissionNotifier_NoPreference_NoPush` (manual task, gated request, no preference → 0 calls) and `TestPermissionNotifier_PreferenceWithoutBrowserChannel_NoPush` (enabled with `["webhook"]` → 0 calls).
+- [ ] **Step 2: Run, expect the two new tests to FAIL.**
+- [ ] **Step 3: Implement**
+
+```go
+// approvalPushWanted reports whether the operator enabled browser notifications
+// for approval_needed in Settings → Notifications.
+func (h *Handler) approvalPushWanted(ctx context.Context) bool {
+	raw := h.cfgRepo.GetString(ctx, notifPrefPrefix+"approval_needed", "")
+	if raw == "" {
+		return false
+	}
+	var p notifPref
+	if err := json.Unmarshal([]byte(raw), &p); err != nil {
+		return false
+	}
+	return p.Enabled && slices.Contains(p.Channels, "browser")
+}
+```
+
+Both call sites: `if req.Outcome == nil && h.notifier != nil && h.approvalPushWanted(r.Context()) {` and, in the bulk loop, `if h.notifier != nil && h.approvalPushWanted(r.Context()) {` (read the preference once before the loop into a local `pushWanted`).
+- [ ] **Step 4: Run, expect PASS.** Mutations: `return p.Enabled` without the channel check → the webhook-only test red; `raw == ""` returning true → no-preference test red. Restore from copies.
+- [ ] **Step 5: Commit** — `fix(tasks): send the approval push only when browser notifications are enabled for it`
+
+### Task 5d: Subscribe this browser to push notifications
+
+Found while documenting Task 5 (`VERIFIED`): the SPA never calls `pushManager.subscribe`, never fetches the VAPID key and never posts to `POST /api/settings/webpush/subscribe` (`server/internal/api/wphandler/handler.go:27-29`). Without a subscription no push reaches any browser.
+
+**Files:**
+- Create: `src/features/settings/composables/usePushSubscription.ts`, `src/features/settings/composables/usePushSubscription.test.ts`
+- Modify: `src/features/settings/components/NotificationSettings.vue` (a "Push on this device" block above the event table)
+- Modify or create the component test next to `NotificationSettings.vue` (follow the existing test file if there is one)
+
+**Interfaces:**
+- Produces (TS): `usePushSubscription(): { supported: ComputedRef<boolean>, state: Ref<'unknown' | 'subscribed' | 'not-subscribed' | 'denied' | 'error'>, error: Ref<string | null>, refresh(): Promise<void>, enable(): Promise<void> }`
+
+- [ ] **Step 1: Failing composable tests** (mock `navigator.serviceWorker.ready`, `Notification.requestPermission`, `PushManager`, `fetch`):
+  - `supported` is false when `serviceWorker` or `PushManager` is missing.
+  - `refresh()` sets `subscribed` when `pushManager.getSubscription()` returns a subscription, `not-subscribed` otherwise.
+  - `enable()`: permission `denied` → state `denied`, no fetch.
+  - `enable()`: permission `granted`, `GET /api/settings/webpush/vapid` 404 → `POST /api/settings/webpush/vapid` → key; `pushManager.subscribe({ userVisibleOnly: true, applicationServerKey })` with the key decoded from base64url to a `Uint8Array`; `POST /api/settings/webpush/subscribe` with `subscription.toJSON()` (`endpoint`, `keys.p256dh`, `keys.auth`) → state `subscribed`.
+  - A failing subscribe POST → state `error` with the server message.
+- [ ] **Step 2: Run, expect FAIL.**
+- [ ] **Step 3: Implement** the composable (mutating requests send `Content-Type: application/json`; reuse `errorMessage` from `@/utils/errorMessage`; base64url decode inline with `atob` after replacing `-`/`_` and padding) and the block in `NotificationSettings.vue`: status line ("Push is on for this device" / "Push is off" / "Blocked in browser settings" / error text) and an "Enable push on this device" `AppButton` when not subscribed and supported; hint that "Approval Needed" needs the Browser channel ticked.
+- [ ] **Step 4: Component test**: mounting shows the button when not subscribed and calls `enable` on click; unmount at the end.
+- [ ] **Step 5: Run, expect PASS**; mutation: skip the `POST …/subscribe` call → the enable test red. Restore.
+- [ ] **Step 6: Commit** — `feat(settings): subscribe this browser to push notifications`
+
 ### Task 6: Docs, full gates, PR
 
 - [ ] `CHANGELOG.md` `### Fixed`: human waits never time out (plan review measured failing after the limit and losing its plan), failed runs keep output, refusals resume the run, application tools never auto-approved under allow-all autonomy (with the `permission_request_routes.go` evidence). `### Added`: push notification for pending permission requests (needs notifications enabled in the browser; the desktop webview is not covered).
