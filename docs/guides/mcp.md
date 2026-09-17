@@ -191,7 +191,21 @@ Grants resolve from the most specific context: task, routine, project (the task'
 
 **Dangerous tools are denied without being asked about.** A shipped preset lists the tools of a known server that must never run unattended — for `imap-mcp-server` that is sending, replying, forwarding, deleting, attachment download and upload, account and spam-list changes. The preset is found by what the server actually runs: its `match` string is looked for in the application's command line, so a definition is recognised without anyone naming a preset. Its denies are written as global `deny` grants when the application is added, when it is imported, and again on demand with `POST /api/applications/{resourceId}/denies`, which answers with the capability names it `created` and those already `existing`. It is idempotent, and it denies a tool the last refresh did not list — the window between adding a server and reading its tool list is exactly when an unguarded tool would be reachable.
 
-Allows are not part of a preset. Everything the denies do not cover asks on first use, and the answer — once, always for this routine, always deny for this routine, deny once — is what writes the grant.
+Allows are not part of a preset. Everything the denies do not cover asks on first use, and the answer — once, always for this routine, always deny for this routine, deny once — is what writes the grant. A request for a tool that is already denied carries no decision at all: the needs-you card says so and points at Settings → Grants, because answering it would change nothing — the run's allow list is built from the same resolution.
+
+Settings → Applications lists every tool with what it resolves to today: **denied by default**, **asks on first use**, or **allowed**, plus the contexts a live allow grant names (`routine:<id>`, for instance). The server's own `readOnlyHint` and `destructiveHint` stay visible beside it and stay untrusted.
+
+### Setting a server up
+
+A preset may also declare a `setup` block — a command, its arguments with a `{port}` placeholder, and a readiness path. **Set up** in Settings → Applications then starts that command on a free port, passing the application's own environment and its stored secrets, and shows the server's own configuration page in a sandboxed frame once the readiness path answers.
+
+- The port is also handed to the child as `SETUP_PORT`.
+- One setup runs per application; starting a second replaces the first.
+- It stops on **Done**, on fifteen minutes idle, after thirty minutes at most, and when the dashboard shuts down.
+- **The setup page is reachable on your local network while it runs** — the panel says so for as long as the process lives. Click Done when you are finished.
+- `POST /api/applications/{resourceId}/setup` answers the session, `GET` returns it, `DELETE` stops it. A server without a setup block answers `409`; a command that fails to start or never becomes ready answers `502` with the tail of its own stderr.
+
+After a setup, `POST /api/applications/{resourceId}/accounts` asks the server which accounts it now knows and answers with the **variable names** those accounts need — `{"names": ["IMAP_MCP_ACCOUNT_WORK_IMAP_PASSWORD", …]}`. The accounts themselves are not part of the answer and nothing is stored: the panel renders one write-only password field per name, which you fill as any other secret. The names are built the way the server builds them, upper-casing the account name and replacing every character outside `A-Z0-9` with an underscore. This call reaches the server's own tool directly and consults no grant — an operator clicked it, no agent is involved.
 
 **No grant is not an allow.** Pipeline runs are headless, so an ungranted tool is refused; the agent can ask through a permission request, and a human's approval is honoured for that task. Allow-all autonomy (`spec_gated`, `full`) does not allow application tools.
 
