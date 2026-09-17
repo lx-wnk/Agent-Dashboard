@@ -1,5 +1,6 @@
 import type { Ref } from 'vue'
 import type { PermissionRequest, PipelineTask } from '../types'
+import type { PermissionDecision } from '@/features/pipeline/composables/useTasks'
 import { computed, ref, watch } from 'vue'
 import { bulkResolvePermissionRequests, fetchPendingPermissionRequests } from '@/features/pipeline/composables/useTasks'
 import { friendlyProjectName } from '../utils/friendlyProjectName'
@@ -74,17 +75,19 @@ export function usePendingPermissions(tasks: Ref<PipelineTask[]>) {
 
   const totalRequests = computed(() => items.value.reduce((sum, item) => sum + item.requests.length, 0))
 
-  async function approve(taskId: string, ids: string[], remember: boolean): Promise<void> {
-    await bulkResolvePermissionRequests(taskId, ids, 'granted', remember)
+  async function decide(taskId: string, ids: string[], decision: PermissionDecision, remember = false): Promise<void> {
+    await bulkResolvePermissionRequests(taskId, ids, decision, remember)
     const updated = await fetchPendingPermissionRequests(taskId)
     cache.value = new Map(cache.value).set(taskId, updated)
+  }
+
+  async function approve(taskId: string, ids: string[], remember: boolean): Promise<void> {
+    await decide(taskId, ids, 'allow_once', remember)
   }
 
   async function deny(taskId: string, ids: string[]): Promise<void> {
-    await bulkResolvePermissionRequests(taskId, ids, 'denied', false)
-    const updated = await fetchPendingPermissionRequests(taskId)
-    cache.value = new Map(cache.value).set(taskId, updated)
+    await decide(taskId, ids, 'deny_once')
   }
 
-  return { items, totalRequests, approve, deny, refresh }
+  return { items, totalRequests, approve, deny, decide, refresh }
 }

@@ -343,11 +343,13 @@ export async function fetchPendingPermissionRequests(taskId: string): Promise<Pe
   return await res.json() as PermissionRequest[]
 }
 
-export async function resolvePermissionRequest(taskId: string, requestId: string, outcome: 'granted' | 'denied'): Promise<void> {
+export type PermissionDecision = 'allow_once' | 'allow_routine' | 'deny_routine' | 'deny_once'
+
+export async function resolvePermissionRequest(taskId: string, requestId: string, decision: PermissionDecision): Promise<void> {
   const res = await fetch(`/api/tasks/${taskId}/permission-requests/${requestId}/resolve`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ outcome }),
+    body: JSON.stringify({ decision }),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
@@ -363,13 +365,13 @@ export interface BulkResolveResponse {
 export async function bulkResolvePermissionRequests(
   taskId: string,
   permissionIds: string[],
-  outcome: 'granted' | 'denied',
+  decision: PermissionDecision,
   remember = false,
 ): Promise<BulkResolveResponse> {
   const res = await fetch(`/api/permission-requests/bulk-resolve`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ taskId, outcome, permissionIds, remember }),
+    body: JSON.stringify({ taskId, decision, permissionIds, remember }),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))

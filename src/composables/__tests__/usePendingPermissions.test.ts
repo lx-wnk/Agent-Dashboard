@@ -147,7 +147,7 @@ describe('usePendingPermissions', () => {
 
     await approve('task-1', ['req-1'], true)
 
-    expect(bulkResolveMock).toHaveBeenCalledWith('task-1', ['req-1'], 'granted', true)
+    expect(bulkResolveMock).toHaveBeenCalledWith('task-1', ['req-1'], 'allow_once', true)
     expect(items.value).toHaveLength(0)
   })
 
@@ -165,7 +165,7 @@ describe('usePendingPermissions', () => {
 
     await deny('task-1', ['req-1'])
 
-    expect(bulkResolveMock).toHaveBeenCalledWith('task-1', ['req-1'], 'denied', false)
+    expect(bulkResolveMock).toHaveBeenCalledWith('task-1', ['req-1'], 'deny_once', false)
   })
 
   it('does not issue duplicate fetches for a task already being fetched', async () => {

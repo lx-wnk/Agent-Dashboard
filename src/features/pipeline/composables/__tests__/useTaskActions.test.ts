@@ -174,7 +174,7 @@ describe('useTaskActions — permission resolution', () => {
     const passedAction = vi.mocked(details.handleAction).mock.calls[0][0]
     await passedAction()
 
-    expect(resolvePermissionRequest).toHaveBeenCalledWith('task-1', 'req-7', 'granted')
+    expect(resolvePermissionRequest).toHaveBeenCalledWith('task-1', 'req-7', 'allow_once')
     wrapper.unmount()
   })
 
@@ -190,7 +190,7 @@ describe('useTaskActions — permission resolution', () => {
     const passedAction = vi.mocked(details.handleAction).mock.calls[0][0]
 
     await expect(passedAction()).rejects.toThrow('1 request(s) failed: r2 failed')
-    expect(bulkResolvePermissionRequests).toHaveBeenCalledWith('task-1', ['r1', 'r2'], 'granted')
+    expect(bulkResolvePermissionRequests).toHaveBeenCalledWith('task-1', ['r1', 'r2'], 'allow_once')
     wrapper.unmount()
   })
 
@@ -218,7 +218,7 @@ describe('useTaskActions — permission resolution', () => {
     const passedAction = vi.mocked(details.handleAction).mock.calls[0][0]
     await passedAction()
 
-    expect(bulkResolvePermissionRequests).toHaveBeenCalledWith('task-1', [], 'denied')
+    expect(bulkResolvePermissionRequests).toHaveBeenCalledWith('task-1', [], 'deny_once')
     wrapper.unmount()
   })
 })
@@ -360,8 +360,8 @@ describe('useTaskActions — onSlashSelect', () => {
     const passedAction = vi.mocked(details.handleAction).mock.calls[0][0]
 
     await expect(passedAction()).resolves.toBeUndefined()
-    expect(bulkResolvePermissionRequests).toHaveBeenNthCalledWith(1, 'task-1', ['r1'], 'granted')
-    expect(bulkResolvePermissionRequests).toHaveBeenNthCalledWith(2, 'task-1', ['r2'], 'granted')
+    expect(bulkResolvePermissionRequests).toHaveBeenNthCalledWith(1, 'task-1', ['r1'], 'allow_once')
+    expect(bulkResolvePermissionRequests).toHaveBeenNthCalledWith(2, 'task-1', ['r2'], 'allow_once')
     wrapper.unmount()
   })
 
@@ -379,7 +379,7 @@ describe('useTaskActions — onSlashSelect', () => {
 
     await expect(passedAction()).rejects.toThrow('1 request(s) failed: r1 denied by policy')
     expect(bulkResolvePermissionRequests).toHaveBeenCalledTimes(1)
-    expect(bulkResolvePermissionRequests).toHaveBeenCalledWith('task-1', ['r1'], 'granted')
+    expect(bulkResolvePermissionRequests).toHaveBeenCalledWith('task-1', ['r1'], 'allow_once')
     wrapper.unmount()
   })
 

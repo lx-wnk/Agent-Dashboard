@@ -49,7 +49,7 @@ describe('usePermissionResolve', () => {
 
       expect(err).toBeNull()
       expect(mockBulkResolve).toHaveBeenCalledOnce()
-      expect(mockBulkResolve).toHaveBeenCalledWith('task-1', ['perm-1', 'perm-2'], 'granted', false)
+      expect(mockBulkResolve).toHaveBeenCalledWith('task-1', ['perm-1', 'perm-2'], 'allow_once', false)
     })
 
     it('forwards remember: true to bulkResolvePermissionRequests', async () => {
@@ -64,7 +64,7 @@ describe('usePermissionResolve', () => {
       const err = await resolveAgent(agent, 'granted', true)
 
       expect(err).toBeNull()
-      expect(mockBulkResolve).toHaveBeenCalledWith('task-2', ['perm-3'], 'granted', true)
+      expect(mockBulkResolve).toHaveBeenCalledWith('task-2', ['perm-3'], 'allow_once', true)
     })
 
     it('returns an error string when the API throws', async () => {
@@ -120,8 +120,8 @@ describe('usePermissionResolve', () => {
 
       expect(err).toBeNull()
       expect(mockBulkResolve).toHaveBeenCalledTimes(2)
-      expect(mockBulkResolve).toHaveBeenCalledWith('task-1', ['p1', 'p2'], 'granted', false)
-      expect(mockBulkResolve).toHaveBeenCalledWith('task-2', ['p3'], 'granted', false)
+      expect(mockBulkResolve).toHaveBeenCalledWith('task-1', ['p1', 'p2'], 'allow_once', false)
+      expect(mockBulkResolve).toHaveBeenCalledWith('task-2', ['p3'], 'allow_once', false)
     })
 
     it('forwards remember: true to every bulk call', async () => {
@@ -139,7 +139,7 @@ describe('usePermissionResolve', () => {
       const err = await approveAll(agents, 'granted', true)
 
       expect(err).toBeNull()
-      expect(mockBulkResolve).toHaveBeenCalledWith('task-1', ['p1'], 'granted', true)
+      expect(mockBulkResolve).toHaveBeenCalledWith('task-1', ['p1'], 'allow_once', true)
     })
 
     it('returns an error string when any bulk call fails', async () => {

@@ -50,14 +50,14 @@ export function useTaskActions(task: Ref<PipelineTask | null>, details: UseTaskD
   })
 
   function onResolve(req: PermissionRequest, outcome: 'granted' | 'denied'): Promise<void> {
-    return details.handleAction(() => resolvePermissionRequest(task.value!.id, req.id, outcome))
+    return details.handleAction(() => resolvePermissionRequest(task.value!.id, req.id, outcome === 'granted' ? 'allow_once' : 'deny_once'))
   }
 
   function onResolveAll(stageRunId: string, outcome: 'granted' | 'denied'): Promise<void> {
     const group = details.pendingByStageRun.value.find(g => g.stageRunId === stageRunId)
     const ids = group ? group.requests.map(r => r.id) : []
     return details.handleAction(async () => {
-      const { errors } = await bulkResolvePermissionRequests(task.value!.id, ids, outcome)
+      const { errors } = await bulkResolvePermissionRequests(task.value!.id, ids, outcome === 'granted' ? 'allow_once' : 'deny_once')
       if (errors?.length)
         throw new Error(`${errors.length} request(s) failed: ${errors.join('; ')}`)
     })
@@ -111,7 +111,7 @@ export function useTaskActions(task: Ref<PipelineTask | null>, details: UseTaskD
       case '/grant':
         await details.handleAction(async () => {
           for (const group of details.pendingByStageRun.value) {
-            const { errors } = await bulkResolvePermissionRequests(task.value!.id, group.requests.map(r => r.id), 'granted')
+            const { errors } = await bulkResolvePermissionRequests(task.value!.id, group.requests.map(r => r.id), 'allow_once')
             if (errors?.length)
               throw new Error(`${errors.length} request(s) failed: ${errors.join('; ')}`)
           }
