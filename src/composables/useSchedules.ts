@@ -1,6 +1,8 @@
 import { onUnmounted, ref, shallowRef } from 'vue'
 import { SSE_RETRY_DELAY_MS } from '../utils/sse'
 
+export type RunMode = 'job' | 'pipeline'
+
 export interface ScheduleView {
   id: string
   name: string
@@ -9,7 +11,8 @@ export interface ScheduleView {
   cronExpr: string
   human: string
   timezone: string
-  catchup: boolean
+  catchup: 'none' | 'once'
+  runMode: RunMode
   slugPrefix: string
   title: string
   description?: string | null
@@ -23,6 +26,8 @@ export interface ScheduleView {
   nextRunAt?: string | null
   lastRunAt?: string | null
   lastTaskId?: string | null
+  lastSkippedAt?: string | null
+  skippedCount: number
   createdAt: string
   updatedAt: string
   applications: string[]
@@ -40,7 +45,8 @@ export interface CreateScheduleBody {
   nlText?: string
   cronExpr?: string
   timezone?: string
-  catchup?: boolean
+  catchup?: 'none' | 'once'
+  runMode?: RunMode
   slugPrefix: string
   title: string
   description?: string
