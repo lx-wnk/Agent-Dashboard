@@ -32,6 +32,7 @@ type scheduleBody struct {
 	SpawnerID           string    `json:"spawnerId"`
 	PermissionTemplate  *string   `json:"permissionTemplate"`
 	Applications        *[]string `json:"applications"`
+	RunMode             string    `json:"runMode"`
 }
 
 // scheduleView is the JSON shape returned for a schedule.
@@ -55,8 +56,11 @@ type scheduleView struct {
 	SpawnerID          *string  `json:"spawnerId,omitempty"`
 	PermissionTemplate *string  `json:"permissionTemplate,omitempty"`
 	Applications       []string `json:"applications"`
+	RunMode            string   `json:"runMode"`
 	NextRunAt          *string  `json:"nextRunAt,omitempty"`
 	LastRunAt          *string  `json:"lastRunAt,omitempty"`
+	LastSkippedAt      *string  `json:"lastSkippedAt,omitempty"`
+	SkippedCount       int      `json:"skippedCount"`
 	LastTaskID         *string  `json:"lastTaskId,omitempty"`
 	CreatedAt          string   `json:"createdAt"`
 	UpdatedAt          string   `json:"updatedAt"`
@@ -83,6 +87,8 @@ func toView(s *ent.TaskSchedule) scheduleView {
 		SpawnerID:          s.SpawnerID,
 		PermissionTemplate: s.PermissionTemplate,
 		Applications:       s.Applications,
+		RunMode:            s.RunMode,
+		SkippedCount:       s.SkippedCount,
 		LastTaskID:         s.LastTaskID,
 		CreatedAt:          s.CreatedAt.UTC().Format(isoFmt),
 		UpdatedAt:          s.UpdatedAt.UTC().Format(isoFmt),
@@ -94,6 +100,10 @@ func toView(s *ent.TaskSchedule) scheduleView {
 	if s.LastRunAt != nil {
 		t := s.LastRunAt.UTC().Format(isoFmt)
 		v.LastRunAt = &t
+	}
+	if s.LastSkippedAt != nil {
+		t := s.LastSkippedAt.UTC().Format(isoFmt)
+		v.LastSkippedAt = &t
 	}
 	return v
 }

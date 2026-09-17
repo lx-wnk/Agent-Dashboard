@@ -128,6 +128,13 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 	if err := h.validateApplications(r.Context(), body.Applications); err != nil {
 		return err
 	}
+	runMode := body.RunMode
+	if runMode == "" {
+		runMode = repo.RunModeJob
+	}
+	if err := scheduler.CheckRunMode(r.Context(), runMode, body.Cwd); err != nil {
+		return apierr.NewAppError(http.StatusBadRequest, err.Error())
+	}
 	cronExpr, err := h.resolveCron(r.Context(), body.NLText, body.CronExpr)
 	if err != nil {
 		return err
@@ -164,6 +171,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 		PermissionTemplate:  body.PermissionTemplate,
 		UserID:              &userID,
 		NextRunAt:           next,
+		RunMode:             runMode,
 	}
 	if body.Applications != nil {
 		in.Applications = *body.Applications
@@ -181,7 +189,8 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) error {
 	id := chi.URLParam(r, "id")
-	if _, err := h.repo.GetByID(r.Context(), id); err != nil {
+	existing, err := h.repo.GetByID(r.Context(), id)
+	if err != nil {
 		return apierr.ErrNotFound
 	}
 	var body scheduleBody
@@ -189,6 +198,22 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) error {
 		return apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
 	}
 	in := repo.UpdateTaskScheduleInput{}
+	if body.RunMode != "" || body.Cwd != "" {
+		effectiveMode := body.RunMode
+		if effectiveMode == "" {
+			effectiveMode = existing.RunMode
+		}
+		effectiveCwd := body.Cwd
+		if effectiveCwd == "" {
+			effectiveCwd = existing.Cwd
+		}
+		if err := scheduler.CheckRunMode(r.Context(), effectiveMode, effectiveCwd); err != nil {
+			return apierr.NewAppError(http.StatusBadRequest, err.Error())
+		}
+		if body.RunMode != "" {
+			in.RunMode = &body.RunMode
+		}
+	}
 	if body.Name != "" {
 		in.Name = &body.Name
 	}
