@@ -1169,7 +1169,7 @@ func CheckRunMode(ctx context.Context, runMode, cwd string) error {
 **Files:**
 - Create: `server/internal/api/schedules/runs.go` (`listRuns` handler + `routineRunView`)
 - Modify: `server/internal/api/schedules/handler.go:36-50` (`Handler` gains `tasks repo.TaskRepo`, `stageRuns repo.StageRunRepo`; `NewHandler` takes both), `:70-78` (`Mount`: `r.Get("/api/schedules/{id}/runs", ...)`)
-- Modify: `server/internal/db/repo/task_repo.go` (`ListByRoutine(ctx, routineID string, limit int) ([]*ent.Task, error)`, newest first, on the interface and the ent repo), `server/internal/agentbroadcast/enricher_test.go` (the fake `TaskRepo` gains the method)
+- Modify: `server/internal/db/repo/task_repo.go` (`ListByRoutine(ctx, routineID string, limit int) ([]*ent.Task, error)`, newest first, on the interface and the ent repo) (the only fake, `fakeTasks` in `server/internal/agentbroadcast/enricher_test.go:37-41`, embeds `repo.TaskRepo` and needs no change)
 - Modify: `server/serverapp/di_scheduler.go:72` and `server/internal/api/schedules/handler_test.go:29` (the two `NewHandler` callers)
 - Test: `server/internal/api/schedules/runs_test.go` (new)
 
@@ -1198,7 +1198,7 @@ type routineRunView struct {
 ```
 
   `listRuns`: `GetByID` (404 on not found, same as `get`), `h.tasks.ListByRoutine(ctx, id, 50)`, then per task `h.stageRuns.ListForTask`; `costCents` = sum of `CostCents`, `status` = the latest run's status (the task stage when it has none), `summary` = latest run's `Output["summary"]` when it is a string, `startedAt` = earliest `StartedAt`, `endedAt` = latest `EndedAt` only when the task stage is terminal (`done`/`cancelled`). Times formatted like `toView` does. `// ponytail: one stage-run query per task, 50 tasks max; batch by task ids if routine pages get slow.`
-- [ ] **Step 4: Run** — PASS; `go test ./internal/api/schedules/... ./internal/db/repo/... ./internal/agentbroadcast/... ./serverapp/...` PASS.
+- [ ] **Step 4: Run** — PASS; `go test ./internal/api/schedules/... ./internal/db/repo/... ./serverapp/...` PASS.
 - [ ] **Step 5: Mutation** — sum only the latest run's cost → B's `costCents` assertion red; restore identical.
 - [ ] **Step 6: Commit** `feat(routines): list a routine's runs with summary and cost`.
 
