@@ -3,6 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { shallowRef } from 'vue'
 import RoutineRuns from '@/components/RoutineRuns.vue'
+import { toast } from '@/composables/useToast'
 
 const taskStore = shallowRef<PipelineTask[]>([])
 const selectTask = vi.fn()
@@ -180,6 +181,59 @@ describe('routineRuns', () => {
     await flushPromises()
     expect(runsCallCount).toBe(2)
 
+    wrapper.unmount()
+  })
+
+  it('keeps the previous run list visible during a live reload instead of showing the loading state', async () => {
+    runsResponse.body = [makeRun({ taskId: 'task-1' })]
+    taskStore.value = [makeTask({ id: 'task-1', currentStage: 'backlog' })]
+    const wrapper = mount(RoutineRuns, { props: { scheduleId: SCHEDULE_ID } })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="routine-run-task-1"]').exists()).toBe(true)
+
+    let resolveSecond: (value: unknown) => void = () => {}
+    const pending = new Promise((resolve) => {
+      resolveSecond = resolve
+    })
+    fetchMock.mockImplementationOnce(async (url: string) => {
+      if (url === `/api/schedules/${SCHEDULE_ID}/runs`) {
+        await pending
+        return { ok: true, status: 200, json: async () => runsResponse.body }
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    })
+
+    taskStore.value = [makeTask({ id: 'task-1', currentStage: 'ready' })]
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('Loading runs…')
+    expect(wrapper.find('[data-testid="routine-run-task-1"]').exists()).toBe(true)
+
+    resolveSecond(undefined)
+    await flushPromises()
+
+    wrapper.unmount()
+  })
+
+  it('shows an error toast when opening a run whose task fetch fails', async () => {
+    const errorSpy = vi.spyOn(toast, 'error').mockImplementation(() => '')
+    runsResponse.body = [makeRun({ taskId: 'task-2' })]
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === `/api/schedules/${SCHEDULE_ID}/runs`)
+        return { ok: true, status: 200, json: async () => runsResponse.body }
+      if (url === '/api/tasks/task-2')
+        return { ok: false, status: 500, json: async () => ({}) }
+      throw new Error(`unexpected fetch ${url}`)
+    })
+    const wrapper = mount(RoutineRuns, { props: { scheduleId: SCHEDULE_ID } })
+    await flushPromises()
+
+    await wrapper.get('[data-testid="routine-run-task-2"] button').trigger('click')
+    await flushPromises()
+
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('500'))
+
+    errorSpy.mockRestore()
     wrapper.unmount()
   })
 })

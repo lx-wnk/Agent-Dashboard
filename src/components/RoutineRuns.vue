@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import type { RoutineRun } from '@/composables/useRoutineRuns'
 import { computed, onMounted, ref, watch } from 'vue'
+import AppButton from '@/components/ui/AppButton.vue'
 import { fetchRoutineRuns } from '@/composables/useRoutineRuns'
+import { toast } from '@/composables/useToast'
 import { useTasks } from '@/features/pipeline/composables/useTasks'
 import { errorMessage } from '@/utils/errorMessage'
 import { formatCost, formatDateTime } from '@/utils/format'
@@ -14,10 +16,12 @@ const { tasks, selectTask } = useTasks({ autoStart: false })
 
 const runs = ref<RoutineRun[]>([])
 const isLoading = ref(true)
+const hasLoaded = ref(false)
 const error = ref<string | null>(null)
 
 async function load() {
-  isLoading.value = true
+  if (!hasLoaded.value)
+    isLoading.value = true
   error.value = null
   try {
     runs.value = await fetchRoutineRuns(props.scheduleId)
@@ -27,6 +31,7 @@ async function load() {
   }
   finally {
     isLoading.value = false
+    hasLoaded.value = true
   }
 }
 
@@ -58,33 +63,41 @@ async function open(run: RoutineRun) {
     return
   }
   const res = await fetch(`/api/tasks/${run.taskId}`)
-  if (res.ok)
+  if (res.ok) {
     selectTask(await res.json())
+    return
+  }
+  toast.error(`Could not open run: HTTP ${res.status}`)
 }
 </script>
 
 <template>
   <div class="routine-runs">
-    <p v-if="isLoading">
+    <p v-if="isLoading" class="text-xs text-fg-faint">
       Loading runs…
     </p>
-    <p v-else-if="error" role="alert">
+    <p v-else-if="error" role="alert" class="text-xs text-danger-text">
       {{ error }}
     </p>
-    <p v-else-if="runs.length === 0">
+    <p v-else-if="runs.length === 0" class="text-xs text-fg-faint">
       No runs yet
     </p>
-    <ul v-else>
-      <li v-for="run in runs" :key="run.taskId" :data-testid="`routine-run-${run.taskId}`">
-        <span>{{ run.title }}</span>
-        <span>{{ run.status }}</span>
-        <span v-if="run.summary">{{ run.summary }}</span>
-        <span>{{ formatCost(run.costCents / 100) }}</span>
-        <span>{{ formatDateTime(run.startedAt) }}</span>
-        <span v-if="formatRunDuration(run)">{{ formatRunDuration(run) }}</span>
-        <button type="button" @click="open(run)">
+    <ul v-else class="flex flex-col divide-y divide-line text-xs">
+      <li
+        v-for="run in runs"
+        :key="run.taskId"
+        :data-testid="`routine-run-${run.taskId}`"
+        class="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5"
+      >
+        <span class="text-fg font-medium">{{ run.title }}</span>
+        <span class="px-1.5 py-0.5 rounded-full bg-raised text-fg-mute">{{ run.status }}</span>
+        <span v-if="run.summary" class="text-fg-mute basis-full">{{ run.summary }}</span>
+        <span class="text-fg-faint">{{ formatCost(run.costCents / 100) }}</span>
+        <span class="text-fg-faint">{{ formatDateTime(run.startedAt) }}</span>
+        <span v-if="formatRunDuration(run)" class="text-fg-faint">{{ formatRunDuration(run) }}</span>
+        <AppButton variant="ghost" size="sm" @click="open(run)">
           Open
-        </button>
+        </AppButton>
       </li>
     </ul>
   </div>
