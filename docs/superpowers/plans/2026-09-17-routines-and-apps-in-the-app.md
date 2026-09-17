@@ -1032,6 +1032,11 @@ func (r *entTaskScheduleRepo) RecordSkip(ctx context.Context, id string, at time
 - [ ] **Step 5: Mutation** — force `kind, stage = "pipeline", "ready"` for every mode → `TestMaterialize_JobRunMode` red; restore identical.
 - [ ] **Step 6: Commit** `feat(routines): fire a job or a ready pipeline task with full autonomy`.
 
+**Found while dispatching (2026-09-17, `VERIFIED`):** two more ways a task can reach a stage that does not match its kind without a transition, both in `server/internal/api/tasks/handler.go`: the create path takes a caller's `stage` (`:531`, `Stage: body.Stage`), so `POST /api/tasks` with `"stage":"job"` stores a pipeline task in the job stage; and resuming a task from `on_hold` always moves it to `implementation` (`:863-867`), which would put a held job into a pipeline stage. Both are closed in this task:
+- Rename `stageKindViolation` to exported `StageKindViolation` in `server/internal/pipeline/types.go` (update its one caller in `transitions.go`). `CreateTaskFromInput` (`api/tasks` already imports `pipeline`) refuses with `apierr.NewAppError(http.StatusBadRequest, reason)` when `pipeline.StageKindViolation(kind, stage)` is non-empty, `kind` defaulting to `pipeline`. Test: `POST /api/tasks` with `"stage":"job"` → 400 containing `only job tasks run the job stage`; `CreateTaskFromInput` with `Kind: "job", Stage: "implementation"` → error.
+- The resume handler moves an `on_hold` task to `pipeline.StageJob` when `t.Kind == pipeline.TaskKindJob`, otherwise to `implementation` as today. Test: a held job resumes into `job`; a held pipeline task still resumes into `implementation`.
+- Mutations: drop the create check → the HTTP case red; always resume into `implementation` → the held-job case red.
+
 ### Task 2.8: A refused fire is counted
 
 **Files:**
