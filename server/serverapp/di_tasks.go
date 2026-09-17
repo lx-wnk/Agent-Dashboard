@@ -13,7 +13,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 )
 
-func provideTaskHandler(client *ent.Client, db *sql.DB, orch *pipeline.PipelineOrchestrator, tb *sse.TaskBroadcaster, refineReader tasks.RefineStatusReader, allowGitPull, bypassAuth bool, checkpointSvc *checkpoint.Service) *tasks.Handler {
+func provideTaskHandler(client *ent.Client, db *sql.DB, orch *pipeline.PipelineOrchestrator, tb *sse.TaskBroadcaster, refineReader tasks.RefineStatusReader, allowGitPull, bypassAuth bool, checkpointSvc *checkpoint.Service, notifier tasks.PermissionNotifier) *tasks.Handler {
 	if client == nil || orch == nil {
 		return nil
 	}
@@ -42,6 +42,7 @@ func provideTaskHandler(client *ent.Client, db *sql.DB, orch *pipeline.PipelineO
 		WorktreeMgr:       services.NewWorktreeManager(taskRepo),
 		RefineReader:      refineReader,
 		CheckpointSvc:     cpIface,
+		Notifier:          notifier,
 		AllowGitPull:      allowGitPull,
 		BypassAuth:        bypassAuth,
 	})

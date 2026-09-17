@@ -141,6 +141,13 @@ func (h *Handler) createPermissionRequest(w http.ResponseWriter, r *http.Request
 			}
 			h.broadcastEnrichedEvent(r.Context(), "permission_request", sr.TaskID)
 		}
+		if req.Outcome == nil && h.notifier != nil {
+			title := ""
+			if taskErr == nil {
+				title = task.Title
+			}
+			h.notifier.PermissionRequested(r.Context(), sr.TaskID, title, body.Tool)
+		}
 	} else {
 		// Stage-run lookup failed: the request was created but can be neither
 		// auto-approved nor surfaced via the awaiting_user gate. Log so a dropped
@@ -383,6 +390,13 @@ func (h *Handler) bulkCreatePermissionRequests(w http.ResponseWriter, r *http.Re
 		}
 		hasNewRequests = true
 		id := req.ID
+		if h.notifier != nil {
+			title := ""
+			if taskErr == nil {
+				title = task.Title
+			}
+			h.notifier.PermissionRequested(r.Context(), sr.TaskID, title, e.Tool)
+		}
 		results = append(results, result{Tool: e.Tool, Pattern: e.Pattern, AutoGranted: false, RequestID: &id})
 	}
 
