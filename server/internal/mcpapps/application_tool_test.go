@@ -15,6 +15,8 @@ func TestIsApplicationTool(t *testing.T) {
 		"Bash":                                    false,
 		"mcp__":                                   false,
 		"mcp__mail":                               false,
+		"mcp____read":                             false,
+		"mcp__mail__":                             false,
 	}
 	for tool, want := range cases {
 		if got := mcpapps.IsApplicationTool(tool); got != want {
