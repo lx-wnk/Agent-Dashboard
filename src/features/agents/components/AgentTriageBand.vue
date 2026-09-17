@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { PermissionItem } from '@/composables/usePendingPermissions'
+import type { PermissionDecision } from '@/features/pipeline'
 import type { PendingCapabilityDecision } from '@/sdk.generated'
 import type { Agent, PendingPermission, PermissionRequest } from '@/types'
 import type { AnswerIntent } from '@/utils/answerKeys'
@@ -12,6 +13,7 @@ import { useNow } from '@/composables/useNow'
 import { usePermissionResolve } from '@/composables/usePermissionResolve'
 import { toast } from '@/composables/useToast'
 import { useAgentIdentity } from '@/features/agents/composables/useAgentIdentity'
+import { isApplicationTool } from '@/utils/applicationTool'
 import { attentionFor } from '@/utils/attention'
 import { formatErrorState, formatRelativeActivity, secondsSince, shortModel } from '@/utils/format'
 import { friendlyProjectName } from '@/utils/friendlyProjectName'
@@ -27,6 +29,7 @@ const emit = defineEmits<{
   remembered: []
   approve: [taskId: string, ids: string[], remember: boolean]
   deny: [taskId: string, ids: string[]]
+  decide: [taskId: string, ids: string[], decision: PermissionDecision]
 }>()
 
 const { getIdentity } = useAgentIdentity()
@@ -271,6 +274,17 @@ function handleApproveTask(taskId: string, ids: string[]) {
 
 function handleDenyTask(taskId: string, ids: string[]) {
   emit('deny', taskId, ids)
+}
+
+// A routine decision is only offered once the task carries a routineId and
+// every pending request targets an MCP application tool — the server refuses
+// allow_routine/deny_routine otherwise (see IsApplicationTool's Go twin).
+function isRoutineDecidable(item: PermissionItem): boolean {
+  return item.routineId !== null && item.requests.every(r => isApplicationTool(r.tool))
+}
+
+function handleDecideTask(taskId: string, ids: string[], decision: PermissionDecision) {
+  emit('decide', taskId, ids, decision)
 }
 
 // hasBulk drives collapse default and bar visibility
@@ -735,11 +749,52 @@ watch(() => props.focusedSessionId, (id) => {
               </li>
             </ul>
 
-            <div class="flex items-center gap-2 flex-wrap">
+            <div v-if="isRoutineDecidable(item)" class="flex items-center gap-2 flex-wrap">
+              <AppButton
+                variant="success"
+                size="sm"
+                :aria-label="`Allow once for ${item.title}`"
+                data-testid="permission-decide-allow-once"
+                @click="handleDecideTask(item.taskId, item.requests.map(r => r.id), 'allow_once')"
+              >
+                Allow once
+              </AppButton>
+              <AppButton
+                variant="secondary"
+                size="sm"
+                title="Saved for this routine; revoke it on the routine page"
+                :aria-label="`Always allow for this routine for ${item.title}`"
+                data-testid="permission-decide-allow-routine"
+                @click="handleDecideTask(item.taskId, item.requests.map(r => r.id), 'allow_routine')"
+              >
+                Always allow for this routine
+              </AppButton>
+              <AppButton
+                variant="secondary"
+                size="sm"
+                title="Saved for this routine; revoke it on the routine page"
+                :aria-label="`Always deny for this routine for ${item.title}`"
+                data-testid="permission-decide-deny-routine"
+                @click="handleDecideTask(item.taskId, item.requests.map(r => r.id), 'deny_routine')"
+              >
+                Always deny for this routine
+              </AppButton>
+              <AppButton
+                variant="danger"
+                size="sm"
+                :aria-label="`Deny once for ${item.title}`"
+                data-testid="permission-decide-deny-once"
+                @click="handleDecideTask(item.taskId, item.requests.map(r => r.id), 'deny_once')"
+              >
+                Deny
+              </AppButton>
+            </div>
+            <div v-else class="flex items-center gap-2 flex-wrap">
               <AppButton
                 variant="success"
                 size="sm"
                 :aria-label="`Approve all permissions for ${item.title}`"
+                data-testid="permission-item-approve"
                 @click="handleApproveTask(item.taskId, item.requests.map(r => r.id))"
               >
                 Approve
@@ -748,6 +803,7 @@ watch(() => props.focusedSessionId, (id) => {
                 variant="danger"
                 size="sm"
                 :aria-label="`Deny all permissions for ${item.title}`"
+                data-testid="permission-item-deny"
                 @click="handleDenyTask(item.taskId, item.requests.map(r => r.id))"
               >
                 Deny

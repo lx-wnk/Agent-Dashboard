@@ -9,6 +9,7 @@ export interface PermissionItem {
   taskId: string
   title: string
   projectName: string
+  routineId: string | null
   requests: PermissionRequest[]
 }
 
@@ -67,6 +68,7 @@ export function usePendingPermissions(tasks: Ref<PipelineTask[]>) {
         taskId: task.id,
         title: task.title,
         projectName: projectNameFromTask(task),
+        routineId: task.routineId ?? null,
         requests,
       })
     }

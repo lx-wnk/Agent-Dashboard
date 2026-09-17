@@ -517,6 +517,7 @@ describe('agentTriageBand capability decisions', () => {
       taskId: 'task-1',
       projectName: 'demo',
       title: 'Ship it',
+      routineId: null,
       requests: [{
         id: 'req-1',
         stageRunId: 'run-1',
@@ -644,6 +645,7 @@ describe('agentTriageBand capability cards vs. the bulk collapse', () => {
       taskId: 'task-1',
       projectName: 'demo',
       title: 'Ship it',
+      routineId: null,
       requests: [
         { id: 'req-1', stageRunId: 'run-1', tool: 'Bash', pattern: 'npm publish', reason: null, requestedAt: new Date().toISOString(), resolvedAt: null, outcome: null },
         { id: 'req-2', stageRunId: 'run-1', tool: 'Read', pattern: '/etc/passwd', reason: null, requestedAt: new Date().toISOString(), resolvedAt: null, outcome: null },
@@ -719,5 +721,71 @@ describe('agentTriageBand capability card focus and announcement', () => {
 
     expect(live.text()).toContain('network.egress')
     expect(live.text()).toContain('api.stripe.com')
+  })
+})
+
+describe('agentTriageBand routine decisions', () => {
+  function applicationRequest(o: Partial<PermissionItem['requests'][number]> = {}) {
+    return {
+      id: 'req-1',
+      stageRunId: 'run-1',
+      tool: 'mcp__mail__read',
+      pattern: null,
+      reason: null,
+      requestedAt: new Date().toISOString(),
+      resolvedAt: null,
+      outcome: null,
+      ...o,
+    }
+  }
+
+  function routineItem(o: Partial<PermissionItem> = {}): PermissionItem {
+    return {
+      taskId: 'task-1',
+      projectName: 'demo',
+      title: 'Ship it',
+      routineId: 'routine-1',
+      requests: [applicationRequest()],
+      ...o,
+    }
+  }
+
+  it('offers the four routine decisions for a routine task whose requests are all application tools', async () => {
+    const wrapper = mount(AgentTriageBand, { props: { agents: [], permissionItems: [routineItem()] } })
+
+    await wrapper.get('[data-testid="permission-decide-allow-once"]').trigger('click')
+    await wrapper.get('[data-testid="permission-decide-allow-routine"]').trigger('click')
+    await wrapper.get('[data-testid="permission-decide-deny-routine"]').trigger('click')
+    await wrapper.get('[data-testid="permission-decide-deny-once"]').trigger('click')
+
+    expect(wrapper.emitted('decide')).toEqual([
+      ['task-1', ['req-1'], 'allow_once'],
+      ['task-1', ['req-1'], 'allow_routine'],
+      ['task-1', ['req-1'], 'deny_routine'],
+      ['task-1', ['req-1'], 'deny_once'],
+    ])
+    wrapper.unmount()
+  })
+
+  it('falls back to Approve/Deny when a routine task has a non-application-tool request', async () => {
+    const item = routineItem({ requests: [applicationRequest({ tool: 'Bash' })] })
+    const wrapper = mount(AgentTriageBand, { props: { agents: [], permissionItems: [item] } })
+
+    expect(wrapper.find('[data-testid="permission-decide-allow-routine"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="permission-item-approve"]').trigger('click')
+    expect(wrapper.emitted('approve')?.[0]).toEqual(['task-1', ['req-1'], false])
+
+    await wrapper.get('[data-testid="permission-item-deny"]').trigger('click')
+    expect(wrapper.emitted('deny')?.[0]).toEqual(['task-1', ['req-1']])
+    wrapper.unmount()
+  })
+
+  it('falls back to Approve/Deny when the task has no routineId', async () => {
+    const item = routineItem({ routineId: null })
+    const wrapper = mount(AgentTriageBand, { props: { agents: [], permissionItems: [item] } })
+
+    expect(wrapper.find('[data-testid="permission-decide-allow-routine"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="permission-item-approve"]').exists()).toBe(true)
+    wrapper.unmount()
   })
 })

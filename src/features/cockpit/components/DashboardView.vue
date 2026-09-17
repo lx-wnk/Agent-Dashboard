@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { PermissionItem } from '@/composables/usePendingPermissions'
+import type { PermissionDecision } from '@/features/pipeline'
 import { computed, ref } from 'vue'
 import AutoApprovingStrip from '@/components/AutoApprovingStrip.vue'
 import ChannelScriptCallout from '@/components/shell/ChannelScriptCallout.vue'
@@ -18,6 +19,7 @@ defineProps<{
 const emit = defineEmits<{
   approve: [taskId: string, ids: string[], remember: boolean]
   deny: [taskId: string, ids: string[]]
+  decide: [taskId: string, ids: string[], decision: PermissionDecision]
 }>()
 
 // autoStart: false, exactly as App.vue calls it — useAgents holds module-level
@@ -62,6 +64,7 @@ defineExpose({ rosterAgents })
     @remembered="autoApprovingStrip?.load()"
     @approve="(taskId, ids, remember) => emit('approve', taskId, ids, remember)"
     @deny="(taskId, ids) => emit('deny', taskId, ids)"
+    @decide="(taskId, ids, decision) => emit('decide', taskId, ids, decision)"
   />
   <AutoApprovingStrip ref="autoApprovingStrip" />
   <DashboardToolbar

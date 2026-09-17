@@ -85,8 +85,20 @@ describe('usePendingPermissions', () => {
     await flushPromises()
 
     expect(items.value).toHaveLength(1)
-    expect(items.value[0]).toMatchObject({ taskId: 'task-1', title: 'Fix bug', projectName: 'My Cool Project' })
+    expect(items.value[0]).toMatchObject({ taskId: 'task-1', title: 'Fix bug', projectName: 'My Cool Project', routineId: null })
     expect(items.value[0].requests).toHaveLength(1)
+  })
+
+  it('carries the task routineId through to the item', async () => {
+    fetchPendingMock.mockResolvedValue([makeRequest()])
+    const tasks = ref<PipelineTask[]>([
+      makeTask({ id: 'task-1', blockedByPendingPermissions: true, routineId: 'routine-1' }),
+    ])
+
+    const { items } = usePendingPermissions(tasks)
+    await flushPromises()
+
+    expect(items.value[0].routineId).toBe('routine-1')
   })
 
   it('excludes items whose cached requests are all already resolved', async () => {
