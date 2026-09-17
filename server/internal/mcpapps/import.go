@@ -19,11 +19,24 @@ const EntryImportMarker = "mcp-applications-entry-import"
 // EntryHash returns the SHA-256 of entry, hex-encoded, or "" for an empty
 // entry. Callers use it to detect drift between the stored entry and what was
 // last exported to Claude Code.
+//
+// The hash is taken over a canonical form, not the bytes as they arrive: the
+// entry is decoded and re-encoded, which sorts every object's keys and drops
+// whitespace. Claude's config is written with indentation and the database
+// holds a compact copy of the same entry, so hashing raw bytes would report
+// every exported server as changed.
 func EntryHash(entry []byte) string {
 	if len(entry) == 0 {
 		return ""
 	}
-	sum := sha256.Sum256(entry)
+	canonical := entry
+	var decoded any
+	if err := json.Unmarshal(entry, &decoded); err == nil {
+		if encoded, err := json.Marshal(decoded); err == nil {
+			canonical = encoded
+		}
+	}
+	sum := sha256.Sum256(canonical)
 	return hex.EncodeToString(sum[:])
 }
 

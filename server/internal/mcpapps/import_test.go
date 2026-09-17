@@ -133,3 +133,12 @@ func TestImportEntries_ErrorAbortsWithoutRecordingMarker(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, seen)
 }
+
+func TestEntryHash_IgnoresFormattingAndKeyOrder(t *testing.T) {
+	indented := json.RawMessage("{\n  \"command\": \"uvx\",\n  \"args\": [\n    \"x\"\n  ]\n}")
+	compact := json.RawMessage(`{"args":["x"],"command":"uvx"}`)
+	require.Equal(t, mcpapps.EntryHash(compact), mcpapps.EntryHash(indented),
+		"the same entry written two ways must not look like a change")
+	require.NotEqual(t, mcpapps.EntryHash(compact), mcpapps.EntryHash(json.RawMessage(`{"command":"other"}`)))
+	require.Equal(t, "", mcpapps.EntryHash(nil))
+}
