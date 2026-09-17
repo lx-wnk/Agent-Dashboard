@@ -13,6 +13,11 @@ import (
 // wraps all DB writes in a single SQLite transaction to prevent torn state on
 // mid-write crashes or context cancellations.
 func (o *PipelineOrchestrator) applyTransition(ctx context.Context, task *ent.Task, sr *ent.StageRun, t StageTransition) (result *ent.StageRun, retErr error) {
+	if nt, ok := t.(NextTransition); ok {
+		if reason := stageKindViolation(task.Kind, nt.Stage); reason != "" {
+			t = FailTransition{Reason: reason}
+		}
+	}
 	if o.opts.Client != nil {
 		tx, err := o.opts.Client.Tx(ctx)
 		if err != nil {
