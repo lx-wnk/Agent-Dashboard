@@ -109,6 +109,10 @@ func modifyServerEntries(mutate func(servers map[string]json.RawMessage)) error 
 	if err := json.Unmarshal(data, &obj); err != nil {
 		return fmt.Errorf("claudeconfig: parse %s: %w", path, err)
 	}
+	// A config holding literal null parses without error and leaves obj nil.
+	if obj == nil {
+		obj = map[string]json.RawMessage{}
+	}
 
 	servers := map[string]json.RawMessage{}
 	if raw, ok := obj["mcpServers"]; ok {

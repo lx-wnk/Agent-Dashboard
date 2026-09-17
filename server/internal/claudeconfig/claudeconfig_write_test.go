@@ -197,3 +197,25 @@ func TestRemoveServerEntry_MissingKeyLeavesOthersAlone(t *testing.T) {
 	}
 	assertSingleFile(t, dir)
 }
+
+func TestWriteServerEntry_ConfigHoldingNullIsNotACrash(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	writeConfigFile(t, dir, "null", 0o600)
+
+	if err := claudeconfig.WriteServerEntry("mail", json.RawMessage(`{"command":"x"}`)); err != nil {
+		t.Fatalf("write into a null config: %v", err)
+	}
+
+	servers, err := claudeconfig.UserMCPServers()
+	if err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	var got map[string]string
+	if err := json.Unmarshal(servers["mail"], &got); err != nil {
+		t.Fatalf("parse the entry that was read back: %v", err)
+	}
+	if got["command"] != "x" {
+		t.Fatalf("command = %q, want x", got["command"])
+	}
+}
