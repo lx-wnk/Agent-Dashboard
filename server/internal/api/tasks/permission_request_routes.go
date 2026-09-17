@@ -14,6 +14,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	"github.com/lx-wnk/agent-dashboard/server/internal/mcpapps"
 	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
 	"github.com/lx-wnk/agent-dashboard/server/internal/taskcontrol"
 )
@@ -113,7 +114,7 @@ func (h *Handler) createPermissionRequest(w http.ResponseWriter, r *http.Request
 	sr, srErr := h.srRepo.GetByID(r.Context(), body.StageRunID)
 	if srErr == nil {
 		task, taskErr := h.taskRepo.GetByID(r.Context(), sr.TaskID)
-		if taskErr == nil && taskcontrol.IsAllowAll(task.Autonomy) {
+		if taskErr == nil && taskcontrol.IsAllowAll(task.Autonomy) && !mcpapps.IsApplicationTool(body.Tool) {
 			// Auto-approve: task operates in allow-all mode — no human gating needed.
 			if resolveErr := h.permRepo.ResolvePermissionRequest(r.Context(), req.ID, repo.OutcomeGranted); resolveErr != nil {
 				slog.Warn("createPermissionRequest: auto-approve failed", "reqID", req.ID, "err", resolveErr)
@@ -366,7 +367,7 @@ func (h *Handler) bulkCreatePermissionRequests(w http.ResponseWriter, r *http.Re
 		if err2 != nil {
 			return fmt.Errorf("bulk_perm_req: create: %w", err2)
 		}
-		if taskIsAllowAll {
+		if taskIsAllowAll && !mcpapps.IsApplicationTool(e.Tool) {
 			// Auto-approve: task operates in allow-all mode.
 			if resolveErr := h.permRepo.ResolvePermissionRequest(r.Context(), req.ID, repo.OutcomeGranted); resolveErr != nil {
 				slog.Warn("bulkCreatePermissionRequests: auto-approve failed", "reqID", req.ID, "err", resolveErr)
