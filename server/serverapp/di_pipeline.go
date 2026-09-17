@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/tasks"
-	"github.com/lx-wnk/agent-dashboard/server/internal/claudeconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/config"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
@@ -177,7 +176,6 @@ func provideOrchestrator(
 			Secrets:      appSecrets,
 			Grants:       grantRepo,
 			Capabilities: capabilityRepo,
-			ReadServers:  claudeconfig.UserMCPServers,
 		}.ResolveRun,
 		// BuildTaskPayload is called inside applyTransitionWrites, bound to the
 		// active transaction, so the returned snapshot reflects the just-applied

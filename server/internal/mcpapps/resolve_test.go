@@ -27,7 +27,7 @@ type resolveFixture struct {
 	resolver mcpapps.Resolver
 }
 
-func newResolveFixture(t *testing.T, userServers map[string]json.RawMessage) resolveFixture {
+func newResolveFixture(t *testing.T) resolveFixture {
 	t.Helper()
 	bundle, err := db.Open(":memory:")
 	require.NoError(t, err)
@@ -41,16 +41,15 @@ func newResolveFixture(t *testing.T, userServers map[string]json.RawMessage) res
 		grants:  repo.NewGrantRepo(bundle.Client),
 		caps:    repo.NewCapabilityRepo(bundle.Client),
 	}
-	f.resolver = mcpapps.Resolver{
-		Apps: f.apps, Secrets: f.secrets, Grants: f.grants, Capabilities: f.caps,
-		ReadServers: func() (map[string]json.RawMessage, error) { return userServers, nil },
-	}
+	f.resolver = mcpapps.Resolver{Apps: f.apps, Secrets: f.secrets, Grants: f.grants, Capabilities: f.caps}
 	return f
 }
 
-func (f resolveFixture) addApp(t *testing.T, resourceID, server string, attachAll bool, tools ...string) {
+func (f resolveFixture) addApp(t *testing.T, resourceID, server string, attachAll bool, entry json.RawMessage, tools ...string) {
 	t.Helper()
-	_, err := f.apps.Upsert(f.ctx, repo.UpsertMCPApplicationInput{ResourceID: resourceID, ServerName: server, AttachAll: attachAll})
+	_, err := f.apps.Upsert(f.ctx, repo.UpsertMCPApplicationInput{
+		ResourceID: resourceID, ServerName: server, AttachAll: attachAll, Entry: entry,
+	})
 	require.NoError(t, err)
 	catalogue := make([]schema.CatalogueTool, 0, len(tools))
 	for _, tool := range tools {
@@ -75,15 +74,15 @@ func (f resolveFixture) grant(t *testing.T, capName, contextKind, contextRef, mo
 	require.NoError(t, err)
 }
 
-var twoServers = map[string]json.RawMessage{
-	"mail":  json.RawMessage(`{"command":"npx","args":["mail"]}`),
-	"notes": json.RawMessage(`{"command":"npx","args":["notes"]}`),
-}
+var (
+	mailEntry  = json.RawMessage(`{"command":"npx","args":["mail"]}`)
+	notesEntry = json.RawMessage(`{"command":"npx","args":["notes"]}`)
+)
 
 func TestResolveRun_OnlyAttachedAndAttachAllServersReachTheRun(t *testing.T) {
-	f := newResolveFixture(t, twoServers)
-	f.addApp(t, "res-mail", "mail", false, "search")
-	f.addApp(t, "res-notes", "notes", true)
+	f := newResolveFixture(t)
+	f.addApp(t, "res-mail", "mail", false, mailEntry, "search")
+	f.addApp(t, "res-notes", "notes", true, notesEntry)
 
 	unattached, err := f.resolver.ResolveRun(f.ctx, &ent.Task{ID: "t1", Cwd: "/repo"})
 	require.NoError(t, err)
@@ -96,9 +95,9 @@ func TestResolveRun_OnlyAttachedAndAttachAllServersReachTheRun(t *testing.T) {
 }
 
 func TestResolveRun_SecretsGoOnlyIntoTheirOwnServerEntry(t *testing.T) {
-	f := newResolveFixture(t, twoServers)
-	f.addApp(t, "res-mail", "mail", false)
-	f.addApp(t, "res-notes", "notes", true)
+	f := newResolveFixture(t)
+	f.addApp(t, "res-mail", "mail", false, mailEntry)
+	f.addApp(t, "res-notes", "notes", true, notesEntry)
 	require.NoError(t, f.secrets.Set(f.ctx, "res-mail", "MAIL_PASSWORD", "hunter2"))
 
 	out, err := f.resolver.ResolveRun(f.ctx, &ent.Task{ID: "t1", Cwd: "/repo", Applications: []string{"res-mail"}})
@@ -108,8 +107,8 @@ func TestResolveRun_SecretsGoOnlyIntoTheirOwnServerEntry(t *testing.T) {
 }
 
 func TestResolveRun_MissingRequiredSecretFailsTheRun(t *testing.T) {
-	f := newResolveFixture(t, twoServers)
-	f.addApp(t, "res-mail", "mail", false)
+	f := newResolveFixture(t)
+	f.addApp(t, "res-mail", "mail", false, mailEntry)
 	_, err := f.apps.SetRequiredEnv(f.ctx, "res-mail", []string{"MAIL_PASSWORD"})
 	require.NoError(t, err)
 
@@ -119,18 +118,27 @@ func TestResolveRun_MissingRequiredSecretFailsTheRun(t *testing.T) {
 	require.Equal(t, "MAIL_PASSWORD", missing.EnvName)
 }
 
-func TestResolveRun_AttachedServerGoneFromClaudeConfigFailsTheRun(t *testing.T) {
-	f := newResolveFixture(t, map[string]json.RawMessage{})
-	f.addApp(t, "res-mail", "mail", false)
+func TestResolveRun_AttachedApplicationWithNoEntryFailsTheRun(t *testing.T) {
+	f := newResolveFixture(t)
+	f.addApp(t, "res-mail", "mail", false, nil)
 
 	_, err := f.resolver.ResolveRun(f.ctx, &ent.Task{ID: "t1", Cwd: "/repo", Applications: []string{"res-mail"}})
 	var missing *mcpapps.MissingServerError
 	require.True(t, errors.As(err, &missing))
 }
 
+func TestResolveRun_AttachAllApplicationWithNoEntryIsSkippedSilently(t *testing.T) {
+	f := newResolveFixture(t)
+	f.addApp(t, "res-notes", "notes", true, nil)
+
+	out, err := f.resolver.ResolveRun(f.ctx, &ent.Task{ID: "t1", Cwd: "/repo"})
+	require.NoError(t, err)
+	require.NotContains(t, out.Servers, "notes")
+}
+
 func TestResolveRun_GrantsDecideAllowDenyAndSilenceMeansAsk(t *testing.T) {
-	f := newResolveFixture(t, twoServers)
-	f.addApp(t, "res-mail", "mail", false, "search", "send", "draft")
+	f := newResolveFixture(t)
+	f.addApp(t, "res-mail", "mail", false, mailEntry, "search", "send", "draft")
 	routineID := "routine-1"
 	f.grant(t, "mcp__mail__search", repo.GrantContextRoutine, routineID, "allow")
 	f.grant(t, "mcp__mail__send", repo.GrantContextGlobal, "", "deny")
@@ -147,17 +155,4 @@ func TestResolveRun_GrantsDecideAllowDenyAndSilenceMeansAsk(t *testing.T) {
 	other, err := f.resolver.ResolveRun(f.ctx, &ent.Task{ID: "t2", Cwd: "/repo", Applications: []string{"res-mail"}})
 	require.NoError(t, err)
 	require.NotContains(t, other.Allow, "mcp__mail__search", "a routine's grant does not leak into another task")
-}
-
-func TestResolveRun_UnreadableClaudeConfigCostsTheServersNotTheRun(t *testing.T) {
-	f := newResolveFixture(t, nil)
-	f.addApp(t, "res-notes", "notes", true)
-	f.resolver.ReadServers = func() (map[string]json.RawMessage, error) {
-		return nil, errors.New("claudeconfig: parse ~/.claude.json: unexpected end of JSON input")
-	}
-
-	out, err := f.resolver.ResolveRun(f.ctx, &ent.Task{ID: "t1", Cwd: "/repo"})
-	require.NoError(t, err, "a file the dashboard does not own must never stop a spawn")
-	require.Empty(t, out.Servers)
-	require.Empty(t, out.Allow)
 }

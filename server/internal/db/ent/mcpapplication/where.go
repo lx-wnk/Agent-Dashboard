@@ -89,6 +89,21 @@ func CatalogueRefreshedAt(v time.Time) predicate.MCPApplication {
 	return predicate.MCPApplication(sql.FieldEQ(FieldCatalogueRefreshedAt, v))
 }
 
+// Entry applies equality check predicate on the "entry" field. It's identical to EntryEQ.
+func Entry(v []byte) predicate.MCPApplication {
+	return predicate.MCPApplication(sql.FieldEQ(FieldEntry, v))
+}
+
+// ExportToClaude applies equality check predicate on the "export_to_claude" field. It's identical to ExportToClaudeEQ.
+func ExportToClaude(v bool) predicate.MCPApplication {
+	return predicate.MCPApplication(sql.FieldEQ(FieldExportToClaude, v))
+}
+
+// ExportedHash applies equality check predicate on the "exported_hash" field. It's identical to ExportedHashEQ.
+func ExportedHash(v string) predicate.MCPApplication {
+	return predicate.MCPApplication(sql.FieldEQ(FieldExportedHash, v))
+}
+
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
 func CreatedAt(v time.Time) predicate.MCPApplication {
 	return predicate.MCPApplication(sql.FieldEQ(FieldCreatedAt, v))
@@ -352,6 +367,121 @@ func CatalogueRefreshedAtIsNil() predicate.MCPApplication {
 // CatalogueRefreshedAtNotNil applies the NotNil predicate on the "catalogue_refreshed_at" field.
 func CatalogueRefreshedAtNotNil() predicate.MCPApplication {
 	return predicate.MCPApplication(sql.FieldNotNull(FieldCatalogueRefreshedAt))
+}
+
+// EntryEQ applies the EQ predicate on the "entry" field.
+func EntryEQ(v []byte) predicate.MCPApplication {
+	return predicate.MCPApplication(sql.FieldEQ(FieldEntry, v))
+}
+
+// EntryNEQ applies the NEQ predicate on the "entry" field.
+func EntryNEQ(v []byte) predicate.MCPApplication {
+	return predicate.MCPApplication(sql.FieldNEQ(FieldEntry, v))
+}
+
+// EntryIn applies the In predicate on the "entry" field.
+func EntryIn(vs ...[]byte) predicate.MCPApplication {
+	return predicate.MCPApplication(sql.FieldIn(FieldEntry, vs...))
+}
+
+// EntryNotIn applies the NotIn predicate on the "entry" field.
+func EntryNotIn(vs ...[]byte) predicate.MCPApplication {
+	return predicate.MCPApplication(sql.FieldNotIn(FieldEntry, vs...))
+}
+
+// EntryGT applies the GT predicate on the "entry" field.
+func EntryGT(v []byte) predicate.MCPApplication {
+	return predicate.MCPApplication(sql.FieldGT(FieldEntry, v))
+}
+
+// EntryGTE applies the GTE predicate on the "entry" field.
+func EntryGTE(v []byte) predicate.MCPApplication {
+	return predicate.MCPApplication(sql.FieldGTE(FieldEntry, v))
+}
+
+// EntryLT applies the LT predicate on the "entry" field.
+func EntryLT(v []byte) predicate.MCPApplication {
+	return predicate.MCPApplication(sql.FieldLT(FieldEntry, v))
+}
+
+// EntryLTE applies the LTE predicate on the "entry" field.
+func EntryLTE(v []byte) predicate.MCPApplication {
+	return predicate.MCPApplication(sql.FieldLTE(FieldEntry, v))
+}
+
+// ExportToClaudeEQ applies the EQ predicate on the "export_to_claude" field.
+func ExportToClaudeEQ(v bool) predicate.MCPApplication {
+	return predicate.MCPApplication(sql.FieldEQ(FieldExportToClaude, v))
+}
+
+// ExportToClaudeNEQ applies the NEQ predicate on the "export_to_claude" field.
+func ExportToClaudeNEQ(v bool) predicate.MCPApplication {
+	return predicate.MCPApplication(sql.FieldNEQ(FieldExportToClaude, v))
+}
+
+// ExportedHashEQ applies the EQ predicate on the "exported_hash" field.
+func ExportedHashEQ(v string) predicate.MCPApplication {
+	return predicate.MCPApplication(sql.FieldEQ(FieldExportedHash, v))
+}
+
+// ExportedHashNEQ applies the NEQ predicate on the "exported_hash" field.
+func ExportedHashNEQ(v string) predicate.MCPApplication {
+	return predicate.MCPApplication(sql.FieldNEQ(FieldExportedHash, v))
+}
+
+// ExportedHashIn applies the In predicate on the "exported_hash" field.
+func ExportedHashIn(vs ...string) predicate.MCPApplication {
+	return predicate.MCPApplication(sql.FieldIn(FieldExportedHash, vs...))
+}
+
+// ExportedHashNotIn applies the NotIn predicate on the "exported_hash" field.
+func ExportedHashNotIn(vs ...string) predicate.MCPApplication {
+	return predicate.MCPApplication(sql.FieldNotIn(FieldExportedHash, vs...))
+}
+
+// ExportedHashGT applies the GT predicate on the "exported_hash" field.
+func ExportedHashGT(v string) predicate.MCPApplication {
+	return predicate.MCPApplication(sql.FieldGT(FieldExportedHash, v))
+}
+
+// ExportedHashGTE applies the GTE predicate on the "exported_hash" field.
+func ExportedHashGTE(v string) predicate.MCPApplication {
+	return predicate.MCPApplication(sql.FieldGTE(FieldExportedHash, v))
+}
+
+// ExportedHashLT applies the LT predicate on the "exported_hash" field.
+func ExportedHashLT(v string) predicate.MCPApplication {
+	return predicate.MCPApplication(sql.FieldLT(FieldExportedHash, v))
+}
+
+// ExportedHashLTE applies the LTE predicate on the "exported_hash" field.
+func ExportedHashLTE(v string) predicate.MCPApplication {
+	return predicate.MCPApplication(sql.FieldLTE(FieldExportedHash, v))
+}
+
+// ExportedHashContains applies the Contains predicate on the "exported_hash" field.
+func ExportedHashContains(v string) predicate.MCPApplication {
+	return predicate.MCPApplication(sql.FieldContains(FieldExportedHash, v))
+}
+
+// ExportedHashHasPrefix applies the HasPrefix predicate on the "exported_hash" field.
+func ExportedHashHasPrefix(v string) predicate.MCPApplication {
+	return predicate.MCPApplication(sql.FieldHasPrefix(FieldExportedHash, v))
+}
+
+// ExportedHashHasSuffix applies the HasSuffix predicate on the "exported_hash" field.
+func ExportedHashHasSuffix(v string) predicate.MCPApplication {
+	return predicate.MCPApplication(sql.FieldHasSuffix(FieldExportedHash, v))
+}
+
+// ExportedHashEqualFold applies the EqualFold predicate on the "exported_hash" field.
+func ExportedHashEqualFold(v string) predicate.MCPApplication {
+	return predicate.MCPApplication(sql.FieldEqualFold(FieldExportedHash, v))
+}
+
+// ExportedHashContainsFold applies the ContainsFold predicate on the "exported_hash" field.
+func ExportedHashContainsFold(v string) predicate.MCPApplication {
+	return predicate.MCPApplication(sql.FieldContainsFold(FieldExportedHash, v))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.

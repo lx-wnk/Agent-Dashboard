@@ -33,6 +33,18 @@ func (MCPApplication) Fields() []ent.Field {
 			Annotations(entsql.Default("[]")),
 		field.String("catalogue_error").Default(""),
 		field.Time("catalogue_refreshed_at").Optional().Nillable(),
+		// entry is the server definition itself (mcpapps.ServerEntry): transport,
+		// command, args and non-secret env. Secrets live in application_secret.
+		// Bytes, not field.JSON with json.RawMessage: under a toolchain with the
+		// jsonv2 experiment that alias resolves to jsontext.Value and the
+		// generated code stops compiling on the toolchain CI pins.
+		field.Bytes("entry").
+			Default([]byte("{}")).
+			Annotations(entsql.Default("{}")),
+		// export_to_claude mirrors the entry into Claude's own config so plain
+		// `claude` sessions see the server; exported_hash is what we last wrote.
+		field.Bool("export_to_claude").Default(false),
+		field.String("exported_hash").Default(""),
 		field.Time("created_at").Default(time.Now).Immutable(),
 		field.Time("updated_at").Default(time.Now).UpdateDefault(time.Now),
 	}

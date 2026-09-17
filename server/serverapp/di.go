@@ -356,6 +356,11 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 			slog.Warn("mcpapps: reconcile failed", "err", err)
 		} else {
 			slog.Info("mcpapps: applications reconciled", "mirrored", n)
+			if n, err := mcpapps.ImportEntries(ctx, servers, mcpAppRepo, db.MarkerStore{DB: bundle.DB}); err != nil {
+				slog.Warn("mcpapps: entry import failed", "err", err)
+			} else {
+				slog.Info("mcpapps: entries imported", "count", n)
+			}
 		}
 
 		if n, err := channelconfig.SweepOrphanedConfigs(time.Now()); err != nil {
@@ -743,12 +748,23 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 				Apps:         repo.NewMCPApplicationRepo(entClient),
 				Secrets:      repo.NewApplicationSecretRepo(entClient, box),
 				Capabilities: repo.NewCapabilityRepo(entClient),
-				ReadServers:  claudeconfig.UserMCPServers,
 				Transport:    mcpapps.StdioTransport,
 				Now:          time.Now,
 			},
 			repo.NewGrantRepo(entClient),
+			resourceRepo,
+			repo.NewTaskScheduleRepo(entClient),
 		)
+
+		watchCtx, stopConfigWatch := context.WithCancel(context.Background())
+		if err := claudeconfig.Watch(watchCtx, func() {
+			taskBroadcaster.Broadcast(sse.TaskEvent{Type: "applications_changed"})
+		}); err != nil {
+			slog.Warn("claudeconfig: watch failed — outside changes are noticed on refresh only", "err", err)
+			stopConfigWatch()
+		} else {
+			cleanup = chainCleanup(cleanup, stopConfigWatch)
+		}
 	}
 
 	// Obsidian manual trigger — POST /api/obsidian/index. Unlike memoryHandler

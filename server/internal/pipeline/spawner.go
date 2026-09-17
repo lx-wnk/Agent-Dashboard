@@ -692,7 +692,7 @@ func SpawnStageAgent(opts SpawnAgentOptions) (SpawnResult, error) {
 	if opts.EnableChannel {
 		// The spawn runs --strict-mcp-config, so whatever is not in this file is
 		// gone for the agent. Carry the operator's own servers over; the
-		// resolver already read and merged them (mcpapps.Resolver.ReadServers).
+		// resolver already read and merged them.
 		userServers := opts.Applications.Servers
 		if selfBin, binErr := channelconfig.SelfBinaryPath(); binErr == nil {
 			if cfgPath, cfgErr := channelconfig.WriteTempConfig(selfBin, buildTaskAPI(opts), userServers); cfgErr == nil {

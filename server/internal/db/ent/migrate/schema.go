@@ -371,6 +371,9 @@ var (
 		{Name: "catalogue", Type: field.TypeJSON, Default: "[]"},
 		{Name: "catalogue_error", Type: field.TypeString, Default: ""},
 		{Name: "catalogue_refreshed_at", Type: field.TypeTime, Nullable: true},
+		{Name: "entry", Type: field.TypeBytes, Default: "{}"},
+		{Name: "export_to_claude", Type: field.TypeBool, Default: false},
+		{Name: "exported_hash", Type: field.TypeString, Default: ""},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 	}

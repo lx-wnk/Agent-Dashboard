@@ -2,6 +2,7 @@ package repo
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -17,6 +18,8 @@ type UpsertMCPApplicationInput struct {
 	ServerName string
 	// AttachAll applies when the row is created; an existing row keeps its value.
 	AttachAll bool
+	// Entry applies when the row is created; an existing row keeps its value.
+	Entry json.RawMessage
 }
 
 type MCPApplicationRepo interface {
@@ -26,6 +29,9 @@ type MCPApplicationRepo interface {
 	SetAttachAll(ctx context.Context, resourceID string, attachAll bool) (*ent.MCPApplication, error)
 	SetRequiredEnv(ctx context.Context, resourceID string, names []string) (*ent.MCPApplication, error)
 	RecordCatalogue(ctx context.Context, resourceID string, tools []schema.CatalogueTool, catalogueErr string, at time.Time) error
+	SetEntry(ctx context.Context, resourceID string, entry json.RawMessage) (*ent.MCPApplication, error)
+	SetExport(ctx context.Context, resourceID string, export bool, exportedHash string) (*ent.MCPApplication, error)
+	Delete(ctx context.Context, resourceID string) error
 }
 
 type entMCPApplicationRepo struct{ client *ent.Client }
@@ -42,12 +48,15 @@ func (r *entMCPApplicationRepo) Upsert(ctx context.Context, in UpsertMCPApplicat
 	if !ent.IsNotFound(err) {
 		return nil, fmt.Errorf("mcpapplication.Upsert: %w", err)
 	}
-	row, err := r.client.MCPApplication.Create().
+	create := r.client.MCPApplication.Create().
 		SetID(uuid.New().String()).
 		SetResourceID(in.ResourceID).
 		SetServerName(in.ServerName).
-		SetAttachAll(in.AttachAll).
-		Save(ctx)
+		SetAttachAll(in.AttachAll)
+	if in.Entry != nil {
+		create = create.SetEntry(in.Entry)
+	}
+	row, err := create.Save(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("mcpapplication.Upsert: %w", err)
 	}
@@ -98,4 +107,25 @@ func (r *entMCPApplicationRepo) RecordCatalogue(ctx context.Context, resourceID 
 		upd = upd.SetCatalogue(tools)
 	}
 	return upd.Exec(ctx)
+}
+
+func (r *entMCPApplicationRepo) SetEntry(ctx context.Context, resourceID string, entry json.RawMessage) (*ent.MCPApplication, error) {
+	row, err := r.GetByResourceID(ctx, resourceID)
+	if err != nil {
+		return nil, err
+	}
+	return row.Update().SetEntry(entry).Save(ctx)
+}
+
+func (r *entMCPApplicationRepo) SetExport(ctx context.Context, resourceID string, export bool, exportedHash string) (*ent.MCPApplication, error) {
+	row, err := r.GetByResourceID(ctx, resourceID)
+	if err != nil {
+		return nil, err
+	}
+	return row.Update().SetExportToClaude(export).SetExportedHash(exportedHash).Save(ctx)
+}
+
+func (r *entMCPApplicationRepo) Delete(ctx context.Context, resourceID string) error {
+	_, err := r.client.MCPApplication.Delete().Where(mcpapplication.ResourceID(resourceID)).Exec(ctx)
+	return err
 }

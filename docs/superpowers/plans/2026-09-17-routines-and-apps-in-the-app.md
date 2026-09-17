@@ -16,6 +16,7 @@
 
 - The server binds to `127.0.0.1`, never `0.0.0.0`.
 - No dependency file changes unless a task says so: `server/go.mod`, `server/go.sum`, `go.work.sum`, `pnpm-lock.yaml` stay byte-identical to `main`.
+- Never give an ent schema field the type `json.RawMessage`. On a toolchain with the jsonv2 experiment (local Go 1.27) that alias resolves to `jsontext.Value`, the generated tree imports `encoding/json/jsontext`, and the build fails on the toolchain CI pins (`go1.26.6`: `build constraints exclude all Go files`). Use `field.Bytes(...)` for a raw JSON blob; Go APIs may still take and return `json.RawMessage`. After every regeneration: `grep -rl jsontext server/internal/db/ent/` prints nothing and `GOTOOLCHAIN=go1.26.6 go build ./...` passes.
 - ent regeneration only via `cd server && go generate ./internal/db/ent/`; afterwards `grep -rl "OnConflict" server/internal/db/ent/ | head` must print files. The generator runs with `-mod=mod` and adds its own dependencies to `server/go.sum`: restore it with `git checkout HEAD -- server/go.sum` before committing.
 - While implementing, run package-scoped tests (`go test ./internal/<pkg>/...`). `go test ./...` and `task test` regenerate `server/internal/db/ent/`; run them once per PR at the end and restore `ent/` if it drifted.
 - Before every commit: `gofmt -l` on touched packages prints nothing; `go vet ./...` from `server/` passes; `GOTOOLCHAIN=go1.26.6 golangci-lint run` on touched packages reports 0 issues.
@@ -1391,18 +1392,245 @@ func decisionResumePrompt(decision string, tools []string) string { // deny_rout
 - [ ] **Isolated run** — never the production database: build the server with the embedded SPA, start it from inside a fresh `mktemp -d` directory (so no `.env` is loaded, `server/internal/config/config.go` loads one from the working directory) with `DASHBOARD_DB_PATH=<tmp>/tasks.db`, `DASHBOARD_PORT=<free port>`, `DASHBOARD_WORKTREE_ROOT=<tmp>/worktrees`, then through the HTTP API (with an `Origin` header matching the host on every write): create a routine `runMode: job`, `cwd: <mktemp -d, not a git repo>`, instruction "Write the word ok into result."; `POST /run-now`; poll `GET /api/schedules/{id}/runs` until the run is `done` (timeout 5 min) and show `summary`, `costCents`; `GET /api/tasks` does not list it, `?kind=job&routineId=` does; the temp directory has no `.git` and no worktree was created under the worktree root; `POST` a `runMode: pipeline` routine for the same cwd → 400 with the git message. Kill the server, print the binary's mtime and hash before the run. Paste every response.
 - [ ] **PR:** push `feat/routine-jobs`, `gh pr create` with summary, findings B-1..B-6, mutation evidence per task, gate output, isolated-run evidence; wait for CI on the head commit (`gh run list --commit <sha>`), merge with `gh pr merge --squash --admin` when every check is green, `gh pr view <n> --json state,mergedAt`, then `main` CI on the merge commit green.
 
-## PR 3 — Servers in the database (detailed before start)
+## PR 3 — Servers in the database
 
-Spec: applications §2.1, §2.2.
+Branch `feat/applications-in-db`, worktree `/Users/alexanderwink/dashboard-worktrees/apps-in-db`, from `main` at `eb5256b8` (PR 2 merged). Spec: applications §2.1, §2.2. Every anchor below was re-read on `eb5256b8`.
 
-- Task 3.1: `mcp_application.entry`, `export_to_claude`, `exported_hash` (ent + regeneration).
-- Task 3.2: Import marker migration from `CLAUDE_CONFIG_DIR/.claude.json` (reserved names skipped, `export_to_claude = true`).
-- Task 3.3: Runs and refresh read `entry` from the database instead of `ReadServers`.
-- Task 3.4: Applications API: create, update, delete (409 while attached, naming routines).
-- Task 3.5: Export writer through the materializer (only `mcpServers.<name>`, atomic, mode kept, symlink refused, no secrets).
-- Task 3.6: `fsnotify` watch: "found" for unknown servers, "changed outside" for exported entries whose hash differs.
-- Task 3.7: Settings → Applications UI: add/edit/remove, export switch, found and changed banners.
-- Task 3.8: Docs, full gates, PR.
+**What exists today (`VERIFIED`):** an application row (`server/internal/db/ent/schema/mcp_application.go:22-38`) holds `resource_id`, `server_name`, `attach_all`, `required_env`, `catalogue`, `catalogue_error`, `catalogue_refreshed_at` — but never the server definition. Both the run resolver and the tool refresh read it from Claude's own config at call time through a `ReadServers func() (map[string]json.RawMessage, error)` field (`mcpapps/resolve.go:39,48`, `mcpapps/catalogue.go:88,129`), wired to `claudeconfig.UserMCPServers` at `serverapp/di_pipeline.go:180`, `serverapp/di.go:746`, and called directly at `serverapp/di.go:351` (boot reconcile) and `api/onboarding/handler.go:86`. `claudeconfig.JSONPath()` (`internal/claudeconfig/claudeconfig.go:17-26`) resolves `CLAUDE_CONFIG_DIR/.claude.json` or `~/.claude.json`; nothing in `server/` writes that file — only the `claude mcp add` subprocess does (`api/onboarding/handler.go:94-113`).
+
+**Design decisions for this PR:**
+
+- **F-1 — the entry is the source of truth.** `mcp_application.entry` (JSON, `mcpapps.ServerEntry` shape from `entry.go:8`) replaces `ReadServers` for runs and refresh. `claudeconfig.UserMCPServers` stays for the one-time import, the boot reconcile and onboarding.
+- **F-2 — drift is computed, the watcher only nudges.** The "found outside" / "changed outside" state is a pure function over (Claude's `mcpServers` map, the application rows) exposed at `GET /api/applications/drift`. The fsnotify watcher does not hold that state: it broadcasts `applications_changed` on the existing task stream (`sse.TaskBroadcaster`, the SPA already multiplexes `/api/tasks/stream` by payload type, `useSchedules.ts:111-119`) so the panel refetches. A missed event costs a manual refresh, never a wrong banner.
+- **F-3 — export is a single-key rewrite.** `claudeconfig.WriteServerEntry` / `RemoveServerEntry` change only `mcpServers.<name>`, keep every other key and the file mode, write atomically through a temp file in the same directory, and refuse a symlinked path — the shape `materializer/apply.go:78` and `refuseSymlinkBelow` (`apply.go:40-67`) already use. Secrets are never written: the export takes the stored `entry`, not the merged one from `mcpapps.WithEnv`.
+- **F-4 — `exported_hash` is the hash of what we wrote**, so "changed outside" compares the file's current entry against it. `mcpapps.EntryHash` = SHA-256, hex-encoded, over a canonical form of the entry: decoded and re-encoded, which sorts every object's keys and drops whitespace, and keeps fields `ServerEntry` does not know. Claude's config is written indented and the database holds a compact copy of the same entry, so hashing the bytes as they arrive would report every exported server as changed.
+
+### Task 3.1: The application row holds the server entry
+
+**Files:**
+- Modify: `server/internal/db/ent/schema/mcp_application.go:22-38`
+- Modify: `server/internal/db/repo/mcp_application_repo.go:15-29` (input + interface), `:37-101` (implementation)
+- Regenerate: `server/internal/db/ent/` (`cd server && go generate ./internal/db/ent/`, then `git checkout HEAD -- server/go.sum`)
+- Test: `server/internal/db/repo/mcp_application_entry_test.go` (new)
+
+**Interfaces:**
+- Produces: ent fields `Entry []byte` (`field.Bytes("entry")`, default `{}`), `ExportToClaude bool` (default false), `ExportedHash string` (default ""); `repo.MCPApplicationRepo` gains
+```go
+	SetEntry(ctx context.Context, resourceID string, entry json.RawMessage) (*ent.MCPApplication, error)
+	SetExport(ctx context.Context, resourceID string, export bool, exportedHash string) (*ent.MCPApplication, error)
+	Delete(ctx context.Context, resourceID string) error
+```
+  and `UpsertMCPApplicationInput` gains `Entry json.RawMessage` (used only when the row is created, like `AttachAll`).
+
+- [ ] **Step 1: Write the failing tests** (package `repo_test`, `db.Open(":memory:")`, pattern from the existing repo tests): a fresh row has `Entry` `{}`/empty, `ExportToClaude` false, `ExportedHash` ""; `SetEntry` stores and re-reads the raw JSON unchanged (including an unknown field, e.g. `{"type":"stdio","command":"x","args":["a"],"env":{"A":"b"},"weird":1}`); `SetExport(true, "abc")` round-trips; `Delete` removes the row and `GetByResourceID` then returns `ent.IsNotFound`; `Upsert` on an existing row leaves `Entry` untouched (the get-or-create contract at `mcp_application_repo.go:37-55`).
+- [ ] **Step 2: Run** `cd server && go test ./internal/db/repo/ -run TestMCPApplication` — compile error. Paste it.
+- [ ] **Step 3: Implement.** Schema, after `attach_all`:
+```go
+		// entry is the server definition itself (mcpapps.ServerEntry): transport,
+		// command, args and non-secret env. Secrets live in application_secret.
+		// Bytes, not field.JSON with json.RawMessage: under a toolchain with the
+		// jsonv2 experiment that alias resolves to jsontext.Value and the
+		// generated code stops compiling on the toolchain CI pins.
+		field.Bytes("entry").
+			Default([]byte("{}")).
+			Annotations(entsql.Default("{}")),
+		// export_to_claude mirrors the entry into Claude's own config so plain
+		// `claude` sessions see the server; exported_hash is what we last wrote.
+		field.Bool("export_to_claude").Default(false),
+		field.String("exported_hash").Default(""),
+```
+  Repo methods follow the `SetAttachAll` shape (`:69-86`): load, `row.Update()`, `Save`.
+- [ ] **Step 4: Regenerate ent**, restore `go.sum`, `grep -rl "OnConflict" internal/db/ent/ | head -3` prints files; tests PASS; `go test ./internal/db/...` PASS.
+- [ ] **Step 5: Mutation** — make `SetEntry` write `json.RawMessage("{}")` instead of the argument → the round-trip test red; restore identical.
+- [ ] **Step 6: Commit** `feat(applications): store the MCP server definition on the application`.
+
+### Task 3.2: One-time import of the servers that exist today
+
+**Files:**
+- Create: `server/internal/mcpapps/import.go`
+- Modify: `server/serverapp/di.go:350-359` (next to the existing reconcile block)
+- Test: `server/internal/mcpapps/import_test.go` (new)
+
+**Interfaces:**
+- Consumes: `repo.MCPApplicationRepo.SetEntry`/`SetExport` (Task 3.1), `Markers` (`reconcile.go:20`, satisfied by `db.MarkerStore`), `channelconfig.IsReservedServerName`.
+- Produces: `const EntryImportMarker = "mcp-applications-entry-import"`; `func ImportEntries(ctx context.Context, servers map[string]json.RawMessage, apps repo.MCPApplicationRepo, markers Markers) (int, error)`; `func EntryHash(entry []byte) string` — SHA-256 over the canonical form of the entry (decode, re-encode, hash), hex-encoded, `""` for an empty entry. `EntryHash` lives in `mcpapps` and nowhere else: `claudeconfig` is a leaf package that imports nothing from this project, and the writer in 3.6 has no use for the hash — its callers compute it.
+
+- [ ] **Step 1: Write the failing tests:** with two user servers (`mail`, `notes`) plus `dashboard-channel` and `dashboard-tasks` in the map and matching application rows: `ImportEntries` copies the raw entry onto each non-reserved row, sets `export_to_claude = true`, records `exported_hash` for it, leaves `attach_all` untouched, skips the reserved names, returns 2, and records the marker; a second call with a changed map imports nothing (marker) and leaves the rows as they were; a server with no application row is skipped (the reconcile that creates rows runs first); an error from the repo aborts without recording the marker.
+- [ ] **Step 2: Run** `go test ./internal/mcpapps/ -run TestImportEntries` — compile error.
+- [ ] **Step 3: Implement.** `ImportEntries` checks `markers.Has(ctx, EntryImportMarker)` first, walks the map skipping `channelconfig.IsReservedServerName`, looks the row up by `ResourceSlug(name)` (`reconcile.go:27`) via `apps.List` (one query, match on `ServerName`), and for each match calls `SetEntry(raw)` then `SetExport(true, EntryHash(raw))`. Record the marker last. Wire it in `di.go` right after the reconcile block, reusing the `servers` value already read there, and log `slog.Info("mcpapps: entries imported", "count", n)`.
+- [ ] **Step 4: Run** — PASS; `go test ./internal/mcpapps/... ./serverapp/...` PASS.
+- [ ] **Step 5: Mutation** — record the marker before importing → the "second call imports nothing" test still passes but the "error aborts without the marker" test goes red; restore identical.
+- [ ] **Step 6: Commit** `feat(applications): import the servers Claude Code already knows`.
+
+### Task 3.3: Runs and tool refresh read the entry from the database
+
+**Files:**
+- Modify: `server/internal/mcpapps/resolve.go:34-107` (drop `ReadServers`, read `app.Entry`), `server/internal/mcpapps/catalogue.go:84-151` (same for `Refresher`)
+- Modify: `server/serverapp/di_pipeline.go:175-181`, `server/serverapp/di.go:737-752` (stop wiring `ReadServers`)
+- Test: `server/internal/mcpapps/resolve_test.go`, `server/internal/mcpapps/catalogue_test.go` (extend; their fixtures set `ReadServers` today)
+
+**Interfaces:**
+- Consumes: `Entry` (Task 3.1).
+- Produces: `Resolver` and `Refresher` without a `ReadServers` field; `MissingServerError` now means "the application has no entry yet" — keep the type, change its message to name the application and say it has no server definition.
+
+- [ ] **Step 1: Write the failing tests:** a run whose attached application has an entry gets it in `RunApplications.Servers`, merged with its secrets, without any `ReadServers` stub in sight; an attached application with an empty entry (`{}`) fails the run with `MissingServerError`; an `attach_all` application with an empty entry is skipped silently (today's behaviour for a missing server); `Refresher.Refresh` builds its transport from `app.Entry` and records the catalogue; a non-stdio entry still fails with the existing message.
+- [ ] **Step 2: Run** `go test ./internal/mcpapps/` — FAIL (the field still exists, the tests do not set it).
+- [ ] **Step 3: Implement.** In `ResolveRun` replace the `servers[app.ServerName]` lookup with `entry := app.Entry` plus an `IsEmptyEntry` check (`len(entry) == 0 || string(entry) == "{}"`); in `Refresher.list` parse `app.Entry` instead of the map. Delete the fields and their DI wiring. `claudeconfig.UserMCPServers` keeps its other three callers.
+- [ ] **Step 4: Run** — PASS; `go test ./internal/mcpapps/... ./internal/pipeline/... ./internal/api/applications/... ./serverapp/...` PASS.
+- [ ] **Step 5: Mutation** — let an empty entry through as `{}` instead of failing → the `MissingServerError` test red; restore identical.
+- [ ] **Step 6: Commit** `feat(applications): runs and refresh use the stored server definition`.
+
+### Task 3.4: Add and edit a server through the API
+
+**Files:**
+- Modify: `server/internal/api/applications/handler.go:32-39` (routes), `:41-63` (view), `:136-163` (patch), new `create`
+- Modify: `server/internal/db/repo/resource_repo.go` only if creating an application needs a resource row helper — check how `mcpapps.Reconcile` creates one (`reconcile.go:29`) and reuse that path rather than writing a second one
+- Test: `server/internal/api/applications/handler_test.go` (extend)
+
+**Interfaces:**
+- Consumes: `SetEntry` (3.1), `mcpapps.ServerEntry`, `mcpapps.ResourceSlug`, `validation.IsValidSlug`.
+- Produces: `POST /api/applications` with body `{name, command, args, env}` → 201 `applicationView`; the view gains `entry` (`{type, command, args, env}`, secrets never in it) and `exportToClaude`; `PATCH` accepts `command`, `args`, `env` (as one `entry` object) alongside today's `attachAll`/`requiredEnv`. An edit goes through `mcpapps.MergeEntry(stored, entry)`: the keys `ServerEntry` owns are replaced (an empty one is removed, which is what clearing a form field means) and every other key of the stored entry survives, so editing a server imported from Claude's config does not drop what the CLI wrote there.
+
+- [ ] **Step 1: Write the failing tests:** `POST` with `{"name":"mail","command":"uvx","args":["imap-mcp"],"env":{"IMAP_HOST":"x"}}` → 201, row created with a resource row and that entry, `exportToClaude` false; an invalid slug → 400 naming the slug rule; a reserved name (`dashboard-channel`, `dashboard-tasks`) → 400; a duplicate name → 409; a missing command → 400 `command is required`; an env key that is not an environment variable name → 400 (reuse `envNameRE`, `handler.go:19`); `PATCH` with `{"entry":{"command":"uvx","args":["x"]}}` replaces the entry and leaves `attachAll` alone; the view never contains a secret value.
+- [ ] **Step 2: Run** `go test ./internal/api/applications/ -run TestCreateApplication` — FAIL.
+- [ ] **Step 3: Implement.** Validation first, then the resource row, then `Upsert` with the entry. Keep the handler's existing error style (`apierr.NewAppError`).
+- [ ] **Step 4: Run** — PASS; package tests PASS; gofmt, vet, lint.
+- [ ] **Step 5: Mutation** — accept a reserved server name → that test red; restore identical.
+- [ ] **Step 6: Commit** `feat(applications): add and edit an MCP server in the app`.
+
+### Task 3.5: Remove a server, refused while a routine uses it
+
+**Files:**
+- Modify: `server/internal/api/applications/handler.go` (new `delete`, route), `server/internal/api/applications/…` deps (needs the schedule repo and the grant repo)
+- Modify: `server/serverapp/di.go:737-752` (pass the new deps)
+- Test: `server/internal/api/applications/handler_test.go` (extend)
+
+**Interfaces:**
+- Consumes: `repo.TaskScheduleRepo.ListForUser(ctx, "", true)` to find routines whose `Applications` contain the resource id; `repo.ApplicationSecretRepo.Delete`; `repo.GrantRepo.ListForCapability` + `Revoke`; `MCPApplicationRepo.Delete` (3.1).
+- Produces: `DELETE /api/applications/{resourceId}` → 204; 409 `{"error":"still attached to: inbox, nightly"}` when routines attach it; the resource row is marked orphaned rather than deleted, so grants anchored to it still resolve — call `resources.SetState(ctx, resourceID, repo.ResourceStateOrphaned)`, the same one line `repo.OrphanScheduleResource` uses (`server/internal/db/repo/schedule_resource.go:71-76`).
+
+- [ ] **Step 1: Write the failing tests:** delete with no routine attached → 204, the row, its secrets and its tool grants are gone (grants revoked, not deleted — `Revoke` tombstones), the resource row still exists with state `orphaned`; delete while two routines attach it → 409 naming both routines in the message, nothing removed; delete of an unknown id → 404.
+- [ ] **Step 2: Run** `go test ./internal/api/applications/ -run TestDeleteApplication` — FAIL.
+- [ ] **Step 3: Implement.** Check attachment first (fail fast, nothing written), then revoke grants for every `CapabilityName(app.ServerName, tool)` in the catalogue, delete the secrets, delete the row, mark the resource orphaned.
+- [ ] **Step 4: Run** — PASS; `go test ./internal/api/... ./serverapp/...` PASS.
+- [ ] **Step 5: Mutation** — delete before the attachment check → the "nothing removed" assertion in the 409 test red; restore identical.
+- [ ] **Step 6: Commit** `fix(applications): removing a server cleans up and refuses while a routine uses it`.
+
+### Task 3.6: Writing one entry into Claude's config, safely
+
+**Files:**
+- Modify: `server/internal/claudeconfig/claudeconfig.go` (new `WriteServerEntry`, `RemoveServerEntry`, unexported `atomicWrite`)
+- Test: `server/internal/claudeconfig/claudeconfig_write_test.go` (new)
+
+**Interfaces:**
+- Produces (the hash is not here — it lives in `mcpapps.EntryHash`, 3.2, because `claudeconfig` imports nothing from this project):
+```go
+// WriteServerEntry writes mcpServers.<name> into Claude's config, leaving every
+// other key and the file mode untouched. It refuses a symlinked path.
+func WriteServerEntry(name string, entry json.RawMessage) error
+
+// RemoveServerEntry deletes mcpServers.<name>; a missing file or key is not an error.
+func RemoveServerEntry(name string) error
+```
+
+- [ ] **Step 1: Write the failing tests** (each sets `t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())`): writing into a file that holds `{"numStartups":7,"mcpServers":{"other":{"command":"x"}}}` keeps `numStartups` and `other` and adds the new key; writing into a file with mode `0600` keeps `0600`; writing when the file does not exist creates it with `0600`; a symlinked `.claude.json` → error containing `symlink`, file untouched; `RemoveServerEntry` drops only that key; removing from a missing file returns nil; a temp file is never left behind (read the directory after each case).
+- [ ] **Step 2: Run** `go test ./internal/claudeconfig/` — FAIL.
+- [ ] **Step 3: Implement.** Read (missing file = empty object), decode into `map[string]json.RawMessage`, decode `mcpServers` into `map[string]json.RawMessage`, set or delete the one key, re-encode with `json.MarshalIndent(…, "", "  ")`, `os.Lstat` the target and refuse `os.ModeSymlink`, then the `materializer/apply.go:78` atomic-write shape with the existing mode (`os.Stat` → `Mode().Perm()`, default `0o600`).
+- [ ] **Step 4: Run** — PASS; `go test ./internal/claudeconfig/...` PASS.
+- [ ] **Step 5: Mutation** — write the whole file from the decoded `mcpServers` only (dropping other keys) → the "keeps numStartups" test red; skip the `Lstat` check → the symlink test red. Restore identical each time.
+- [ ] **Step 6: Commit** `feat(applications): write a single server entry into Claude's config`.
+
+### Task 3.7: The export switch and drift detection
+
+**Files:**
+- Modify: `server/internal/api/applications/handler.go` (PATCH accepts `exportToClaude`; every entry write re-exports when the switch is on; new `GET /api/applications/drift`)
+- Create: `server/internal/mcpapps/drift.go`
+- Test: `server/internal/mcpapps/drift_test.go` (new), `server/internal/api/applications/handler_test.go` (extend)
+
+**Interfaces:**
+- Consumes: `claudeconfig.WriteServerEntry`/`RemoveServerEntry` (3.6), `mcpapps.EntryHash` (3.2), `claudeconfig.UserMCPServers`.
+- Produces:
+```go
+type Drift struct {
+	Found   []string `json:"found"`   // in Claude's config, no application row
+	Changed []string `json:"changed"` // exported, but the file no longer matches exported_hash
+}
+func DetectDrift(servers map[string]json.RawMessage, apps []*ent.MCPApplication) Drift
+```
+  `GET /api/applications/drift` → `200 Drift`; `PATCH {"exportToClaude":true}` writes the entry and stores the new hash, `false` removes the key and clears the hash; changing the entry while the switch is on rewrites and re-hashes. Also `POST /api/applications/import` with `{"name":"mail"}` → 201 `applicationView`: it reads that one server from `claudeconfig.UserMCPServers` and creates the row through the same path as 3.2's `ImportEntries`, so the panel's Import button never sends an entry the client made up. An unknown name → 404, an existing row → 409.
+
+- [ ] **Step 1: Write the failing tests:** import — `POST {"name":"mail"}` with `mail` in the config creates the row with that entry and `exportToClaude` false, an unknown name → 404, a second import → 409. `DetectDrift` — a server with no row is `found`; a row with `export_to_claude` false is never `changed` even when the file differs; an exported row whose file entry hashes differently is `changed`; an exported row missing from the file is `changed`; reserved names are never reported; both lists are sorted. Handler — turning the switch on writes `mcpServers.<name>` (assert through `claudeconfig.UserMCPServers` in a `t.Setenv` config dir) and stores a non-empty `exportedHash`; turning it off removes the key and clears the hash; a `PATCH` of the entry while exported rewrites the file and changes the hash; a write failure answers 502 and does not flip the flag in the database.
+- [ ] **Step 2: Run** `go test ./internal/mcpapps/ ./internal/api/applications/ -run 'Drift|Export'` — FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** — PASS; package tests PASS.
+- [ ] **Step 5: Mutation** — report `changed` for non-exported rows → that test red; flip the flag before the write succeeds → the 502 test red. Restore identical.
+- [ ] **Step 6: Commit** `feat(applications): mirror a server into Claude's config and notice outside changes`.
+
+### Task 3.8: The watcher that nudges the panel
+
+**Files:**
+- Create: `server/internal/claudeconfig/watch.go`
+- Modify: `server/serverapp/di.go` (start it next to the reconcile block; stop it in the existing shutdown path)
+- Test: `server/internal/claudeconfig/watch_test.go` (new)
+
+**Interfaces:**
+- Consumes: `fsnotify` (already a dependency, used in `internal/checkpoint/checkpointer.go:48-68` — copy its watcher lifecycle, including `Close`), `sse.TaskBroadcaster`.
+- Produces:
+```go
+// Watch reports a debounced change to Claude's config until ctx is done.
+func Watch(ctx context.Context, onChange func()) error
+```
+  DI broadcasts `sse.TaskEvent{Type: "applications_changed"}` from `onChange`; the SPA refetches the drift endpoint on that event.
+
+- [ ] **Step 1: Write the failing tests:** with `CLAUDE_CONFIG_DIR` in a temp dir, `Watch` fires `onChange` once after the file is written twice inside the debounce window (the package exports `var WatchDebounce = 300 * time.Millisecond`; the test sets it to 20 ms before starting the watcher and restores it with `t.Cleanup`); it fires again after a later write; it returns when the context is cancelled and closes the watcher (no goroutine left writing to a closed channel — run the test with `-race`); a missing file at start is not an error (watch the directory, not the file).
+- [ ] **Step 2: Run** `go test -race ./internal/claudeconfig/ -run TestWatch` — FAIL.
+- [ ] **Step 3: Implement.** Watch the config's *directory* (editors replace the file, which breaks a file watch), filter events for `.claude.json`, debounce like `checkpointer.debounceLoop` (`checkpointer.go:99-128`).
+- [ ] **Step 4: Run** — PASS with `-race`; `go test ./internal/claudeconfig/... ./serverapp/...` PASS.
+- [ ] **Step 5: Mutation** — drop the debounce (fire per event) → the "once" test red; restore identical.
+- [ ] **Step 6: Commit** `feat(applications): notice when Claude's config changes outside the app`.
+
+### Task 3.9: Managing a server in Settings → Applications
+
+**Files:**
+- Modify: `src/features/settings/composables/useApplications.ts:3-25` (types), `:41-98` (calls)
+- Modify: `src/features/settings/components/ApplicationSettings.vue` (add/edit/remove, export switch)
+- Test: `src/features/settings/components/ApplicationSettings.test.ts` (extend), `src/features/settings/composables/__tests__/useApplications.test.ts` (new)
+
+**Interfaces:**
+- Consumes: `POST /api/applications`, `PATCH /api/applications/{id}` with `entry`/`exportToClaude`, `DELETE /api/applications/{id}` (3.4, 3.5, 3.7).
+- Produces: `ApplicationView` gains `entry: { type?: string, command: string, args: string[], env: Record<string, string> }` and `exportToClaude: boolean`; the composable gains `createApplication(input)`, `setEntry(id, entry)`, `setExport(id, on)`, `deleteApplication(id)`.
+
+- [ ] **Step 1: Write the failing tests** (fetch-stub dialect of `ApplicationSettings.test.ts:17-28`, every mount unmounted): **Add server** reveals a form (name, command, args as one line split on spaces, env as `KEY=value` lines) and posts exactly `{name, command, args, env}`; a server-side 400 shows its message in the panel's error slot and keeps the form open; **Edit** on an existing card sends `PATCH {entry:{command,args,env}}`; the **"Also available in Claude Code sessions"** switch (`role="switch"`, the `ProviderSettings.vue:55-69` markup) sends `PATCH {exportToClaude:true}` and reflects the returned row; **Remove** asks for confirmation first (the inline two-step from `GrantSettings.vue:297-315`, never `window.confirm`), then sends `DELETE`; a 409 on delete shows the message naming the routines and leaves the card; no secret value ever appears in the rendered HTML (keep the existing leak assertion).
+- [ ] **Step 2: Run** `pnpm vitest run src/features/settings` — FAIL, paste.
+- [ ] **Step 3: Implement.** Follow the panel house style: `<label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1">` + raw inputs, `AppButton variant="info"` to save, `variant="secondary"` to cancel, `data-testid` prefixed `application-…`. Parse args by splitting on whitespace and env by `KEY=value` per line, both trimmed; show a field error rather than sending a malformed body.
+- [ ] **Step 4: Run** — PASS; `pnpm vitest run src/features/settings` PASS; eslint on the touched files; `pnpm typecheck`.
+- [ ] **Step 5: Mutations** — post `args` as one string → the create test red; skip the confirmation step → the confirm test red; restore identical.
+- [ ] **Step 6: Commit** `feat(applications): add, edit and remove an MCP server in Settings`.
+
+### Task 3.10: Found outside / changed outside
+
+**Files:**
+- Modify: `src/features/settings/composables/useApplications.ts` (drift fetch + stream subscription)
+- Modify: `src/features/settings/components/ApplicationSettings.vue` (two banners)
+- Test: `src/features/settings/components/ApplicationSettings.test.ts` (extend)
+
+**Interfaces:**
+- Consumes: `GET /api/applications/drift` (3.7) and the `applications_changed` event on `/api/tasks/stream` (3.8). Subscribe the way `useSchedules.ts:111-126` does (raw `EventSource`, filter by payload type, refetch) — do not add a second stream.
+- Produces: a **found** banner per unknown server with an **Import** button (`POST /api/applications/import` with `{name}` — the server reads the entry from Claude's config, 3.7), and a **changed** banner per drifted application with **Take the change** (`PATCH {entry}` from the file) and **Write the app's version back** (`PATCH {exportToClaude:true}` re-export). Nothing is applied automatically.
+
+- [ ] **Step 1: Write the failing tests:** drift `{found:["mail"],changed:[]}` renders `Found mail — import?` with an Import button that posts `{"name":"mail"}` to `/api/applications/import` and then refetches both the list and the drift; drift `{found:[],changed:["notes"]}` renders "Changed outside the app" with both actions, each sending the right request; no banner when both lists are empty; an `applications_changed` event on the stream triggers a drift refetch (drive the stubbed `EventSource`'s `onmessage` the way the schedules tests do).
+- [ ] **Step 2: Run** `pnpm vitest run src/features/settings/components/ApplicationSettings.test.ts` — FAIL.
+- [ ] **Step 3: Implement.** Banner markup: the panel-notice idiom (`role="alert" class="rounded border border-warning-line bg-warning-soft text-warning-text px-3 py-2 text-xs"`, as `ResourceSettings.vue:132`), action buttons `AppButton size="sm"`.
+- [ ] **Step 4: Run** — PASS; `pnpm vitest run src/features/settings` PASS; eslint; `pnpm typecheck`.
+- [ ] **Step 5: Mutation** — render the changed banner for every application → the "no banner" test red; restore identical.
+- [ ] **Step 6: Commit** `feat(applications): show servers found or changed outside the app`.
+
+### Task 3.11: Docs, full gates, isolated run, PR
+
+- [ ] **Docs:** `CHANGELOG.md` — `### Added`: the server definition lives in the app (add/edit/remove in Settings → Applications, runs and refresh read it, a change applies to the next run without a restart), the one-time import, the export switch, the found/changed banners, `GET /api/applications/drift`. `### Changed`: `~/.claude.json` is no longer read for runs or refresh; removing a server is refused while a routine attaches it. `docs/guides/mcp.md`: managing servers in the app, what the export writes (never secrets), what the watcher does. `docs/guides/security.md`: the export writes only `mcpServers.<name>`, refuses a symlinked config, and never writes secret values; a deleted application revokes its tool grants. Every claim checked against the code.
+- [ ] **Full gates** (paste raw output): `cd server && go vet ./... && go test -race ./...` (restore `internal/db/ent/` if it drifted), `cd sdk && go vet ./...`, `cd server && GOTOOLCHAIN=go1.26.6 golangci-lint run ./...`, `pnpm lint && pnpm typecheck && pnpm test`, `pnpm test:e2e`, `git checkout HEAD -- server/frontend/dist/.gitkeep`.
+- [ ] **Isolated run** — never the production database, and **never set `CLAUDE_CONFIG_DIR` for the server** (that breaks the spawned agent's login; see the ledger correction): temp `DASHBOARD_DB_PATH`, `DASHBOARD_PORT`, `DASHBOARD_WORKTREE_ROOT`, and a temp `HOME`-independent config only where a test needs to write Claude's config — for the export check, point the API at a temp config dir by starting the server with `CLAUDE_CONFIG_DIR` set **and** accept that spawning is then untestable in that instance; run the two halves as two instances if both are needed. Check: create a server in the UI payload shape → it appears in `GET /api/applications` with its entry; attach it to a routine and fire the routine → the run's temp MCP config contains the entry; turn the export switch on → `mcpServers.<name>` appears in the temp config file with every other key intact; edit the file by hand → `GET /api/applications/drift` reports it as changed; delete the application while the routine attaches it → 409 naming the routine. Paste every response; remove the temp instances afterwards.
+- [ ] **PR:** push `feat/applications-in-db`, open it with the evidence, wait for CI on the head commit, merge with `gh pr merge --squash --admin` when green, then `main` CI green.
 
 ## PR 4 — Setup UI, grants from use, default denies (detailed before start)
 

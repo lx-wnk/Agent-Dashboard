@@ -33,6 +33,12 @@ type MCPApplication struct {
 	CatalogueError string `json:"catalogue_error,omitempty"`
 	// CatalogueRefreshedAt holds the value of the "catalogue_refreshed_at" field.
 	CatalogueRefreshedAt *time.Time `json:"catalogue_refreshed_at,omitempty"`
+	// Entry holds the value of the "entry" field.
+	Entry []byte `json:"entry,omitempty"`
+	// ExportToClaude holds the value of the "export_to_claude" field.
+	ExportToClaude bool `json:"export_to_claude,omitempty"`
+	// ExportedHash holds the value of the "exported_hash" field.
+	ExportedHash string `json:"exported_hash,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
@@ -45,11 +51,11 @@ func (*MCPApplication) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case mcpapplication.FieldRequiredEnv, mcpapplication.FieldCatalogue:
+		case mcpapplication.FieldRequiredEnv, mcpapplication.FieldCatalogue, mcpapplication.FieldEntry:
 			values[i] = new([]byte)
-		case mcpapplication.FieldAttachAll:
+		case mcpapplication.FieldAttachAll, mcpapplication.FieldExportToClaude:
 			values[i] = new(sql.NullBool)
-		case mcpapplication.FieldID, mcpapplication.FieldResourceID, mcpapplication.FieldServerName, mcpapplication.FieldCatalogueError:
+		case mcpapplication.FieldID, mcpapplication.FieldResourceID, mcpapplication.FieldServerName, mcpapplication.FieldCatalogueError, mcpapplication.FieldExportedHash:
 			values[i] = new(sql.NullString)
 		case mcpapplication.FieldCatalogueRefreshedAt, mcpapplication.FieldCreatedAt, mcpapplication.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -121,6 +127,24 @@ func (_m *MCPApplication) assignValues(columns []string, values []any) error {
 				_m.CatalogueRefreshedAt = new(time.Time)
 				*_m.CatalogueRefreshedAt = value.Time
 			}
+		case mcpapplication.FieldEntry:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field entry", values[i])
+			} else if value != nil {
+				_m.Entry = *value
+			}
+		case mcpapplication.FieldExportToClaude:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field export_to_claude", values[i])
+			} else if value.Valid {
+				_m.ExportToClaude = value.Bool
+			}
+		case mcpapplication.FieldExportedHash:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field exported_hash", values[i])
+			} else if value.Valid {
+				_m.ExportedHash = value.String
+			}
 		case mcpapplication.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field created_at", values[i])
@@ -191,6 +215,15 @@ func (_m *MCPApplication) String() string {
 		builder.WriteString("catalogue_refreshed_at=")
 		builder.WriteString(v.Format(time.ANSIC))
 	}
+	builder.WriteString(", ")
+	builder.WriteString("entry=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Entry))
+	builder.WriteString(", ")
+	builder.WriteString("export_to_claude=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ExportToClaude))
+	builder.WriteString(", ")
+	builder.WriteString("exported_hash=")
+	builder.WriteString(_m.ExportedHash)
 	builder.WriteString(", ")
 	builder.WriteString("created_at=")
 	builder.WriteString(_m.CreatedAt.Format(time.ANSIC))
