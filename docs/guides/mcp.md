@@ -137,7 +137,7 @@ An MCP server the dashboard knows is an *application*. The dashboard holds the s
 
 The same over HTTP: `POST /api/applications` with `{"name": "mail", "command": "npx", "args": ["-y", "imap-mcp-server"], "env": {"IMAP_HOST": "imap.example.com"}}`. Editing a definition is `PATCH /api/applications/{resourceId}` with `{"entry": {...}}` — it replaces the fields the app knows (`type`, `command`, `args`, `url`, `env`) and keeps any other key the entry carries, so a definition imported from Claude's config does not lose what the CLI wrote there.
 
-**Removing** a server (`DELETE /api/applications/{resourceId}`) revokes the grants on its tools, deletes its secrets and drops the definition. It is refused with `409` while a routine still attaches it, and the message names those routines. The registry row stays behind as `orphaned` so grants anchored to it still resolve.
+**Removing** a server (`DELETE /api/applications/{resourceId}`) revokes the grants on its tools, deletes its secrets and drops the definition. If it was mirrored into `~/.claude.json`, that entry goes with it; a server the app never mirrored stays in the file and is then offered as found. It is refused with `409` while a routine still attaches it, and the message names those routines. The registry row stays behind as `orphaned` so grants anchored to it still resolve.
 
 ### Servers registered with Claude Code
 

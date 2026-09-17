@@ -511,3 +511,25 @@ func TestDrift_UnreadableConfigReportsNothingRatherThanEverything(t *testing.T) 
 	require.JSONEq(t, `{"found":[],"changed":[]}`, rec.Body.String(),
 		"a config that cannot be read is no information, not evidence of an edit")
 }
+
+func TestDeleteApplication_TakesItsMirrorOutOfClaudeConfig(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	require.NoError(t, os.WriteFile(dir+"/.claude.json",
+		[]byte(`{"mcpServers":{"notes":{"command":"x"},"mine":{"command":"y"}}}`), 0o600))
+	mux, apps, grants, secrets, resources, _ := newMux(t)
+	ctx := context.Background()
+	resID := deletableApp(t, apps, grants, secrets, resources)
+	_, err := apps.SetEntry(ctx, resID, json.RawMessage(`{"command":"y"}`))
+	require.NoError(t, err)
+	rec := do(t, mux, http.MethodPatch, "/api/applications/"+resID, map[string]any{"exportToClaude": true})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	rec = do(t, mux, http.MethodDelete, "/api/applications/"+resID, nil)
+	require.Equal(t, http.StatusNoContent, rec.Code, rec.Body.String())
+
+	servers, err := claudeconfig.UserMCPServers()
+	require.NoError(t, err)
+	require.NotContains(t, servers, "notes", "a mirror the app wrote is removed with the application")
+	require.Contains(t, servers, "mine", "a server the app never mirrored stays")
+}

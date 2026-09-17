@@ -484,6 +484,14 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
+	// Only a mirror the app itself wrote is taken back out of Claude's config;
+	// a server the operator registered there stays, and the panel then offers
+	// it as found rather than silently losing it.
+	if app.ExportToClaude {
+		if err := claudeconfig.RemoveServerEntry(app.ServerName); err != nil {
+			return apierr.NewAppError(http.StatusBadGateway, "write Claude config: "+err.Error())
+		}
+	}
 	if err := h.apps.Delete(r.Context(), app.ResourceID); err != nil {
 		return err
 	}
