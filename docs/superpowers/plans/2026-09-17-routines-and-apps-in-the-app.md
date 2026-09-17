@@ -16,6 +16,7 @@
 
 - The server binds to `127.0.0.1`, never `0.0.0.0`.
 - No dependency file changes unless a task says so: `server/go.mod`, `server/go.sum`, `go.work.sum`, `pnpm-lock.yaml` stay byte-identical to `main`.
+- Never give an ent schema field the type `json.RawMessage`. On a toolchain with the jsonv2 experiment (local Go 1.27) that alias resolves to `jsontext.Value`, the generated tree imports `encoding/json/jsontext`, and the build fails on the toolchain CI pins (`go1.26.6`: `build constraints exclude all Go files`). Use `field.Bytes(...)` for a raw JSON blob; Go APIs may still take and return `json.RawMessage`. After every regeneration: `grep -rl jsontext server/internal/db/ent/` prints nothing and `GOTOOLCHAIN=go1.26.6 go build ./...` passes.
 - ent regeneration only via `cd server && go generate ./internal/db/ent/`; afterwards `grep -rl "OnConflict" server/internal/db/ent/ | head` must print files. The generator runs with `-mod=mod` and adds its own dependencies to `server/go.sum`: restore it with `git checkout HEAD -- server/go.sum` before committing.
 - While implementing, run package-scoped tests (`go test ./internal/<pkg>/...`). `go test ./...` and `task test` regenerate `server/internal/db/ent/`; run them once per PR at the end and restore `ent/` if it drifted.
 - Before every commit: `gofmt -l` on touched packages prints nothing; `go vet ./...` from `server/` passes; `GOTOOLCHAIN=go1.26.6 golangci-lint run` on touched packages reports 0 issues.
@@ -1413,7 +1414,7 @@ Branch `feat/applications-in-db`, worktree `/Users/alexanderwink/dashboard-workt
 - Test: `server/internal/db/repo/mcp_application_entry_test.go` (new)
 
 **Interfaces:**
-- Produces: ent fields `Entry json.RawMessage` (`field.JSON("entry", json.RawMessage{})`, default `{}`), `ExportToClaude bool` (default false), `ExportedHash string` (default ""); `repo.MCPApplicationRepo` gains
+- Produces: ent fields `Entry []byte` (`field.Bytes("entry")`, default `{}`), `ExportToClaude bool` (default false), `ExportedHash string` (default ""); `repo.MCPApplicationRepo` gains
 ```go
 	SetEntry(ctx context.Context, resourceID string, entry json.RawMessage) (*ent.MCPApplication, error)
 	SetExport(ctx context.Context, resourceID string, export bool, exportedHash string) (*ent.MCPApplication, error)
@@ -1427,8 +1428,11 @@ Branch `feat/applications-in-db`, worktree `/Users/alexanderwink/dashboard-workt
 ```go
 		// entry is the server definition itself (mcpapps.ServerEntry): transport,
 		// command, args and non-secret env. Secrets live in application_secret.
-		field.JSON("entry", json.RawMessage{}).
-			Default(json.RawMessage("{}")).
+		// Bytes, not field.JSON with json.RawMessage: under a toolchain with the
+		// jsonv2 experiment that alias resolves to jsontext.Value and the
+		// generated code stops compiling on the toolchain CI pins.
+		field.Bytes("entry").
+			Default([]byte("{}")).
 			Annotations(entsql.Default("{}")),
 		// export_to_claude mirrors the entry into Claude's own config so plain
 		// `claude` sessions see the server; exported_hash is what we last wrote.
