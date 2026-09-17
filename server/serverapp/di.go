@@ -755,6 +755,17 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 			resourceRepo,
 			repo.NewTaskScheduleRepo(entClient),
 		)
+
+		watchCtx, stopConfigWatch := context.WithCancel(context.Background())
+		if err := claudeconfig.Watch(watchCtx, func() {
+			taskBroadcaster.Broadcast(sse.TaskEvent{Type: "applications_changed"})
+		}); err != nil {
+			slog.Warn("claudeconfig: watch failed — outside changes are noticed on refresh only", "err", err)
+			stopConfigWatch()
+		} else {
+			prev := cleanup
+			cleanup = func() { stopConfigWatch(); prev() }
+		}
 	}
 
 	// Obsidian manual trigger — POST /api/obsidian/index. Unlike memoryHandler
