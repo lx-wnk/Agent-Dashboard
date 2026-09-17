@@ -178,6 +178,20 @@ describe('useTaskActions — permission resolution', () => {
     wrapper.unmount()
   })
 
+  it('onResolve maps a refusal to deny_once', async () => {
+    const task = ref<PipelineTask | null>(makeTask())
+    const details = makeDetails()
+    const { result, wrapper } = withSetup(() => useTaskActions(task, details))
+
+    const req = makePermissionRequest({ id: 'req-8' })
+    await result.onResolve(req, 'denied')
+    const passedAction = vi.mocked(details.handleAction).mock.calls[0][0]
+    await passedAction()
+
+    expect(resolvePermissionRequest).toHaveBeenCalledWith('task-1', 'req-8', 'deny_once')
+    wrapper.unmount()
+  })
+
   it('onResolveAll bulk-resolves the matching group and throws a combined error on failures', async () => {
     const details = makeDetails([
       { stageRunId: 'run-1', requests: [makePermissionRequest({ id: 'r1' }), makePermissionRequest({ id: 'r2' })] },
