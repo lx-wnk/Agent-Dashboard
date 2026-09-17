@@ -12,6 +12,20 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 )
 
+// countingResumeRecorder records every ResumeFromUser call, unlike the
+// shared resumeRecorder which only keeps the last one.
+type countingResumeRecorder struct {
+	*noopOrchestrator
+	calls  int
+	prompt string
+}
+
+func (r *countingResumeRecorder) ResumeFromUser(_ context.Context, _ string, userPrompt string) (*ent.StageRun, error) {
+	r.calls++
+	r.prompt = userPrompt
+	return &ent.StageRun{ID: "resumed"}, nil
+}
+
 // bulkResolveDecision posts to /api/permission-requests/bulk-resolve.
 func bulkResolveDecision(t *testing.T, r http.Handler, body string) *httptest.ResponseRecorder {
 	t.Helper()
@@ -52,7 +66,7 @@ func mustStageRunID(t *testing.T, client *ent.Client, taskID string) string {
 }
 
 func TestBulkResolveDecision_AllowRoutineTwoTools(t *testing.T) {
-	rec := &resumeRecorder{noopOrchestrator: &noopOrchestrator{}}
+	rec := &countingResumeRecorder{noopOrchestrator: &noopOrchestrator{}}
 	client, r := newDecisionHandler(t, rec)
 	taskID, _ := seedRoutinePermission(t, client, "bulk-allow-routine", "mcp__mail__read_message", "", true)
 	addPendingPermission(t, client, taskID, "mcp__mail__move_message", "")
@@ -89,8 +103,8 @@ func TestBulkResolveDecision_AllowRoutineTwoTools(t *testing.T) {
 			t.Errorf("tool %s: expected exactly one live grant, got %d", tool, live)
 		}
 	}
-	if !rec.resumed || rec.prompt != "" {
-		t.Errorf("expected a single resume with empty prompt, got resumed=%v prompt=%q", rec.resumed, rec.prompt)
+	if rec.calls != 1 || rec.prompt != "" {
+		t.Errorf("expected exactly one resume with empty prompt, got calls=%d prompt=%q", rec.calls, rec.prompt)
 	}
 }
 
