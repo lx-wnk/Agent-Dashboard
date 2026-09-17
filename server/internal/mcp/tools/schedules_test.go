@@ -174,6 +174,26 @@ func TestManageSchedule_UpdateInvalidRunModeFails(t *testing.T) {
 	require.ErrorContains(t, err, "runMode must be job or pipeline")
 }
 
+func TestManageSchedule_UpdateToPipelineOutsideGitFails(t *testing.T) {
+	registry, r := newScheduleRegistry(t)
+	ctx := context.Background()
+
+	s, err := r.Create(ctx, repo.CreateTaskScheduleInput{
+		Name: "g", CronExpr: "0 9 * * *", SlugPrefix: "g", Title: "G", Cwd: t.TempDir(),
+		MaxIterations: 20, StageTimeoutSeconds: 1800,
+	})
+	require.NoError(t, err)
+
+	_, err = registry["manage_schedule"].Handler(ctx, map[string]any{
+		"action": "update", "id": s.ID, "runMode": "pipeline",
+	})
+	require.ErrorContains(t, err, "working directory is not a git repository")
+
+	got, err := r.GetByID(ctx, s.ID)
+	require.NoError(t, err)
+	require.Equal(t, repo.RunModeJob, got.RunMode, "a refused update must not change the run mode")
+}
+
 // Regression: a timezone-only update (no nlText/cronExpr) must persist the new
 // timezone. Previously the field was read only inside the cron-change branch,
 // so updating the zone alone was a silent no-op.
