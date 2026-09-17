@@ -8,10 +8,12 @@ import (
 	"time"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/tasks"
+	"github.com/lx-wnk/agent-dashboard/server/internal/claudeconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/config"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/mcp"
+	"github.com/lx-wnk/agent-dashboard/server/internal/mcpapps"
 	"github.com/lx-wnk/agent-dashboard/server/internal/memory"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 	"github.com/lx-wnk/agent-dashboard/server/internal/services"
@@ -93,6 +95,7 @@ func provideOrchestrator(
 	memRepo repo.MemoryRepo,
 	memRetriever *memory.Retriever,
 	grantUsageRepo repo.GrantUsageRepo,
+	appSecrets repo.ApplicationSecretRepo,
 ) (*pipeline.PipelineOrchestrator, error) {
 	if client == nil {
 		return nil, nil
@@ -169,6 +172,13 @@ func provideOrchestrator(
 		RevokeTaskAPIKeys: func(ctx context.Context, stageRunID string) error {
 			return stageKeyIssuer.Revoke(ctx, stageRunID)
 		},
+		ResolveApplications: mcpapps.Resolver{
+			Apps:         repo.NewMCPApplicationRepo(client),
+			Secrets:      appSecrets,
+			Grants:       grantRepo,
+			Capabilities: capabilityRepo,
+			ReadServers:  claudeconfig.UserMCPServers,
+		}.ResolveRun,
 		// BuildTaskPayload is called inside applyTransitionWrites, bound to the
 		// active transaction, so the returned snapshot reflects the just-applied
 		// writes before tx.Commit(). The result is forwarded to OnTaskChanged

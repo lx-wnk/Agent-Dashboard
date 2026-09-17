@@ -14,6 +14,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/agentcosttrend"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/apikey"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/applicationsecret"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/appsetting"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/auditevent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/capability"
@@ -24,6 +25,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/grant"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/grantusage"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/materialization"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/mcpapplication"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/memoryentry"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/memoryinjection"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionpreset"
@@ -111,6 +113,7 @@ func checkColumn(t, c string) error {
 			agentcosttrend.Table:     agentcosttrend.ValidColumn,
 			apikey.Table:             apikey.ValidColumn,
 			appsetting.Table:         appsetting.ValidColumn,
+			applicationsecret.Table:  applicationsecret.ValidColumn,
 			auditevent.Table:         auditevent.ValidColumn,
 			capability.Table:         capability.ValidColumn,
 			checkpoint.Table:         checkpoint.ValidColumn,
@@ -119,6 +122,7 @@ func checkColumn(t, c string) error {
 			evalmetricsnapshot.Table: evalmetricsnapshot.ValidColumn,
 			grant.Table:              grant.ValidColumn,
 			grantusage.Table:         grantusage.ValidColumn,
+			mcpapplication.Table:     mcpapplication.ValidColumn,
 			materialization.Table:    materialization.ValidColumn,
 			memoryentry.Table:        memoryentry.ValidColumn,
 			memoryinjection.Table:    memoryinjection.ValidColumn,

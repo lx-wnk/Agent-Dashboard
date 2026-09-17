@@ -122,6 +122,65 @@ The rest of this page is for **your own** Claude Code client — a session you s
 terminal — which still needs a key from **Settings → API Keys**, because there is no stage run to
 attribute it to.
 
+## MCP applications
+
+MCP servers you register for Claude Code at user scope become *applications* in the dashboard. A pipeline run gets an application only when its routine attaches it, the dashboard holds the application's secrets, and grants decide which of its tools an agent may call.
+
+### Register a server
+
+```bash
+claude mcp add --scope user mail -- npx -y imap-mcp-server
+```
+
+The dashboard mirrors user-scope servers from `~/.claude.json` when it starts, so restart it after adding one. The server then appears in **Settings → Applications** and in the resource registry as `kind = application` with the slug `mcp-<name>`.
+
+- Only user-scope servers are mirrored; `local` and `project` scope servers are not.
+- `dashboard-channel` and `dashboard-tasks` are the dashboard's own servers and are never mirrored.
+- The name must be a valid slug — lowercase letters, digits and hyphens. A server with any other name is skipped with the log line `mcpapps: server not mirrored`, and because runs only receive mirrored applications, **it reaches no run at all**. Register it again under a valid name:
+
+```bash
+claude mcp remove --scope user My_Mail
+claude mcp add --scope user my-mail -- npx -y imap-mcp-server
+```
+
+### Which runs get a server
+
+A run receives the dashboard's own servers, every application marked **Attach to every run**, and the applications of the routine that created its task — nothing else from `~/.claude.json`.
+
+- The first time the dashboard mirrors servers, every server that already exists is marked **Attach to every run**, so existing setups keep working. Servers added later start unattached. Change it per application in Settings → Applications.
+- To attach an application to a routine, tick it under **Applications** in the routine form (**Build → Schedules**), or send `applications` — a list of application resource ids — with `POST` or `PATCH /api/schedules`. An unknown id is rejected with `400`.
+- The scheduler copies the routine's list onto every task it creates. The task API does not accept `applications`; a task gets applications only from its routine.
+
+### Secrets
+
+In Settings → Applications, add the environment variable names the server reads its credentials from with **Add variable** (names match `^[A-Z_][A-Z0-9_]*$`), then enter a value for each. A server that takes per-account passwords from the environment might, for example, need `IMAP_MCP_ACCOUNT_OVH_IMAP_PASSWORD` and `IMAP_MCP_ACCOUNT_OVH_SMTP_PASSWORD`.
+
+- Values are encrypted with AES-256-GCM using the dashboard's secret key and never returned by any API; the panel only shows whether a value is set and when it last changed. Without a configured key, storing a value fails with `503`.
+- At spawn, the values are written into the `env` of that application's entry in the run's temporary MCP config. No other server in the run sees them.
+- If an attached application is missing a required value, or its server is no longer in `~/.claude.json`, the stage run **fails before the agent starts**, with a reason beginning `MCP applications:`. Add the value and retry the task.
+- If `~/.claude.json` cannot be read, the run gets no applications but still starts.
+
+The same over HTTP: `PATCH /api/applications/{resourceId}` with `{"requiredEnv": [...]}` or `{"attachAll": true}`; `PUT /api/applications/{resourceId}/secrets/{NAME}` with `{"value": "..."}`; `DELETE` on the same path.
+
+### Tools and grants
+
+**Refresh tool list** (`POST /api/applications/{resourceId}/refresh`) starts the server with its secrets and reads its tool list. Only stdio servers — entries with a `command` — are supported; `http` and `sse` servers are refused with an error. A failed refresh keeps the previous list and shows the error.
+
+Each tool becomes a capability named the way Claude Code names it, `mcp__<server>__<tool>`, with class `tool`. A later refresh never changes the class of a capability that already exists. The server's `readOnlyHint` and `destructiveHint` are shown for orientation only; the MCP specification says clients must not trust them.
+
+Refresh before granting — the grants API rejects capability names it does not know. Then:
+
+```bash
+agent-dashboard grants add mcp__mail__search_emails --scope routine:<schedule id> --mode allow
+agent-dashboard grants add mcp__mail__send_email --scope global --mode deny
+```
+
+Grants resolve from the most specific context: task, routine, project (the task's working directory), global. An allow lands in the run's `--allowedTools`, a deny in `--disallowedTools`.
+
+A **grant preset** writes a server's usual grants in one call: `POST /api/applications/{resourceId}/presets/{preset}` with `{"routineId": "<schedule id>"}` allows the preset's read and draft tools for that routine and denies its sending, deleting and account tools globally. It answers with the capability names it `created`, the ones that already `existing`, and the tool names it `skipped` because the last refresh did not list them — so refresh first. Only a grant exactly like the preset's counts as existing; a revoked, expiring, patterned or rate-limited grant for the same tool does not. The response is `400` without a routine, `404` for an unknown application or preset, and `409` for a preset whose tool classification no human has confirmed yet. The one shipped preset, `imap-mcp-server`, is still unconfirmed, so it is refused until its file is reviewed and marked `"confirmed": true`.
+
+**No grant is not an allow.** Pipeline runs are headless, so an ungranted tool is refused; the agent can ask through a permission request, and a human's approval is honoured for that task. Allow-all autonomy (`spec_gated`, `full`) does not allow application tools.
+
 ## Connect the dashboard to Claude
 
 The fastest way to wire a Claude Code session to the dashboard's task tools is the one-command

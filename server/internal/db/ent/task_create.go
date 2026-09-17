@@ -302,6 +302,12 @@ func (_c *TaskCreate) SetNillableRoutineID(v *string) *TaskCreate {
 	return _c
 }
 
+// SetApplications sets the "applications" field.
+func (_c *TaskCreate) SetApplications(v []string) *TaskCreate {
+	_c.mutation.SetApplications(v)
+	return _c
+}
+
 // SetRank sets the "rank" field.
 func (_c *TaskCreate) SetRank(v float64) *TaskCreate {
 	_c.mutation.SetRank(v)
@@ -473,6 +479,10 @@ func (_c *TaskCreate) defaults() {
 		v := task.DefaultAutonomy
 		_c.mutation.SetAutonomy(v)
 	}
+	if _, ok := _c.mutation.Applications(); !ok {
+		v := task.DefaultApplications
+		_c.mutation.SetApplications(v)
+	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		v := task.DefaultCreatedAt()
 		_c.mutation.SetCreatedAt(v)
@@ -524,6 +534,9 @@ func (_c *TaskCreate) check() error {
 	}
 	if _, ok := _c.mutation.Autonomy(); !ok {
 		return &ValidationError{Name: "autonomy", err: errors.New(`ent: missing required field "Task.autonomy"`)}
+	}
+	if _, ok := _c.mutation.Applications(); !ok {
+		return &ValidationError{Name: "applications", err: errors.New(`ent: missing required field "Task.applications"`)}
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "Task.created_at"`)}
@@ -654,6 +667,10 @@ func (_c *TaskCreate) createSpec() (*Task, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.RoutineID(); ok {
 		_spec.SetField(task.FieldRoutineID, field.TypeString, value)
 		_node.RoutineID = &value
+	}
+	if value, ok := _c.mutation.Applications(); ok {
+		_spec.SetField(task.FieldApplications, field.TypeJSON, value)
+		_node.Applications = value
 	}
 	if value, ok := _c.mutation.Rank(); ok {
 		_spec.SetField(task.FieldRank, field.TypeFloat64, value)
@@ -1140,6 +1157,18 @@ func (u *TaskUpsert) UpdateRoutineID() *TaskUpsert {
 // ClearRoutineID clears the value of the "routine_id" field.
 func (u *TaskUpsert) ClearRoutineID() *TaskUpsert {
 	u.SetNull(task.FieldRoutineID)
+	return u
+}
+
+// SetApplications sets the "applications" field.
+func (u *TaskUpsert) SetApplications(v []string) *TaskUpsert {
+	u.Set(task.FieldApplications, v)
+	return u
+}
+
+// UpdateApplications sets the "applications" field to the value that was provided on create.
+func (u *TaskUpsert) UpdateApplications() *TaskUpsert {
+	u.SetExcluded(task.FieldApplications)
 	return u
 }
 
@@ -1647,6 +1676,20 @@ func (u *TaskUpsertOne) UpdateRoutineID() *TaskUpsertOne {
 func (u *TaskUpsertOne) ClearRoutineID() *TaskUpsertOne {
 	return u.Update(func(s *TaskUpsert) {
 		s.ClearRoutineID()
+	})
+}
+
+// SetApplications sets the "applications" field.
+func (u *TaskUpsertOne) SetApplications(v []string) *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetApplications(v)
+	})
+}
+
+// UpdateApplications sets the "applications" field to the value that was provided on create.
+func (u *TaskUpsertOne) UpdateApplications() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateApplications()
 	})
 }
 
@@ -2327,6 +2370,20 @@ func (u *TaskUpsertBulk) UpdateRoutineID() *TaskUpsertBulk {
 func (u *TaskUpsertBulk) ClearRoutineID() *TaskUpsertBulk {
 	return u.Update(func(s *TaskUpsert) {
 		s.ClearRoutineID()
+	})
+}
+
+// SetApplications sets the "applications" field.
+func (u *TaskUpsertBulk) SetApplications(v []string) *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetApplications(v)
+	})
+}
+
+// UpdateApplications sets the "applications" field to the value that was provided on create.
+func (u *TaskUpsertBulk) UpdateApplications() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateApplications()
 	})
 }
 

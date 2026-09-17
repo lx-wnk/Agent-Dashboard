@@ -338,6 +338,17 @@ matcher onto the deny side would make deny rules match *less*, and start
 offering Allow on calls the user's own settings already forbid. The two
 matchers stay separate on purpose.
 
+### Application secrets and MCP applications
+
+Application secrets (see [MCP applications](mcp.md#mcp-applications)) are encrypted at rest with AES-256-GCM and never returned by the API. That protects the database, not a running agent.
+
+- At spawn, the secrets of a run's attached applications are written in clear into the `env` of each server's own entry in the run's temporary MCP config, `$TMPDIR/dashboard-<uid>/dashboard-channel-mcp-*.json` (`/tmp/dashboard-<uid>/…` when `TMPDIR` is unset), mode `0600`. The file is removed when the run is cleaned up. A file a crash left behind is removed at the next dashboard start once it is a day old; a younger one may belong to another dashboard instance's live run.
+- **An agent with Bash runs as the same OS user as that file and as the MCP server process, so it can read the secrets of every application attached to its own run.** Separate OS users per run are not implemented.
+- Use credentials you can revoke on their own — app-specific passwords where the provider offers them, never an account's main password — and attach an application only to routines whose agents you would trust with that credential.
+- Under `auth.mode=none` (see [Authentication and the local-trust default](#authentication-and-the-local-trust-default)), no authentication guards `/api`, so any local process, an agent's Bash included, can call the schedules and applications API — for example to attach an application to a routine or replace a secret. With authentication enabled, these routes require a session.
+- **Refresh tool list** runs the command from `~/.claude.json` — the command Claude Code itself runs for that server — as the same OS user, without a shell. Anyone able to change that file already runs as that user.
+- Application tools default to refusal: a tool without an allow grant is not in a run's allow list, and allow-all autonomy does not change that.
+
 ### Obsidian's TLS trust model
 
 The Obsidian Application (`server/internal/apps/obsidian`) talks to Obsidian's

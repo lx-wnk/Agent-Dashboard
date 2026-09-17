@@ -11,6 +11,7 @@ const NAV_LABELS = [
   'API Keys',
   'Grants',
   'Registry',
+  'Applications',
   'Memory',
   'Obsidian',
   'GitHub',

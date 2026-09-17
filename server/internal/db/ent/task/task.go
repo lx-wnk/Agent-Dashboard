@@ -58,6 +58,8 @@ const (
 	FieldSpawnerID = "spawner_id"
 	// FieldRoutineID holds the string denoting the routine_id field in the database.
 	FieldRoutineID = "routine_id"
+	// FieldApplications holds the string denoting the applications field in the database.
+	FieldApplications = "applications"
 	// FieldRank holds the string denoting the rank field in the database.
 	FieldRank = "rank"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
@@ -129,6 +131,7 @@ var Columns = []string{
 	FieldProjectID,
 	FieldSpawnerID,
 	FieldRoutineID,
+	FieldApplications,
 	FieldRank,
 	FieldCreatedAt,
 	FieldUpdatedAt,
@@ -163,6 +166,8 @@ var (
 	DefaultPlanMode bool
 	// DefaultAutonomy holds the default value on creation for the "autonomy" field.
 	DefaultAutonomy string
+	// DefaultApplications holds the default value on creation for the "applications" field.
+	DefaultApplications []string
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 	// DefaultUpdatedAt holds the default value on creation for the "updated_at" field.

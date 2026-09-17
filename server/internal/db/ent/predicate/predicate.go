@@ -15,6 +15,9 @@ type ApiKey func(*sql.Selector)
 // AppSetting is the predicate function for appsetting builders.
 type AppSetting func(*sql.Selector)
 
+// ApplicationSecret is the predicate function for applicationsecret builders.
+type ApplicationSecret func(*sql.Selector)
+
 // AuditEvent is the predicate function for auditevent builders.
 type AuditEvent func(*sql.Selector)
 
@@ -38,6 +41,9 @@ type Grant func(*sql.Selector)
 
 // GrantUsage is the predicate function for grantusage builders.
 type GrantUsage func(*sql.Selector)
+
+// MCPApplication is the predicate function for mcpapplication builders.
+type MCPApplication func(*sql.Selector)
 
 // Materialization is the predicate function for materialization builders.
 type Materialization func(*sql.Selector)

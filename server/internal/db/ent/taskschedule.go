@@ -72,6 +72,8 @@ type TaskSchedule struct {
 	LastTaskID *string `json:"last_task_id,omitempty"`
 	// ResourceID holds the value of the "resource_id" field.
 	ResourceID string `json:"resource_id,omitempty"`
+	// Applications holds the value of the "applications" field.
+	Applications []string `json:"applications,omitempty"`
 	// UserID holds the value of the "user_id" field.
 	UserID *string `json:"user_id,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
@@ -86,7 +88,7 @@ func (*TaskSchedule) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case taskschedule.FieldMetadata:
+		case taskschedule.FieldMetadata, taskschedule.FieldApplications:
 			values[i] = new([]byte)
 		case taskschedule.FieldEnabled, taskschedule.FieldSilverBullet:
 			values[i] = new(sql.NullBool)
@@ -293,6 +295,14 @@ func (_m *TaskSchedule) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.ResourceID = value.String
 			}
+		case taskschedule.FieldApplications:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field applications", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.Applications); err != nil {
+					return fmt.Errorf("unmarshal field applications: %w", err)
+				}
+			}
 		case taskschedule.FieldUserID:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field user_id", values[i])
@@ -452,6 +462,9 @@ func (_m *TaskSchedule) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("resource_id=")
 	builder.WriteString(_m.ResourceID)
+	builder.WriteString(", ")
+	builder.WriteString("applications=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Applications))
 	builder.WriteString(", ")
 	if v := _m.UserID; v != nil {
 		builder.WriteString("user_id=")

@@ -280,13 +280,13 @@ On an isolated instance — never the production database — with iCloud, Gmail
 
 Each is settled against the chosen server before anything is built, because a design choice above depends on it.
 
-| Question | Depends on it | Cheapest check |
-| --- | --- | --- |
-| Can the server send an existing draft? | §3.6. Fallback: read the draft's fields, call the send tool with them, delete the draft — which may drop attachments | `tools/list` |
-| Does it expose UIDs and `UIDVALIDITY`? | §3.5 cursor | one search call |
-| Does it accept credentials for several accounts from the environment? | §3.3 | start it with two env-managed accounts |
-| Does `tools/list` answer without credentials? | §3.4 catalogue before secrets are set | start it with none |
-| Does it save a copy to `\Sent` after SMTP sending, or must the client append one? | §7.5 | send one mail per account and list `\Sent` |
+| Question | Depends on it | Cheapest check | Answer (probe 2026-09-16, `imap-mcp-server@2.0.0`, no accounts) |
+| --- | --- | --- | --- |
+| Can the server send an existing draft? | §3.6. Fallback: read the draft's fields, call the send tool with them, delete the draft — which may drop attachments | `tools/list` | **No.** 40 tools; `imap_save_draft` stores a draft, `imap_send_email` sends new content, nothing sends a draft by id. Slice 3 takes the fallback: read the draft (`imap_get_email`), send its fields with `imap_send_email`, then delete the draft. Attachments need `imap_download_attachment` and re-attaching — to be designed in the slice 3 plan |
+| Does it expose UIDs and `UIDVALIDITY`? | §3.5 cursor | one search call | **Yes, from code.** Message tools address mail by `uid`; `imap_folder_status` returns `uidValidity` and `uidNext` (`dist/setup.js:742-750`). Live values still to be seen |
+| Does it accept credentials for several accounts from the environment? | §3.3 | start it with two env-managed accounts | **Yes, from code** — the published build reads `IMAP_MCP_ACCOUNT_<ACCOUNT NAME>_…` (`dist/index.js`). Live test with two accounts still needs the human's credentials |
+| Does `tools/list` answer without credentials? | §3.4 catalogue before secrets are set | start it with none | **Yes, live** — full list with no accounts configured |
+| Does it save a copy to `\Sent` after SMTP sending, or must the client append one? | §7.5 | send one mail per account and list `\Sent` | **The server appends itself, from code** — `appendToSentFolder` resolves the folder by configured name, then SPECIAL-USE `\Sent`, then localized names; per-account `saveToSent`. `HYPOTHESIS`: Gmail then keeps two copies unless `saveToSent` is off — check with a real send |
 
 ---
 

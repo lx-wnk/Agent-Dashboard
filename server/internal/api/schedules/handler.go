@@ -38,14 +38,32 @@ type Handler struct {
 	repo       repo.TaskScheduleRepo
 	translator Translator
 	runner     Runner
+	apps       repo.MCPApplicationRepo
 	bypassAuth bool
 }
 
 // NewHandler builds the schedules handler. runner may be nil (run-now disabled).
 // bypassAuth is the loopback single-user mode, in which the listing is not
 // scoped to a user id because there is only one implicit user.
-func NewHandler(r repo.TaskScheduleRepo, t Translator, runner Runner, bypassAuth bool) *Handler {
-	return &Handler{repo: r, translator: t, runner: runner, bypassAuth: bypassAuth}
+func NewHandler(r repo.TaskScheduleRepo, t Translator, runner Runner, apps repo.MCPApplicationRepo, bypassAuth bool) *Handler {
+	return &Handler{repo: r, translator: t, runner: runner, apps: apps, bypassAuth: bypassAuth}
+}
+
+// validateApplications checks that every id names an existing MCP application.
+// nil ids leaves an existing schedule's applications untouched on update.
+func (h *Handler) validateApplications(ctx context.Context, ids *[]string) error {
+	if ids == nil {
+		return nil
+	}
+	for _, id := range *ids {
+		if h.apps == nil {
+			return apierr.NewAppError(http.StatusBadRequest, "applications: MCP applications are not available")
+		}
+		if _, err := h.apps.GetByResourceID(ctx, id); err != nil {
+			return apierr.NewAppError(http.StatusBadRequest, "applications: unknown application "+id)
+		}
+	}
+	return nil
 }
 
 // Mount registers the schedule routes on r (already inside the JWT group).
@@ -107,6 +125,9 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 	if !validation.IsValidSlug(body.SlugPrefix) {
 		return apierr.NewAppError(http.StatusBadRequest, "slugPrefix: "+validation.SlugPatternMessage)
 	}
+	if err := h.validateApplications(r.Context(), body.Applications); err != nil {
+		return err
+	}
 	cronExpr, err := h.resolveCron(r.Context(), body.NLText, body.CronExpr)
 	if err != nil {
 		return err
@@ -143,6 +164,9 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 		PermissionTemplate:  body.PermissionTemplate,
 		UserID:              &userID,
 		NextRunAt:           next,
+	}
+	if body.Applications != nil {
+		in.Applications = *body.Applications
 	}
 	if body.NLText != "" {
 		nl := body.NLText
@@ -207,6 +231,10 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) error {
 		}
 		in.SlugPrefix = &body.SlugPrefix
 	}
+	if err := h.validateApplications(r.Context(), body.Applications); err != nil {
+		return err
+	}
+	in.Applications = body.Applications
 	if body.Priority != "" {
 		in.Priority = &body.Priority
 	}

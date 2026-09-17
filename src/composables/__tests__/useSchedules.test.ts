@@ -40,6 +40,7 @@ function makeSchedule(id: string, name: string, overrides: Partial<ScheduleView>
     maxIterations: 20,
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-01T00:00:00Z',
+    applications: [],
     ...overrides,
   }
 }

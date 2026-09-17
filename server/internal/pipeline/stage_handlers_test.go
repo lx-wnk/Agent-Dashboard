@@ -13,6 +13,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/llmadapter"
+	"github.com/lx-wnk/agent-dashboard/server/internal/mcpapps"
 	"github.com/lx-wnk/agent-dashboard/server/internal/memory"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 	"github.com/stretchr/testify/require"
@@ -556,4 +557,36 @@ func TestAgentStageHandler_UnsupportedAdapterEffortNeverForwarded(t *testing.T) 
 	require.NoError(t, json.Unmarshal(raw, &sent))
 	_, hasEffort := sent["effort"]
 	require.False(t, hasEffort, "unsupported adapter must not receive the effort argument at all")
+}
+func TestAgentStageHandler_ApplicationResolutionFailureFailsBeforeSpawn(t *testing.T) {
+	spawned := false
+	spawnFn := func(pipeline.SpawnAgentOptions) (pipeline.SpawnResult, error) {
+		spawned = true
+		return pipeline.SpawnResult{PID: 123}, nil
+	}
+	handler := pipeline.NewAgentStageHandlerForTest("implementation", spawnFn)
+
+	minted := false
+	ctx := &pipeline.StageContext{
+		Ctx:               context.Background(),
+		Task:              &ent.Task{Title: "Reply to mail", Cwd: "/tmp/proj-apps", StageTimeoutSeconds: 1800},
+		StageRun:          &ent.StageRun{Stage: "implementation", ID: "sr-apps"},
+		RecordAudit:       func(string, map[string]any) {},
+		RequestPermission: func(string, string, string) *ent.PermissionRequest { return nil },
+		IssueTaskAPIKey: func(context.Context, string, time.Duration) (string, error) {
+			minted = true
+			return "key", nil
+		},
+		ResolveApplications: func(context.Context, *ent.Task) (mcpapps.RunApplications, error) {
+			return mcpapps.RunApplications{}, &mcpapps.MissingSecretError{Server: "mail", EnvName: "MAIL_PASSWORD"}
+		},
+	}
+
+	tr, err := handler.Execute(ctx)
+	require.NoError(t, err)
+	fail, ok := tr.(pipeline.FailTransition)
+	require.True(t, ok, "got %T", tr)
+	require.Contains(t, fail.Reason, "MAIL_PASSWORD")
+	require.False(t, spawned, "a run must never start without the mailbox it was given")
+	require.False(t, minted, "no credential is minted for a run that will not start")
 }

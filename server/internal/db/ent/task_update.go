@@ -10,6 +10,7 @@ import (
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"entgo.io/ent/dialect/sql/sqljson"
 	"entgo.io/ent/schema/field"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/predicate"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/stagerun"
@@ -431,6 +432,18 @@ func (_u *TaskUpdate) ClearRoutineID() *TaskUpdate {
 	return _u
 }
 
+// SetApplications sets the "applications" field.
+func (_u *TaskUpdate) SetApplications(v []string) *TaskUpdate {
+	_u.mutation.SetApplications(v)
+	return _u
+}
+
+// AppendApplications appends value to the "applications" field.
+func (_u *TaskUpdate) AppendApplications(v []string) *TaskUpdate {
+	_u.mutation.AppendApplications(v)
+	return _u
+}
+
 // SetRank sets the "rank" field.
 func (_u *TaskUpdate) SetRank(v float64) *TaskUpdate {
 	_u.mutation.ResetRank()
@@ -789,6 +802,14 @@ func (_u *TaskUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.RoutineIDCleared() {
 		_spec.ClearField(task.FieldRoutineID, field.TypeString)
+	}
+	if value, ok := _u.mutation.Applications(); ok {
+		_spec.SetField(task.FieldApplications, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedApplications(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, task.FieldApplications, value)
+		})
 	}
 	if value, ok := _u.mutation.Rank(); ok {
 		_spec.SetField(task.FieldRank, field.TypeFloat64, value)
@@ -1402,6 +1423,18 @@ func (_u *TaskUpdateOne) ClearRoutineID() *TaskUpdateOne {
 	return _u
 }
 
+// SetApplications sets the "applications" field.
+func (_u *TaskUpdateOne) SetApplications(v []string) *TaskUpdateOne {
+	_u.mutation.SetApplications(v)
+	return _u
+}
+
+// AppendApplications appends value to the "applications" field.
+func (_u *TaskUpdateOne) AppendApplications(v []string) *TaskUpdateOne {
+	_u.mutation.AppendApplications(v)
+	return _u
+}
+
 // SetRank sets the "rank" field.
 func (_u *TaskUpdateOne) SetRank(v float64) *TaskUpdateOne {
 	_u.mutation.ResetRank()
@@ -1790,6 +1823,14 @@ func (_u *TaskUpdateOne) sqlSave(ctx context.Context) (_node *Task, err error) {
 	}
 	if _u.mutation.RoutineIDCleared() {
 		_spec.ClearField(task.FieldRoutineID, field.TypeString)
+	}
+	if value, ok := _u.mutation.Applications(); ok {
+		_spec.SetField(task.FieldApplications, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedApplications(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, task.FieldApplications, value)
+		})
 	}
 	if value, ok := _u.mutation.Rank(); ok {
 		_spec.SetField(task.FieldRank, field.TypeFloat64, value)

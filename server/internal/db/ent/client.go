@@ -17,6 +17,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/agentcosttrend"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/apikey"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/applicationsecret"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/appsetting"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/auditevent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/capability"
@@ -27,6 +28,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/grant"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/grantusage"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/materialization"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/mcpapplication"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/memoryentry"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/memoryinjection"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionpreset"
@@ -64,6 +66,8 @@ type Client struct {
 	ApiKey *ApiKeyClient
 	// AppSetting is the client for interacting with the AppSetting builders.
 	AppSetting *AppSettingClient
+	// ApplicationSecret is the client for interacting with the ApplicationSecret builders.
+	ApplicationSecret *ApplicationSecretClient
 	// AuditEvent is the client for interacting with the AuditEvent builders.
 	AuditEvent *AuditEventClient
 	// Capability is the client for interacting with the Capability builders.
@@ -80,6 +84,8 @@ type Client struct {
 	Grant *GrantClient
 	// GrantUsage is the client for interacting with the GrantUsage builders.
 	GrantUsage *GrantUsageClient
+	// MCPApplication is the client for interacting with the MCPApplication builders.
+	MCPApplication *MCPApplicationClient
 	// Materialization is the client for interacting with the Materialization builders.
 	Materialization *MaterializationClient
 	// MemoryEntry is the client for interacting with the MemoryEntry builders.
@@ -144,6 +150,7 @@ func (c *Client) init() {
 	c.AgentCostTrend = NewAgentCostTrendClient(c.config)
 	c.ApiKey = NewApiKeyClient(c.config)
 	c.AppSetting = NewAppSettingClient(c.config)
+	c.ApplicationSecret = NewApplicationSecretClient(c.config)
 	c.AuditEvent = NewAuditEventClient(c.config)
 	c.Capability = NewCapabilityClient(c.config)
 	c.Checkpoint = NewCheckpointClient(c.config)
@@ -152,6 +159,7 @@ func (c *Client) init() {
 	c.EvalMetricSnapshot = NewEvalMetricSnapshotClient(c.config)
 	c.Grant = NewGrantClient(c.config)
 	c.GrantUsage = NewGrantUsageClient(c.config)
+	c.MCPApplication = NewMCPApplicationClient(c.config)
 	c.Materialization = NewMaterializationClient(c.config)
 	c.MemoryEntry = NewMemoryEntryClient(c.config)
 	c.MemoryInjection = NewMemoryInjectionClient(c.config)
@@ -272,6 +280,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		AgentCostTrend:     NewAgentCostTrendClient(cfg),
 		ApiKey:             NewApiKeyClient(cfg),
 		AppSetting:         NewAppSettingClient(cfg),
+		ApplicationSecret:  NewApplicationSecretClient(cfg),
 		AuditEvent:         NewAuditEventClient(cfg),
 		Capability:         NewCapabilityClient(cfg),
 		Checkpoint:         NewCheckpointClient(cfg),
@@ -280,6 +289,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		EvalMetricSnapshot: NewEvalMetricSnapshotClient(cfg),
 		Grant:              NewGrantClient(cfg),
 		GrantUsage:         NewGrantUsageClient(cfg),
+		MCPApplication:     NewMCPApplicationClient(cfg),
 		Materialization:    NewMaterializationClient(cfg),
 		MemoryEntry:        NewMemoryEntryClient(cfg),
 		MemoryInjection:    NewMemoryInjectionClient(cfg),
@@ -327,6 +337,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		AgentCostTrend:     NewAgentCostTrendClient(cfg),
 		ApiKey:             NewApiKeyClient(cfg),
 		AppSetting:         NewAppSettingClient(cfg),
+		ApplicationSecret:  NewApplicationSecretClient(cfg),
 		AuditEvent:         NewAuditEventClient(cfg),
 		Capability:         NewCapabilityClient(cfg),
 		Checkpoint:         NewCheckpointClient(cfg),
@@ -335,6 +346,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		EvalMetricSnapshot: NewEvalMetricSnapshotClient(cfg),
 		Grant:              NewGrantClient(cfg),
 		GrantUsage:         NewGrantUsageClient(cfg),
+		MCPApplication:     NewMCPApplicationClient(cfg),
 		Materialization:    NewMaterializationClient(cfg),
 		MemoryEntry:        NewMemoryEntryClient(cfg),
 		MemoryInjection:    NewMemoryInjectionClient(cfg),
@@ -389,11 +401,11 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.AgentCostTrend, c.ApiKey, c.AppSetting, c.AuditEvent, c.Capability,
-		c.Checkpoint, c.CoordLock, c.DriftAlert, c.EvalMetricSnapshot, c.Grant,
-		c.GrantUsage, c.Materialization, c.MemoryEntry, c.MemoryInjection,
-		c.PermissionPreset, c.PermissionRequest, c.PipelineConfig, c.Plugin,
-		c.PluginSetting, c.Project, c.ProjectFolder, c.PromptTemplate,
+		c.AgentCostTrend, c.ApiKey, c.AppSetting, c.ApplicationSecret, c.AuditEvent,
+		c.Capability, c.Checkpoint, c.CoordLock, c.DriftAlert, c.EvalMetricSnapshot,
+		c.Grant, c.GrantUsage, c.MCPApplication, c.Materialization, c.MemoryEntry,
+		c.MemoryInjection, c.PermissionPreset, c.PermissionRequest, c.PipelineConfig,
+		c.Plugin, c.PluginSetting, c.Project, c.ProjectFolder, c.PromptTemplate,
 		c.ProviderSetting, c.RefinementTurn, c.RemoteRegistration, c.Resource,
 		c.Scratchpad, c.Skill, c.Spawner, c.StageRun, c.SystemPrompt, c.Task,
 		c.TaskDependency, c.TaskPermission, c.TaskSchedule, c.User,
@@ -406,11 +418,11 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.AgentCostTrend, c.ApiKey, c.AppSetting, c.AuditEvent, c.Capability,
-		c.Checkpoint, c.CoordLock, c.DriftAlert, c.EvalMetricSnapshot, c.Grant,
-		c.GrantUsage, c.Materialization, c.MemoryEntry, c.MemoryInjection,
-		c.PermissionPreset, c.PermissionRequest, c.PipelineConfig, c.Plugin,
-		c.PluginSetting, c.Project, c.ProjectFolder, c.PromptTemplate,
+		c.AgentCostTrend, c.ApiKey, c.AppSetting, c.ApplicationSecret, c.AuditEvent,
+		c.Capability, c.Checkpoint, c.CoordLock, c.DriftAlert, c.EvalMetricSnapshot,
+		c.Grant, c.GrantUsage, c.MCPApplication, c.Materialization, c.MemoryEntry,
+		c.MemoryInjection, c.PermissionPreset, c.PermissionRequest, c.PipelineConfig,
+		c.Plugin, c.PluginSetting, c.Project, c.ProjectFolder, c.PromptTemplate,
 		c.ProviderSetting, c.RefinementTurn, c.RemoteRegistration, c.Resource,
 		c.Scratchpad, c.Skill, c.Spawner, c.StageRun, c.SystemPrompt, c.Task,
 		c.TaskDependency, c.TaskPermission, c.TaskSchedule, c.User,
@@ -428,6 +440,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.ApiKey.mutate(ctx, m)
 	case *AppSettingMutation:
 		return c.AppSetting.mutate(ctx, m)
+	case *ApplicationSecretMutation:
+		return c.ApplicationSecret.mutate(ctx, m)
 	case *AuditEventMutation:
 		return c.AuditEvent.mutate(ctx, m)
 	case *CapabilityMutation:
@@ -444,6 +458,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.Grant.mutate(ctx, m)
 	case *GrantUsageMutation:
 		return c.GrantUsage.mutate(ctx, m)
+	case *MCPApplicationMutation:
+		return c.MCPApplication.mutate(ctx, m)
 	case *MaterializationMutation:
 		return c.Materialization.mutate(ctx, m)
 	case *MemoryEntryMutation:
@@ -895,6 +911,139 @@ func (c *AppSettingClient) mutate(ctx context.Context, m *AppSettingMutation) (V
 		return (&AppSettingDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown AppSetting mutation op: %q", m.Op())
+	}
+}
+
+// ApplicationSecretClient is a client for the ApplicationSecret schema.
+type ApplicationSecretClient struct {
+	config
+}
+
+// NewApplicationSecretClient returns a client for the ApplicationSecret from the given config.
+func NewApplicationSecretClient(c config) *ApplicationSecretClient {
+	return &ApplicationSecretClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `applicationsecret.Hooks(f(g(h())))`.
+func (c *ApplicationSecretClient) Use(hooks ...Hook) {
+	c.hooks.ApplicationSecret = append(c.hooks.ApplicationSecret, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `applicationsecret.Intercept(f(g(h())))`.
+func (c *ApplicationSecretClient) Intercept(interceptors ...Interceptor) {
+	c.inters.ApplicationSecret = append(c.inters.ApplicationSecret, interceptors...)
+}
+
+// Create returns a builder for creating a ApplicationSecret entity.
+func (c *ApplicationSecretClient) Create() *ApplicationSecretCreate {
+	mutation := newApplicationSecretMutation(c.config, OpCreate)
+	return &ApplicationSecretCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of ApplicationSecret entities.
+func (c *ApplicationSecretClient) CreateBulk(builders ...*ApplicationSecretCreate) *ApplicationSecretCreateBulk {
+	return &ApplicationSecretCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ApplicationSecretClient) MapCreateBulk(slice any, setFunc func(*ApplicationSecretCreate, int)) *ApplicationSecretCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ApplicationSecretCreateBulk{err: fmt.Errorf("calling to ApplicationSecretClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ApplicationSecretCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &ApplicationSecretCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for ApplicationSecret.
+func (c *ApplicationSecretClient) Update() *ApplicationSecretUpdate {
+	mutation := newApplicationSecretMutation(c.config, OpUpdate)
+	return &ApplicationSecretUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *ApplicationSecretClient) UpdateOne(_m *ApplicationSecret) *ApplicationSecretUpdateOne {
+	mutation := newApplicationSecretMutation(c.config, OpUpdateOne, withApplicationSecret(_m))
+	return &ApplicationSecretUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *ApplicationSecretClient) UpdateOneID(id string) *ApplicationSecretUpdateOne {
+	mutation := newApplicationSecretMutation(c.config, OpUpdateOne, withApplicationSecretID(id))
+	return &ApplicationSecretUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for ApplicationSecret.
+func (c *ApplicationSecretClient) Delete() *ApplicationSecretDelete {
+	mutation := newApplicationSecretMutation(c.config, OpDelete)
+	return &ApplicationSecretDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *ApplicationSecretClient) DeleteOne(_m *ApplicationSecret) *ApplicationSecretDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *ApplicationSecretClient) DeleteOneID(id string) *ApplicationSecretDeleteOne {
+	builder := c.Delete().Where(applicationsecret.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &ApplicationSecretDeleteOne{builder}
+}
+
+// Query returns a query builder for ApplicationSecret.
+func (c *ApplicationSecretClient) Query() *ApplicationSecretQuery {
+	return &ApplicationSecretQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeApplicationSecret},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a ApplicationSecret entity by its id.
+func (c *ApplicationSecretClient) Get(ctx context.Context, id string) (*ApplicationSecret, error) {
+	return c.Query().Where(applicationsecret.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *ApplicationSecretClient) GetX(ctx context.Context, id string) *ApplicationSecret {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *ApplicationSecretClient) Hooks() []Hook {
+	return c.hooks.ApplicationSecret
+}
+
+// Interceptors returns the client interceptors.
+func (c *ApplicationSecretClient) Interceptors() []Interceptor {
+	return c.inters.ApplicationSecret
+}
+
+func (c *ApplicationSecretClient) mutate(ctx context.Context, m *ApplicationSecretMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&ApplicationSecretCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&ApplicationSecretUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&ApplicationSecretUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&ApplicationSecretDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown ApplicationSecret mutation op: %q", m.Op())
 	}
 }
 
@@ -1959,6 +2108,139 @@ func (c *GrantUsageClient) mutate(ctx context.Context, m *GrantUsageMutation) (V
 		return (&GrantUsageDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown GrantUsage mutation op: %q", m.Op())
+	}
+}
+
+// MCPApplicationClient is a client for the MCPApplication schema.
+type MCPApplicationClient struct {
+	config
+}
+
+// NewMCPApplicationClient returns a client for the MCPApplication from the given config.
+func NewMCPApplicationClient(c config) *MCPApplicationClient {
+	return &MCPApplicationClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `mcpapplication.Hooks(f(g(h())))`.
+func (c *MCPApplicationClient) Use(hooks ...Hook) {
+	c.hooks.MCPApplication = append(c.hooks.MCPApplication, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `mcpapplication.Intercept(f(g(h())))`.
+func (c *MCPApplicationClient) Intercept(interceptors ...Interceptor) {
+	c.inters.MCPApplication = append(c.inters.MCPApplication, interceptors...)
+}
+
+// Create returns a builder for creating a MCPApplication entity.
+func (c *MCPApplicationClient) Create() *MCPApplicationCreate {
+	mutation := newMCPApplicationMutation(c.config, OpCreate)
+	return &MCPApplicationCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of MCPApplication entities.
+func (c *MCPApplicationClient) CreateBulk(builders ...*MCPApplicationCreate) *MCPApplicationCreateBulk {
+	return &MCPApplicationCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *MCPApplicationClient) MapCreateBulk(slice any, setFunc func(*MCPApplicationCreate, int)) *MCPApplicationCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &MCPApplicationCreateBulk{err: fmt.Errorf("calling to MCPApplicationClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*MCPApplicationCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &MCPApplicationCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for MCPApplication.
+func (c *MCPApplicationClient) Update() *MCPApplicationUpdate {
+	mutation := newMCPApplicationMutation(c.config, OpUpdate)
+	return &MCPApplicationUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *MCPApplicationClient) UpdateOne(_m *MCPApplication) *MCPApplicationUpdateOne {
+	mutation := newMCPApplicationMutation(c.config, OpUpdateOne, withMCPApplication(_m))
+	return &MCPApplicationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *MCPApplicationClient) UpdateOneID(id string) *MCPApplicationUpdateOne {
+	mutation := newMCPApplicationMutation(c.config, OpUpdateOne, withMCPApplicationID(id))
+	return &MCPApplicationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for MCPApplication.
+func (c *MCPApplicationClient) Delete() *MCPApplicationDelete {
+	mutation := newMCPApplicationMutation(c.config, OpDelete)
+	return &MCPApplicationDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *MCPApplicationClient) DeleteOne(_m *MCPApplication) *MCPApplicationDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *MCPApplicationClient) DeleteOneID(id string) *MCPApplicationDeleteOne {
+	builder := c.Delete().Where(mcpapplication.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &MCPApplicationDeleteOne{builder}
+}
+
+// Query returns a query builder for MCPApplication.
+func (c *MCPApplicationClient) Query() *MCPApplicationQuery {
+	return &MCPApplicationQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeMCPApplication},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a MCPApplication entity by its id.
+func (c *MCPApplicationClient) Get(ctx context.Context, id string) (*MCPApplication, error) {
+	return c.Query().Where(mcpapplication.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *MCPApplicationClient) GetX(ctx context.Context, id string) *MCPApplication {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *MCPApplicationClient) Hooks() []Hook {
+	return c.hooks.MCPApplication
+}
+
+// Interceptors returns the client interceptors.
+func (c *MCPApplicationClient) Interceptors() []Interceptor {
+	return c.inters.MCPApplication
+}
+
+func (c *MCPApplicationClient) mutate(ctx context.Context, m *MCPApplicationMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&MCPApplicationCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&MCPApplicationUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&MCPApplicationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&MCPApplicationDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown MCPApplication mutation op: %q", m.Op())
 	}
 }
 
@@ -5482,21 +5764,23 @@ func (c *UserClient) mutate(ctx context.Context, m *UserMutation) (Value, error)
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		AgentCostTrend, ApiKey, AppSetting, AuditEvent, Capability, Checkpoint,
-		CoordLock, DriftAlert, EvalMetricSnapshot, Grant, GrantUsage, Materialization,
-		MemoryEntry, MemoryInjection, PermissionPreset, PermissionRequest,
-		PipelineConfig, Plugin, PluginSetting, Project, ProjectFolder, PromptTemplate,
-		ProviderSetting, RefinementTurn, RemoteRegistration, Resource, Scratchpad,
-		Skill, Spawner, StageRun, SystemPrompt, Task, TaskDependency, TaskPermission,
-		TaskSchedule, User []ent.Hook
+		AgentCostTrend, ApiKey, AppSetting, ApplicationSecret, AuditEvent, Capability,
+		Checkpoint, CoordLock, DriftAlert, EvalMetricSnapshot, Grant, GrantUsage,
+		MCPApplication, Materialization, MemoryEntry, MemoryInjection,
+		PermissionPreset, PermissionRequest, PipelineConfig, Plugin, PluginSetting,
+		Project, ProjectFolder, PromptTemplate, ProviderSetting, RefinementTurn,
+		RemoteRegistration, Resource, Scratchpad, Skill, Spawner, StageRun,
+		SystemPrompt, Task, TaskDependency, TaskPermission, TaskSchedule,
+		User []ent.Hook
 	}
 	inters struct {
-		AgentCostTrend, ApiKey, AppSetting, AuditEvent, Capability, Checkpoint,
-		CoordLock, DriftAlert, EvalMetricSnapshot, Grant, GrantUsage, Materialization,
-		MemoryEntry, MemoryInjection, PermissionPreset, PermissionRequest,
-		PipelineConfig, Plugin, PluginSetting, Project, ProjectFolder, PromptTemplate,
-		ProviderSetting, RefinementTurn, RemoteRegistration, Resource, Scratchpad,
-		Skill, Spawner, StageRun, SystemPrompt, Task, TaskDependency, TaskPermission,
-		TaskSchedule, User []ent.Interceptor
+		AgentCostTrend, ApiKey, AppSetting, ApplicationSecret, AuditEvent, Capability,
+		Checkpoint, CoordLock, DriftAlert, EvalMetricSnapshot, Grant, GrantUsage,
+		MCPApplication, Materialization, MemoryEntry, MemoryInjection,
+		PermissionPreset, PermissionRequest, PipelineConfig, Plugin, PluginSetting,
+		Project, ProjectFolder, PromptTemplate, ProviderSetting, RefinementTurn,
+		RemoteRegistration, Resource, Scratchpad, Skill, Spawner, StageRun,
+		SystemPrompt, Task, TaskDependency, TaskPermission, TaskSchedule,
+		User []ent.Interceptor
 	}
 )

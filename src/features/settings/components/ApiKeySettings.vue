@@ -36,6 +36,7 @@ const TrackerSettingsPanel = defineAsyncComponent(() => import('@/features/setti
 const AppSettings = defineAsyncComponent(() => import('@/features/settings/components/AppSettings.vue'))
 const MemorySettings = defineAsyncComponent(() => import('@/features/settings/components/MemorySettings.vue'))
 const ResourceSettings = defineAsyncComponent(() => import('@/features/settings/components/ResourceSettings.vue'))
+const ApplicationSettings = defineAsyncComponent(() => import('@/features/settings/components/ApplicationSettings.vue'))
 
 const { preference: themePref, setTheme } = useTheme()
 const { authEnabled } = useUser()
@@ -48,7 +49,7 @@ function reopenOnboarding() {
 }
 
 // --- Nav ---
-type Section = 'appearance' | 'apiKeys' | 'grants' | 'registry' | 'memory' | 'remotes' | 'permissionPresets' | 'analytics' | 'systemPrompts' | 'plugins' | 'notifications' | 'providers' | 'tracker' | 'projects' | 'spawners' | 'pipelineConfig' | 'server' | 'obsidian' | 'github'
+type Section = 'appearance' | 'apiKeys' | 'grants' | 'registry' | 'applications' | 'memory' | 'remotes' | 'permissionPresets' | 'analytics' | 'systemPrompts' | 'plugins' | 'notifications' | 'providers' | 'tracker' | 'projects' | 'spawners' | 'pipelineConfig' | 'server' | 'obsidian' | 'github'
 const activeSection = ref<Section>('appearance')
 
 // Nav model — drives the sidebar list. requiresAuth items only show when auth is on.
@@ -57,6 +58,7 @@ const SECTIONS: readonly { id: Section, icon: string, label: string, requiresAut
   { id: 'apiKeys', icon: '⬡', label: 'API Keys' },
   { id: 'grants', icon: '🛡', label: 'Grants' },
   { id: 'registry', icon: '▤', label: 'Registry' },
+  { id: 'applications', icon: '⧉', label: 'Applications' },
   { id: 'memory', icon: '🧠', label: 'Memory' },
   { id: 'obsidian', icon: '🗒', label: 'Obsidian' },
   { id: 'github', icon: '⑂', label: 'GitHub' },
@@ -645,6 +647,11 @@ const { isImporting, importStatus, start: startImport } = useHistoryImport()
         <!-- Registry -->
         <section v-else-if="activeSection === 'registry'">
           <ResourceSettings />
+        </section>
+
+        <!-- Applications -->
+        <section v-else-if="activeSection === 'applications'">
+          <ApplicationSettings />
         </section>
 
         <!-- Memory -->

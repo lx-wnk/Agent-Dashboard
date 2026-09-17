@@ -7,6 +7,7 @@ import (
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/agentcosttrend"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/apikey"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/applicationsecret"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/appsetting"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/auditevent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/capability"
@@ -17,6 +18,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/grant"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/grantusage"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/materialization"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/mcpapplication"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/memoryentry"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/memoryinjection"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionrequest"
@@ -111,6 +113,14 @@ func init() {
 	appsetting.DefaultUpdatedAt = appsettingDescUpdatedAt.Default.(func() time.Time)
 	// appsetting.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	appsetting.UpdateDefaultUpdatedAt = appsettingDescUpdatedAt.UpdateDefault.(func() time.Time)
+	applicationsecretFields := schema.ApplicationSecret{}.Fields()
+	_ = applicationsecretFields
+	// applicationsecretDescUpdatedAt is the schema descriptor for updated_at field.
+	applicationsecretDescUpdatedAt := applicationsecretFields[5].Descriptor()
+	// applicationsecret.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	applicationsecret.DefaultUpdatedAt = applicationsecretDescUpdatedAt.Default.(func() time.Time)
+	// applicationsecret.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	applicationsecret.UpdateDefaultUpdatedAt = applicationsecretDescUpdatedAt.UpdateDefault.(func() time.Time)
 	auditeventFields := schema.AuditEvent{}.Fields()
 	_ = auditeventFields
 	// auditeventDescTs is the schema descriptor for ts field.
@@ -252,6 +262,34 @@ func init() {
 	grantusageDescUsedAt := grantusageFields[1].Descriptor()
 	// grantusage.DefaultUsedAt holds the default value on creation for the used_at field.
 	grantusage.DefaultUsedAt = grantusageDescUsedAt.Default.(func() time.Time)
+	mcpapplicationFields := schema.MCPApplication{}.Fields()
+	_ = mcpapplicationFields
+	// mcpapplicationDescAttachAll is the schema descriptor for attach_all field.
+	mcpapplicationDescAttachAll := mcpapplicationFields[3].Descriptor()
+	// mcpapplication.DefaultAttachAll holds the default value on creation for the attach_all field.
+	mcpapplication.DefaultAttachAll = mcpapplicationDescAttachAll.Default.(bool)
+	// mcpapplicationDescRequiredEnv is the schema descriptor for required_env field.
+	mcpapplicationDescRequiredEnv := mcpapplicationFields[4].Descriptor()
+	// mcpapplication.DefaultRequiredEnv holds the default value on creation for the required_env field.
+	mcpapplication.DefaultRequiredEnv = mcpapplicationDescRequiredEnv.Default.([]string)
+	// mcpapplicationDescCatalogue is the schema descriptor for catalogue field.
+	mcpapplicationDescCatalogue := mcpapplicationFields[5].Descriptor()
+	// mcpapplication.DefaultCatalogue holds the default value on creation for the catalogue field.
+	mcpapplication.DefaultCatalogue = mcpapplicationDescCatalogue.Default.([]schema.CatalogueTool)
+	// mcpapplicationDescCatalogueError is the schema descriptor for catalogue_error field.
+	mcpapplicationDescCatalogueError := mcpapplicationFields[6].Descriptor()
+	// mcpapplication.DefaultCatalogueError holds the default value on creation for the catalogue_error field.
+	mcpapplication.DefaultCatalogueError = mcpapplicationDescCatalogueError.Default.(string)
+	// mcpapplicationDescCreatedAt is the schema descriptor for created_at field.
+	mcpapplicationDescCreatedAt := mcpapplicationFields[8].Descriptor()
+	// mcpapplication.DefaultCreatedAt holds the default value on creation for the created_at field.
+	mcpapplication.DefaultCreatedAt = mcpapplicationDescCreatedAt.Default.(func() time.Time)
+	// mcpapplicationDescUpdatedAt is the schema descriptor for updated_at field.
+	mcpapplicationDescUpdatedAt := mcpapplicationFields[9].Descriptor()
+	// mcpapplication.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	mcpapplication.DefaultUpdatedAt = mcpapplicationDescUpdatedAt.Default.(func() time.Time)
+	// mcpapplication.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	mcpapplication.UpdateDefaultUpdatedAt = mcpapplicationDescUpdatedAt.UpdateDefault.(func() time.Time)
 	materializationMixin := schema.Materialization{}.Mixin()
 	materializationMixinFields0 := materializationMixin[0].Fields()
 	_ = materializationMixinFields0
@@ -661,12 +699,16 @@ func init() {
 	taskDescAutonomy := taskFields[18].Descriptor()
 	// task.DefaultAutonomy holds the default value on creation for the autonomy field.
 	task.DefaultAutonomy = taskDescAutonomy.Default.(string)
+	// taskDescApplications is the schema descriptor for applications field.
+	taskDescApplications := taskFields[23].Descriptor()
+	// task.DefaultApplications holds the default value on creation for the applications field.
+	task.DefaultApplications = taskDescApplications.Default.([]string)
 	// taskDescCreatedAt is the schema descriptor for created_at field.
-	taskDescCreatedAt := taskFields[24].Descriptor()
+	taskDescCreatedAt := taskFields[25].Descriptor()
 	// task.DefaultCreatedAt holds the default value on creation for the created_at field.
 	task.DefaultCreatedAt = taskDescCreatedAt.Default.(func() time.Time)
 	// taskDescUpdatedAt is the schema descriptor for updated_at field.
-	taskDescUpdatedAt := taskFields[25].Descriptor()
+	taskDescUpdatedAt := taskFields[26].Descriptor()
 	// task.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	task.DefaultUpdatedAt = taskDescUpdatedAt.Default.(func() time.Time)
 	// task.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
@@ -749,12 +791,16 @@ func init() {
 	taskscheduleDescResourceID := taskscheduleFields[27].Descriptor()
 	// taskschedule.DefaultResourceID holds the default value on creation for the resource_id field.
 	taskschedule.DefaultResourceID = taskscheduleDescResourceID.Default.(string)
+	// taskscheduleDescApplications is the schema descriptor for applications field.
+	taskscheduleDescApplications := taskscheduleFields[28].Descriptor()
+	// taskschedule.DefaultApplications holds the default value on creation for the applications field.
+	taskschedule.DefaultApplications = taskscheduleDescApplications.Default.([]string)
 	// taskscheduleDescCreatedAt is the schema descriptor for created_at field.
-	taskscheduleDescCreatedAt := taskscheduleFields[29].Descriptor()
+	taskscheduleDescCreatedAt := taskscheduleFields[30].Descriptor()
 	// taskschedule.DefaultCreatedAt holds the default value on creation for the created_at field.
 	taskschedule.DefaultCreatedAt = taskscheduleDescCreatedAt.Default.(func() time.Time)
 	// taskscheduleDescUpdatedAt is the schema descriptor for updated_at field.
-	taskscheduleDescUpdatedAt := taskscheduleFields[30].Descriptor()
+	taskscheduleDescUpdatedAt := taskscheduleFields[31].Descriptor()
 	// taskschedule.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	taskschedule.DefaultUpdatedAt = taskscheduleDescUpdatedAt.Default.(func() time.Time)
 	// taskschedule.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

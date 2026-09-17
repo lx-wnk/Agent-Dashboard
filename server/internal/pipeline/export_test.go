@@ -9,7 +9,9 @@ import (
 
 // ExportedWriteSettingsFile exposes writeSettingsFile for spawner tests.
 func ExportedWriteSettingsFile(autonomy, cwd string, perms []*ent.TaskPermission, enableChannel, allowGitPush bool) (string, bool, bool, error) {
-	return writeSettingsFile(autonomy, cwd, perms, enableChannel, allowGitPush, nil)
+	allow := BuildAllowList(autonomy, perms, enableChannel, allowGitPush, nil)
+	deny := BuildDenyList(autonomy, allowGitPush)
+	return writeSettingsFile(cwd, allow, deny)
 }
 
 // CapabilityViewForTest exposes capabilityViewFor so the allow-list parity

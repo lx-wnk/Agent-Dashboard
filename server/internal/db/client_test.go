@@ -803,3 +803,32 @@ func TestOpen_RenameStagesRunsOnlyOnce(t *testing.T) {
 		"a second boot must not push the parked task on to 'ready'")
 	require.Equal(t, "ready", stageOf(t, path, "t-backlog"))
 }
+
+func TestOpen_MCPApplicationTables(t *testing.T) {
+	bundle, err := db.Open(":memory:")
+	require.NoError(t, err)
+	defer func() { _ = bundle.Client.Close() }()
+	ctx := t.Context()
+
+	app, err := bundle.Client.MCPApplication.Create().
+		SetID("app-1").
+		SetResourceID("res-1").
+		SetServerName("mail").
+		Save(ctx)
+	require.NoError(t, err)
+	require.False(t, app.AttachAll)
+	require.Empty(t, app.RequiredEnv)
+	require.Empty(t, app.Catalogue)
+
+	_, err = bundle.Client.ApplicationSecret.Create().
+		SetID("sec-1").SetResourceID("res-1").SetEnvName("PASSWORD").
+		SetCiphertext("c").SetNonce("n").
+		Save(ctx)
+	require.NoError(t, err)
+
+	_, err = bundle.Client.ApplicationSecret.Create().
+		SetID("sec-2").SetResourceID("res-1").SetEnvName("PASSWORD").
+		SetCiphertext("c").SetNonce("n").
+		Save(ctx)
+	require.Error(t, err, "one value per application and variable name")
+}

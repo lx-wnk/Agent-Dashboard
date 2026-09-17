@@ -13,6 +13,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/agentcosttrend"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/apikey"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/applicationsecret"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/appsetting"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/auditevent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/capability"
@@ -23,6 +24,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/grant"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/grantusage"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/materialization"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/mcpapplication"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/memoryentry"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/memoryinjection"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/permissionpreset"
@@ -38,6 +40,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/refinementturn"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/remoteregistration"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/resource"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/schema"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/scratchpad"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/skill"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/spawner"
@@ -62,6 +65,7 @@ const (
 	TypeAgentCostTrend     = "AgentCostTrend"
 	TypeApiKey             = "ApiKey"
 	TypeAppSetting         = "AppSetting"
+	TypeApplicationSecret  = "ApplicationSecret"
 	TypeAuditEvent         = "AuditEvent"
 	TypeCapability         = "Capability"
 	TypeCheckpoint         = "Checkpoint"
@@ -70,6 +74,7 @@ const (
 	TypeEvalMetricSnapshot = "EvalMetricSnapshot"
 	TypeGrant              = "Grant"
 	TypeGrantUsage         = "GrantUsage"
+	TypeMCPApplication     = "MCPApplication"
 	TypeMaterialization    = "Materialization"
 	TypeMemoryEntry        = "MemoryEntry"
 	TypeMemoryInjection    = "MemoryInjection"
@@ -2551,6 +2556,554 @@ func (m *AppSettingMutation) ClearEdge(name string) error {
 // It returns an error if the edge is not defined in the schema.
 func (m *AppSettingMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown AppSetting edge %s", name)
+}
+
+// ApplicationSecretMutation represents an operation that mutates the ApplicationSecret nodes in the graph.
+type ApplicationSecretMutation struct {
+	config
+	op            Op
+	typ           string
+	id            *string
+	resource_id   *string
+	env_name      *string
+	ciphertext    *string
+	nonce         *string
+	updated_at    *time.Time
+	clearedFields map[string]struct{}
+	done          bool
+	oldValue      func(context.Context) (*ApplicationSecret, error)
+	predicates    []predicate.ApplicationSecret
+}
+
+var _ ent.Mutation = (*ApplicationSecretMutation)(nil)
+
+// applicationsecretOption allows management of the mutation configuration using functional options.
+type applicationsecretOption func(*ApplicationSecretMutation)
+
+// newApplicationSecretMutation creates new mutation for the ApplicationSecret entity.
+func newApplicationSecretMutation(c config, op Op, opts ...applicationsecretOption) *ApplicationSecretMutation {
+	m := &ApplicationSecretMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeApplicationSecret,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withApplicationSecretID sets the ID field of the mutation.
+func withApplicationSecretID(id string) applicationsecretOption {
+	return func(m *ApplicationSecretMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *ApplicationSecret
+		)
+		m.oldValue = func(ctx context.Context) (*ApplicationSecret, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().ApplicationSecret.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withApplicationSecret sets the old ApplicationSecret of the mutation.
+func withApplicationSecret(node *ApplicationSecret) applicationsecretOption {
+	return func(m *ApplicationSecretMutation) {
+		m.oldValue = func(context.Context) (*ApplicationSecret, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m ApplicationSecretMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m ApplicationSecretMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of ApplicationSecret entities.
+func (m *ApplicationSecretMutation) SetID(id string) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *ApplicationSecretMutation) ID() (id string, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *ApplicationSecretMutation) IDs(ctx context.Context) ([]string, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []string{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().ApplicationSecret.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetResourceID sets the "resource_id" field.
+func (m *ApplicationSecretMutation) SetResourceID(s string) {
+	m.resource_id = &s
+}
+
+// ResourceID returns the value of the "resource_id" field in the mutation.
+func (m *ApplicationSecretMutation) ResourceID() (r string, exists bool) {
+	v := m.resource_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldResourceID returns the old "resource_id" field's value of the ApplicationSecret entity.
+// If the ApplicationSecret object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ApplicationSecretMutation) OldResourceID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldResourceID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldResourceID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldResourceID: %w", err)
+	}
+	return oldValue.ResourceID, nil
+}
+
+// ResetResourceID resets all changes to the "resource_id" field.
+func (m *ApplicationSecretMutation) ResetResourceID() {
+	m.resource_id = nil
+}
+
+// SetEnvName sets the "env_name" field.
+func (m *ApplicationSecretMutation) SetEnvName(s string) {
+	m.env_name = &s
+}
+
+// EnvName returns the value of the "env_name" field in the mutation.
+func (m *ApplicationSecretMutation) EnvName() (r string, exists bool) {
+	v := m.env_name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEnvName returns the old "env_name" field's value of the ApplicationSecret entity.
+// If the ApplicationSecret object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ApplicationSecretMutation) OldEnvName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEnvName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEnvName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEnvName: %w", err)
+	}
+	return oldValue.EnvName, nil
+}
+
+// ResetEnvName resets all changes to the "env_name" field.
+func (m *ApplicationSecretMutation) ResetEnvName() {
+	m.env_name = nil
+}
+
+// SetCiphertext sets the "ciphertext" field.
+func (m *ApplicationSecretMutation) SetCiphertext(s string) {
+	m.ciphertext = &s
+}
+
+// Ciphertext returns the value of the "ciphertext" field in the mutation.
+func (m *ApplicationSecretMutation) Ciphertext() (r string, exists bool) {
+	v := m.ciphertext
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCiphertext returns the old "ciphertext" field's value of the ApplicationSecret entity.
+// If the ApplicationSecret object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ApplicationSecretMutation) OldCiphertext(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCiphertext is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCiphertext requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCiphertext: %w", err)
+	}
+	return oldValue.Ciphertext, nil
+}
+
+// ResetCiphertext resets all changes to the "ciphertext" field.
+func (m *ApplicationSecretMutation) ResetCiphertext() {
+	m.ciphertext = nil
+}
+
+// SetNonce sets the "nonce" field.
+func (m *ApplicationSecretMutation) SetNonce(s string) {
+	m.nonce = &s
+}
+
+// Nonce returns the value of the "nonce" field in the mutation.
+func (m *ApplicationSecretMutation) Nonce() (r string, exists bool) {
+	v := m.nonce
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldNonce returns the old "nonce" field's value of the ApplicationSecret entity.
+// If the ApplicationSecret object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ApplicationSecretMutation) OldNonce(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldNonce is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldNonce requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldNonce: %w", err)
+	}
+	return oldValue.Nonce, nil
+}
+
+// ResetNonce resets all changes to the "nonce" field.
+func (m *ApplicationSecretMutation) ResetNonce() {
+	m.nonce = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *ApplicationSecretMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *ApplicationSecretMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the ApplicationSecret entity.
+// If the ApplicationSecret object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ApplicationSecretMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *ApplicationSecretMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// Where appends a list predicates to the ApplicationSecretMutation builder.
+func (m *ApplicationSecretMutation) Where(ps ...predicate.ApplicationSecret) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the ApplicationSecretMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *ApplicationSecretMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.ApplicationSecret, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *ApplicationSecretMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *ApplicationSecretMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (ApplicationSecret).
+func (m *ApplicationSecretMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *ApplicationSecretMutation) Fields() []string {
+	fields := make([]string, 0, 5)
+	if m.resource_id != nil {
+		fields = append(fields, applicationsecret.FieldResourceID)
+	}
+	if m.env_name != nil {
+		fields = append(fields, applicationsecret.FieldEnvName)
+	}
+	if m.ciphertext != nil {
+		fields = append(fields, applicationsecret.FieldCiphertext)
+	}
+	if m.nonce != nil {
+		fields = append(fields, applicationsecret.FieldNonce)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, applicationsecret.FieldUpdatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *ApplicationSecretMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case applicationsecret.FieldResourceID:
+		return m.ResourceID()
+	case applicationsecret.FieldEnvName:
+		return m.EnvName()
+	case applicationsecret.FieldCiphertext:
+		return m.Ciphertext()
+	case applicationsecret.FieldNonce:
+		return m.Nonce()
+	case applicationsecret.FieldUpdatedAt:
+		return m.UpdatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *ApplicationSecretMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case applicationsecret.FieldResourceID:
+		return m.OldResourceID(ctx)
+	case applicationsecret.FieldEnvName:
+		return m.OldEnvName(ctx)
+	case applicationsecret.FieldCiphertext:
+		return m.OldCiphertext(ctx)
+	case applicationsecret.FieldNonce:
+		return m.OldNonce(ctx)
+	case applicationsecret.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown ApplicationSecret field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *ApplicationSecretMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case applicationsecret.FieldResourceID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetResourceID(v)
+		return nil
+	case applicationsecret.FieldEnvName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEnvName(v)
+		return nil
+	case applicationsecret.FieldCiphertext:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCiphertext(v)
+		return nil
+	case applicationsecret.FieldNonce:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetNonce(v)
+		return nil
+	case applicationsecret.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown ApplicationSecret field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *ApplicationSecretMutation) AddedFields() []string {
+	return nil
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *ApplicationSecretMutation) AddedField(name string) (ent.Value, bool) {
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *ApplicationSecretMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown ApplicationSecret numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *ApplicationSecretMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *ApplicationSecretMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *ApplicationSecretMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown ApplicationSecret nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *ApplicationSecretMutation) ResetField(name string) error {
+	switch name {
+	case applicationsecret.FieldResourceID:
+		m.ResetResourceID()
+		return nil
+	case applicationsecret.FieldEnvName:
+		m.ResetEnvName()
+		return nil
+	case applicationsecret.FieldCiphertext:
+		m.ResetCiphertext()
+		return nil
+	case applicationsecret.FieldNonce:
+		m.ResetNonce()
+		return nil
+	case applicationsecret.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown ApplicationSecret field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *ApplicationSecretMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *ApplicationSecretMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *ApplicationSecretMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *ApplicationSecretMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *ApplicationSecretMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *ApplicationSecretMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *ApplicationSecretMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown ApplicationSecret unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *ApplicationSecretMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown ApplicationSecret edge %s", name)
 }
 
 // AuditEventMutation represents an operation that mutates the AuditEvent nodes in the graph.
@@ -9037,6 +9590,824 @@ func (m *GrantUsageMutation) ClearEdge(name string) error {
 // It returns an error if the edge is not defined in the schema.
 func (m *GrantUsageMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown GrantUsage edge %s", name)
+}
+
+// MCPApplicationMutation represents an operation that mutates the MCPApplication nodes in the graph.
+type MCPApplicationMutation struct {
+	config
+	op                     Op
+	typ                    string
+	id                     *string
+	resource_id            *string
+	server_name            *string
+	attach_all             *bool
+	required_env           *[]string
+	appendrequired_env     []string
+	catalogue              *[]schema.CatalogueTool
+	appendcatalogue        []schema.CatalogueTool
+	catalogue_error        *string
+	catalogue_refreshed_at *time.Time
+	created_at             *time.Time
+	updated_at             *time.Time
+	clearedFields          map[string]struct{}
+	done                   bool
+	oldValue               func(context.Context) (*MCPApplication, error)
+	predicates             []predicate.MCPApplication
+}
+
+var _ ent.Mutation = (*MCPApplicationMutation)(nil)
+
+// mcpapplicationOption allows management of the mutation configuration using functional options.
+type mcpapplicationOption func(*MCPApplicationMutation)
+
+// newMCPApplicationMutation creates new mutation for the MCPApplication entity.
+func newMCPApplicationMutation(c config, op Op, opts ...mcpapplicationOption) *MCPApplicationMutation {
+	m := &MCPApplicationMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeMCPApplication,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withMCPApplicationID sets the ID field of the mutation.
+func withMCPApplicationID(id string) mcpapplicationOption {
+	return func(m *MCPApplicationMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *MCPApplication
+		)
+		m.oldValue = func(ctx context.Context) (*MCPApplication, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().MCPApplication.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withMCPApplication sets the old MCPApplication of the mutation.
+func withMCPApplication(node *MCPApplication) mcpapplicationOption {
+	return func(m *MCPApplicationMutation) {
+		m.oldValue = func(context.Context) (*MCPApplication, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m MCPApplicationMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m MCPApplicationMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of MCPApplication entities.
+func (m *MCPApplicationMutation) SetID(id string) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *MCPApplicationMutation) ID() (id string, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *MCPApplicationMutation) IDs(ctx context.Context) ([]string, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []string{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().MCPApplication.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetResourceID sets the "resource_id" field.
+func (m *MCPApplicationMutation) SetResourceID(s string) {
+	m.resource_id = &s
+}
+
+// ResourceID returns the value of the "resource_id" field in the mutation.
+func (m *MCPApplicationMutation) ResourceID() (r string, exists bool) {
+	v := m.resource_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldResourceID returns the old "resource_id" field's value of the MCPApplication entity.
+// If the MCPApplication object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MCPApplicationMutation) OldResourceID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldResourceID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldResourceID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldResourceID: %w", err)
+	}
+	return oldValue.ResourceID, nil
+}
+
+// ResetResourceID resets all changes to the "resource_id" field.
+func (m *MCPApplicationMutation) ResetResourceID() {
+	m.resource_id = nil
+}
+
+// SetServerName sets the "server_name" field.
+func (m *MCPApplicationMutation) SetServerName(s string) {
+	m.server_name = &s
+}
+
+// ServerName returns the value of the "server_name" field in the mutation.
+func (m *MCPApplicationMutation) ServerName() (r string, exists bool) {
+	v := m.server_name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldServerName returns the old "server_name" field's value of the MCPApplication entity.
+// If the MCPApplication object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MCPApplicationMutation) OldServerName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldServerName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldServerName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldServerName: %w", err)
+	}
+	return oldValue.ServerName, nil
+}
+
+// ResetServerName resets all changes to the "server_name" field.
+func (m *MCPApplicationMutation) ResetServerName() {
+	m.server_name = nil
+}
+
+// SetAttachAll sets the "attach_all" field.
+func (m *MCPApplicationMutation) SetAttachAll(b bool) {
+	m.attach_all = &b
+}
+
+// AttachAll returns the value of the "attach_all" field in the mutation.
+func (m *MCPApplicationMutation) AttachAll() (r bool, exists bool) {
+	v := m.attach_all
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAttachAll returns the old "attach_all" field's value of the MCPApplication entity.
+// If the MCPApplication object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MCPApplicationMutation) OldAttachAll(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAttachAll is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAttachAll requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAttachAll: %w", err)
+	}
+	return oldValue.AttachAll, nil
+}
+
+// ResetAttachAll resets all changes to the "attach_all" field.
+func (m *MCPApplicationMutation) ResetAttachAll() {
+	m.attach_all = nil
+}
+
+// SetRequiredEnv sets the "required_env" field.
+func (m *MCPApplicationMutation) SetRequiredEnv(s []string) {
+	m.required_env = &s
+	m.appendrequired_env = nil
+}
+
+// RequiredEnv returns the value of the "required_env" field in the mutation.
+func (m *MCPApplicationMutation) RequiredEnv() (r []string, exists bool) {
+	v := m.required_env
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRequiredEnv returns the old "required_env" field's value of the MCPApplication entity.
+// If the MCPApplication object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MCPApplicationMutation) OldRequiredEnv(ctx context.Context) (v []string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRequiredEnv is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRequiredEnv requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRequiredEnv: %w", err)
+	}
+	return oldValue.RequiredEnv, nil
+}
+
+// AppendRequiredEnv adds s to the "required_env" field.
+func (m *MCPApplicationMutation) AppendRequiredEnv(s []string) {
+	m.appendrequired_env = append(m.appendrequired_env, s...)
+}
+
+// AppendedRequiredEnv returns the list of values that were appended to the "required_env" field in this mutation.
+func (m *MCPApplicationMutation) AppendedRequiredEnv() ([]string, bool) {
+	if len(m.appendrequired_env) == 0 {
+		return nil, false
+	}
+	return m.appendrequired_env, true
+}
+
+// ResetRequiredEnv resets all changes to the "required_env" field.
+func (m *MCPApplicationMutation) ResetRequiredEnv() {
+	m.required_env = nil
+	m.appendrequired_env = nil
+}
+
+// SetCatalogue sets the "catalogue" field.
+func (m *MCPApplicationMutation) SetCatalogue(st []schema.CatalogueTool) {
+	m.catalogue = &st
+	m.appendcatalogue = nil
+}
+
+// Catalogue returns the value of the "catalogue" field in the mutation.
+func (m *MCPApplicationMutation) Catalogue() (r []schema.CatalogueTool, exists bool) {
+	v := m.catalogue
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCatalogue returns the old "catalogue" field's value of the MCPApplication entity.
+// If the MCPApplication object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MCPApplicationMutation) OldCatalogue(ctx context.Context) (v []schema.CatalogueTool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCatalogue is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCatalogue requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCatalogue: %w", err)
+	}
+	return oldValue.Catalogue, nil
+}
+
+// AppendCatalogue adds st to the "catalogue" field.
+func (m *MCPApplicationMutation) AppendCatalogue(st []schema.CatalogueTool) {
+	m.appendcatalogue = append(m.appendcatalogue, st...)
+}
+
+// AppendedCatalogue returns the list of values that were appended to the "catalogue" field in this mutation.
+func (m *MCPApplicationMutation) AppendedCatalogue() ([]schema.CatalogueTool, bool) {
+	if len(m.appendcatalogue) == 0 {
+		return nil, false
+	}
+	return m.appendcatalogue, true
+}
+
+// ResetCatalogue resets all changes to the "catalogue" field.
+func (m *MCPApplicationMutation) ResetCatalogue() {
+	m.catalogue = nil
+	m.appendcatalogue = nil
+}
+
+// SetCatalogueError sets the "catalogue_error" field.
+func (m *MCPApplicationMutation) SetCatalogueError(s string) {
+	m.catalogue_error = &s
+}
+
+// CatalogueError returns the value of the "catalogue_error" field in the mutation.
+func (m *MCPApplicationMutation) CatalogueError() (r string, exists bool) {
+	v := m.catalogue_error
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCatalogueError returns the old "catalogue_error" field's value of the MCPApplication entity.
+// If the MCPApplication object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MCPApplicationMutation) OldCatalogueError(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCatalogueError is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCatalogueError requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCatalogueError: %w", err)
+	}
+	return oldValue.CatalogueError, nil
+}
+
+// ResetCatalogueError resets all changes to the "catalogue_error" field.
+func (m *MCPApplicationMutation) ResetCatalogueError() {
+	m.catalogue_error = nil
+}
+
+// SetCatalogueRefreshedAt sets the "catalogue_refreshed_at" field.
+func (m *MCPApplicationMutation) SetCatalogueRefreshedAt(t time.Time) {
+	m.catalogue_refreshed_at = &t
+}
+
+// CatalogueRefreshedAt returns the value of the "catalogue_refreshed_at" field in the mutation.
+func (m *MCPApplicationMutation) CatalogueRefreshedAt() (r time.Time, exists bool) {
+	v := m.catalogue_refreshed_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCatalogueRefreshedAt returns the old "catalogue_refreshed_at" field's value of the MCPApplication entity.
+// If the MCPApplication object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MCPApplicationMutation) OldCatalogueRefreshedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCatalogueRefreshedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCatalogueRefreshedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCatalogueRefreshedAt: %w", err)
+	}
+	return oldValue.CatalogueRefreshedAt, nil
+}
+
+// ClearCatalogueRefreshedAt clears the value of the "catalogue_refreshed_at" field.
+func (m *MCPApplicationMutation) ClearCatalogueRefreshedAt() {
+	m.catalogue_refreshed_at = nil
+	m.clearedFields[mcpapplication.FieldCatalogueRefreshedAt] = struct{}{}
+}
+
+// CatalogueRefreshedAtCleared returns if the "catalogue_refreshed_at" field was cleared in this mutation.
+func (m *MCPApplicationMutation) CatalogueRefreshedAtCleared() bool {
+	_, ok := m.clearedFields[mcpapplication.FieldCatalogueRefreshedAt]
+	return ok
+}
+
+// ResetCatalogueRefreshedAt resets all changes to the "catalogue_refreshed_at" field.
+func (m *MCPApplicationMutation) ResetCatalogueRefreshedAt() {
+	m.catalogue_refreshed_at = nil
+	delete(m.clearedFields, mcpapplication.FieldCatalogueRefreshedAt)
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *MCPApplicationMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *MCPApplicationMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the MCPApplication entity.
+// If the MCPApplication object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MCPApplicationMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *MCPApplicationMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *MCPApplicationMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *MCPApplicationMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the MCPApplication entity.
+// If the MCPApplication object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MCPApplicationMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *MCPApplicationMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// Where appends a list predicates to the MCPApplicationMutation builder.
+func (m *MCPApplicationMutation) Where(ps ...predicate.MCPApplication) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the MCPApplicationMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *MCPApplicationMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.MCPApplication, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *MCPApplicationMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *MCPApplicationMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (MCPApplication).
+func (m *MCPApplicationMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *MCPApplicationMutation) Fields() []string {
+	fields := make([]string, 0, 9)
+	if m.resource_id != nil {
+		fields = append(fields, mcpapplication.FieldResourceID)
+	}
+	if m.server_name != nil {
+		fields = append(fields, mcpapplication.FieldServerName)
+	}
+	if m.attach_all != nil {
+		fields = append(fields, mcpapplication.FieldAttachAll)
+	}
+	if m.required_env != nil {
+		fields = append(fields, mcpapplication.FieldRequiredEnv)
+	}
+	if m.catalogue != nil {
+		fields = append(fields, mcpapplication.FieldCatalogue)
+	}
+	if m.catalogue_error != nil {
+		fields = append(fields, mcpapplication.FieldCatalogueError)
+	}
+	if m.catalogue_refreshed_at != nil {
+		fields = append(fields, mcpapplication.FieldCatalogueRefreshedAt)
+	}
+	if m.created_at != nil {
+		fields = append(fields, mcpapplication.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, mcpapplication.FieldUpdatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *MCPApplicationMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case mcpapplication.FieldResourceID:
+		return m.ResourceID()
+	case mcpapplication.FieldServerName:
+		return m.ServerName()
+	case mcpapplication.FieldAttachAll:
+		return m.AttachAll()
+	case mcpapplication.FieldRequiredEnv:
+		return m.RequiredEnv()
+	case mcpapplication.FieldCatalogue:
+		return m.Catalogue()
+	case mcpapplication.FieldCatalogueError:
+		return m.CatalogueError()
+	case mcpapplication.FieldCatalogueRefreshedAt:
+		return m.CatalogueRefreshedAt()
+	case mcpapplication.FieldCreatedAt:
+		return m.CreatedAt()
+	case mcpapplication.FieldUpdatedAt:
+		return m.UpdatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *MCPApplicationMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case mcpapplication.FieldResourceID:
+		return m.OldResourceID(ctx)
+	case mcpapplication.FieldServerName:
+		return m.OldServerName(ctx)
+	case mcpapplication.FieldAttachAll:
+		return m.OldAttachAll(ctx)
+	case mcpapplication.FieldRequiredEnv:
+		return m.OldRequiredEnv(ctx)
+	case mcpapplication.FieldCatalogue:
+		return m.OldCatalogue(ctx)
+	case mcpapplication.FieldCatalogueError:
+		return m.OldCatalogueError(ctx)
+	case mcpapplication.FieldCatalogueRefreshedAt:
+		return m.OldCatalogueRefreshedAt(ctx)
+	case mcpapplication.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case mcpapplication.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown MCPApplication field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *MCPApplicationMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case mcpapplication.FieldResourceID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetResourceID(v)
+		return nil
+	case mcpapplication.FieldServerName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetServerName(v)
+		return nil
+	case mcpapplication.FieldAttachAll:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAttachAll(v)
+		return nil
+	case mcpapplication.FieldRequiredEnv:
+		v, ok := value.([]string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRequiredEnv(v)
+		return nil
+	case mcpapplication.FieldCatalogue:
+		v, ok := value.([]schema.CatalogueTool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCatalogue(v)
+		return nil
+	case mcpapplication.FieldCatalogueError:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCatalogueError(v)
+		return nil
+	case mcpapplication.FieldCatalogueRefreshedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCatalogueRefreshedAt(v)
+		return nil
+	case mcpapplication.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case mcpapplication.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown MCPApplication field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *MCPApplicationMutation) AddedFields() []string {
+	return nil
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *MCPApplicationMutation) AddedField(name string) (ent.Value, bool) {
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *MCPApplicationMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown MCPApplication numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *MCPApplicationMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(mcpapplication.FieldCatalogueRefreshedAt) {
+		fields = append(fields, mcpapplication.FieldCatalogueRefreshedAt)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *MCPApplicationMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *MCPApplicationMutation) ClearField(name string) error {
+	switch name {
+	case mcpapplication.FieldCatalogueRefreshedAt:
+		m.ClearCatalogueRefreshedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown MCPApplication nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *MCPApplicationMutation) ResetField(name string) error {
+	switch name {
+	case mcpapplication.FieldResourceID:
+		m.ResetResourceID()
+		return nil
+	case mcpapplication.FieldServerName:
+		m.ResetServerName()
+		return nil
+	case mcpapplication.FieldAttachAll:
+		m.ResetAttachAll()
+		return nil
+	case mcpapplication.FieldRequiredEnv:
+		m.ResetRequiredEnv()
+		return nil
+	case mcpapplication.FieldCatalogue:
+		m.ResetCatalogue()
+		return nil
+	case mcpapplication.FieldCatalogueError:
+		m.ResetCatalogueError()
+		return nil
+	case mcpapplication.FieldCatalogueRefreshedAt:
+		m.ResetCatalogueRefreshedAt()
+		return nil
+	case mcpapplication.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case mcpapplication.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown MCPApplication field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *MCPApplicationMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *MCPApplicationMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *MCPApplicationMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *MCPApplicationMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *MCPApplicationMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *MCPApplicationMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *MCPApplicationMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown MCPApplication unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *MCPApplicationMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown MCPApplication edge %s", name)
 }
 
 // MaterializationMutation represents an operation that mutates the Materialization nodes in the graph.
@@ -23920,6 +25291,8 @@ type TaskMutation struct {
 	project_id               *string
 	spawner_id               *string
 	routine_id               *string
+	applications             *[]string
+	appendapplications       []string
 	rank                     *float64
 	addrank                  *float64
 	created_at               *time.Time
@@ -25076,6 +26449,57 @@ func (m *TaskMutation) ResetRoutineID() {
 	delete(m.clearedFields, task.FieldRoutineID)
 }
 
+// SetApplications sets the "applications" field.
+func (m *TaskMutation) SetApplications(s []string) {
+	m.applications = &s
+	m.appendapplications = nil
+}
+
+// Applications returns the value of the "applications" field in the mutation.
+func (m *TaskMutation) Applications() (r []string, exists bool) {
+	v := m.applications
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldApplications returns the old "applications" field's value of the Task entity.
+// If the Task object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TaskMutation) OldApplications(ctx context.Context) (v []string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldApplications is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldApplications requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldApplications: %w", err)
+	}
+	return oldValue.Applications, nil
+}
+
+// AppendApplications adds s to the "applications" field.
+func (m *TaskMutation) AppendApplications(s []string) {
+	m.appendapplications = append(m.appendapplications, s...)
+}
+
+// AppendedApplications returns the list of values that were appended to the "applications" field in this mutation.
+func (m *TaskMutation) AppendedApplications() ([]string, bool) {
+	if len(m.appendapplications) == 0 {
+		return nil, false
+	}
+	return m.appendapplications, true
+}
+
+// ResetApplications resets all changes to the "applications" field.
+func (m *TaskMutation) ResetApplications() {
+	m.applications = nil
+	m.appendapplications = nil
+}
+
 // SetRank sets the "rank" field.
 func (m *TaskMutation) SetRank(f float64) {
 	m.rank = &f
@@ -25468,7 +26892,7 @@ func (m *TaskMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *TaskMutation) Fields() []string {
-	fields := make([]string, 0, 25)
+	fields := make([]string, 0, 26)
 	if m.slug != nil {
 		fields = append(fields, task.FieldSlug)
 	}
@@ -25535,6 +26959,9 @@ func (m *TaskMutation) Fields() []string {
 	if m.routine_id != nil {
 		fields = append(fields, task.FieldRoutineID)
 	}
+	if m.applications != nil {
+		fields = append(fields, task.FieldApplications)
+	}
 	if m.rank != nil {
 		fields = append(fields, task.FieldRank)
 	}
@@ -25596,6 +27023,8 @@ func (m *TaskMutation) Field(name string) (ent.Value, bool) {
 		return m.SpawnerID()
 	case task.FieldRoutineID:
 		return m.RoutineID()
+	case task.FieldApplications:
+		return m.Applications()
 	case task.FieldRank:
 		return m.Rank()
 	case task.FieldCreatedAt:
@@ -25655,6 +27084,8 @@ func (m *TaskMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldSpawnerID(ctx)
 	case task.FieldRoutineID:
 		return m.OldRoutineID(ctx)
+	case task.FieldApplications:
+		return m.OldApplications(ctx)
 	case task.FieldRank:
 		return m.OldRank(ctx)
 	case task.FieldCreatedAt:
@@ -25823,6 +27254,13 @@ func (m *TaskMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetRoutineID(v)
+		return nil
+	case task.FieldApplications:
+		v, ok := value.([]string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetApplications(v)
 		return nil
 	case task.FieldRank:
 		v, ok := value.(float64)
@@ -26103,6 +27541,9 @@ func (m *TaskMutation) ResetField(name string) error {
 		return nil
 	case task.FieldRoutineID:
 		m.ResetRoutineID()
+		return nil
+	case task.FieldApplications:
+		m.ResetApplications()
 		return nil
 	case task.FieldRank:
 		m.ResetRank()
@@ -27807,6 +29248,8 @@ type TaskScheduleMutation struct {
 	last_run_at              *time.Time
 	last_task_id             *string
 	resource_id              *string
+	applications             *[]string
+	appendapplications       []string
 	user_id                  *string
 	created_at               *time.Time
 	updated_at               *time.Time
@@ -29156,6 +30599,57 @@ func (m *TaskScheduleMutation) ResetResourceID() {
 	delete(m.clearedFields, taskschedule.FieldResourceID)
 }
 
+// SetApplications sets the "applications" field.
+func (m *TaskScheduleMutation) SetApplications(s []string) {
+	m.applications = &s
+	m.appendapplications = nil
+}
+
+// Applications returns the value of the "applications" field in the mutation.
+func (m *TaskScheduleMutation) Applications() (r []string, exists bool) {
+	v := m.applications
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldApplications returns the old "applications" field's value of the TaskSchedule entity.
+// If the TaskSchedule object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TaskScheduleMutation) OldApplications(ctx context.Context) (v []string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldApplications is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldApplications requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldApplications: %w", err)
+	}
+	return oldValue.Applications, nil
+}
+
+// AppendApplications adds s to the "applications" field.
+func (m *TaskScheduleMutation) AppendApplications(s []string) {
+	m.appendapplications = append(m.appendapplications, s...)
+}
+
+// AppendedApplications returns the list of values that were appended to the "applications" field in this mutation.
+func (m *TaskScheduleMutation) AppendedApplications() ([]string, bool) {
+	if len(m.appendapplications) == 0 {
+		return nil, false
+	}
+	return m.appendapplications, true
+}
+
+// ResetApplications resets all changes to the "applications" field.
+func (m *TaskScheduleMutation) ResetApplications() {
+	m.applications = nil
+	m.appendapplications = nil
+}
+
 // SetUserID sets the "user_id" field.
 func (m *TaskScheduleMutation) SetUserID(s string) {
 	m.user_id = &s
@@ -29311,7 +30805,7 @@ func (m *TaskScheduleMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *TaskScheduleMutation) Fields() []string {
-	fields := make([]string, 0, 30)
+	fields := make([]string, 0, 31)
 	if m.name != nil {
 		fields = append(fields, taskschedule.FieldName)
 	}
@@ -29393,6 +30887,9 @@ func (m *TaskScheduleMutation) Fields() []string {
 	if m.resource_id != nil {
 		fields = append(fields, taskschedule.FieldResourceID)
 	}
+	if m.applications != nil {
+		fields = append(fields, taskschedule.FieldApplications)
+	}
 	if m.user_id != nil {
 		fields = append(fields, taskschedule.FieldUserID)
 	}
@@ -29464,6 +30961,8 @@ func (m *TaskScheduleMutation) Field(name string) (ent.Value, bool) {
 		return m.LastTaskID()
 	case taskschedule.FieldResourceID:
 		return m.ResourceID()
+	case taskschedule.FieldApplications:
+		return m.Applications()
 	case taskschedule.FieldUserID:
 		return m.UserID()
 	case taskschedule.FieldCreatedAt:
@@ -29533,6 +31032,8 @@ func (m *TaskScheduleMutation) OldField(ctx context.Context, name string) (ent.V
 		return m.OldLastTaskID(ctx)
 	case taskschedule.FieldResourceID:
 		return m.OldResourceID(ctx)
+	case taskschedule.FieldApplications:
+		return m.OldApplications(ctx)
 	case taskschedule.FieldUserID:
 		return m.OldUserID(ctx)
 	case taskschedule.FieldCreatedAt:
@@ -29736,6 +31237,13 @@ func (m *TaskScheduleMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetResourceID(v)
+		return nil
+	case taskschedule.FieldApplications:
+		v, ok := value.([]string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetApplications(v)
 		return nil
 	case taskschedule.FieldUserID:
 		v, ok := value.(string)
@@ -30031,6 +31539,9 @@ func (m *TaskScheduleMutation) ResetField(name string) error {
 		return nil
 	case taskschedule.FieldResourceID:
 		m.ResetResourceID()
+		return nil
+	case taskschedule.FieldApplications:
+		m.ResetApplications()
 		return nil
 	case taskschedule.FieldUserID:
 		m.ResetUserID()

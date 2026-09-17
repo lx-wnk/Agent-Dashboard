@@ -62,6 +62,8 @@ type Task struct {
 	SpawnerID *string `json:"spawner_id,omitempty"`
 	// RoutineID holds the value of the "routine_id" field.
 	RoutineID *string `json:"routine_id,omitempty"`
+	// Applications holds the value of the "applications" field.
+	Applications []string `json:"applications,omitempty"`
 	// Rank holds the value of the "rank" field.
 	Rank *float64 `json:"rank,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
@@ -130,7 +132,7 @@ func (*Task) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case task.FieldMetadata:
+		case task.FieldMetadata, task.FieldApplications:
 			values[i] = new([]byte)
 		case task.FieldSilverBullet, task.FieldPlanMode:
 			values[i] = new(sql.NullBool)
@@ -308,6 +310,14 @@ func (_m *Task) assignValues(columns []string, values []any) error {
 				_m.RoutineID = new(string)
 				*_m.RoutineID = value.String
 			}
+		case task.FieldApplications:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field applications", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.Applications); err != nil {
+					return fmt.Errorf("unmarshal field applications: %w", err)
+				}
+			}
 		case task.FieldRank:
 			if value, ok := values[i].(*sql.NullFloat64); !ok {
 				return fmt.Errorf("unexpected type %T for field rank", values[i])
@@ -470,6 +480,9 @@ func (_m *Task) String() string {
 		builder.WriteString("routine_id=")
 		builder.WriteString(*v)
 	}
+	builder.WriteString(", ")
+	builder.WriteString("applications=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Applications))
 	builder.WriteString(", ")
 	if v := _m.Rank; v != nil {
 		builder.WriteString("rank=")

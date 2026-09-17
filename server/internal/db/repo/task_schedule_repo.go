@@ -53,6 +53,7 @@ type CreateTaskScheduleInput struct {
 	Metadata            map[string]any
 	UserID              *string
 	NextRunAt           *time.Time
+	Applications        []string
 }
 
 // UpdateTaskScheduleInput patches schedule fields. Nil pointers leave a field
@@ -81,6 +82,7 @@ type UpdateTaskScheduleInput struct {
 	PermissionTemplate  *string
 	Metadata            map[string]any
 	NextRunAt           *time.Time
+	Applications        *[]string
 }
 
 // FireStateInput records the result of a fire: the spawned task and the next
@@ -145,6 +147,9 @@ func (r *entTaskScheduleRepo) Create(ctx context.Context, in CreateTaskScheduleI
 		SetNillableNextRunAt(in.NextRunAt)
 	if in.Metadata != nil {
 		q = q.SetMetadata(in.Metadata)
+	}
+	if in.Applications != nil {
+		q = q.SetApplications(in.Applications)
 	}
 
 	s, err := q.Save(ctx)
@@ -218,6 +223,9 @@ func (r *entTaskScheduleRepo) Update(ctx context.Context, id string, in UpdateTa
 		SetNillableNextRunAt(in.NextRunAt)
 	if in.Metadata != nil {
 		q = q.SetMetadata(in.Metadata)
+	}
+	if in.Applications != nil {
+		q = q.SetApplications(*in.Applications)
 	}
 	s, err := q.Save(ctx)
 	if err != nil {

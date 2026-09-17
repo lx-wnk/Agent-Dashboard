@@ -106,21 +106,7 @@ func (g Gate) Authorize(ctx context.Context, capName, value string, scope repo.S
 	if err != nil {
 		return fmt.Errorf("list grants for %s: %w", capName, err)
 	}
-	grantViews := make([]capability.GrantView, len(grantRows))
-	for i, gr := range grantRows {
-		grantViews[i] = capability.GrantView{
-			ID:                 gr.ID,
-			Capability:         gr.CapabilityName,
-			ContextKind:        gr.ContextKind,
-			ContextRef:         gr.ContextRef,
-			Pattern:            gr.Pattern,
-			Mode:               gr.Mode,
-			LimitCount:         gr.LimitCount,
-			LimitWindowSeconds: gr.LimitWindowSeconds,
-			ExpiresAt:          gr.ExpiresAt,
-			RevokedAt:          gr.RevokedAt,
-		}
-	}
+	grantViews := repo.GrantViewsFromRows(grantRows)
 
 	req := capability.Request{Capability: capName, Value: value, Contexts: Contexts(scope, extra...)}
 	decision := capability.Decide(req, grantViews, capView)
