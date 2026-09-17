@@ -31,6 +31,8 @@ func newServerWithApps(t *testing.T) (*httptest.Server, repo.MCPApplicationRepo)
 		scheduler.NewNLCron(nil),
 		nil,
 		apps,
+		repo.NewTaskRepo(bundle.Client),
+		repo.NewStageRunRepo(bundle.Client),
 		true,
 	)
 	r := chi.NewRouter()

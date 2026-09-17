@@ -39,14 +39,16 @@ type Handler struct {
 	translator Translator
 	runner     Runner
 	apps       repo.MCPApplicationRepo
+	tasks      repo.TaskRepo
+	stageRuns  repo.StageRunRepo
 	bypassAuth bool
 }
 
 // NewHandler builds the schedules handler. runner may be nil (run-now disabled).
 // bypassAuth is the loopback single-user mode, in which the listing is not
 // scoped to a user id because there is only one implicit user.
-func NewHandler(r repo.TaskScheduleRepo, t Translator, runner Runner, apps repo.MCPApplicationRepo, bypassAuth bool) *Handler {
-	return &Handler{repo: r, translator: t, runner: runner, apps: apps, bypassAuth: bypassAuth}
+func NewHandler(r repo.TaskScheduleRepo, t Translator, runner Runner, apps repo.MCPApplicationRepo, tasks repo.TaskRepo, stageRuns repo.StageRunRepo, bypassAuth bool) *Handler {
+	return &Handler{repo: r, translator: t, runner: runner, apps: apps, tasks: tasks, stageRuns: stageRuns, bypassAuth: bypassAuth}
 }
 
 // validateApplications checks that every id names an existing MCP application.
@@ -75,6 +77,7 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Patch("/api/schedules/{id}", apierr.ErrorMiddleware(h.update))
 	r.Delete("/api/schedules/{id}", apierr.ErrorMiddleware(h.delete))
 	r.Post("/api/schedules/{id}/run-now", apierr.ErrorMiddleware(h.runNow))
+	r.Get("/api/schedules/{id}/runs", apierr.ErrorMiddleware(h.listRuns))
 }
 
 func jsonReply(w http.ResponseWriter, status int, v any) error {

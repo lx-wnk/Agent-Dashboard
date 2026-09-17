@@ -69,6 +69,6 @@ func provideScheduler(client *ent.Client, taskHandler *tasks.Handler, tb *sse.Ta
 	// Rule-based fast-path with a one-shot LLM fallback for the long tail;
 	// firing stays deterministic and offline (it reads only the stored cron).
 	translator := scheduler.NewNLCron(scheduler.NewExecLLMTranslator())
-	handler := schedules.NewHandler(schedRepo, translator, sched, repo.NewMCPApplicationRepo(client), bypassAuth)
+	handler := schedules.NewHandler(schedRepo, translator, sched, repo.NewMCPApplicationRepo(client), taskRepo, repo.NewStageRunRepo(client), bypassAuth)
 	return sched, handler
 }
