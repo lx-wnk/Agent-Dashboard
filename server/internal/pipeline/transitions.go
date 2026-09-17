@@ -338,6 +338,9 @@ func transitionKindName(t StageTransition) string {
 // decideCompletedTransition maps a completed stage_run to its next transition.
 // self_review may loop back to implementation; finalization produces DoneTransition.
 func (o *PipelineOrchestrator) decideCompletedTransition(ctx context.Context, task *ent.Task, run *ent.StageRun, output map[string]any) StageTransition {
+	if run.Stage == StageJob {
+		return DoneTransition{Output: output}
+	}
 	if run.Stage == "finalization" {
 		return DoneTransition{Output: output}
 	}
