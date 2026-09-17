@@ -1167,38 +1167,38 @@ func CheckRunMode(ctx context.Context, runMode, cwd string) error {
 ### Task 2.12: A routine's runs, with summary and cost
 
 **Files:**
-- Create: `server/internal/api/schedules/runs.go` (handler + view)
-- Modify: `server/internal/db/repo/task_repo.go` (`ListByRoutine(ctx, routineID string, limit int) ([]*ent.Task, error)`, newest first)
-- Modify: `server/serverapp/di_scheduler.go:69` (mount the runs handler next to the schedules handler)
+- Create: `server/internal/api/schedules/runs.go` (`listRuns` handler + `routineRunView`)
+- Modify: `server/internal/api/schedules/handler.go:36-50` (`Handler` gains `tasks repo.TaskRepo`, `stageRuns repo.StageRunRepo`; `NewHandler` takes both), `:70-78` (`Mount`: `r.Get("/api/schedules/{id}/runs", ...)`)
+- Modify: `server/internal/db/repo/task_repo.go` (`ListByRoutine(ctx, routineID string, limit int) ([]*ent.Task, error)`, newest first, on the interface and the ent repo), `server/internal/agentbroadcast/enricher_test.go` (the fake `TaskRepo` gains the method)
+- Modify: `server/serverapp/di_scheduler.go:72` and `server/internal/api/schedules/handler_test.go:29` (the two `NewHandler` callers)
 - Test: `server/internal/api/schedules/runs_test.go` (new)
 
+The schedules handler is mounted through `RouterConfig.SchedulesHandler` (`serverapp/di.go:1047`), so the route belongs on that handler rather than a second one that would need its own router field.
+
 **Interfaces:**
-- Consumes: `Task.Kind`, `Task.RoutineID`, stage runs (`cost_cents`, `output`, `started_at`, `ended_at`).
+- Consumes: `Task.Kind`, `Task.RoutineID`, `StageRunRepo.ListForTask` (`stage_run_repo.go:26`, the method `listStageRuns` in `api/tasks/handler.go` uses).
 - Produces: `GET /api/schedules/{id}/runs` → `200 [{taskId, title, kind, stage, status, summary, costCents, startedAt, endedAt}]`, newest first, at most 50; 404 when the schedule does not exist.
 
-- [ ] **Step 1: Write the failing test:** schedule `s1`; task A (`job`, `done`) with one stage run `output {"summary":"sorted 3 mails","result":"…"}`, `cost_cents 12`; task B (`job`, `job` stage) with two stage runs (`awaiting_user` then `running`, cost 5 + 7); task C of another routine. Expect two items, B first; B `costCents 12`, `status "running"` (latest run), `summary ""`; A `summary "sorted 3 mails"`, `status "done"`; unknown schedule id → 404.
-- [ ] **Step 2: Run** `go test ./internal/api/schedules/ -run TestRoutineRuns` — FAIL.
+- [ ] **Step 1: Write the failing test:** schedule `s1`; task A (`job`, `done`) with one stage run `output {"summary":"sorted 3 mails","result":"…"}`, `cost_cents 12`, ended; task B (`job`, `job` stage) with two stage runs (`awaiting_user` then `running`, cost 5 + 7); task C of another routine. Expect two items, B first; B `costCents 12`, `status "running"` (latest run), `summary ""`, no `endedAt`; A `summary "sorted 3 mails"`, `status "done"`, `costCents 12`; unknown schedule id → 404. `ListByRoutine` repo test: three tasks of one routine and one of another, limit 2 → the two newest of the routine.
+- [ ] **Step 2: Run** `go test ./internal/api/schedules/ ./internal/db/repo/ -run 'TestRoutineRuns|TestTaskRepo_ListByRoutine'` — FAIL.
 - [ ] **Step 3: Implement.** `runs.go`:
 
 ```go
-// RunsHandler serves GET /api/schedules/{id}/runs.
-type RunsHandler struct {
-	schedules repo.TaskScheduleRepo
-	tasks     repo.TaskRepo
-	runs      repo.StageRunRepo
-}
-
-func NewRunsHandler(s repo.TaskScheduleRepo, t repo.TaskRepo, r repo.StageRunRepo) *RunsHandler {
-	return &RunsHandler{schedules: s, tasks: t, runs: r}
-}
-
-func (h *RunsHandler) Mount(r chi.Router) {
-	r.Get("/api/schedules/{id}/runs", apierr.ErrorMiddleware(h.list))
+type routineRunView struct {
+	TaskID    string  `json:"taskId"`
+	Title     string  `json:"title"`
+	Kind      string  `json:"kind"`
+	Stage     string  `json:"stage"`
+	Status    string  `json:"status"`
+	Summary   string  `json:"summary"`
+	CostCents int     `json:"costCents"`
+	StartedAt *string `json:"startedAt,omitempty"`
+	EndedAt   *string `json:"endedAt,omitempty"`
 }
 ```
 
-  `list`: `GetByID` (404 on not found), `tasks.ListByRoutine(ctx, id, 50)`, then for each task the stage runs through the stage-run list method `api/tasks/handler.go:934` (`listStageRuns`) uses; `costCents` = sum, `status` = the latest run's status (or the task stage when it has none), `summary` = latest run's `output["summary"]` when it is a string, `startedAt` = earliest `started_at`, `endedAt` = latest `ended_at` when the task is terminal. `// ponytail: one stage-run query per task, 50 tasks max; batch by task ids if routine pages get slow.` Mount it in `di_scheduler.go` wherever `handler.Mount` is called for the schedules handler, inside the same authenticated group.
-- [ ] **Step 4: Run** — PASS; `go test ./internal/api/schedules/... ./serverapp/...` PASS.
+  `listRuns`: `GetByID` (404 on not found, same as `get`), `h.tasks.ListByRoutine(ctx, id, 50)`, then per task `h.stageRuns.ListForTask`; `costCents` = sum of `CostCents`, `status` = the latest run's status (the task stage when it has none), `summary` = latest run's `Output["summary"]` when it is a string, `startedAt` = earliest `StartedAt`, `endedAt` = latest `EndedAt` only when the task stage is terminal (`done`/`cancelled`). Times formatted like `toView` does. `// ponytail: one stage-run query per task, 50 tasks max; batch by task ids if routine pages get slow.`
+- [ ] **Step 4: Run** — PASS; `go test ./internal/api/schedules/... ./internal/db/repo/... ./internal/agentbroadcast/... ./serverapp/...` PASS.
 - [ ] **Step 5: Mutation** — sum only the latest run's cost → B's `costCents` assertion red; restore identical.
 - [ ] **Step 6: Commit** `feat(routines): list a routine's runs with summary and cost`.
 
