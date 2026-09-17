@@ -417,6 +417,9 @@ describe('applicationSettings', () => {
     const frame = wrapper.find('[data-testid=\"application-setup-frame-res-mail\"]')
     expect(frame.exists()).toBe(true)
     expect(frame.attributes('src')).toBe('http://127.0.0.1:51234')
+    // The frame shows a third-party page: without the sandbox it could reach
+    // the dashboard's own origin, so the attribute is part of the contract.
+    expect(frame.attributes('sandbox')).toBe('allow-forms allow-scripts allow-same-origin')
 
     const warning = wrapper.find('[data-testid=\"application-setup-warning-res-mail\"]')
     expect(warning.text()).toBe('Setup is reachable on your local network until you click Done.')
