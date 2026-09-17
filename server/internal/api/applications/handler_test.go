@@ -41,7 +41,7 @@ func newMux(t *testing.T) (*chi.Mux, repo.MCPApplicationRepo, repo.GrantRepo, re
 	_, err = apps.Upsert(context.Background(), repo.UpsertMCPApplicationInput{ResourceID: "res-mail", ServerName: "mail"})
 	require.NoError(t, err)
 	mux := chi.NewRouter()
-	applications.NewHandler(apps, secrets, mcpapps.Refresher{Now: time.Now}, grants, resources, schedules, appsetup.NewManager(appsetup.Options{}), nil).Mount(mux)
+	applications.NewHandler(apps, secrets, mcpapps.Refresher{Now: time.Now}, grants, resources, schedules, appsetup.NewManager(appsetup.Options{}), nil, repo.NewCapabilityRepo(bundle.Client)).Mount(mux)
 	return mux, apps, grants, secrets, resources, schedules
 }
 
@@ -675,7 +675,7 @@ func newMuxWithSetup(t *testing.T, setup applications.SetupRunner) (*chi.Mux, re
 	mux := chi.NewRouter()
 	applications.NewHandler(apps, secrets, mcpapps.Refresher{Now: time.Now},
 		repo.NewGrantRepo(bundle.Client), repo.NewResourceRepo(bundle.Client),
-		repo.NewTaskScheduleRepo(bundle.Client), setup, nil).Mount(mux)
+		repo.NewTaskScheduleRepo(bundle.Client), setup, nil, repo.NewCapabilityRepo(bundle.Client)).Mount(mux)
 	return mux, apps, secrets
 }
 
@@ -769,7 +769,7 @@ func newMuxWithTools(t *testing.T, tools applications.ToolCaller) (*chi.Mux, rep
 	mux := chi.NewRouter()
 	applications.NewHandler(apps, secrets, mcpapps.Refresher{Now: time.Now},
 		repo.NewGrantRepo(bundle.Client), repo.NewResourceRepo(bundle.Client),
-		repo.NewTaskScheduleRepo(bundle.Client), &fakeSetup{}, tools).Mount(mux)
+		repo.NewTaskScheduleRepo(bundle.Client), &fakeSetup{}, tools, repo.NewCapabilityRepo(bundle.Client)).Mount(mux)
 	return mux, apps, secrets
 }
 
@@ -829,4 +829,107 @@ func TestAccounts_ServerWithoutTemplatesIs409(t *testing.T) {
 	rec := do(t, mux, http.MethodPost, "/api/applications/res-mail/accounts", nil)
 	require.Equal(t, http.StatusConflict, rec.Code, rec.Body.String())
 	require.Equal(t, 0, tools.calls, "a server with no per-account secrets is never started")
+}
+
+func newMuxWithCaps(t *testing.T) (*chi.Mux, repo.MCPApplicationRepo, repo.GrantRepo, repo.CapabilityRepo) {
+	t.Helper()
+	bundle, err := db.Open(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+	box, err := secretbox.New(make([]byte, 32))
+	require.NoError(t, err)
+	apps := repo.NewMCPApplicationRepo(bundle.Client)
+	grants := repo.NewGrantRepo(bundle.Client)
+	caps := repo.NewCapabilityRepo(bundle.Client)
+	_, err = apps.Upsert(context.Background(), repo.UpsertMCPApplicationInput{ResourceID: "res-mail", ServerName: "mail"})
+	require.NoError(t, err)
+	mux := chi.NewRouter()
+	applications.NewHandler(apps, repo.NewApplicationSecretRepo(bundle.Client, box),
+		mcpapps.Refresher{Now: time.Now}, grants, repo.NewResourceRepo(bundle.Client),
+		repo.NewTaskScheduleRepo(bundle.Client), &fakeSetup{}, &fakeTools{}, caps).Mount(mux)
+	return mux, apps, grants, caps
+}
+
+func TestToolState_DeniedAsksAndAllowedForARoutine(t *testing.T) {
+	mux, apps, grants, caps := newMuxWithCaps(t)
+	ctx := context.Background()
+	require.NoError(t, apps.RecordCatalogue(ctx, "res-mail", []schema.CatalogueTool{
+		{Name: "imap_send_email"}, {Name: "imap_search_emails"}, {Name: "imap_save_draft"},
+	}, "", time.Now()))
+	for _, tool := range []string{"imap_send_email", "imap_search_emails", "imap_save_draft"} {
+		_, err := caps.Upsert(ctx, repo.UpsertCapabilityInput{Name: mcpapps.CapabilityName("mail", tool), Class: repo.CapClassTool})
+		require.NoError(t, err)
+	}
+	_, err := grants.Create(ctx, repo.CreateGrantInput{
+		CapabilityName: mcpapps.CapabilityName("mail", "imap_send_email"),
+		Context:        repo.GrantContextFor(repo.GrantContextGlobal, ""),
+		Mode:           repo.GrantModeDeny, GrantedBy: "tester",
+	})
+	require.NoError(t, err)
+	_, err = grants.Create(ctx, repo.CreateGrantInput{
+		CapabilityName: mcpapps.CapabilityName("mail", "imap_save_draft"),
+		Context:        repo.GrantContextFor(repo.GrantContextRoutine, "routine-7"),
+		Mode:           repo.GrantModeAllow, GrantedBy: "tester",
+	})
+	require.NoError(t, err)
+
+	rec := do(t, mux, http.MethodGet, "/api/applications", nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var views []struct {
+		Tools []struct {
+			Name      string   `json:"name"`
+			State     string   `json:"state"`
+			AllowedIn []string `json:"allowedIn"`
+		} `json:"tools"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &views))
+	require.Len(t, views, 1)
+	byName := map[string]struct {
+		state     string
+		allowedIn []string
+	}{}
+	for _, tv := range views[0].Tools {
+		byName[tv.Name] = struct {
+			state     string
+			allowedIn []string
+		}{tv.State, tv.AllowedIn}
+	}
+	require.Equal(t, "denied", byName["imap_send_email"].state, "a global deny reads as denied")
+	require.Equal(t, "asks", byName["imap_search_emails"].state, "a tool with no grant asks")
+	require.Equal(t, "asks", byName["imap_save_draft"].state, "a routine allow does not make it allowed everywhere")
+	require.Equal(t, []string{"routine:routine-7"}, byName["imap_save_draft"].allowedIn,
+		"but the panel names the routine it is allowed in")
+	require.Empty(t, byName["imap_search_emails"].allowedIn)
+
+	// Revoking that allow must take the routine off the list: a revoked grant
+	// decides nothing, so showing it would promise access that no longer exists.
+	rows, err := grants.ListForCapability(ctx, mcpapps.CapabilityName("mail", "imap_save_draft"))
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.NoError(t, grants.Revoke(ctx, rows[0].ID, "tester"))
+
+	rec = do(t, mux, http.MethodGet, "/api/applications", nil)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.NotContains(t, rec.Body.String(), "routine:routine-7",
+		"a revoked allow must not be listed: %s", rec.Body.String())
+	_ = caps
+}
+
+func TestToolState_RevokingTheDenyMakesItAskAgain(t *testing.T) {
+	mux, apps, grants, caps := newMuxWithCaps(t)
+	ctx := context.Background()
+	require.NoError(t, apps.RecordCatalogue(ctx, "res-mail", []schema.CatalogueTool{{Name: "imap_send_email"}}, "", time.Now()))
+	_, err := caps.Upsert(ctx, repo.UpsertCapabilityInput{Name: mcpapps.CapabilityName("mail", "imap_send_email"), Class: repo.CapClassTool})
+	require.NoError(t, err)
+	g, err := grants.Create(ctx, repo.CreateGrantInput{
+		CapabilityName: mcpapps.CapabilityName("mail", "imap_send_email"),
+		Context:        repo.GrantContextFor(repo.GrantContextGlobal, ""),
+		Mode:           repo.GrantModeDeny, GrantedBy: "tester",
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, grants.Revoke(ctx, g.ID, "tester"))
+
+	rec := do(t, mux, http.MethodGet, "/api/applications", nil)
+	require.Contains(t, rec.Body.String(), `"state":"asks"`, "a revoked deny stops denying: %s", rec.Body.String())
 }

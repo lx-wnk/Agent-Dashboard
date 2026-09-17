@@ -532,4 +532,30 @@ describe('applicationSettings', () => {
 
     wrapper.unmount()
   })
+
+  it('shows each tool as denied, asking or allowed, and names where it is allowed', async () => {
+    stubFetch({
+      'GET /api/applications': [{
+        ...MAIL,
+        tools: [
+          { capability: 'mcp__mail__imap_send_email', name: 'imap_send_email', readOnlyHint: false, state: 'denied', allowedIn: [] },
+          { capability: 'mcp__mail__imap_search_emails', name: 'imap_search_emails', readOnlyHint: true, state: 'asks', allowedIn: [] },
+          { capability: 'mcp__mail__imap_save_draft', name: 'imap_save_draft', readOnlyHint: false, state: 'asks', allowedIn: ['routine:routine-7'] },
+        ],
+      }],
+      'GET /api/applications/drift': { found: [], changed: [] },
+    })
+    const wrapper = mount(ApplicationSettings)
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="application-tool-state-denied-imap_send_email"]').text()).toBe('denied by default')
+    expect(wrapper.find('[data-testid="application-tool-state-asks-imap_search_emails"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="application-tool-allowed-in-imap_save_draft"]').text()).toContain('routine:routine-7')
+    // A tool that asks carries no allowed-in label at all.
+    expect(wrapper.find('[data-testid="application-tool-allowed-in-imap_search_emails"]').exists()).toBe(false)
+    // The server's own hints stay, separate from the grant state.
+    expect(wrapper.html()).toContain('read-only (per server)')
+
+    wrapper.unmount()
+  })
 })

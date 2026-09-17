@@ -16,6 +16,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
 	"github.com/lx-wnk/agent-dashboard/server/internal/appsetup"
 	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
+	"github.com/lx-wnk/agent-dashboard/server/internal/capability"
 	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/claudeconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
@@ -27,14 +28,15 @@ import (
 var envNameRE = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
 
 type Handler struct {
-	apps      repo.MCPApplicationRepo
-	secrets   repo.ApplicationSecretRepo
-	refresher mcpapps.Refresher
-	grants    repo.GrantRepo
-	resources repo.ResourceRepo
-	schedules repo.TaskScheduleRepo
-	setup     SetupRunner
-	tools     ToolCaller
+	apps         repo.MCPApplicationRepo
+	secrets      repo.ApplicationSecretRepo
+	refresher    mcpapps.Refresher
+	grants       repo.GrantRepo
+	resources    repo.ResourceRepo
+	schedules    repo.TaskScheduleRepo
+	setup        SetupRunner
+	tools        ToolCaller
+	capabilities repo.CapabilityRepo
 }
 
 // ToolCaller runs one tool on an application's own MCP server. It is an
@@ -65,11 +67,11 @@ type SetupRunner interface {
 	Get(resourceID string) (appsetup.Session, bool)
 }
 
-func NewHandler(apps repo.MCPApplicationRepo, secrets repo.ApplicationSecretRepo, refresher mcpapps.Refresher, grants repo.GrantRepo, resources repo.ResourceRepo, schedules repo.TaskScheduleRepo, setup SetupRunner, tools ToolCaller) *Handler {
+func NewHandler(apps repo.MCPApplicationRepo, secrets repo.ApplicationSecretRepo, refresher mcpapps.Refresher, grants repo.GrantRepo, resources repo.ResourceRepo, schedules repo.TaskScheduleRepo, setup SetupRunner, tools ToolCaller, capabilities repo.CapabilityRepo) *Handler {
 	if tools == nil {
 		tools = StdioToolCaller{}
 	}
-	return &Handler{apps: apps, secrets: secrets, refresher: refresher, grants: grants, resources: resources, schedules: schedules, setup: setup, tools: tools}
+	return &Handler{apps: apps, secrets: secrets, refresher: refresher, grants: grants, resources: resources, schedules: schedules, setup: setup, tools: tools, capabilities: capabilities}
 }
 
 func (h *Handler) Mount(r chi.Router) {
@@ -95,6 +97,14 @@ type toolView struct {
 	Description     string `json:"description,omitempty"`
 	ReadOnlyHint    bool   `json:"readOnlyHint"`
 	DestructiveHint *bool  `json:"destructiveHint,omitempty"`
+	// State is what happens when an agent reaches for this tool with nothing
+	// but the global context to go on: "denied", "asks" or "allowed". It is
+	// resolved with the same capability.Decide a run's allow list uses.
+	State string `json:"state"`
+	// AllowedIn names the contexts that carry a live allow grant, so a tool
+	// that is denied by default but allowed for one routine says so instead of
+	// looking simply forbidden.
+	AllowedIn []string `json:"allowedIn"`
 }
 
 type secretView struct {
@@ -144,8 +154,12 @@ func (h *Handler) view(r *http.Request, app *ent.MCPApplication) (applicationVie
 		v.Secrets = append(v.Secrets, secretView{EnvName: m.EnvName, UpdatedAt: m.UpdatedAt.UTC().Format(time.RFC3339)})
 	}
 	for _, t := range app.Catalogue {
+		capName := mcpapps.CapabilityName(app.ServerName, t.Name)
+		state, allowedIn := h.toolState(r.Context(), capName)
 		v.Tools = append(v.Tools, toolView{
-			Capability:      mcpapps.CapabilityName(app.ServerName, t.Name),
+			State:           state,
+			AllowedIn:       allowedIn,
+			Capability:      capName,
 			Name:            t.Name,
 			Description:     t.Description,
 			ReadOnlyHint:    t.ReadOnlyHint,
@@ -649,4 +663,47 @@ func (h *Handler) accounts(w http.ResponseWriter, r *http.Request) error {
 		return apierr.NewAppError(http.StatusBadGateway, err.Error())
 	}
 	return writeJSON(w, http.StatusOK, map[string]any{"names": mcpapps.SecretNamesForAccounts(preset.SecretTemplates, names)})
+}
+
+// toolState answers what a tool does today: its effect in the global context,
+// and the contexts where a live allow grant exists. One capability.Decide per
+// tool, the same resolution a run's allow list is built from — the panel must
+// never describe a rule the spawner does not follow.
+func (h *Handler) toolState(ctx context.Context, capName string) (state string, allowedIn []string) {
+	allowedIn = []string{}
+	if h.grants == nil || h.capabilities == nil {
+		return "asks", allowedIn
+	}
+	decision, err := mcpapps.Decide(ctx, h.grants, h.capabilities, capName,
+		[]capability.Context{{Kind: repo.GrantContextGlobal}})
+	switch {
+	case err != nil:
+		state = "asks"
+	case decision.Effect == capability.EffectDeny:
+		state = "denied"
+	case decision.Effect == capability.EffectAllow:
+		state = "allowed"
+	default:
+		state = "asks"
+	}
+
+	rows, err := h.grants.ListForCapability(ctx, capName)
+	if err != nil {
+		return state, allowedIn
+	}
+	seen := map[string]bool{}
+	for _, g := range rows {
+		if g.RevokedAt != nil || g.Mode != repo.GrantModeAllow {
+			continue
+		}
+		label := g.ContextKind
+		if g.ContextRef != "" {
+			label += ":" + g.ContextRef
+		}
+		if !seen[label] {
+			seen[label] = true
+			allowedIn = append(allowedIn, label)
+		}
+	}
+	return state, allowedIn
 }

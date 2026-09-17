@@ -6,6 +6,10 @@ export interface ApplicationTool {
   description?: string
   readOnlyHint: boolean
   destructiveHint?: boolean
+  /** What happens with nothing but the global context: denied, asks, or allowed. */
+  state?: 'denied' | 'asks' | 'allowed'
+  /** Contexts carrying a live allow grant, e.g. `routine:<id>`. */
+  allowedIn?: string[]
 }
 
 export interface ApplicationSecret {

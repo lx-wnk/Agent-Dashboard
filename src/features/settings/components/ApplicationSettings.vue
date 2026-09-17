@@ -557,8 +557,28 @@ async function writeAppVersion(name: string) {
           Tool list not read yet.
         </p>
         <ul v-else class="text-sm flex flex-col gap-1">
-          <li v-for="tool in app.tools" :key="tool.capability" class="flex items-center gap-2">
+          <li v-for="tool in app.tools" :key="tool.capability" class="flex items-center gap-2 flex-wrap">
             <code>{{ tool.capability }}</code>
+            <span
+              v-if="tool.state === 'denied'"
+              class="text-xs text-red-600"
+              :data-testid="`application-tool-state-denied-${tool.name}`"
+            >denied by default</span>
+            <span
+              v-else-if="tool.state === 'allowed'"
+              class="text-xs text-emerald-600"
+              :data-testid="`application-tool-state-allowed-${tool.name}`"
+            >allowed</span>
+            <span
+              v-else
+              class="text-xs text-fg-mute"
+              :data-testid="`application-tool-state-asks-${tool.name}`"
+            >asks on first use</span>
+            <span
+              v-if="tool.allowedIn?.length"
+              class="text-xs text-fg-mute"
+              :data-testid="`application-tool-allowed-in-${tool.name}`"
+            >allowed in {{ tool.allowedIn.join(', ') }}</span>
             <span v-if="tool.readOnlyHint" class="text-xs text-fg-mute">read-only (per server)</span>
             <span v-if="tool.destructiveHint" class="text-xs text-amber-600">destructive (per server)</span>
           </li>

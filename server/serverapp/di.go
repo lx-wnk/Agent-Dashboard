@@ -766,6 +766,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 			repo.NewTaskScheduleRepo(entClient),
 			setupManager,
 			apiapplications.StdioToolCaller{},
+			repo.NewCapabilityRepo(entClient),
 		)
 
 		watchCtx, stopConfigWatch := context.WithCancel(context.Background())
