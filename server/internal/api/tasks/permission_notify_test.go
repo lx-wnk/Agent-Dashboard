@@ -112,6 +112,21 @@ func postPermissionRequest(t *testing.T, r *chi.Mux, stageRunID, toolName, patte
 	}
 }
 
+// setApprovalPushPreference writes the notification preference that gates the
+// approval push, via the same route the Settings panel uses.
+func setApprovalPushPreference(t *testing.T, r *chi.Mux, enabled bool, channels []string) {
+	t.Helper()
+	body := map[string]any{"eventType": "approval_needed", "channels": channels, "enabled": enabled}
+	b, _ := json.Marshal(body)
+	req := withAuth(t, httptest.NewRequest(http.MethodPut, "/api/notifications/preferences/approval_needed", bytes.NewReader(b)))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("set approval push preference: got %d, body %s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestPermissionNotifier_ManualTaskGatedRequest_Notifies(t *testing.T) {
 	bundle, err := db.Open(":memory:")
 	if err != nil {
@@ -121,6 +136,7 @@ func TestPermissionNotifier_ManualTaskGatedRequest_Notifies(t *testing.T) {
 
 	rec := &notifierRecorder{}
 	r := newNotifyTestHandler(t, bundle.Client, rec)
+	setApprovalPushPreference(t, r, true, []string{"browser"})
 
 	tk := mustCreateNotifyTask(t, bundle.Client, "manual")
 	sr := mustCreateNotifyStageRun(t, bundle.Client, tk.ID)
@@ -164,6 +180,7 @@ func TestPermissionNotifier_FullTaskApplicationTool_Notifies(t *testing.T) {
 
 	rec := &notifierRecorder{}
 	r := newNotifyTestHandler(t, bundle.Client, rec)
+	setApprovalPushPreference(t, r, true, []string{"browser"})
 
 	tk := mustCreateNotifyTask(t, bundle.Client, "full")
 	sr := mustCreateNotifyStageRun(t, bundle.Client, tk.ID)
@@ -187,6 +204,7 @@ func TestPermissionNotifier_BulkFullTask_NotifiesOnlyForPendingEntries(t *testin
 
 	rec := &notifierRecorder{}
 	r := newNotifyTestHandler(t, bundle.Client, rec)
+	setApprovalPushPreference(t, r, true, []string{"browser"})
 
 	tk := mustCreateNotifyTask(t, bundle.Client, "full")
 	sr := mustCreateNotifyStageRun(t, bundle.Client, tk.ID)
@@ -208,5 +226,45 @@ func TestPermissionNotifier_BulkFullTask_NotifiesOnlyForPendingEntries(t *testin
 
 	if len(rec.calls) != 1 || rec.calls[0] != tk.ID+":mcp__mail__imap_move_email" {
 		t.Fatalf("expected exactly one call for the pending application tool, got %v", rec.calls)
+	}
+}
+func TestPermissionNotifier_NoPreference_NoPush(t *testing.T) {
+	bundle, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("db.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+
+	rec := &notifierRecorder{}
+	r := newNotifyTestHandler(t, bundle.Client, rec)
+
+	tk := mustCreateNotifyTask(t, bundle.Client, "manual")
+	sr := mustCreateNotifyStageRun(t, bundle.Client, tk.ID)
+
+	postPermissionRequest(t, r, sr.ID, "Bash", "make build")
+
+	if len(rec.calls) != 0 {
+		t.Fatalf("expected 0 notifier calls with no stored preference, got %d: %v", len(rec.calls), rec.calls)
+	}
+}
+
+func TestPermissionNotifier_PreferenceWithoutBrowserChannel_NoPush(t *testing.T) {
+	bundle, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("db.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+
+	rec := &notifierRecorder{}
+	r := newNotifyTestHandler(t, bundle.Client, rec)
+	setApprovalPushPreference(t, r, true, []string{"webhook"})
+
+	tk := mustCreateNotifyTask(t, bundle.Client, "manual")
+	sr := mustCreateNotifyStageRun(t, bundle.Client, tk.ID)
+
+	postPermissionRequest(t, r, sr.ID, "Bash", "make build")
+
+	if len(rec.calls) != 0 {
+		t.Fatalf("expected 0 notifier calls without the browser channel, got %d: %v", len(rec.calls), rec.calls)
 	}
 }

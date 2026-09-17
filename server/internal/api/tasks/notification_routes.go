@@ -1,12 +1,14 @@
 package tasks
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -84,6 +86,20 @@ type notifPref struct {
 	EventType string   `json:"eventType"`
 	Channels  []string `json:"channels"`
 	Enabled   bool     `json:"enabled"`
+}
+
+// approvalPushWanted reports whether the operator enabled browser notifications
+// for approval_needed in Settings → Notifications.
+func (h *Handler) approvalPushWanted(ctx context.Context) bool {
+	raw := h.cfgRepo.GetString(ctx, notifPrefPrefix+"approval_needed", "")
+	if raw == "" {
+		return false
+	}
+	var p notifPref
+	if err := json.Unmarshal([]byte(raw), &p); err != nil {
+		return false
+	}
+	return p.Enabled && slices.Contains(p.Channels, "browser")
 }
 
 func (h *Handler) listNotificationPreferences(w http.ResponseWriter, r *http.Request) error {

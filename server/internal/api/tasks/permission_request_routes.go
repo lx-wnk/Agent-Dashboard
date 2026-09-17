@@ -141,7 +141,7 @@ func (h *Handler) createPermissionRequest(w http.ResponseWriter, r *http.Request
 			}
 			h.broadcastEnrichedEvent(r.Context(), "permission_request", sr.TaskID)
 		}
-		if req.Outcome == nil && h.notifier != nil {
+		if req.Outcome == nil && h.notifier != nil && h.approvalPushWanted(r.Context()) {
 			title := ""
 			if taskErr == nil {
 				title = task.Title
@@ -357,6 +357,7 @@ func (h *Handler) bulkCreatePermissionRequests(w http.ResponseWriter, r *http.Re
 	task, taskErr := h.taskRepo.GetByID(r.Context(), sr.TaskID)
 	taskIsAllowAll := taskErr == nil && taskcontrol.IsAllowAll(task.Autonomy)
 
+	pushWanted := h.approvalPushWanted(r.Context())
 	for _, e := range body.Entries {
 		if e.Tool == "" {
 			continue
@@ -390,7 +391,7 @@ func (h *Handler) bulkCreatePermissionRequests(w http.ResponseWriter, r *http.Re
 		}
 		hasNewRequests = true
 		id := req.ID
-		if h.notifier != nil {
+		if h.notifier != nil && pushWanted {
 			title := ""
 			if taskErr == nil {
 				title = task.Title
