@@ -4,6 +4,7 @@ import { ref, watch } from 'vue'
 import { deleteSchedule, runScheduleNow, updateSchedule, useSchedules } from '../composables/useSchedules'
 import { toast } from '../composables/useToast'
 import { formatDateTime } from '../utils/format'
+import RoutineGrants from './RoutineGrants.vue'
 import RoutineRuns from './RoutineRuns.vue'
 import ScheduleForm from './ScheduleForm.vue'
 import AppButton from './ui/AppButton.vue'
@@ -169,6 +170,9 @@ function toggleRuns(id: string) {
 
         <div v-if="expandedRuns.has(s.id)" :id="`schedule-runs-${s.id}`">
           <RoutineRuns :schedule-id="s.id" />
+          <div class="mt-3 pt-3 border-t border-line">
+            <RoutineGrants :schedule-id="s.id" />
+          </div>
         </div>
       </div>
     </div>

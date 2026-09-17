@@ -127,4 +127,19 @@ describe('schedulesView — run mode, skips, and runs', () => {
 
     w.unmount()
   })
+
+  it('shows the saved decisions section once Runs is expanded', async () => {
+    const fetchMock = makeFetchMock(makeSchedule())
+    globalThis.fetch = fetchMock as any
+    const w = mount(SchedulesView)
+    await flushPromises()
+
+    const toggle = w.get(`[aria-controls="schedule-runs-${SCHEDULE_ID}"]`)
+    await toggle.trigger('click')
+    await flushPromises()
+
+    expect(w.text()).toContain('Saved decisions')
+
+    w.unmount()
+  })
 })
