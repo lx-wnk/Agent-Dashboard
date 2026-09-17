@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -622,4 +623,121 @@ func TestDenies_AppliedTwiceLeavesOneGrant(t *testing.T) {
 
 	require.Equal(t, 1, liveDenies(t, grants, mcpapps.CapabilityName("inbox", "imap_send_email")),
 		"re-applying the denies must not stack a second grant")
+}
+
+// fakeSetup records what the routes asked for and answers without starting a
+// process. The manager's own behaviour is covered in its package.
+type fakeSetup struct {
+	started   int
+	stopped   int
+	lastEnv   map[string]string
+	lastSetup mcpapps.PresetSetup
+	session   *appsetup.Session
+	startErr  error
+}
+
+func (f *fakeSetup) Start(_ context.Context, resourceID string, setup mcpapps.PresetSetup, env map[string]string) (appsetup.Session, error) {
+	f.started++
+	f.lastEnv = env
+	f.lastSetup = setup
+	if f.startErr != nil {
+		return appsetup.Session{}, f.startErr
+	}
+	sess := appsetup.Session{ResourceID: resourceID, Port: 4711, URL: "http://127.0.0.1:4711", Warning: "Setup is reachable on your local network until you click Done."}
+	f.session = &sess
+	return sess, nil
+}
+
+func (f *fakeSetup) Stop(string) error {
+	f.stopped++
+	f.session = nil
+	return nil
+}
+
+func (f *fakeSetup) Get(string) (appsetup.Session, bool) {
+	if f.session == nil {
+		return appsetup.Session{}, false
+	}
+	return *f.session, true
+}
+
+func newMuxWithSetup(t *testing.T, setup applications.SetupRunner) (*chi.Mux, repo.MCPApplicationRepo, repo.ApplicationSecretRepo) {
+	t.Helper()
+	bundle, err := db.Open(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+	box, err := secretbox.New(make([]byte, 32))
+	require.NoError(t, err)
+	apps := repo.NewMCPApplicationRepo(bundle.Client)
+	secrets := repo.NewApplicationSecretRepo(bundle.Client, box)
+	_, err = apps.Upsert(context.Background(), repo.UpsertMCPApplicationInput{ResourceID: "res-mail", ServerName: "mail"})
+	require.NoError(t, err)
+	mux := chi.NewRouter()
+	applications.NewHandler(apps, secrets, mcpapps.Refresher{Now: time.Now},
+		repo.NewGrantRepo(bundle.Client), repo.NewResourceRepo(bundle.Client),
+		repo.NewTaskScheduleRepo(bundle.Client), setup).Mount(mux)
+	return mux, apps, secrets
+}
+
+func TestStartSetup_ServerWithoutASetupPageIs409(t *testing.T) {
+	setup := &fakeSetup{}
+	mux, apps, _ := newMuxWithSetup(t, setup)
+	_, err := apps.SetEntry(context.Background(), "res-mail", json.RawMessage(`{"command":"npx","args":["-y","notes-mcp"]}`))
+	require.NoError(t, err)
+
+	rec := do(t, mux, http.MethodPost, "/api/applications/res-mail/setup", nil)
+	require.Equal(t, http.StatusConflict, rec.Code, rec.Body.String())
+	require.Contains(t, rec.Body.String(), "no setup page")
+	require.Equal(t, 0, setup.started, "nothing may be started for a server that declares no setup")
+}
+
+func TestStartSetup_PassesTheEntryEnvAndTheSecrets(t *testing.T) {
+	setup := &fakeSetup{}
+	mux, apps, secrets := newMuxWithSetup(t, setup)
+	ctx := context.Background()
+	_, err := apps.SetEntry(ctx, "res-mail", json.RawMessage(`{"command":"npx","args":["-y","imap-mcp-server"],"env":{"IMAP_HOST":"imap.example.com"}}`))
+	require.NoError(t, err)
+	require.NoError(t, secrets.Set(ctx, "res-mail", "IMAP_MCP_ACCOUNT_WORK_IMAP_PASSWORD", "hunter2"))
+
+	rec := do(t, mux, http.MethodPost, "/api/applications/res-mail/setup", nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.Equal(t, 1, setup.started)
+	require.Equal(t, "imap.example.com", setup.lastEnv["IMAP_HOST"], "the entry's own environment reaches the setup process")
+	require.Equal(t, "hunter2", setup.lastEnv["IMAP_MCP_ACCOUNT_WORK_IMAP_PASSWORD"], "the application's secrets reach it too — the setup page configures the account")
+	require.Contains(t, setup.lastSetup.Args, "{port}", "the preset's args are passed through unsubstituted; the manager fills the port")
+	require.NotContains(t, rec.Body.String(), "hunter2", "no secret value may appear in the response")
+	require.Contains(t, rec.Body.String(), "local network", "the response carries the warning the panel shows")
+}
+
+func TestStartSetup_FailureIs502(t *testing.T) {
+	setup := &fakeSetup{startErr: errors.New("appsetup: never became ready: setup failed: no config")}
+	mux, apps, _ := newMuxWithSetup(t, setup)
+	_, err := apps.SetEntry(context.Background(), "res-mail", json.RawMessage(`{"command":"npx","args":["-y","imap-mcp-server"]}`))
+	require.NoError(t, err)
+
+	rec := do(t, mux, http.MethodPost, "/api/applications/res-mail/setup", nil)
+	require.Equal(t, http.StatusBadGateway, rec.Code)
+	require.Contains(t, rec.Body.String(), "setup failed: no config", "the child's own words reach the operator")
+}
+
+func TestSetupRoutes_UnknownApplicationIs404(t *testing.T) {
+	mux, _, _ := newMuxWithSetup(t, &fakeSetup{})
+	for _, method := range []string{http.MethodPost, http.MethodGet, http.MethodDelete} {
+		rec := do(t, mux, method, "/api/applications/res-nope/setup", nil)
+		require.Equal(t, http.StatusNotFound, rec.Code, method)
+	}
+}
+
+func TestGetSetup_NothingRunningIs404AndStopIsIdempotent(t *testing.T) {
+	setup := &fakeSetup{}
+	mux, _, _ := newMuxWithSetup(t, setup)
+
+	rec := do(t, mux, http.MethodGet, "/api/applications/res-mail/setup", nil)
+	require.Equal(t, http.StatusNotFound, rec.Code)
+
+	for range 2 {
+		rec = do(t, mux, http.MethodDelete, "/api/applications/res-mail/setup", nil)
+		require.Equal(t, http.StatusNoContent, rec.Code, rec.Body.String())
+	}
+	require.Equal(t, 2, setup.stopped, "stopping twice is not an error")
 }

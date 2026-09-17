@@ -1,6 +1,7 @@
 package applications
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -32,10 +33,19 @@ type Handler struct {
 	grants    repo.GrantRepo
 	resources repo.ResourceRepo
 	schedules repo.TaskScheduleRepo
-	setup     *appsetup.Manager
+	setup     SetupRunner
 }
 
-func NewHandler(apps repo.MCPApplicationRepo, secrets repo.ApplicationSecretRepo, refresher mcpapps.Refresher, grants repo.GrantRepo, resources repo.ResourceRepo, schedules repo.TaskScheduleRepo, setup *appsetup.Manager) *Handler {
+// SetupRunner is the part of appsetup.Manager these routes use. It is an
+// interface so a test can drive the routes without starting a real process —
+// the manager's own behaviour is covered by its package's tests.
+type SetupRunner interface {
+	Start(ctx context.Context, resourceID string, setup mcpapps.PresetSetup, env map[string]string) (appsetup.Session, error)
+	Stop(resourceID string) error
+	Get(resourceID string) (appsetup.Session, bool)
+}
+
+func NewHandler(apps repo.MCPApplicationRepo, secrets repo.ApplicationSecretRepo, refresher mcpapps.Refresher, grants repo.GrantRepo, resources repo.ResourceRepo, schedules repo.TaskScheduleRepo, setup SetupRunner) *Handler {
 	return &Handler{apps: apps, secrets: secrets, refresher: refresher, grants: grants, resources: resources, schedules: schedules, setup: setup}
 }
 
