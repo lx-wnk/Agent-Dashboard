@@ -356,6 +356,11 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 			slog.Warn("mcpapps: reconcile failed", "err", err)
 		} else {
 			slog.Info("mcpapps: applications reconciled", "mirrored", n)
+			if n, err := mcpapps.ImportEntries(ctx, servers, mcpAppRepo, db.MarkerStore{DB: bundle.DB}); err != nil {
+				slog.Warn("mcpapps: entry import failed", "err", err)
+			} else {
+				slog.Info("mcpapps: entries imported", "count", n)
+			}
 		}
 
 		if n, err := channelconfig.SweepOrphanedConfigs(time.Now()); err != nil {
