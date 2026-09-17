@@ -1,6 +1,23 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ApplicationSettings from '@/features/settings/components/ApplicationSettings.vue'
+
+class MockEventSource {
+  static instances: MockEventSource[] = []
+  onmessage: ((e: MessageEvent) => void) | null = null
+  onerror: ((e: Event) => void) | null = null
+  readyState = 0
+  static CONNECTING = 0
+  static OPEN = 1
+  static CLOSED = 2
+  constructor(public url: string) { MockEventSource.instances.push(this) }
+  close() { this.readyState = 2 }
+}
+
+beforeEach(() => {
+  MockEventSource.instances = []
+  vi.stubGlobal('EventSource', MockEventSource)
+})
 
 const MAIL = {
   resourceId: 'res-mail',
@@ -18,9 +35,10 @@ const MAIL = {
 
 function stubFetch(responses: Record<string, unknown>) {
   const calls: Array<{ url: string, init?: RequestInit }> = []
+  const merged: Record<string, unknown> = { 'GET /api/applications/drift': { found: [], changed: [] }, ...responses }
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     calls.push({ url, init })
-    const body = responses[`${init?.method ?? 'GET'} ${url}`]
+    const body = merged[`${init?.method ?? 'GET'} ${url}`]
     return { ok: true, status: body === undefined ? 204 : 200, json: async () => body }
   }))
   return calls
@@ -140,7 +158,7 @@ describe('applicationSettings', () => {
       args: ['-y', 'calendar-mcp'],
       env: { API_KEY: 'abc' },
     })
-    expect(calls.filter(c => (c.init?.method ?? 'GET') === 'GET').length).toBe(2)
+    expect(calls.filter(c => (c.init?.method ?? 'GET') === 'GET' && c.url === '/api/applications').length).toBe(2)
     wrapper.unmount()
   })
 
@@ -255,5 +273,122 @@ describe('applicationSettings', () => {
     expect(wrapper.text()).toContain('still attached to: inbox')
     expect(wrapper.find('[data-testid="application-res-mail"]').exists()).toBe(true)
     wrapper.unmount()
+  })
+
+  it('imports a found server from the drift banner', async () => {
+    const calls = stubFetch({
+      'GET /api/applications': [],
+      'GET /api/applications/drift': { found: ['notes'], changed: [] },
+      'POST /api/applications/import': { ...MAIL, resourceId: 'res-notes', serverName: 'notes' },
+    })
+    const wrapper = mount(ApplicationSettings)
+    await flushPromises()
+
+    const banner = wrapper.find('[data-testid="application-drift-found-notes"]')
+    expect(banner.text()).toContain('Found notes')
+
+    const getCountBefore = calls.filter(c => (c.init?.method ?? 'GET') === 'GET').length
+    await banner.find('button').trigger('click')
+    await flushPromises()
+
+    const post = calls.find(c => c.init?.method === 'POST' && c.url === '/api/applications/import')
+    expect(JSON.parse(String(post?.init?.body))).toEqual({ name: 'notes' })
+    const getCountAfter = calls.filter(c => (c.init?.method ?? 'GET') === 'GET').length
+    expect(getCountAfter).toBe(getCountBefore + 2)
+    expect(calls.some(c => (c.init?.method ?? 'GET') === 'GET' && c.url === '/api/applications')).toBe(true)
+    expect(calls.some(c => (c.init?.method ?? 'GET') === 'GET' && c.url === '/api/applications/drift')).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('takes the file version by disabling export', async () => {
+    const calls = stubFetch({
+      'GET /api/applications': [MAIL],
+      'GET /api/applications/drift': { found: [], changed: ['mail'] },
+      'PATCH /api/applications/res-mail': { ...MAIL, exportToClaude: false },
+    })
+    const wrapper = mount(ApplicationSettings)
+    await flushPromises()
+
+    const banner = wrapper.find('[data-testid="application-drift-changed-mail"]')
+    expect(banner.text()).toContain('mail')
+    const buttons = banner.findAll('button')
+    expect(buttons).toHaveLength(2)
+    await buttons[0].trigger('click')
+    await flushPromises()
+
+    const patch = calls.find(c => c.init?.method === 'PATCH')
+    expect(patch?.url).toBe('/api/applications/res-mail')
+    expect(JSON.parse(String(patch?.init?.body))).toEqual({ exportToClaude: false })
+    wrapper.unmount()
+  })
+
+  it('writes the app version back to Claude config', async () => {
+    const calls = stubFetch({
+      'GET /api/applications': [MAIL],
+      'GET /api/applications/drift': { found: [], changed: ['mail'] },
+      'PATCH /api/applications/res-mail': { ...MAIL, exportToClaude: true },
+    })
+    const wrapper = mount(ApplicationSettings)
+    await flushPromises()
+
+    const banner = wrapper.find('[data-testid="application-drift-changed-mail"]')
+    const buttons = banner.findAll('button')
+    await buttons[1].trigger('click')
+    await flushPromises()
+
+    const patch = calls.find(c => c.init?.method === 'PATCH')
+    expect(patch?.url).toBe('/api/applications/res-mail')
+    expect(JSON.parse(String(patch?.init?.body))).toEqual({ exportToClaude: true })
+    wrapper.unmount()
+  })
+
+  it('shows no drift banner when nothing changed', async () => {
+    stubFetch({ 'GET /api/applications': [MAIL] })
+    const wrapper = mount(ApplicationSettings)
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid^="application-drift-"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('refetches drift on an applications_changed event', async () => {
+    const calls = stubFetch({ 'GET /api/applications': [MAIL] })
+    const wrapper = mount(ApplicationSettings)
+    await flushPromises()
+
+    const driftCallsBefore = calls.filter(c => (c.init?.method ?? 'GET') === 'GET' && c.url === '/api/applications/drift').length
+    expect(driftCallsBefore).toBe(1)
+
+    MockEventSource.instances[0].onmessage?.({ data: JSON.stringify({ type: 'applications_changed' }) } as MessageEvent)
+    await flushPromises()
+
+    const driftCallsAfter = calls.filter(c => (c.init?.method ?? 'GET') === 'GET' && c.url === '/api/applications/drift').length
+    expect(driftCallsAfter).toBe(2)
+    wrapper.unmount()
+  })
+
+  it('keeps the list and shows no panel error when the drift fetch fails', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url === '/api/applications/drift')
+        throw new Error('network down')
+      return { ok: true, status: 200, json: async () => [MAIL] }
+    }))
+    const wrapper = mount(ApplicationSettings)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('mail')
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('closes the event stream on unmount', async () => {
+    stubFetch({ 'GET /api/applications': [MAIL] })
+    const wrapper = mount(ApplicationSettings)
+    await flushPromises()
+
+    expect(MockEventSource.instances).toHaveLength(1)
+    wrapper.unmount()
+
+    expect(MockEventSource.instances[0].readyState).toBe(MockEventSource.CLOSED)
   })
 })

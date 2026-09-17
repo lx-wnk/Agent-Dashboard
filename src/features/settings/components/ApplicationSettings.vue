@@ -1,17 +1,23 @@
 <script setup lang="ts">
 import type { ApplicationEntry, ApplicationView } from '@/features/settings/composables/useApplications'
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import { useApplications } from '@/features/settings/composables/useApplications'
 import { formatDateTime } from '@/utils/format'
 
-const { applications, loading, error, fetchApplications, setAttachAll, setRequiredEnv, setSecret, deleteSecret, refreshCatalogue, createApplication, deleteApplication, setEntry, setExport } = useApplications()
+const { applications, loading, error, drift, fetchApplications, setAttachAll, setRequiredEnv, setSecret, deleteSecret, refreshCatalogue, createApplication, deleteApplication, setEntry, setExport, fetchDrift, importApplication, subscribe, unsubscribe } = useApplications()
 const actionError = ref<string | null>(null)
 const drafts = reactive<Record<string, string>>({})
 const requiredEnvDrafts = reactive<Record<string, string>>({})
 
 onMounted(() => {
   void fetchApplications()
+  void fetchDrift()
+  subscribe()
+})
+
+onUnmounted(() => {
+  unsubscribe()
 })
 
 type PanelState = 'loading' | 'error' | 'empty' | 'rows'
@@ -150,6 +156,30 @@ async function handleRemove(app: ApplicationView) {
   await run(() => deleteApplication(app.resourceId))
   confirmRemoveId.value = null
 }
+
+function appByName(name: string): ApplicationView | undefined {
+  return applications.value.find(a => a.serverName === name)
+}
+
+async function takeFileVersion(name: string) {
+  const app = appByName(name)
+  if (!app)
+    return
+  await run(async () => {
+    await setExport(app.resourceId, false)
+    await fetchDrift()
+  })
+}
+
+async function writeAppVersion(name: string) {
+  const app = appByName(name)
+  if (!app)
+    return
+  await run(async () => {
+    await setExport(app.resourceId, true)
+    await fetchDrift()
+  })
+}
 </script>
 
 <template>
@@ -166,6 +196,38 @@ async function handleRemove(app: ApplicationView) {
     <p v-if="actionError" class="text-sm text-red-500" role="alert">
       {{ actionError }}
     </p>
+
+    <div v-if="drift.found.length || drift.changed.length" class="flex flex-col gap-2">
+      <div
+        v-for="name in drift.found"
+        :key="`found-${name}`"
+        role="alert"
+        class="rounded border border-warning-line bg-warning-soft text-warning-text px-3 py-2 text-xs flex items-center justify-between gap-3"
+        :data-testid="`application-drift-found-${name}`"
+      >
+        <span>Found {{ name }} — import?</span>
+        <AppButton variant="info" size="sm" @click="run(() => importApplication(name))">
+          Import
+        </AppButton>
+      </div>
+      <div
+        v-for="name in drift.changed"
+        :key="`changed-${name}`"
+        role="alert"
+        class="rounded border border-warning-line bg-warning-soft text-warning-text px-3 py-2 text-xs flex items-center justify-between gap-3"
+        :data-testid="`application-drift-changed-${name}`"
+      >
+        <span>Changed outside the app — {{ name }}</span>
+        <div class="flex items-center gap-2">
+          <AppButton variant="secondary" size="sm" title="Stop mirroring, so the edit in Claude's config stays" @click="run(() => takeFileVersion(name))">
+            Take the change
+          </AppButton>
+          <AppButton variant="info" size="sm" title="Overwrite the edit with the definition stored here" @click="run(() => writeAppVersion(name))">
+            Write the app's version back
+          </AppButton>
+        </div>
+      </div>
+    </div>
 
     <p v-if="panelState === 'loading'" class="text-sm text-fg-mute" aria-live="polite">
       Loading applications…
