@@ -16,6 +16,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/rawrepo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
+	"github.com/lx-wnk/agent-dashboard/server/internal/mcpapps"
 	"github.com/lx-wnk/agent-dashboard/server/internal/pipeline"
 	"github.com/lx-wnk/agent-dashboard/server/internal/sse"
 	"github.com/lx-wnk/agent-dashboard/server/internal/taskcontrol"
@@ -76,6 +77,7 @@ type Handler struct {
 	refineReader      RefineStatusReader
 	checkpointSvc     CheckpointServiceIface
 	notifier          PermissionNotifier
+	grantRepo         repo.GrantRepo
 	allowGitPull      bool
 	bypassAuth        bool
 }
@@ -108,6 +110,9 @@ type Deps struct {
 	// Notifier tells the operator that a run waits for a permission decision.
 	// Nil disables push notifications (no webpush service configured).
 	Notifier PermissionNotifier
+	// GrantRepo persists allow_routine/deny_routine decisions. Nil disables
+	// routine decisions (allow_once/deny_once keep working without it).
+	GrantRepo repo.GrantRepo
 	// AllowGitPull permits the git "pull" action; resolved from the git.allowPull
 	// setting at startup (ApplyRestart).
 	AllowGitPull bool
@@ -136,6 +141,7 @@ func NewHandler(deps Deps) *Handler {
 		refineReader:      deps.RefineReader,
 		checkpointSvc:     deps.CheckpointSvc,
 		notifier:          deps.Notifier,
+		grantRepo:         deps.GrantRepo,
 		allowGitPull:      deps.AllowGitPull,
 		bypassAuth:        deps.BypassAuth,
 	}
@@ -1131,13 +1137,15 @@ func (h *Handler) resolvePermissionRequest(w http.ResponseWriter, r *http.Reques
 	id := chi.URLParam(r, "id")
 	reqID := chi.URLParam(r, "reqID")
 	var body struct {
-		Outcome string `json:"outcome"`
+		Decision string `json:"decision"`
+		Outcome  string `json:"outcome"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		return apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
 	}
-	if body.Outcome != repo.OutcomeGranted && body.Outcome != repo.OutcomeDenied {
-		return apierr.NewAppError(http.StatusBadRequest, "outcome must be granted or denied")
+	decision, err := parseDecision(body.Decision, body.Outcome)
+	if err != nil {
+		return err
 	}
 	// Object-level authz: the request must belong to the task in the URL,
 	// otherwise the nested {taskId}/{reqID} path is not an enforced scope.
@@ -1152,27 +1160,48 @@ func (h *Handler) resolvePermissionRequest(w http.ResponseWriter, r *http.Reques
 	if err != nil || sr.TaskID != id {
 		return apierr.ErrNotFound
 	}
-	if err := h.permRepo.ResolvePermissionRequest(r.Context(), reqID, body.Outcome); err != nil {
+	task, err := h.taskRepo.GetByID(r.Context(), id)
+	if err != nil {
+		return apierr.ErrNotFound
+	}
+	// Validate everything before writing anything: a refused decision must
+	// leave the request pending and the run un-resumed.
+	if err := validateDecision(decision, task, []string{pr.Tool}); err != nil {
+		return err
+	}
+	if (decision == DecisionAllowRoutine || decision == DecisionDenyRoutine) && h.grantRepo == nil {
+		return apierr.NewAppError(http.StatusServiceUnavailable, "grants unavailable")
+	}
+
+	outcome := repo.OutcomeDenied
+	if decision == DecisionAllowOnce || decision == DecisionAllowRoutine {
+		outcome = repo.OutcomeGranted
+	}
+	if err := h.permRepo.ResolvePermissionRequest(r.Context(), reqID, outcome); err != nil {
 		return fmt.Errorf("tasks.resolvePermissionRequest: %w", err)
 	}
 	resolved, err := h.permRepo.GetPermissionRequest(r.Context(), reqID)
 	if err != nil {
 		return fmt.Errorf("tasks.resolvePermissionRequest.get: %w", err)
 	}
-	if body.Outcome == repo.OutcomeGranted {
+
+	if decision == DecisionAllowOnce {
 		entries := []repo.GrantEntry{{Tool: pr.Tool, Pattern: pr.Pattern, DecidedBy: decidedByFromRequest(r)}}
 		if _, errs := h.grantValidatedEntries(r.Context(), id, entries); len(errs) > 0 {
 			slog.Warn("resolvePermissionRequest: grant failed", "taskID", id, "errs", errs)
 		}
-		if _, err := h.orchestrator.ResumeFromUser(r.Context(), id, ""); err != nil {
-			slog.Warn("resolvePermissionRequest: ResumeFromUser failed", "taskID", id, "err", err)
+	}
+	if h.grantRepo != nil {
+		for _, row := range decisionGrants(decision, task, pr.Tool, decidedByFromRequest(r)) {
+			if _, err := mcpapps.EnsureGrant(r.Context(), h.grantRepo, row); err != nil {
+				slog.Warn("resolvePermissionRequest: EnsureGrant failed", "taskID", id, "tool", pr.Tool, "err", err)
+			}
 		}
 	}
-	if body.Outcome == repo.OutcomeDenied {
-		if _, err := h.orchestrator.ResumeFromUser(r.Context(), id, deniedResumePrompt([]string{pr.Tool})); err != nil {
-			slog.Warn("resolvePermissionRequest: ResumeFromUser after refusal failed", "taskID", id, "err", err)
-		}
+	if _, err := h.orchestrator.ResumeFromUser(r.Context(), id, decisionResumePrompt(decision, []string{pr.Tool})); err != nil {
+		slog.Warn("resolvePermissionRequest: ResumeFromUser failed", "taskID", id, "err", err)
 	}
+
 	h.broadcastEnrichedUpdate(r.Context(), id)
 	return jsonReply(w, http.StatusOK, toPermissionRequestResponse(resolved))
 }
