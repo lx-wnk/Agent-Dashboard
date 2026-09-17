@@ -25291,6 +25291,7 @@ type TaskMutation struct {
 	project_id               *string
 	spawner_id               *string
 	routine_id               *string
+	kind                     *string
 	applications             *[]string
 	appendapplications       []string
 	rank                     *float64
@@ -26449,6 +26450,42 @@ func (m *TaskMutation) ResetRoutineID() {
 	delete(m.clearedFields, task.FieldRoutineID)
 }
 
+// SetKind sets the "kind" field.
+func (m *TaskMutation) SetKind(s string) {
+	m.kind = &s
+}
+
+// Kind returns the value of the "kind" field in the mutation.
+func (m *TaskMutation) Kind() (r string, exists bool) {
+	v := m.kind
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldKind returns the old "kind" field's value of the Task entity.
+// If the Task object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TaskMutation) OldKind(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldKind is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldKind requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldKind: %w", err)
+	}
+	return oldValue.Kind, nil
+}
+
+// ResetKind resets all changes to the "kind" field.
+func (m *TaskMutation) ResetKind() {
+	m.kind = nil
+}
+
 // SetApplications sets the "applications" field.
 func (m *TaskMutation) SetApplications(s []string) {
 	m.applications = &s
@@ -26892,7 +26929,7 @@ func (m *TaskMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *TaskMutation) Fields() []string {
-	fields := make([]string, 0, 26)
+	fields := make([]string, 0, 27)
 	if m.slug != nil {
 		fields = append(fields, task.FieldSlug)
 	}
@@ -26959,6 +26996,9 @@ func (m *TaskMutation) Fields() []string {
 	if m.routine_id != nil {
 		fields = append(fields, task.FieldRoutineID)
 	}
+	if m.kind != nil {
+		fields = append(fields, task.FieldKind)
+	}
 	if m.applications != nil {
 		fields = append(fields, task.FieldApplications)
 	}
@@ -27023,6 +27063,8 @@ func (m *TaskMutation) Field(name string) (ent.Value, bool) {
 		return m.SpawnerID()
 	case task.FieldRoutineID:
 		return m.RoutineID()
+	case task.FieldKind:
+		return m.Kind()
 	case task.FieldApplications:
 		return m.Applications()
 	case task.FieldRank:
@@ -27084,6 +27126,8 @@ func (m *TaskMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldSpawnerID(ctx)
 	case task.FieldRoutineID:
 		return m.OldRoutineID(ctx)
+	case task.FieldKind:
+		return m.OldKind(ctx)
 	case task.FieldApplications:
 		return m.OldApplications(ctx)
 	case task.FieldRank:
@@ -27254,6 +27298,13 @@ func (m *TaskMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetRoutineID(v)
+		return nil
+	case task.FieldKind:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetKind(v)
 		return nil
 	case task.FieldApplications:
 		v, ok := value.([]string)
@@ -27541,6 +27592,9 @@ func (m *TaskMutation) ResetField(name string) error {
 		return nil
 	case task.FieldRoutineID:
 		m.ResetRoutineID()
+		return nil
+	case task.FieldKind:
+		m.ResetKind()
 		return nil
 	case task.FieldApplications:
 		m.ResetApplications()

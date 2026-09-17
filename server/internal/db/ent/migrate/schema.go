@@ -955,6 +955,7 @@ var (
 		{Name: "project_id", Type: field.TypeString, Nullable: true},
 		{Name: "spawner_id", Type: field.TypeString, Nullable: true},
 		{Name: "routine_id", Type: field.TypeString, Nullable: true},
+		{Name: "kind", Type: field.TypeString, Default: "pipeline"},
 		{Name: "applications", Type: field.TypeJSON, Default: "[]"},
 		{Name: "rank", Type: field.TypeFloat64, Nullable: true},
 		{Name: "created_at", Type: field.TypeTime},
@@ -984,7 +985,7 @@ var (
 			{
 				Name:    "task_silver_bullet_priority_rank_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{TasksColumns[16], TasksColumns[9], TasksColumns[24], TasksColumns[25]},
+				Columns: []*schema.Column{TasksColumns[16], TasksColumns[9], TasksColumns[25], TasksColumns[26]},
 			},
 		},
 	}

@@ -62,6 +62,8 @@ type Task struct {
 	SpawnerID *string `json:"spawner_id,omitempty"`
 	// RoutineID holds the value of the "routine_id" field.
 	RoutineID *string `json:"routine_id,omitempty"`
+	// Kind holds the value of the "kind" field.
+	Kind string `json:"kind,omitempty"`
 	// Applications holds the value of the "applications" field.
 	Applications []string `json:"applications,omitempty"`
 	// Rank holds the value of the "rank" field.
@@ -140,7 +142,7 @@ func (*Task) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullFloat64)
 		case task.FieldMaxIterations, task.FieldTokenBudget, task.FieldCostBudgetCents, task.FieldStageTimeoutSeconds:
 			values[i] = new(sql.NullInt64)
-		case task.FieldID, task.FieldSlug, task.FieldTitle, task.FieldDescription, task.FieldCwd, task.FieldWorktreePath, task.FieldSourceBranch, task.FieldTargetBranch, task.FieldCurrentStage, task.FieldPriority, task.FieldUserID, task.FieldParentTaskID, task.FieldAutonomy, task.FieldProjectID, task.FieldSpawnerID, task.FieldRoutineID:
+		case task.FieldID, task.FieldSlug, task.FieldTitle, task.FieldDescription, task.FieldCwd, task.FieldWorktreePath, task.FieldSourceBranch, task.FieldTargetBranch, task.FieldCurrentStage, task.FieldPriority, task.FieldUserID, task.FieldParentTaskID, task.FieldAutonomy, task.FieldProjectID, task.FieldSpawnerID, task.FieldRoutineID, task.FieldKind:
 			values[i] = new(sql.NullString)
 		case task.FieldCreatedAt, task.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -309,6 +311,12 @@ func (_m *Task) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.RoutineID = new(string)
 				*_m.RoutineID = value.String
+			}
+		case task.FieldKind:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field kind", values[i])
+			} else if value.Valid {
+				_m.Kind = value.String
 			}
 		case task.FieldApplications:
 			if value, ok := values[i].(*[]byte); !ok {
@@ -480,6 +488,9 @@ func (_m *Task) String() string {
 		builder.WriteString("routine_id=")
 		builder.WriteString(*v)
 	}
+	builder.WriteString(", ")
+	builder.WriteString("kind=")
+	builder.WriteString(_m.Kind)
 	builder.WriteString(", ")
 	builder.WriteString("applications=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Applications))

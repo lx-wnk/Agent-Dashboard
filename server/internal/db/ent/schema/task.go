@@ -47,6 +47,9 @@ func (Task) Fields() []ent.Field {
 		// the scheduler only and never accepted from a request body — a
 		// caller-writable routine id would let any task claim a routine's grants.
 		field.String("routine_id").Optional().Nillable(),
+		// kind is "pipeline" (runs the stage order) or "job" (one agent run,
+		// no worktree, never on the board). Set by the scheduler only.
+		field.String("kind").Default("pipeline"),
 		field.JSON("applications", []string{}).
 			Default([]string{}).
 			Annotations(entsql.Default("[]")),

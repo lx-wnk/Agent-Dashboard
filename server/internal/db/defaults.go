@@ -15,4 +15,5 @@ const (
 	DefaultAutonomy            = "spec_gated"
 	DefaultPlanMode            = false
 	DefaultPlanIterationCap    = 3
+	DefaultKind                = "pipeline"
 )

@@ -699,16 +699,20 @@ func init() {
 	taskDescAutonomy := taskFields[18].Descriptor()
 	// task.DefaultAutonomy holds the default value on creation for the autonomy field.
 	task.DefaultAutonomy = taskDescAutonomy.Default.(string)
+	// taskDescKind is the schema descriptor for kind field.
+	taskDescKind := taskFields[23].Descriptor()
+	// task.DefaultKind holds the default value on creation for the kind field.
+	task.DefaultKind = taskDescKind.Default.(string)
 	// taskDescApplications is the schema descriptor for applications field.
-	taskDescApplications := taskFields[23].Descriptor()
+	taskDescApplications := taskFields[24].Descriptor()
 	// task.DefaultApplications holds the default value on creation for the applications field.
 	task.DefaultApplications = taskDescApplications.Default.([]string)
 	// taskDescCreatedAt is the schema descriptor for created_at field.
-	taskDescCreatedAt := taskFields[25].Descriptor()
+	taskDescCreatedAt := taskFields[26].Descriptor()
 	// task.DefaultCreatedAt holds the default value on creation for the created_at field.
 	task.DefaultCreatedAt = taskDescCreatedAt.Default.(func() time.Time)
 	// taskDescUpdatedAt is the schema descriptor for updated_at field.
-	taskDescUpdatedAt := taskFields[26].Descriptor()
+	taskDescUpdatedAt := taskFields[27].Descriptor()
 	// task.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	task.DefaultUpdatedAt = taskDescUpdatedAt.Default.(func() time.Time)
 	// task.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
