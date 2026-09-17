@@ -60,7 +60,9 @@ func TestRefresh_SeedsCapabilitiesAsAskAndNeverDowngradesAnExistingClass(t *test
 
 	apps := repo.NewMCPApplicationRepo(bundle.Client)
 	caps := repo.NewCapabilityRepo(bundle.Client)
-	app, err := apps.Upsert(ctx, repo.UpsertMCPApplicationInput{ResourceID: "res-mail", ServerName: "mail"})
+	app, err := apps.Upsert(ctx, repo.UpsertMCPApplicationInput{
+		ResourceID: "res-mail", ServerName: "mail", Entry: json.RawMessage(`{"command":"unused"}`),
+	})
 	require.NoError(t, err)
 
 	_, err = caps.Upsert(ctx, repo.UpsertCapabilityInput{
@@ -74,11 +76,8 @@ func TestRefresh_SeedsCapabilitiesAsAskAndNeverDowngradesAnExistingClass(t *test
 		Apps:         apps,
 		Secrets:      repo.NewApplicationSecretRepo(bundle.Client, nil),
 		Capabilities: caps,
-		ReadServers: func() (map[string]json.RawMessage, error) {
-			return map[string]json.RawMessage{"mail": json.RawMessage(`{"command":"unused"}`)}, nil
-		},
-		Transport: func(mcpapps.ServerEntry, map[string]string) (mcp.Transport, error) { return transport, nil },
-		Now:       time.Now,
+		Transport:    func(mcpapps.ServerEntry, map[string]string) (mcp.Transport, error) { return transport, nil },
+		Now:          time.Now,
 	}
 	tools, err := r.Refresh(ctx, app.ResourceID)
 	require.NoError(t, err)
@@ -97,4 +96,33 @@ func TestRefresh_SeedsCapabilitiesAsAskAndNeverDowngradesAnExistingClass(t *test
 	require.NoError(t, err)
 	require.Len(t, stored.Catalogue, 2)
 	require.Empty(t, stored.CatalogueError)
+}
+
+func TestRefresh_NonStdioEntryFailsWithExistingMessage(t *testing.T) {
+	bundle, err := db.Open(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+	ctx := context.Background()
+
+	apps := repo.NewMCPApplicationRepo(bundle.Client)
+	caps := repo.NewCapabilityRepo(bundle.Client)
+	app, err := apps.Upsert(ctx, repo.UpsertMCPApplicationInput{
+		ResourceID: "res-mail", ServerName: "mail",
+		Entry: json.RawMessage(`{"type":"http","url":"https://example.com"}`),
+	})
+	require.NoError(t, err)
+
+	r := mcpapps.Refresher{
+		Apps:         apps,
+		Secrets:      repo.NewApplicationSecretRepo(bundle.Client, nil),
+		Capabilities: caps,
+		Transport:    mcpapps.StdioTransport,
+		Now:          time.Now,
+	}
+	_, err = r.Refresh(ctx, app.ResourceID)
+	require.ErrorContains(t, err, "supports stdio servers only")
+
+	stored, err := apps.GetByResourceID(ctx, app.ResourceID)
+	require.NoError(t, err)
+	require.Contains(t, stored.CatalogueError, "supports stdio servers only")
 }

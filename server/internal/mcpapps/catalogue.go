@@ -2,7 +2,6 @@ package mcpapps
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -85,7 +84,6 @@ type Refresher struct {
 	Apps         repo.MCPApplicationRepo
 	Secrets      repo.ApplicationSecretRepo
 	Capabilities repo.CapabilityRepo
-	ReadServers  func() (map[string]json.RawMessage, error)
 	Transport    func(entry ServerEntry, env map[string]string) (mcp.Transport, error)
 	Now          func() time.Time
 }
@@ -126,15 +124,7 @@ func (r Refresher) Refresh(ctx context.Context, resourceID string) ([]schema.Cat
 }
 
 func (r Refresher) list(ctx context.Context, app *ent.MCPApplication) ([]schema.CatalogueTool, error) {
-	servers, err := r.ReadServers()
-	if err != nil {
-		return nil, err
-	}
-	raw, ok := servers[app.ServerName]
-	if !ok {
-		return nil, fmt.Errorf("server %q is no longer in ~/.claude.json", app.ServerName)
-	}
-	entry, err := ParseEntry(raw)
+	entry, err := ParseEntry(app.Entry)
 	if err != nil {
 		return nil, err
 	}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/capability"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
@@ -28,7 +27,7 @@ func (e *MissingSecretError) Error() string {
 type MissingServerError struct{ Server string }
 
 func (e *MissingServerError) Error() string {
-	return fmt.Sprintf("application %q is attached but no longer registered in ~/.claude.json", e.Server)
+	return fmt.Sprintf("application %q is attached but has no server definition", e.Server)
 }
 
 type Resolver struct {
@@ -36,7 +35,6 @@ type Resolver struct {
 	Secrets      repo.ApplicationSecretRepo
 	Grants       repo.GrantRepo
 	Capabilities repo.CapabilityRepo
-	ReadServers  func() (map[string]json.RawMessage, error)
 }
 
 // ResolveRun decides what one run gets. It calls capability.Decide directly and
@@ -45,11 +43,6 @@ type Resolver struct {
 func (r Resolver) ResolveRun(ctx context.Context, task *ent.Task) (RunApplications, error) {
 	out := RunApplications{Servers: map[string]json.RawMessage{}, CatalogueTools: map[string]bool{}}
 
-	servers, err := r.ReadServers()
-	if err != nil {
-		slog.Warn("mcpapps: ~/.claude.json unreadable — run gets no MCP applications", "task", task.ID, "err", err)
-		return out, nil
-	}
 	apps, err := r.Apps.List(ctx)
 	if err != nil {
 		return RunApplications{}, fmt.Errorf("mcpapps.ResolveRun: %w", err)
@@ -66,8 +59,7 @@ func (r Resolver) ResolveRun(ctx context.Context, task *ent.Task) (RunApplicatio
 		if !explicit && !app.AttachAll {
 			continue
 		}
-		raw, ok := servers[app.ServerName]
-		if !ok {
+		if IsEmptyEntry(app.Entry) {
 			if explicit {
 				return RunApplications{}, &MissingServerError{Server: app.ServerName}
 			}
@@ -82,7 +74,7 @@ func (r Resolver) ResolveRun(ctx context.Context, task *ent.Task) (RunApplicatio
 				return RunApplications{}, &MissingSecretError{Server: app.ServerName, EnvName: name}
 			}
 		}
-		merged, err := WithEnv(raw, values)
+		merged, err := WithEnv(app.Entry, values)
 		if err != nil {
 			return RunApplications{}, err
 		}

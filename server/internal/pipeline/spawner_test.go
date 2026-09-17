@@ -581,8 +581,8 @@ func TestSpawnStageAgent_CQ06_WarnsAndContinuesUnderAllowAllAutonomy(t *testing.
 // shows up here.
 func spawnRecording(t *testing.T, userConfigJSON string, opts pipeline.SpawnAgentOptions) ([]string, map[string]json.RawMessage) {
 	t.Helper()
-	// SpawnStageAgent no longer reads ~/.claude.json itself — the resolver
-	// (mcpapps.Resolver.ReadServers) does that upstream and hands the result
+	// SpawnStageAgent no longer reads the server definitions itself — the
+	// resolver does that upstream and hands the result
 	// through opts.Applications.Servers, so the test simulates that hand-off
 	// directly instead of writing a real user-scope config file.
 	if userConfigJSON != "" {

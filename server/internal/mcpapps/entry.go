@@ -25,6 +25,13 @@ func (e ServerEntry) IsStdio() bool {
 	return (e.Type == "" || e.Type == "stdio") && e.Command != ""
 }
 
+// IsEmptyEntry reports whether raw is the schema default for
+// MCPApplication.Entry — unset or "{}" — meaning nobody has stored a server
+// definition for this application yet.
+func IsEmptyEntry(raw json.RawMessage) bool {
+	return len(raw) == 0 || string(raw) == "{}"
+}
+
 // WithEnv merges env into the entry's "env" object. It works on the raw object
 // rather than ServerEntry so fields the Claude CLI may add to an entry are kept.
 func WithEnv(raw json.RawMessage, env map[string]string) (json.RawMessage, error) {
