@@ -840,7 +840,7 @@ func stageKindViolation(kind, stage string) string {
 - Produces: `func JobPrompt(t *ent.Task) PromptBundle`; handler registered under `"job"`; `ValidateStageOutput("job", out)` requires `summary` (string, non-empty) and `result` (string).
 
 - [ ] **Step 1: Write the failing tests:**
-  - `TestJobPrompt_CarriesTitleDescriptionAndContract`: `JobPrompt(&ent.Task{Title: "Triage inbox", Description: ptr("Sort new mail")})` → `UserPrompt` contains `Triage inbox`, `Sort new mail`, `set_stage_output`, `"summary"`, `"result"`; `SystemPrompt` contains `sharedContext`'s first sentence and does NOT contain `git`, `commit`, `review`, `finalization` (case-insensitive).
+  - `TestJobPrompt_CarriesTitleDescriptionAndContract`: `JobPrompt(&ent.Task{Title: "Triage inbox", Description: ptr("Sort new mail")})` → `UserPrompt` contains `Triage inbox`, `Sort new mail`, `set_stage_output`, `"summary"`, `"result"`; `SystemPrompt` starts with `sharedContext` and does NOT contain `git`, `commit`, `worktree`, `self_review`, `finalization` (case-insensitive; `review` alone is not forbidden because `sharedContext` says a human will review the output).
   - `TestValidateStageOutput_Job`: `{"summary":"done","result":"3 mails"}` OK; missing `summary` → not OK, message names `summary`; `summary` empty string → not OK; missing `result` → not OK; `result` not a string → not OK.
   - `TestStageHandlers_RegistersJob`: `pipeline.HandlersByStage["job"]` non-nil and `RequiresAgent()` true.
 - [ ] **Step 2: Run** `go test ./internal/pipeline/ -run 'TestJobPrompt|TestValidateStageOutput_Job|TestStageHandlers_RegistersJob'` — compile error / FAIL.
@@ -852,7 +852,7 @@ func stageKindViolation(kind, stage string) string {
 func JobPrompt(t *ent.Task) PromptBundle {
 	systemPrompt := sharedContext + "\n\nYou run one unattended job for a routine. Work in the current directory. " +
 		"If you need a tool you do not have, call `request_permission` once with every tool you need; " +
-		"a human decides and the job continues afterwards.\n\n" + upfrontPermissionsDirective
+		"a human decides and the job continues afterwards.\n\n" + jobPermissionsDirective
 	userPrompt := fmt.Sprintf(`## Job: %s
 
 %s
@@ -866,7 +866,7 @@ If `+"`set_stage_output`"+` is unavailable, instead emit the same object as a `+
 }
 ```
 
-  Check `upfrontPermissionsDirective` for the words the test forbids (it names `git commit*` as an example): if it does, write a job-specific directive without the git examples instead of relaxing the test.
+  `upfrontPermissionsDirective` names `git commit*` as an example, so the job prompt uses its own `jobPermissionsDirective` (same instruction, no git examples) instead of relaxing the test.
 
   `stage_handlers.go`: `func jobBuilder(ctx *StageContext) PromptBundle { return JobPrompt(ctx.Task) }` and registry entry `StageJob: createAgentStage(StageJob, jobBuilder, spawnFn),`.
 
