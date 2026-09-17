@@ -3,6 +3,7 @@ package applications
 import (
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"regexp"
 	"slices"
@@ -14,6 +15,7 @@ import (
 	"github.com/lx-wnk/agent-dashboard/server/internal/apierr"
 	"github.com/lx-wnk/agent-dashboard/server/internal/auth"
 	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
+	"github.com/lx-wnk/agent-dashboard/server/internal/claudeconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/mcpapps"
@@ -38,6 +40,8 @@ func NewHandler(apps repo.MCPApplicationRepo, secrets repo.ApplicationSecretRepo
 func (h *Handler) Mount(r chi.Router) {
 	r.Get("/api/applications", apierr.ErrorMiddleware(h.list))
 	r.Post("/api/applications", apierr.ErrorMiddleware(h.create))
+	r.Get("/api/applications/drift", apierr.ErrorMiddleware(h.drift))
+	r.Post("/api/applications/import", apierr.ErrorMiddleware(h.importApplication))
 	r.Patch("/api/applications/{resourceId}", apierr.ErrorMiddleware(h.patch))
 	r.Put("/api/applications/{resourceId}/secrets/{envName}", apierr.ErrorMiddleware(h.putSecret))
 	r.Delete("/api/applications/{resourceId}/secrets/{envName}", apierr.ErrorMiddleware(h.deleteSecret))
@@ -152,9 +156,10 @@ func (h *Handler) patch(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	var body struct {
-		AttachAll   *bool                `json:"attachAll"`
-		RequiredEnv *[]string            `json:"requiredEnv"`
-		Entry       *mcpapps.ServerEntry `json:"entry"`
+		AttachAll      *bool                `json:"attachAll"`
+		RequiredEnv    *[]string            `json:"requiredEnv"`
+		Entry          *mcpapps.ServerEntry `json:"entry"`
+		ExportToClaude *bool                `json:"exportToClaude"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		return apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
@@ -183,11 +188,103 @@ func (h *Handler) patch(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 	}
+	// Export runs after the entry write above so a PATCH carrying both entry
+	// and exportToClaude mirrors the new entry into Claude's config, not the
+	// stale one.
+	exportToClaude := app.ExportToClaude
+	if body.ExportToClaude != nil {
+		exportToClaude = *body.ExportToClaude
+	}
+	if body.ExportToClaude != nil || (exportToClaude && body.Entry != nil) {
+		if app, err = h.applyExport(r, app, exportToClaude); err != nil {
+			return err
+		}
+	}
 	v, err := h.view(r, app)
 	if err != nil {
 		return err
 	}
 	return writeJSON(w, http.StatusOK, v)
+}
+
+// applyExport mirrors app's entry into Claude's own config, or removes it, and
+// records the outcome on the row. A write failure answers 502 and leaves the
+// database untouched — the flag and hash must not move ahead of the file.
+func (h *Handler) applyExport(r *http.Request, app *ent.MCPApplication, export bool) (*ent.MCPApplication, error) {
+	if export {
+		if err := claudeconfig.WriteServerEntry(app.ServerName, app.Entry); err != nil {
+			return nil, apierr.NewAppError(http.StatusBadGateway, "write Claude config: "+err.Error())
+		}
+		return h.apps.SetExport(r.Context(), app.ResourceID, true, mcpapps.EntryHash(app.Entry))
+	}
+	if err := claudeconfig.RemoveServerEntry(app.ServerName); err != nil {
+		return nil, apierr.NewAppError(http.StatusBadGateway, "write Claude config: "+err.Error())
+	}
+	return h.apps.SetExport(r.Context(), app.ResourceID, false, "")
+}
+
+func (h *Handler) drift(w http.ResponseWriter, r *http.Request) error {
+	servers, readErr := claudeconfig.UserMCPServers()
+	if readErr != nil {
+		// An unreadable config is not "every exported server changed" — it is
+		// no information at all, and the panel must not accuse the operator of
+		// edits they did not make.
+		slog.Warn("applications: Claude config unreadable — drift not reported", "err", readErr)
+		return writeJSON(w, http.StatusOK, mcpapps.Drift{Found: []string{}, Changed: []string{}})
+	}
+	apps, err := h.apps.List(r.Context())
+	if err != nil {
+		return err
+	}
+	return writeJSON(w, http.StatusOK, mcpapps.DetectDrift(servers, apps))
+}
+
+func (h *Handler) importApplication(w http.ResponseWriter, r *http.Request) error {
+	var body struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		return apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
+	}
+	if channelconfig.IsReservedServerName(body.Name) {
+		return apierr.NewAppError(http.StatusBadRequest, body.Name+" is a reserved server name")
+	}
+	servers, err := claudeconfig.UserMCPServers()
+	if err != nil {
+		return err
+	}
+	entry, ok := servers[body.Name]
+	if !ok {
+		return apierr.NewAppError(http.StatusNotFound, "no server named \""+body.Name+"\" in Claude's config")
+	}
+
+	existing, err := h.apps.List(r.Context())
+	if err != nil {
+		return err
+	}
+	for _, app := range existing {
+		if app.ServerName == body.Name {
+			return apierr.NewAppError(http.StatusConflict, body.Name+" already exists")
+		}
+	}
+
+	res, err := mcpapps.EnsureResource(r.Context(), h.resources, body.Name)
+	if err != nil {
+		return err
+	}
+	app, err := h.apps.Upsert(r.Context(), repo.UpsertMCPApplicationInput{
+		ResourceID: res.ID,
+		ServerName: body.Name,
+		Entry:      entry,
+	})
+	if err != nil {
+		return err
+	}
+	v, err := h.view(r, app)
+	if err != nil {
+		return err
+	}
+	return writeJSON(w, http.StatusCreated, v)
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {

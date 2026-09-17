@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/applications"
+	"github.com/lx-wnk/agent-dashboard/server/internal/claudeconfig"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/schema"
@@ -333,4 +335,179 @@ func TestDeleteApplication_UnknownIdIs404(t *testing.T) {
 	mux, _, _, _, _, _ := newMux(t)
 	rec := do(t, mux, http.MethodDelete, "/api/applications/res-nope", nil)
 	require.Equal(t, http.StatusNotFound, rec.Code)
+}
+
+func TestPatch_ExportToClaudeWritesFileAndStoresHash(t *testing.T) {
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	mux, apps, _, _, _, _ := newMux(t)
+	ctx := context.Background()
+	_, err := apps.SetEntry(ctx, "res-mail", json.RawMessage(`{"command":"uvx"}`))
+	require.NoError(t, err)
+
+	rec := do(t, mux, http.MethodPatch, "/api/applications/res-mail", map[string]any{"exportToClaude": true})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	servers, err := claudeconfig.UserMCPServers()
+	require.NoError(t, err)
+	require.Contains(t, servers, "mail")
+
+	app, err := apps.GetByResourceID(ctx, "res-mail")
+	require.NoError(t, err)
+	require.True(t, app.ExportToClaude)
+	require.NotEmpty(t, app.ExportedHash)
+	require.Equal(t, mcpapps.EntryHash(app.Entry), app.ExportedHash)
+}
+
+func TestPatch_UnexportRemovesFileEntryAndClearsHash(t *testing.T) {
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	mux, apps, _, _, _, _ := newMux(t)
+	ctx := context.Background()
+	_, err := apps.SetEntry(ctx, "res-mail", json.RawMessage(`{"command":"uvx"}`))
+	require.NoError(t, err)
+	rec := do(t, mux, http.MethodPatch, "/api/applications/res-mail", map[string]any{"exportToClaude": true})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	rec = do(t, mux, http.MethodPatch, "/api/applications/res-mail", map[string]any{"exportToClaude": false})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	servers, err := claudeconfig.UserMCPServers()
+	require.NoError(t, err)
+	require.NotContains(t, servers, "mail")
+
+	app, err := apps.GetByResourceID(ctx, "res-mail")
+	require.NoError(t, err)
+	require.False(t, app.ExportToClaude)
+	require.Equal(t, "", app.ExportedHash)
+}
+
+func TestPatch_EntryChangeWhileExportedRewritesFileAndHash(t *testing.T) {
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	mux, apps, _, _, _, _ := newMux(t)
+	ctx := context.Background()
+	_, err := apps.SetEntry(ctx, "res-mail", json.RawMessage(`{"command":"uvx"}`))
+	require.NoError(t, err)
+	rec := do(t, mux, http.MethodPatch, "/api/applications/res-mail", map[string]any{"exportToClaude": true})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	rec = do(t, mux, http.MethodPatch, "/api/applications/res-mail", map[string]any{
+		"entry": map[string]any{"command": "npx"},
+	})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	servers, err := claudeconfig.UserMCPServers()
+	require.NoError(t, err)
+	var entry mcpapps.ServerEntry
+	require.NoError(t, json.Unmarshal(servers["mail"], &entry))
+	require.Equal(t, "npx", entry.Command)
+
+	app, err := apps.GetByResourceID(ctx, "res-mail")
+	require.NoError(t, err)
+	require.Equal(t, mcpapps.EntryHash(app.Entry), app.ExportedHash)
+}
+
+func TestPatch_ExportWriteFailureIs502AndLeavesRowUntouched(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	target := dir + "/real.json"
+	require.NoError(t, os.WriteFile(target, []byte(`{"mcpServers":{}}`), 0o600))
+	require.NoError(t, os.Symlink(target, dir+"/.claude.json"))
+
+	mux, apps, _, _, _, _ := newMux(t)
+	ctx := context.Background()
+	_, err := apps.SetEntry(ctx, "res-mail", json.RawMessage(`{"command":"uvx"}`))
+	require.NoError(t, err)
+
+	rec := do(t, mux, http.MethodPatch, "/api/applications/res-mail", map[string]any{"exportToClaude": true})
+	require.Equal(t, http.StatusBadGateway, rec.Code, rec.Body.String())
+
+	app, err := apps.GetByResourceID(ctx, "res-mail")
+	require.NoError(t, err)
+	require.False(t, app.ExportToClaude)
+	require.Equal(t, "", app.ExportedHash)
+}
+
+func TestDrift_ReportsServerWithNoApplicationRow(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	require.NoError(t, os.WriteFile(dir+"/.claude.json", []byte(`{"mcpServers":{"notes":{"command":"x"}}}`), 0o600))
+	mux, _, _, _, _, _ := newMux(t)
+
+	rec := do(t, mux, http.MethodGet, "/api/applications/drift", nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.JSONEq(t, `{"found":["notes"],"changed":[]}`, rec.Body.String())
+}
+
+func TestImportApplication_CopiesEntryFromClaudeConfig(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	require.NoError(t, os.WriteFile(dir+"/.claude.json", []byte(`{"mcpServers":{"notes":{"command":"uvx","args":["notes-mcp"]}}}`), 0o600))
+	mux, apps, _, _, _, _ := newMux(t)
+
+	rec := do(t, mux, http.MethodPost, "/api/applications/import", map[string]any{"name": "notes"})
+	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
+
+	var view struct {
+		ResourceID     string              `json:"resourceId"`
+		ServerName     string              `json:"serverName"`
+		ExportToClaude bool                `json:"exportToClaude"`
+		Entry          mcpapps.ServerEntry `json:"entry"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &view))
+	require.Equal(t, "notes", view.ServerName)
+	require.False(t, view.ExportToClaude)
+	require.Equal(t, mcpapps.ServerEntry{Command: "uvx", Args: []string{"notes-mcp"}}, view.Entry)
+
+	app, err := apps.GetByResourceID(context.Background(), view.ResourceID)
+	require.NoError(t, err)
+	storedEntry, err := mcpapps.ParseEntry(app.Entry)
+	require.NoError(t, err)
+	require.Equal(t, mcpapps.ServerEntry{Command: "uvx", Args: []string{"notes-mcp"}}, storedEntry)
+}
+
+func TestImportApplication_UnknownNameIs404(t *testing.T) {
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	mux, _, _, _, _, _ := newMux(t)
+
+	rec := do(t, mux, http.MethodPost, "/api/applications/import", map[string]any{"name": "mail"})
+	require.Equal(t, http.StatusNotFound, rec.Code, rec.Body.String())
+	var errBody struct {
+		Error string `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &errBody))
+	require.Equal(t, `no server named "mail" in Claude's config`, errBody.Error)
+}
+
+func TestImportApplication_ExistingRowIs409(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	require.NoError(t, os.WriteFile(dir+"/.claude.json", []byte(`{"mcpServers":{"mail":{"command":"x"}}}`), 0o600))
+	mux, _, _, _, _, _ := newMux(t)
+
+	rec := do(t, mux, http.MethodPost, "/api/applications/import", map[string]any{"name": "mail"})
+	require.Equal(t, http.StatusConflict, rec.Code, rec.Body.String())
+}
+
+func TestImportApplication_ReservedNameIs400(t *testing.T) {
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	mux, _, _, _, _, _ := newMux(t)
+
+	rec := do(t, mux, http.MethodPost, "/api/applications/import", map[string]any{"name": "dashboard-channel"})
+	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+}
+
+func TestDrift_UnreadableConfigReportsNothingRatherThanEverything(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	require.NoError(t, os.WriteFile(dir+"/.claude.json", []byte(`{ not json`), 0o600))
+	mux, apps, _, _, _, _ := newMux(t)
+	ctx := context.Background()
+	_, err := apps.SetEntry(ctx, "res-mail", json.RawMessage(`{"command":"x"}`))
+	require.NoError(t, err)
+	_, err = apps.SetExport(ctx, "res-mail", true, mcpapps.EntryHash([]byte(`{"command":"x"}`)))
+	require.NoError(t, err)
+
+	rec := do(t, mux, http.MethodGet, "/api/applications/drift", nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.JSONEq(t, `{"found":[],"changed":[]}`, rec.Body.String(),
+		"a config that cannot be read is no information, not evidence of an edit")
 }
