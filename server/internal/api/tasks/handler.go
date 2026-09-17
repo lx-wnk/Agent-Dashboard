@@ -1124,6 +1124,11 @@ func (h *Handler) resolvePermissionRequest(w http.ResponseWriter, r *http.Reques
 			slog.Warn("resolvePermissionRequest: ResumeFromUser failed", "taskID", id, "err", err)
 		}
 	}
+	if body.Outcome == repo.OutcomeDenied {
+		if _, err := h.orchestrator.ResumeFromUser(r.Context(), id, deniedResumePrompt([]string{pr.Tool})); err != nil {
+			slog.Warn("resolvePermissionRequest: ResumeFromUser after refusal failed", "taskID", id, "err", err)
+		}
+	}
 	h.broadcastEnrichedUpdate(r.Context(), id)
 	return jsonReply(w, http.StatusOK, toPermissionRequestResponse(resolved))
 }

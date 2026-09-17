@@ -401,6 +401,12 @@ func (h *Handler) bulkCreatePermissionRequests(w http.ResponseWriter, r *http.Re
 	return jsonReply(w, http.StatusOK, results)
 }
 
+// deniedResumePrompt is what a resumed agent is told after a human refused tools.
+func deniedResumePrompt(tools []string) string {
+	return "A human refused permission to use: " + strings.Join(tools, ", ") +
+		". Continue without these tools and state in your output what you could not do because of that."
+}
+
 // bulkResolvePermissionRequests handles POST /api/permission-requests/bulk-resolve.
 func (h *Handler) bulkResolvePermissionRequests(w http.ResponseWriter, r *http.Request) error {
 	var body struct {
@@ -512,6 +518,21 @@ func (h *Handler) bulkResolvePermissionRequests(w http.ResponseWriter, r *http.R
 					slog.Warn("bulk_resolve: remember: UpsertBatch failed", "taskID", body.TaskID, "err", err)
 				}
 			}
+		}
+	}
+	if outcome == repo.OutcomeDenied && len(idsToResolve) > 0 {
+		resolveSet := make(map[string]bool, len(idsToResolve))
+		for _, id := range idsToResolve {
+			resolveSet[id] = true
+		}
+		var tools []string
+		for _, req := range pending {
+			if resolveSet[req.ID] {
+				tools = append(tools, req.Tool)
+			}
+		}
+		if _, err := h.orchestrator.ResumeFromUser(r.Context(), body.TaskID, deniedResumePrompt(tools)); err != nil {
+			slog.Warn("bulk_resolve: ResumeFromUser after refusal failed", "taskID", body.TaskID, "err", err)
 		}
 	}
 
