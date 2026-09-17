@@ -921,6 +921,7 @@ If `+"`set_stage_output`"+` is unavailable, instead emit the same object as a `+
 **Files:**
 - Modify: `server/internal/db/ent/schema/task_schedule.go:39` (remove `current_stage`; add `run_mode`, `last_skipped_at`, `skipped_count`)
 - Modify: `server/internal/db/client.go:443-444` (remove the two `task_schedules` renames), new `migrateRoutineRunModes` after `migrateRenameStages` (`:192-195`)
+- Modify: `server/internal/db/repo/task_schedule_repo.go:44, 134-136` (remove `CreateTaskScheduleInput.CurrentStage` and its setter — the generated `SetCurrentStage` no longer exists, so this cannot wait for Task 2.6)
 - Regenerate: `server/internal/db/ent/`
 - Test: `server/internal/db/client_test.go` (next to `TestOpen_RenameStagesRunsOnlyOnce`, `:775`)
 
@@ -976,7 +977,7 @@ func migrateRoutineRunModes(db *sql.DB) error {
 
 - [ ] **Step 1: Write the failing tests:** create without `RunMode` → `job`; create with `pipeline` → `pipeline`; update `RunMode: ptr("pipeline")` persists; `RecordSkip` twice → `SkippedCount == 2`, `LastSkippedAt` equals the second `at` (truncate to second); `RecordSkip` on an unknown id → `ent.IsNotFound(err)`; create with `RunMode: "cron"` → error containing `run mode`.
 - [ ] **Step 2: Run** `go test ./internal/db/repo/ -run 'TestTaskSchedule_RunMode|TestTaskSchedule_RecordSkip'` — compile error.
-- [ ] **Step 3: Implement.** Constants and `IsValidRunMode` at the top of the file. `Create`: `if in.RunMode != "" { if !IsValidRunMode(in.RunMode) { return nil, fmt.Errorf("task_schedule.create: invalid run mode %q", in.RunMode) }; q = q.SetRunMode(in.RunMode) }` — delete the `CurrentStage` block (`:134-136`). `Update`: same validation for `in.RunMode != nil`, `SetRunMode`. `RecordSkip`:
+- [ ] **Step 3: Implement.** Constants and `IsValidRunMode` at the top of the file. `Create`: `if in.RunMode != "" { if !IsValidRunMode(in.RunMode) { return nil, fmt.Errorf("task_schedule.create: invalid run mode %q", in.RunMode) }; q = q.SetRunMode(in.RunMode) }` — `Update`: same validation for `in.RunMode != nil`, `SetRunMode`. `RecordSkip`:
 
 ```go
 func (r *entTaskScheduleRepo) RecordSkip(ctx context.Context, id string, at time.Time) (*ent.TaskSchedule, error) {
@@ -988,7 +989,7 @@ func (r *entTaskScheduleRepo) RecordSkip(ctx context.Context, id string, at time
 }
 ```
 
-  Every compile error from the removed `CurrentStage` field (the MCP tool, tests) is fixed by deleting the field from the literal — nothing reads it.
+  (`CreateTaskScheduleInput.CurrentStage` was already removed in Task 2.5.)
 - [ ] **Step 4: Run** — PASS; `go vet ./...` from `server/` PASS.
 - [ ] **Step 5: Mutation** — drop `AddSkippedCount(1)` → count test red; restore identical.
 - [ ] **Step 6: Commit** `feat(routines): persist run modes and count skipped fires`.
