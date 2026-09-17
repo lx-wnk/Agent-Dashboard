@@ -143,6 +143,10 @@ claude mcp remove --scope user My_Mail
 claude mcp add --scope user my-mail -- npx -y imap-mcp-server
 ```
 
+### Routine run modes over MCP
+
+`manage_schedule` takes `runMode` on `create` and `update`: `job` (the default) fires one agent run in the routine's working directory, `pipeline` fires a pipeline task that starts in `ready`. A `pipeline` routine needs a git working directory — the tool refuses anything else with `working directory is not a git repository`, and an unknown value with `runMode must be job or pipeline`, exactly as `POST`/`PATCH /api/schedules` do.
+
 ### Which runs get a server
 
 A run receives the dashboard's own servers, every application marked **Attach to every run**, and the applications of the routine that created its task — nothing else from `~/.claude.json`.
