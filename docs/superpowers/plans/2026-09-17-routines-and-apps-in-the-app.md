@@ -1067,7 +1067,8 @@ func (r *entTaskScheduleRepo) RecordSkip(ctx context.Context, id string, at time
 - Modify: `server/internal/api/schedules/view.go:12-35` (`scheduleBody.RunMode string`), `:38-63` (`scheduleView`: `RunMode`, `LastSkippedAt *string`, `SkippedCount int`), `:65-99` (`toView`)
 - Modify: `server/internal/api/schedules/handler.go:111-253` (create, update validation)
 - Modify: `server/internal/worktree/worktree.go` (new exported `IsGitWorkTree`)
-- Test: `server/internal/api/schedules/handler_test.go` (extend), `server/internal/worktree/worktree_git_check_test.go` (new)
+- Create: `server/internal/scheduler/run_mode.go` (`CheckRunMode`, the one rule the REST handler and the MCP tool share — both already import `scheduler`, `worktree` imports nothing from the project)
+- Test: `server/internal/api/schedules/handler_test.go` (extend), `server/internal/worktree/worktree_git_check_test.go` (new), `server/internal/scheduler/run_mode_test.go` (new)
 
 **Interfaces:**
 - Consumes: `repo.IsValidRunMode`, `RunMode` inputs (Task 2.6).
@@ -1087,23 +1088,26 @@ func IsGitWorkTree(ctx context.Context, dir string) bool {
 }
 ```
 
-  `handler.go`: one helper used by create and update:
+  `scheduler/run_mode.go`:
 
 ```go
-func validateRunMode(ctx context.Context, runMode, cwd string) error {
+// CheckRunMode reports why a routine with runMode and cwd cannot be saved.
+func CheckRunMode(ctx context.Context, runMode, cwd string) error {
 	if !repo.IsValidRunMode(runMode) {
-		return apierr.NewAppError(http.StatusBadRequest, "runMode must be job or pipeline")
+		return errors.New("runMode must be job or pipeline")
 	}
 	if runMode == repo.RunModePipeline && !worktree.IsGitWorkTree(ctx, cwd) {
-		return apierr.NewAppError(http.StatusBadRequest, "working directory is not a git repository")
+		return errors.New("working directory is not a git repository")
 	}
 	return nil
 }
 ```
 
+  `handler.go` wraps it: `if err := scheduler.CheckRunMode(ctx, mode, cwd); err != nil { return apierr.NewAppError(http.StatusBadRequest, err.Error()) }`.
+
   Create: `mode := body.RunMode; if mode == "" { mode = repo.RunModeJob }`, validate with `body.Cwd`, pass `RunMode: mode`. Update: load the schedule, compute the effective mode (`body.RunMode` or stored) and effective cwd (`body.Cwd` or stored), validate only when either changes, set `in.RunMode`. `toView`: map the three fields.
 - [ ] **Step 4: Run** — PASS; `go test ./internal/api/... ./internal/worktree/...` PASS.
-- [ ] **Step 5: Mutation** — remove the git check in `validateRunMode` → the non-git pipeline cases red; restore identical.
+- [ ] **Step 5: Mutation** — remove the git check in `CheckRunMode` → the non-git pipeline cases red; restore identical.
 - [ ] **Step 6: Commit** `feat(routines): choose a run mode in the schedules API`.
 
 ### Task 2.10: The MCP schedule tool knows run modes
@@ -1113,7 +1117,7 @@ func validateRunMode(ctx context.Context, runMode, cwd string) error {
 - Test: `server/internal/mcp/tools/schedules_test.go` (extend)
 
 **Interfaces:**
-- Consumes: `repo.IsValidRunMode`, `worktree.IsGitWorkTree` (Tasks 2.6, 2.9). Reuse the REST rule by moving `validateRunMode`'s two checks into an exported function in `repo` or a tiny shared package only if the REST handler's `apierr` type is not needed here; otherwise return `mcp.Fail` with the same two messages.
+- Consumes: `scheduler.CheckRunMode` (Task 2.9) — `mcp.Fail(err.Error())` on refusal.
 
 - [ ] **Step 1: Write the failing tests:** `manage_schedule` create without `runMode` → stored `job`; create `runMode: "pipeline"` with `cwd: t.TempDir()` → tool error containing `working directory is not a git repository`; update `runMode: "cron"` → tool error containing `runMode must be job or pipeline`.
 - [ ] **Step 2: Run** `go test ./internal/mcp/tools/ -run TestManageSchedule` — FAIL.
