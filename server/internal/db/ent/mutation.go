@@ -9607,6 +9607,9 @@ type MCPApplicationMutation struct {
 	appendcatalogue        []schema.CatalogueTool
 	catalogue_error        *string
 	catalogue_refreshed_at *time.Time
+	entry                  *[]byte
+	export_to_claude       *bool
+	exported_hash          *string
 	created_at             *time.Time
 	updated_at             *time.Time
 	clearedFields          map[string]struct{}
@@ -10014,6 +10017,114 @@ func (m *MCPApplicationMutation) ResetCatalogueRefreshedAt() {
 	delete(m.clearedFields, mcpapplication.FieldCatalogueRefreshedAt)
 }
 
+// SetEntry sets the "entry" field.
+func (m *MCPApplicationMutation) SetEntry(b []byte) {
+	m.entry = &b
+}
+
+// Entry returns the value of the "entry" field in the mutation.
+func (m *MCPApplicationMutation) Entry() (r []byte, exists bool) {
+	v := m.entry
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEntry returns the old "entry" field's value of the MCPApplication entity.
+// If the MCPApplication object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MCPApplicationMutation) OldEntry(ctx context.Context) (v []byte, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEntry is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEntry requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEntry: %w", err)
+	}
+	return oldValue.Entry, nil
+}
+
+// ResetEntry resets all changes to the "entry" field.
+func (m *MCPApplicationMutation) ResetEntry() {
+	m.entry = nil
+}
+
+// SetExportToClaude sets the "export_to_claude" field.
+func (m *MCPApplicationMutation) SetExportToClaude(b bool) {
+	m.export_to_claude = &b
+}
+
+// ExportToClaude returns the value of the "export_to_claude" field in the mutation.
+func (m *MCPApplicationMutation) ExportToClaude() (r bool, exists bool) {
+	v := m.export_to_claude
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldExportToClaude returns the old "export_to_claude" field's value of the MCPApplication entity.
+// If the MCPApplication object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MCPApplicationMutation) OldExportToClaude(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldExportToClaude is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldExportToClaude requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldExportToClaude: %w", err)
+	}
+	return oldValue.ExportToClaude, nil
+}
+
+// ResetExportToClaude resets all changes to the "export_to_claude" field.
+func (m *MCPApplicationMutation) ResetExportToClaude() {
+	m.export_to_claude = nil
+}
+
+// SetExportedHash sets the "exported_hash" field.
+func (m *MCPApplicationMutation) SetExportedHash(s string) {
+	m.exported_hash = &s
+}
+
+// ExportedHash returns the value of the "exported_hash" field in the mutation.
+func (m *MCPApplicationMutation) ExportedHash() (r string, exists bool) {
+	v := m.exported_hash
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldExportedHash returns the old "exported_hash" field's value of the MCPApplication entity.
+// If the MCPApplication object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MCPApplicationMutation) OldExportedHash(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldExportedHash is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldExportedHash requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldExportedHash: %w", err)
+	}
+	return oldValue.ExportedHash, nil
+}
+
+// ResetExportedHash resets all changes to the "exported_hash" field.
+func (m *MCPApplicationMutation) ResetExportedHash() {
+	m.exported_hash = nil
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (m *MCPApplicationMutation) SetCreatedAt(t time.Time) {
 	m.created_at = &t
@@ -10120,7 +10231,7 @@ func (m *MCPApplicationMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *MCPApplicationMutation) Fields() []string {
-	fields := make([]string, 0, 9)
+	fields := make([]string, 0, 12)
 	if m.resource_id != nil {
 		fields = append(fields, mcpapplication.FieldResourceID)
 	}
@@ -10141,6 +10252,15 @@ func (m *MCPApplicationMutation) Fields() []string {
 	}
 	if m.catalogue_refreshed_at != nil {
 		fields = append(fields, mcpapplication.FieldCatalogueRefreshedAt)
+	}
+	if m.entry != nil {
+		fields = append(fields, mcpapplication.FieldEntry)
+	}
+	if m.export_to_claude != nil {
+		fields = append(fields, mcpapplication.FieldExportToClaude)
+	}
+	if m.exported_hash != nil {
+		fields = append(fields, mcpapplication.FieldExportedHash)
 	}
 	if m.created_at != nil {
 		fields = append(fields, mcpapplication.FieldCreatedAt)
@@ -10170,6 +10290,12 @@ func (m *MCPApplicationMutation) Field(name string) (ent.Value, bool) {
 		return m.CatalogueError()
 	case mcpapplication.FieldCatalogueRefreshedAt:
 		return m.CatalogueRefreshedAt()
+	case mcpapplication.FieldEntry:
+		return m.Entry()
+	case mcpapplication.FieldExportToClaude:
+		return m.ExportToClaude()
+	case mcpapplication.FieldExportedHash:
+		return m.ExportedHash()
 	case mcpapplication.FieldCreatedAt:
 		return m.CreatedAt()
 	case mcpapplication.FieldUpdatedAt:
@@ -10197,6 +10323,12 @@ func (m *MCPApplicationMutation) OldField(ctx context.Context, name string) (ent
 		return m.OldCatalogueError(ctx)
 	case mcpapplication.FieldCatalogueRefreshedAt:
 		return m.OldCatalogueRefreshedAt(ctx)
+	case mcpapplication.FieldEntry:
+		return m.OldEntry(ctx)
+	case mcpapplication.FieldExportToClaude:
+		return m.OldExportToClaude(ctx)
+	case mcpapplication.FieldExportedHash:
+		return m.OldExportedHash(ctx)
 	case mcpapplication.FieldCreatedAt:
 		return m.OldCreatedAt(ctx)
 	case mcpapplication.FieldUpdatedAt:
@@ -10258,6 +10390,27 @@ func (m *MCPApplicationMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetCatalogueRefreshedAt(v)
+		return nil
+	case mcpapplication.FieldEntry:
+		v, ok := value.([]byte)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEntry(v)
+		return nil
+	case mcpapplication.FieldExportToClaude:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetExportToClaude(v)
+		return nil
+	case mcpapplication.FieldExportedHash:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetExportedHash(v)
 		return nil
 	case mcpapplication.FieldCreatedAt:
 		v, ok := value.(time.Time)
@@ -10351,6 +10504,15 @@ func (m *MCPApplicationMutation) ResetField(name string) error {
 		return nil
 	case mcpapplication.FieldCatalogueRefreshedAt:
 		m.ResetCatalogueRefreshedAt()
+		return nil
+	case mcpapplication.FieldEntry:
+		m.ResetEntry()
+		return nil
+	case mcpapplication.FieldExportToClaude:
+		m.ResetExportToClaude()
+		return nil
+	case mcpapplication.FieldExportedHash:
+		m.ResetExportedHash()
 		return nil
 	case mcpapplication.FieldCreatedAt:
 		m.ResetCreatedAt()

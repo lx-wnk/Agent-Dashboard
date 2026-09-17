@@ -28,6 +28,12 @@ const (
 	FieldCatalogueError = "catalogue_error"
 	// FieldCatalogueRefreshedAt holds the string denoting the catalogue_refreshed_at field in the database.
 	FieldCatalogueRefreshedAt = "catalogue_refreshed_at"
+	// FieldEntry holds the string denoting the entry field in the database.
+	FieldEntry = "entry"
+	// FieldExportToClaude holds the string denoting the export_to_claude field in the database.
+	FieldExportToClaude = "export_to_claude"
+	// FieldExportedHash holds the string denoting the exported_hash field in the database.
+	FieldExportedHash = "exported_hash"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
@@ -46,6 +52,9 @@ var Columns = []string{
 	FieldCatalogue,
 	FieldCatalogueError,
 	FieldCatalogueRefreshedAt,
+	FieldEntry,
+	FieldExportToClaude,
+	FieldExportedHash,
 	FieldCreatedAt,
 	FieldUpdatedAt,
 }
@@ -69,6 +78,12 @@ var (
 	DefaultCatalogue []schema.CatalogueTool
 	// DefaultCatalogueError holds the default value on creation for the "catalogue_error" field.
 	DefaultCatalogueError string
+	// DefaultEntry holds the default value on creation for the "entry" field.
+	DefaultEntry []byte
+	// DefaultExportToClaude holds the default value on creation for the "export_to_claude" field.
+	DefaultExportToClaude bool
+	// DefaultExportedHash holds the default value on creation for the "exported_hash" field.
+	DefaultExportedHash string
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 	// DefaultUpdatedAt holds the default value on creation for the "updated_at" field.
@@ -108,6 +123,16 @@ func ByCatalogueError(opts ...sql.OrderTermOption) OrderOption {
 // ByCatalogueRefreshedAt orders the results by the catalogue_refreshed_at field.
 func ByCatalogueRefreshedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldCatalogueRefreshedAt, opts...).ToFunc()
+}
+
+// ByExportToClaude orders the results by the export_to_claude field.
+func ByExportToClaude(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldExportToClaude, opts...).ToFunc()
+}
+
+// ByExportedHash orders the results by the exported_hash field.
+func ByExportedHash(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldExportedHash, opts...).ToFunc()
 }
 
 // ByCreatedAt orders the results by the created_at field.

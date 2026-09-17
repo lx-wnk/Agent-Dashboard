@@ -90,6 +90,40 @@ func (_c *MCPApplicationCreate) SetNillableCatalogueRefreshedAt(v *time.Time) *M
 	return _c
 }
 
+// SetEntry sets the "entry" field.
+func (_c *MCPApplicationCreate) SetEntry(v []byte) *MCPApplicationCreate {
+	_c.mutation.SetEntry(v)
+	return _c
+}
+
+// SetExportToClaude sets the "export_to_claude" field.
+func (_c *MCPApplicationCreate) SetExportToClaude(v bool) *MCPApplicationCreate {
+	_c.mutation.SetExportToClaude(v)
+	return _c
+}
+
+// SetNillableExportToClaude sets the "export_to_claude" field if the given value is not nil.
+func (_c *MCPApplicationCreate) SetNillableExportToClaude(v *bool) *MCPApplicationCreate {
+	if v != nil {
+		_c.SetExportToClaude(*v)
+	}
+	return _c
+}
+
+// SetExportedHash sets the "exported_hash" field.
+func (_c *MCPApplicationCreate) SetExportedHash(v string) *MCPApplicationCreate {
+	_c.mutation.SetExportedHash(v)
+	return _c
+}
+
+// SetNillableExportedHash sets the "exported_hash" field if the given value is not nil.
+func (_c *MCPApplicationCreate) SetNillableExportedHash(v *string) *MCPApplicationCreate {
+	if v != nil {
+		_c.SetExportedHash(*v)
+	}
+	return _c
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (_c *MCPApplicationCreate) SetCreatedAt(v time.Time) *MCPApplicationCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -175,6 +209,18 @@ func (_c *MCPApplicationCreate) defaults() {
 		v := mcpapplication.DefaultCatalogueError
 		_c.mutation.SetCatalogueError(v)
 	}
+	if _, ok := _c.mutation.Entry(); !ok {
+		v := mcpapplication.DefaultEntry
+		_c.mutation.SetEntry(v)
+	}
+	if _, ok := _c.mutation.ExportToClaude(); !ok {
+		v := mcpapplication.DefaultExportToClaude
+		_c.mutation.SetExportToClaude(v)
+	}
+	if _, ok := _c.mutation.ExportedHash(); !ok {
+		v := mcpapplication.DefaultExportedHash
+		_c.mutation.SetExportedHash(v)
+	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		v := mcpapplication.DefaultCreatedAt()
 		_c.mutation.SetCreatedAt(v)
@@ -204,6 +250,15 @@ func (_c *MCPApplicationCreate) check() error {
 	}
 	if _, ok := _c.mutation.CatalogueError(); !ok {
 		return &ValidationError{Name: "catalogue_error", err: errors.New(`ent: missing required field "MCPApplication.catalogue_error"`)}
+	}
+	if _, ok := _c.mutation.Entry(); !ok {
+		return &ValidationError{Name: "entry", err: errors.New(`ent: missing required field "MCPApplication.entry"`)}
+	}
+	if _, ok := _c.mutation.ExportToClaude(); !ok {
+		return &ValidationError{Name: "export_to_claude", err: errors.New(`ent: missing required field "MCPApplication.export_to_claude"`)}
+	}
+	if _, ok := _c.mutation.ExportedHash(); !ok {
+		return &ValidationError{Name: "exported_hash", err: errors.New(`ent: missing required field "MCPApplication.exported_hash"`)}
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "MCPApplication.created_at"`)}
@@ -274,6 +329,18 @@ func (_c *MCPApplicationCreate) createSpec() (*MCPApplication, *sqlgraph.CreateS
 	if value, ok := _c.mutation.CatalogueRefreshedAt(); ok {
 		_spec.SetField(mcpapplication.FieldCatalogueRefreshedAt, field.TypeTime, value)
 		_node.CatalogueRefreshedAt = &value
+	}
+	if value, ok := _c.mutation.Entry(); ok {
+		_spec.SetField(mcpapplication.FieldEntry, field.TypeBytes, value)
+		_node.Entry = value
+	}
+	if value, ok := _c.mutation.ExportToClaude(); ok {
+		_spec.SetField(mcpapplication.FieldExportToClaude, field.TypeBool, value)
+		_node.ExportToClaude = value
+	}
+	if value, ok := _c.mutation.ExportedHash(); ok {
+		_spec.SetField(mcpapplication.FieldExportedHash, field.TypeString, value)
+		_node.ExportedHash = value
 	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(mcpapplication.FieldCreatedAt, field.TypeTime, value)
@@ -398,6 +465,42 @@ func (u *MCPApplicationUpsert) UpdateCatalogueRefreshedAt() *MCPApplicationUpser
 // ClearCatalogueRefreshedAt clears the value of the "catalogue_refreshed_at" field.
 func (u *MCPApplicationUpsert) ClearCatalogueRefreshedAt() *MCPApplicationUpsert {
 	u.SetNull(mcpapplication.FieldCatalogueRefreshedAt)
+	return u
+}
+
+// SetEntry sets the "entry" field.
+func (u *MCPApplicationUpsert) SetEntry(v []byte) *MCPApplicationUpsert {
+	u.Set(mcpapplication.FieldEntry, v)
+	return u
+}
+
+// UpdateEntry sets the "entry" field to the value that was provided on create.
+func (u *MCPApplicationUpsert) UpdateEntry() *MCPApplicationUpsert {
+	u.SetExcluded(mcpapplication.FieldEntry)
+	return u
+}
+
+// SetExportToClaude sets the "export_to_claude" field.
+func (u *MCPApplicationUpsert) SetExportToClaude(v bool) *MCPApplicationUpsert {
+	u.Set(mcpapplication.FieldExportToClaude, v)
+	return u
+}
+
+// UpdateExportToClaude sets the "export_to_claude" field to the value that was provided on create.
+func (u *MCPApplicationUpsert) UpdateExportToClaude() *MCPApplicationUpsert {
+	u.SetExcluded(mcpapplication.FieldExportToClaude)
+	return u
+}
+
+// SetExportedHash sets the "exported_hash" field.
+func (u *MCPApplicationUpsert) SetExportedHash(v string) *MCPApplicationUpsert {
+	u.Set(mcpapplication.FieldExportedHash, v)
+	return u
+}
+
+// UpdateExportedHash sets the "exported_hash" field to the value that was provided on create.
+func (u *MCPApplicationUpsert) UpdateExportedHash() *MCPApplicationUpsert {
+	u.SetExcluded(mcpapplication.FieldExportedHash)
 	return u
 }
 
@@ -544,6 +647,48 @@ func (u *MCPApplicationUpsertOne) UpdateCatalogueRefreshedAt() *MCPApplicationUp
 func (u *MCPApplicationUpsertOne) ClearCatalogueRefreshedAt() *MCPApplicationUpsertOne {
 	return u.Update(func(s *MCPApplicationUpsert) {
 		s.ClearCatalogueRefreshedAt()
+	})
+}
+
+// SetEntry sets the "entry" field.
+func (u *MCPApplicationUpsertOne) SetEntry(v []byte) *MCPApplicationUpsertOne {
+	return u.Update(func(s *MCPApplicationUpsert) {
+		s.SetEntry(v)
+	})
+}
+
+// UpdateEntry sets the "entry" field to the value that was provided on create.
+func (u *MCPApplicationUpsertOne) UpdateEntry() *MCPApplicationUpsertOne {
+	return u.Update(func(s *MCPApplicationUpsert) {
+		s.UpdateEntry()
+	})
+}
+
+// SetExportToClaude sets the "export_to_claude" field.
+func (u *MCPApplicationUpsertOne) SetExportToClaude(v bool) *MCPApplicationUpsertOne {
+	return u.Update(func(s *MCPApplicationUpsert) {
+		s.SetExportToClaude(v)
+	})
+}
+
+// UpdateExportToClaude sets the "export_to_claude" field to the value that was provided on create.
+func (u *MCPApplicationUpsertOne) UpdateExportToClaude() *MCPApplicationUpsertOne {
+	return u.Update(func(s *MCPApplicationUpsert) {
+		s.UpdateExportToClaude()
+	})
+}
+
+// SetExportedHash sets the "exported_hash" field.
+func (u *MCPApplicationUpsertOne) SetExportedHash(v string) *MCPApplicationUpsertOne {
+	return u.Update(func(s *MCPApplicationUpsert) {
+		s.SetExportedHash(v)
+	})
+}
+
+// UpdateExportedHash sets the "exported_hash" field to the value that was provided on create.
+func (u *MCPApplicationUpsertOne) UpdateExportedHash() *MCPApplicationUpsertOne {
+	return u.Update(func(s *MCPApplicationUpsert) {
+		s.UpdateExportedHash()
 	})
 }
 
@@ -859,6 +1004,48 @@ func (u *MCPApplicationUpsertBulk) UpdateCatalogueRefreshedAt() *MCPApplicationU
 func (u *MCPApplicationUpsertBulk) ClearCatalogueRefreshedAt() *MCPApplicationUpsertBulk {
 	return u.Update(func(s *MCPApplicationUpsert) {
 		s.ClearCatalogueRefreshedAt()
+	})
+}
+
+// SetEntry sets the "entry" field.
+func (u *MCPApplicationUpsertBulk) SetEntry(v []byte) *MCPApplicationUpsertBulk {
+	return u.Update(func(s *MCPApplicationUpsert) {
+		s.SetEntry(v)
+	})
+}
+
+// UpdateEntry sets the "entry" field to the value that was provided on create.
+func (u *MCPApplicationUpsertBulk) UpdateEntry() *MCPApplicationUpsertBulk {
+	return u.Update(func(s *MCPApplicationUpsert) {
+		s.UpdateEntry()
+	})
+}
+
+// SetExportToClaude sets the "export_to_claude" field.
+func (u *MCPApplicationUpsertBulk) SetExportToClaude(v bool) *MCPApplicationUpsertBulk {
+	return u.Update(func(s *MCPApplicationUpsert) {
+		s.SetExportToClaude(v)
+	})
+}
+
+// UpdateExportToClaude sets the "export_to_claude" field to the value that was provided on create.
+func (u *MCPApplicationUpsertBulk) UpdateExportToClaude() *MCPApplicationUpsertBulk {
+	return u.Update(func(s *MCPApplicationUpsert) {
+		s.UpdateExportToClaude()
+	})
+}
+
+// SetExportedHash sets the "exported_hash" field.
+func (u *MCPApplicationUpsertBulk) SetExportedHash(v string) *MCPApplicationUpsertBulk {
+	return u.Update(func(s *MCPApplicationUpsert) {
+		s.SetExportedHash(v)
+	})
+}
+
+// UpdateExportedHash sets the "exported_hash" field to the value that was provided on create.
+func (u *MCPApplicationUpsertBulk) UpdateExportedHash() *MCPApplicationUpsertBulk {
+	return u.Update(func(s *MCPApplicationUpsert) {
+		s.UpdateExportedHash()
 	})
 }
 

@@ -280,12 +280,24 @@ func init() {
 	mcpapplicationDescCatalogueError := mcpapplicationFields[6].Descriptor()
 	// mcpapplication.DefaultCatalogueError holds the default value on creation for the catalogue_error field.
 	mcpapplication.DefaultCatalogueError = mcpapplicationDescCatalogueError.Default.(string)
+	// mcpapplicationDescEntry is the schema descriptor for entry field.
+	mcpapplicationDescEntry := mcpapplicationFields[8].Descriptor()
+	// mcpapplication.DefaultEntry holds the default value on creation for the entry field.
+	mcpapplication.DefaultEntry = mcpapplicationDescEntry.Default.([]byte)
+	// mcpapplicationDescExportToClaude is the schema descriptor for export_to_claude field.
+	mcpapplicationDescExportToClaude := mcpapplicationFields[9].Descriptor()
+	// mcpapplication.DefaultExportToClaude holds the default value on creation for the export_to_claude field.
+	mcpapplication.DefaultExportToClaude = mcpapplicationDescExportToClaude.Default.(bool)
+	// mcpapplicationDescExportedHash is the schema descriptor for exported_hash field.
+	mcpapplicationDescExportedHash := mcpapplicationFields[10].Descriptor()
+	// mcpapplication.DefaultExportedHash holds the default value on creation for the exported_hash field.
+	mcpapplication.DefaultExportedHash = mcpapplicationDescExportedHash.Default.(string)
 	// mcpapplicationDescCreatedAt is the schema descriptor for created_at field.
-	mcpapplicationDescCreatedAt := mcpapplicationFields[8].Descriptor()
+	mcpapplicationDescCreatedAt := mcpapplicationFields[11].Descriptor()
 	// mcpapplication.DefaultCreatedAt holds the default value on creation for the created_at field.
 	mcpapplication.DefaultCreatedAt = mcpapplicationDescCreatedAt.Default.(func() time.Time)
 	// mcpapplicationDescUpdatedAt is the schema descriptor for updated_at field.
-	mcpapplicationDescUpdatedAt := mcpapplicationFields[9].Descriptor()
+	mcpapplicationDescUpdatedAt := mcpapplicationFields[12].Descriptor()
 	// mcpapplication.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	mcpapplication.DefaultUpdatedAt = mcpapplicationDescUpdatedAt.Default.(func() time.Time)
 	// mcpapplication.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

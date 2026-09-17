@@ -102,6 +102,40 @@ func (_u *MCPApplicationUpdate) ClearCatalogueRefreshedAt() *MCPApplicationUpdat
 	return _u
 }
 
+// SetEntry sets the "entry" field.
+func (_u *MCPApplicationUpdate) SetEntry(v []byte) *MCPApplicationUpdate {
+	_u.mutation.SetEntry(v)
+	return _u
+}
+
+// SetExportToClaude sets the "export_to_claude" field.
+func (_u *MCPApplicationUpdate) SetExportToClaude(v bool) *MCPApplicationUpdate {
+	_u.mutation.SetExportToClaude(v)
+	return _u
+}
+
+// SetNillableExportToClaude sets the "export_to_claude" field if the given value is not nil.
+func (_u *MCPApplicationUpdate) SetNillableExportToClaude(v *bool) *MCPApplicationUpdate {
+	if v != nil {
+		_u.SetExportToClaude(*v)
+	}
+	return _u
+}
+
+// SetExportedHash sets the "exported_hash" field.
+func (_u *MCPApplicationUpdate) SetExportedHash(v string) *MCPApplicationUpdate {
+	_u.mutation.SetExportedHash(v)
+	return _u
+}
+
+// SetNillableExportedHash sets the "exported_hash" field if the given value is not nil.
+func (_u *MCPApplicationUpdate) SetNillableExportedHash(v *string) *MCPApplicationUpdate {
+	if v != nil {
+		_u.SetExportedHash(*v)
+	}
+	return _u
+}
+
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *MCPApplicationUpdate) SetUpdatedAt(v time.Time) *MCPApplicationUpdate {
 	_u.mutation.SetUpdatedAt(v)
@@ -185,6 +219,15 @@ func (_u *MCPApplicationUpdate) sqlSave(ctx context.Context) (_node int, err err
 	}
 	if _u.mutation.CatalogueRefreshedAtCleared() {
 		_spec.ClearField(mcpapplication.FieldCatalogueRefreshedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.Entry(); ok {
+		_spec.SetField(mcpapplication.FieldEntry, field.TypeBytes, value)
+	}
+	if value, ok := _u.mutation.ExportToClaude(); ok {
+		_spec.SetField(mcpapplication.FieldExportToClaude, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.ExportedHash(); ok {
+		_spec.SetField(mcpapplication.FieldExportedHash, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(mcpapplication.FieldUpdatedAt, field.TypeTime, value)
@@ -278,6 +321,40 @@ func (_u *MCPApplicationUpdateOne) SetNillableCatalogueRefreshedAt(v *time.Time)
 // ClearCatalogueRefreshedAt clears the value of the "catalogue_refreshed_at" field.
 func (_u *MCPApplicationUpdateOne) ClearCatalogueRefreshedAt() *MCPApplicationUpdateOne {
 	_u.mutation.ClearCatalogueRefreshedAt()
+	return _u
+}
+
+// SetEntry sets the "entry" field.
+func (_u *MCPApplicationUpdateOne) SetEntry(v []byte) *MCPApplicationUpdateOne {
+	_u.mutation.SetEntry(v)
+	return _u
+}
+
+// SetExportToClaude sets the "export_to_claude" field.
+func (_u *MCPApplicationUpdateOne) SetExportToClaude(v bool) *MCPApplicationUpdateOne {
+	_u.mutation.SetExportToClaude(v)
+	return _u
+}
+
+// SetNillableExportToClaude sets the "export_to_claude" field if the given value is not nil.
+func (_u *MCPApplicationUpdateOne) SetNillableExportToClaude(v *bool) *MCPApplicationUpdateOne {
+	if v != nil {
+		_u.SetExportToClaude(*v)
+	}
+	return _u
+}
+
+// SetExportedHash sets the "exported_hash" field.
+func (_u *MCPApplicationUpdateOne) SetExportedHash(v string) *MCPApplicationUpdateOne {
+	_u.mutation.SetExportedHash(v)
+	return _u
+}
+
+// SetNillableExportedHash sets the "exported_hash" field if the given value is not nil.
+func (_u *MCPApplicationUpdateOne) SetNillableExportedHash(v *string) *MCPApplicationUpdateOne {
+	if v != nil {
+		_u.SetExportedHash(*v)
+	}
 	return _u
 }
 
@@ -394,6 +471,15 @@ func (_u *MCPApplicationUpdateOne) sqlSave(ctx context.Context) (_node *MCPAppli
 	}
 	if _u.mutation.CatalogueRefreshedAtCleared() {
 		_spec.ClearField(mcpapplication.FieldCatalogueRefreshedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.Entry(); ok {
+		_spec.SetField(mcpapplication.FieldEntry, field.TypeBytes, value)
+	}
+	if value, ok := _u.mutation.ExportToClaude(); ok {
+		_spec.SetField(mcpapplication.FieldExportToClaude, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.ExportedHash(); ok {
+		_spec.SetField(mcpapplication.FieldExportedHash, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(mcpapplication.FieldUpdatedAt, field.TypeTime, value)
