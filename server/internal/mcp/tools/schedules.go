@@ -82,16 +82,22 @@ func registerManageSchedule(registry mcp.ToolRegistry, d ScheduleDeps) {
 					"type": "string",
 					"enum": []string{"create", "update", "delete", "enable", "disable", "run_now"},
 				},
-				"id":                 map[string]any{"type": "string", "description": "Schedule ID (required for all actions except create)"},
-				"name":               map[string]any{"type": "string"},
-				"nlText":             map[string]any{"type": "string", "description": "Natural-language schedule phrase, e.g. 'every weekday at 9am'"},
-				"cronExpr":           map[string]any{"type": "string", "description": "Raw 5-field cron expression (overrides nlText)"},
-				"timezone":           map[string]any{"type": "string"},
-				"catchup":            map[string]any{"type": "string", "enum": []string{"none", "once"}},
-				"slugPrefix":         map[string]any{"type": "string"},
-				"title":              map[string]any{"type": "string"},
-				"description":        map[string]any{"type": "string"},
-				"cwd":                map[string]any{"type": "string"},
+				"id":          map[string]any{"type": "string", "description": "Schedule ID (required for all actions except create)"},
+				"name":        map[string]any{"type": "string"},
+				"nlText":      map[string]any{"type": "string", "description": "Natural-language schedule phrase, e.g. 'every weekday at 9am'"},
+				"cronExpr":    map[string]any{"type": "string", "description": "Raw 5-field cron expression (overrides nlText)"},
+				"timezone":    map[string]any{"type": "string"},
+				"catchup":     map[string]any{"type": "string", "enum": []string{"none", "once"}},
+				"slugPrefix":  map[string]any{"type": "string"},
+				"title":       map[string]any{"type": "string"},
+				"description": map[string]any{"type": "string"},
+				"cwd":         map[string]any{"type": "string"},
+				"runMode": map[string]any{
+					"type": "string",
+					"enum": []string{"job", "pipeline"},
+					"description": "job: one agent run in cwd, no worktree (default). pipeline: a pipeline task " +
+						"that starts in ready; cwd must be a git repository.",
+				},
 				"priority":           map[string]any{"type": "string", "enum": []string{"high", "medium", "low"}},
 				"maxIterations":      map[string]any{"type": "integer"},
 				"permissionTemplate": map[string]any{"type": "string"},
@@ -136,6 +142,13 @@ func manageScheduleCreate(ctx context.Context, d ScheduleDeps, args map[string]a
 	if !validation.IsValidSlug(slugPrefix) {
 		return nil, mcp.Fail("slugPrefix: " + validation.SlugPatternMessage)
 	}
+	runMode := mcp.OptionalString(args, "runMode")
+	if runMode == "" {
+		runMode = repo.RunModeJob
+	}
+	if err := scheduler.CheckRunMode(ctx, runMode, cwd); err != nil {
+		return nil, mcp.Fail(err.Error())
+	}
 	cronExpr, err := resolveScheduleCron(ctx, d.Translator, mcp.OptionalString(args, "nlText"), mcp.OptionalString(args, "cronExpr"))
 	if err != nil {
 		return nil, err
@@ -152,6 +165,7 @@ func manageScheduleCreate(ctx context.Context, d ScheduleDeps, args map[string]a
 		SlugPrefix: slugPrefix,
 		Title:      title,
 		Cwd:        cwd,
+		RunMode:    runMode,
 		Priority:   mcp.OptionalString(args, "priority"),
 		NextRunAt:  scheduleNextRunPtr(cronExpr, tz),
 	}
@@ -190,10 +204,29 @@ func manageScheduleUpdate(ctx context.Context, d ScheduleDeps, args map[string]a
 	if err != nil {
 		return nil, err
 	}
-	if _, err := d.Repo.GetByID(ctx, id); err != nil {
+	existing, err := d.Repo.GetByID(ctx, id)
+	if err != nil {
 		return nil, mcp.Fail("schedule not found: " + id)
 	}
 	in := repo.UpdateTaskScheduleInput{}
+	runMode := mcp.OptionalString(args, "runMode")
+	argCwd := mcp.OptionalString(args, "cwd")
+	if runMode != "" || argCwd != "" {
+		effectiveMode := runMode
+		if effectiveMode == "" {
+			effectiveMode = existing.RunMode
+		}
+		effectiveCwd := argCwd
+		if effectiveCwd == "" {
+			effectiveCwd = existing.Cwd
+		}
+		if err := scheduler.CheckRunMode(ctx, effectiveMode, effectiveCwd); err != nil {
+			return nil, mcp.Fail(err.Error())
+		}
+		if runMode != "" {
+			in.RunMode = &runMode
+		}
+	}
 	if v := mcp.OptionalString(args, "name"); v != "" {
 		in.Name = &v
 	}
