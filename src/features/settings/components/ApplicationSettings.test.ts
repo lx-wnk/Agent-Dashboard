@@ -391,4 +391,142 @@ describe('applicationSettings', () => {
 
     expect(MockEventSource.instances[0].readyState).toBe(MockEventSource.CLOSED)
   })
+
+  const SESSION = {
+    resourceId: 'res-mail',
+    port: 51234,
+    url: 'http://127.0.0.1:51234',
+    startedAt: '2026-09-18T10:00:00Z',
+    warning: 'Setup is reachable on your local network until you click Done.',
+  }
+
+  it('starts a setup session and shows the frame with the warning and fallback link', async () => {
+    const calls = stubFetch({
+      'GET /api/applications': [MAIL],
+      'POST /api/applications/res-mail/setup': SESSION,
+    })
+    const wrapper = mount(ApplicationSettings)
+    await flushPromises()
+
+    await wrapper.find('[data-testid=\"application-setup-start-res-mail\"]').trigger('click')
+    await flushPromises()
+
+    const post = calls.find(c => c.init?.method === 'POST' && c.url === '/api/applications/res-mail/setup')
+    expect(post).toBeTruthy()
+
+    const frame = wrapper.find('[data-testid=\"application-setup-frame-res-mail\"]')
+    expect(frame.exists()).toBe(true)
+    expect(frame.attributes('src')).toBe('http://127.0.0.1:51234')
+
+    const warning = wrapper.find('[data-testid=\"application-setup-warning-res-mail\"]')
+    expect(warning.text()).toBe('Setup is reachable on your local network until you click Done.')
+
+    const link = wrapper.find('[data-testid=\"application-setup-open-res-mail\"]')
+    expect(link.attributes('target')).toBe('_blank')
+    expect(link.attributes('rel')).toBe('noopener noreferrer')
+    expect(link.attributes('href')).toBe('http://127.0.0.1:51234')
+
+    wrapper.unmount()
+  })
+
+  it('finishes setup, removes the frame and shows one password field per returned account name', async () => {
+    const calls = stubFetch({
+      'GET /api/applications': [MAIL],
+      'POST /api/applications/res-mail/setup': SESSION,
+      'POST /api/applications/res-mail/accounts': { names: ['IMAP_MCP_ACCOUNT_WORK_IMAP_PASSWORD'] },
+    })
+    const wrapper = mount(ApplicationSettings)
+    await flushPromises()
+
+    await wrapper.find('[data-testid=\"application-setup-start-res-mail\"]').trigger('click')
+    await flushPromises()
+    await wrapper.find('[data-testid=\"application-setup-done-res-mail\"]').trigger('click')
+    await flushPromises()
+
+    const del = calls.find(c => c.init?.method === 'DELETE' && c.url === '/api/applications/res-mail/setup')
+    expect(del).toBeTruthy()
+    const post = calls.find(c => c.init?.method === 'POST' && c.url === '/api/applications/res-mail/accounts')
+    expect(post).toBeTruthy()
+
+    expect(wrapper.find('[data-testid=\"application-setup-frame-res-mail\"]').exists()).toBe(false)
+
+    const field = wrapper.find('[data-testid=\"application-setup-secret-IMAP_MCP_ACCOUNT_WORK_IMAP_PASSWORD\"]')
+    expect(field.exists()).toBe(true)
+    expect(field.attributes('type')).toBe('password')
+
+    wrapper.unmount()
+  })
+
+  it('saves a setup-derived secret and clears the field', async () => {
+    const calls = stubFetch({
+      'GET /api/applications': [MAIL],
+      'POST /api/applications/res-mail/setup': SESSION,
+      'POST /api/applications/res-mail/accounts': { names: ['IMAP_MCP_ACCOUNT_WORK_IMAP_PASSWORD'] },
+    })
+    const wrapper = mount(ApplicationSettings)
+    await flushPromises()
+
+    await wrapper.find('[data-testid=\"application-setup-start-res-mail\"]').trigger('click')
+    await flushPromises()
+    await wrapper.find('[data-testid=\"application-setup-done-res-mail\"]').trigger('click')
+    await flushPromises()
+
+    const input = wrapper.find('[data-testid=\"application-setup-secret-IMAP_MCP_ACCOUNT_WORK_IMAP_PASSWORD\"]')
+    await input.setValue('s3cret')
+    await wrapper.find('[data-testid=\"application-setup-secret-save-IMAP_MCP_ACCOUNT_WORK_IMAP_PASSWORD\"]').trigger('click')
+    await flushPromises()
+
+    const put = calls.find(c => c.init?.method === 'PUT')
+    expect(put?.url).toBe('/api/applications/res-mail/secrets/IMAP_MCP_ACCOUNT_WORK_IMAP_PASSWORD')
+    expect(JSON.parse(String(put?.init?.body))).toEqual({ value: 's3cret' })
+    expect((wrapper.find('[data-testid=\"application-setup-secret-IMAP_MCP_ACCOUNT_WORK_IMAP_PASSWORD\"]').element as HTMLInputElement).value).toBe('')
+
+    wrapper.unmount()
+  })
+
+  it('shows a 502 from setup and renders no frame', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === 'POST' && url === '/api/applications/res-mail/setup')
+        return { ok: false, status: 502, json: async () => ({ error: 'child process failed to start' }) }
+      if (url === '/api/applications/drift')
+        return { ok: true, status: 200, json: async () => ({ found: [], changed: [] }) }
+      return { ok: true, status: 200, json: async () => [MAIL] }
+    }))
+    const wrapper = mount(ApplicationSettings)
+    await flushPromises()
+
+    await wrapper.find('[data-testid=\"application-setup-start-res-mail\"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('child process failed to start')
+    expect(wrapper.find('[data-testid=\"application-setup-frame-res-mail\"]').exists()).toBe(false)
+
+    wrapper.unmount()
+  })
+
+  it('shows a 502 from the accounts call and renders the manual fallback input', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === 'POST' && url === '/api/applications/res-mail/setup')
+        return { ok: true, status: 200, json: async () => SESSION }
+      if (init?.method === 'DELETE' && url === '/api/applications/res-mail/setup')
+        return { ok: true, status: 204, json: async () => null }
+      if (init?.method === 'POST' && url === '/api/applications/res-mail/accounts')
+        return { ok: false, status: 502, json: async () => ({ error: 'tool does not report accounts' }) }
+      if (url === '/api/applications/drift')
+        return { ok: true, status: 200, json: async () => ({ found: [], changed: [] }) }
+      return { ok: true, status: 200, json: async () => [MAIL] }
+    }))
+    const wrapper = mount(ApplicationSettings)
+    await flushPromises()
+
+    await wrapper.find('[data-testid=\"application-setup-start-res-mail\"]').trigger('click')
+    await flushPromises()
+    await wrapper.find('[data-testid=\"application-setup-done-res-mail\"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('tool does not report accounts')
+    expect(wrapper.find('[data-testid=\"application-setup-account-manual-res-mail\"]').exists()).toBe(true)
+
+    wrapper.unmount()
+  })
 })

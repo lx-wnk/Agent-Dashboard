@@ -5,10 +5,14 @@ import AppButton from '@/components/ui/AppButton.vue'
 import { useApplications } from '@/features/settings/composables/useApplications'
 import { formatDateTime } from '@/utils/format'
 
-const { applications, loading, error, drift, fetchApplications, setAttachAll, setRequiredEnv, setSecret, deleteSecret, refreshCatalogue, createApplication, deleteApplication, setEntry, setExport, fetchDrift, importApplication, subscribe, unsubscribe } = useApplications()
+const { applications, loading, error, drift, setupSessions, fetchApplications, setAttachAll, setRequiredEnv, setSecret, deleteSecret, refreshCatalogue, createApplication, deleteApplication, setEntry, setExport, fetchDrift, importApplication, startSetup, stopSetup, fetchAccountNames, subscribe, unsubscribe } = useApplications()
 const actionError = ref<string | null>(null)
 const drafts = reactive<Record<string, string>>({})
 const requiredEnvDrafts = reactive<Record<string, string>>({})
+const setupAccountNames = reactive<Record<string, string[]>>({})
+const setupAccountError = reactive<Record<string, string | null>>({})
+const setupSecretDrafts = reactive<Record<string, string>>({})
+const manualAccountDrafts = reactive<Record<string, { name: string, value: string }>>({})
 
 onMounted(() => {
   void fetchApplications()
@@ -54,6 +58,40 @@ async function saveSecret(app: ApplicationView, envName: string) {
     return
   await run(() => setSecret(app.resourceId, envName, value))
   drafts[key] = ''
+}
+
+function setupDraftKey(resourceId: string, name: string) {
+  return `${resourceId}-${name}`
+}
+
+async function handleSetupDone(app: ApplicationView) {
+  await run(() => stopSetup(app.resourceId))
+  setupAccountError[app.resourceId] = null
+  setupAccountNames[app.resourceId] = []
+  try {
+    setupAccountNames[app.resourceId] = await fetchAccountNames(app.resourceId)
+  }
+  catch (e) {
+    setupAccountError[app.resourceId] = (e as Error).message
+    manualAccountDrafts[app.resourceId] = { name: '', value: '' }
+  }
+}
+
+async function saveSetupSecret(app: ApplicationView, name: string) {
+  const key = setupDraftKey(app.resourceId, name)
+  const value = setupSecretDrafts[key]
+  if (!value)
+    return
+  await run(() => setSecret(app.resourceId, name, value))
+  setupSecretDrafts[key] = ''
+}
+
+async function saveManualAccount(app: ApplicationView) {
+  const draft = manualAccountDrafts[app.resourceId]
+  if (!draft?.name || !draft.value)
+    return
+  await run(() => setSecret(app.resourceId, draft.name, draft.value))
+  manualAccountDrafts[app.resourceId] = { name: '', value: '' }
 }
 
 const ENV_NAME_RE = /^[A-Z_][A-Z0-9_]*$/
@@ -397,6 +435,106 @@ async function writeAppVersion(name: string) {
           >
             Add variable
           </button>
+        </div>
+      </div>
+
+      <div class="flex flex-col gap-2">
+        <div class="flex items-center justify-between">
+          <h5 class="text-sm font-medium text-fg">
+            Setup
+          </h5>
+          <AppButton
+            v-if="!setupSessions[app.resourceId]"
+            variant="info"
+            size="sm"
+            :data-testid="`application-setup-start-${app.resourceId}`"
+            @click="run(() => startSetup(app.resourceId))"
+          >
+            Set up
+          </AppButton>
+        </div>
+
+        <div v-if="setupSessions[app.resourceId]" class="flex flex-col gap-2">
+          <iframe
+            :src="setupSessions[app.resourceId].url"
+            :data-testid="`application-setup-frame-${app.resourceId}`"
+            sandbox="allow-forms allow-scripts allow-same-origin"
+            class="w-full h-[28rem] rounded border border-line"
+          />
+          <p role="note" :data-testid="`application-setup-warning-${app.resourceId}`" class="text-xs text-amber-600">
+            {{ setupSessions[app.resourceId].warning }}
+          </p>
+          <a
+            :href="setupSessions[app.resourceId].url"
+            target="_blank"
+            rel="noopener noreferrer"
+            :data-testid="`application-setup-open-${app.resourceId}`"
+            class="text-sm text-accent underline"
+          >
+            Open in a new window
+          </a>
+          <div>
+            <AppButton
+              variant="success"
+              size="sm"
+              :data-testid="`application-setup-done-${app.resourceId}`"
+              @click="handleSetupDone(app)"
+            >
+              Done
+            </AppButton>
+          </div>
+        </div>
+
+        <div v-if="setupAccountNames[app.resourceId]?.length" class="flex flex-col gap-2">
+          <div v-for="name in setupAccountNames[app.resourceId]" :key="name" class="flex items-center gap-2 text-sm">
+            <code class="min-w-48">{{ name }}</code>
+            <input
+              v-model="setupSecretDrafts[setupDraftKey(app.resourceId, name)]"
+              type="password"
+              autocomplete="off"
+              class="border border-line rounded px-2 py-1 bg-raised"
+              :aria-label="`New value for ${name}`"
+              :data-testid="`application-setup-secret-${name}`"
+            >
+            <button
+              type="button"
+              class="px-2 py-1 rounded border border-line"
+              :data-testid="`application-setup-secret-save-${name}`"
+              @click="saveSetupSecret(app, name)"
+            >
+              Save
+            </button>
+          </div>
+        </div>
+
+        <div v-if="setupAccountError[app.resourceId]" class="flex flex-col gap-2">
+          <p class="text-sm text-red-500" role="alert">
+            {{ setupAccountError[app.resourceId] }}
+          </p>
+          <div class="flex items-center gap-2 text-sm">
+            <input
+              v-model="manualAccountDrafts[app.resourceId].name"
+              type="text"
+              placeholder="ACCOUNT_NAME"
+              class="border border-line rounded px-2 py-1 bg-raised"
+              :data-testid="`application-setup-account-manual-${app.resourceId}`"
+            >
+            <input
+              v-model="manualAccountDrafts[app.resourceId].value"
+              type="password"
+              autocomplete="off"
+              class="border border-line rounded px-2 py-1 bg-raised"
+              :data-testid="`application-setup-account-manual-value-${app.resourceId}`"
+            >
+            <button
+              type="button"
+              class="px-2 py-1 rounded border border-line"
+              :data-testid="`application-setup-account-manual-save-${app.resourceId}`"
+              @click="saveManualAccount(app)"
+            >
+              Save
+            </button>
+          </div>
         </div>
       </div>
 
