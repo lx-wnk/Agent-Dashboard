@@ -283,6 +283,13 @@ function isRoutineDecidable(item: PermissionItem): boolean {
   return item.routineId !== null && item.requests.every(r => isApplicationTool(r.tool))
 }
 
+// Every request already denied ⟹ no decision is offered: the server would
+// refuse it, and the run's allow list would ignore it. The remedy is the
+// grant, which is why the note points at Settings → Grants.
+function allDeniedByDefault(item: PermissionItem): boolean {
+  return item.requests.length > 0 && item.requests.every(r => r.deniedByDefault === true)
+}
+
 function handleDecideTask(taskId: string, ids: string[], decision: PermissionDecision) {
   emit('decide', taskId, ids, decision)
 }
@@ -749,7 +756,10 @@ watch(() => props.focusedSessionId, (id) => {
               </li>
             </ul>
 
-            <div v-if="isRoutineDecidable(item)" class="flex items-center gap-2 flex-wrap">
+            <div v-if="allDeniedByDefault(item)" role="note" data-testid="permission-item-denied-by-default" class="text-[11px] text-fg-faint">
+              Denied by default — change it under Settings → Grants
+            </div>
+            <div v-else-if="isRoutineDecidable(item)" class="flex items-center gap-2 flex-wrap">
               <AppButton
                 variant="success"
                 size="sm"

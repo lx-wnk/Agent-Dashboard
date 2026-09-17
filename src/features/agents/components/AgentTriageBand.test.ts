@@ -789,3 +789,79 @@ describe('agentTriageBand routine decisions', () => {
     wrapper.unmount()
   })
 })
+
+describe('agentTriageBand denied-by-default requests', () => {
+  function plainRequest(o: Partial<PermissionItem['requests'][number]> = {}): PermissionItem['requests'][number] {
+    return {
+      id: 'req-1',
+      stageRunId: 'run-1',
+      tool: 'Bash',
+      pattern: 'npm publish',
+      reason: null,
+      requestedAt: new Date().toISOString(),
+      resolvedAt: null,
+      outcome: null,
+      ...o,
+    }
+  }
+
+  function plainItem(o: Partial<PermissionItem> = {}): PermissionItem {
+    return {
+      taskId: 'task-1',
+      projectName: 'demo',
+      title: 'Ship it',
+      routineId: null,
+      requests: [plainRequest()],
+      ...o,
+    }
+  }
+
+  // Every request already denied: an answer here could not reach the agent —
+  // the note points at the grant instead of offering a decision.
+  it('renders the note instead of a decision when every request is already denied', () => {
+    const item = plainItem({ requests: [plainRequest({ deniedByDefault: true })] })
+    const wrapper = mount(AgentTriageBand, { props: { agents: [], permissionItems: [item] } })
+
+    const note = wrapper.get('[data-testid="permission-item-denied-by-default"]')
+    expect(note.text()).toBe('Denied by default — change it under Settings → Grants')
+    expect(note.attributes('role')).toBe('note')
+    expect(wrapper.find('[data-testid="permission-decide-allow-once"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="permission-item-approve"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  // Only some requests are denied: the operator still has to answer the
+  // others, so the ordinary decision row stays exactly as it was.
+  it('keeps the decision row when only some requests are denied', async () => {
+    const item = plainItem({
+      requests: [plainRequest({ id: 'req-1', deniedByDefault: true }), plainRequest({ id: 'req-2' })],
+    })
+    const wrapper = mount(AgentTriageBand, { props: { agents: [], permissionItems: [item] } })
+    await wrapper.findAll('button').find(b => b.text().includes('Review individually'))!.trigger('click')
+
+    expect(wrapper.find('[data-testid="permission-item-denied-by-default"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="permission-item-approve"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  // No request is denied: nothing changes.
+  it('renders nothing extra when no request is denied', () => {
+    const item = plainItem({ requests: [plainRequest({ deniedByDefault: false })] })
+    const wrapper = mount(AgentTriageBand, { props: { agents: [], permissionItems: [item] } })
+
+    expect(wrapper.find('[data-testid="permission-item-denied-by-default"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="permission-item-approve"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  // The field is optional: a request that never carries it behaves exactly
+  // like one explicitly not denied.
+  it('behaves like none-denied when the field is absent from every request', () => {
+    const item = plainItem({ requests: [plainRequest()] })
+    const wrapper = mount(AgentTriageBand, { props: { agents: [], permissionItems: [item] } })
+
+    expect(wrapper.find('[data-testid="permission-item-denied-by-default"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="permission-item-approve"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+})
