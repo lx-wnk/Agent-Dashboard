@@ -16,7 +16,7 @@
 
 - The server binds to `127.0.0.1`, never `0.0.0.0`.
 - No dependency file changes unless a task says so: `server/go.mod`, `server/go.sum`, `go.work.sum`, `pnpm-lock.yaml` stay byte-identical to `main`.
-- ent regeneration only via `cd server && go generate ./internal/db/ent/`; afterwards `grep -rl "OnConflict" server/internal/db/ent/ | head` must print files.
+- ent regeneration only via `cd server && go generate ./internal/db/ent/`; afterwards `grep -rl "OnConflict" server/internal/db/ent/ | head` must print files. The generator runs with `-mod=mod` and adds its own dependencies to `server/go.sum`: restore it with `git checkout HEAD -- server/go.sum` before committing.
 - While implementing, run package-scoped tests (`go test ./internal/<pkg>/...`). `go test ./...` and `task test` regenerate `server/internal/db/ent/`; run them once per PR at the end and restore `ent/` if it drifted.
 - Before every commit: `gofmt -l` on touched packages prints nothing; `go vet ./...` from `server/` passes; `GOTOOLCHAIN=go1.26.6 golangci-lint run` on touched packages reports 0 issues.
 - Frontend gate: `pnpm lint && pnpm typecheck && pnpm test`; every component test that mounts calls `wrapper.unmount()`.
