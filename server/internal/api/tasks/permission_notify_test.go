@@ -268,3 +268,33 @@ func TestPermissionNotifier_PreferenceWithoutBrowserChannel_NoPush(t *testing.T)
 		t.Fatalf("expected 0 notifier calls without the browser channel, got %d: %v", len(rec.calls), rec.calls)
 	}
 }
+
+func TestPermissionNotifier_BulkWithoutPreference_NoPush(t *testing.T) {
+	bundle, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("db.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+
+	rec := &notifierRecorder{}
+	r := newNotifyTestHandler(t, bundle.Client, rec)
+
+	tk := mustCreateNotifyTask(t, bundle.Client, "full")
+	sr := mustCreateNotifyStageRun(t, bundle.Client, tk.ID)
+
+	b, _ := json.Marshal(map[string]any{
+		"stageRunId": sr.ID,
+		"entries":    []map[string]any{{"tool": "mcp__mail__imap_move_email"}},
+	})
+	req := withAuth(t, httptest.NewRequest(http.MethodPost, "/api/permission-requests/bulk", bytes.NewReader(b)))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("bulk create: got %d, body %s", rr.Code, rr.Body.String())
+	}
+
+	if len(rec.calls) != 0 {
+		t.Fatalf("expected no push without a stored preference, got %v", rec.calls)
+	}
+}
