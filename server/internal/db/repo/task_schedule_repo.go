@@ -24,8 +24,8 @@ type TaskScheduleRepo interface {
 	ListDue(ctx context.Context, now time.Time) ([]*ent.TaskSchedule, error)
 	SetEnabled(ctx context.Context, id string, enabled bool) (*ent.TaskSchedule, error)
 	UpdateFireState(ctx context.Context, id string, in FireStateInput) (*ent.TaskSchedule, error)
-	// RecordSkip increments skipped_count and stamps last_skipped_at — called
-	// when a due schedule is not fired (e.g. concurrency cap reached).
+	// RecordSkip increments skipped_count and stamps last_skipped_at for a fire
+	// refused because the routine's previous run was still in flight.
 	RecordSkip(ctx context.Context, id string, at time.Time) (*ent.TaskSchedule, error)
 }
 
