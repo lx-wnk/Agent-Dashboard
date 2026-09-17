@@ -124,24 +124,32 @@ attribute it to.
 
 ## MCP applications
 
-MCP servers you register for Claude Code at user scope become *applications* in the dashboard. A pipeline run gets an application only when its routine attaches it, the dashboard holds the application's secrets, and grants decide which of its tools an agent may call.
+An MCP server the dashboard knows is an *application*. The dashboard holds the server definition and its secrets, a pipeline run gets an application only when its routine attaches it, and grants decide which of its tools an agent may call.
 
-### Register a server
+### Add a server
 
-```bash
-claude mcp add --scope user mail -- npx -y imap-mcp-server
-```
+**Settings → Applications → Add server**: a name, the command, its arguments and any non-secret environment variables. The server is available to the next run — no restart.
 
-The dashboard mirrors user-scope servers from `~/.claude.json` when it starts, so restart it after adding one. The server then appears in **Settings → Applications** and in the resource registry as `kind = application` with the slug `mcp-<name>`.
+- The name must be a valid slug — lowercase letters, digits and hyphens (`^[a-z0-9][a-z0-9-]{0,63}$`). Anything else is refused with the pattern in the message.
+- `dashboard-channel` and `dashboard-tasks` are the dashboard's own servers; those names are refused.
+- A name that already exists is refused with `409`.
+- Credentials do not belong here. Declare their variable names under [Secrets](#secrets) and store the values there.
 
-- Only user-scope servers are mirrored; `local` and `project` scope servers are not.
-- `dashboard-channel` and `dashboard-tasks` are the dashboard's own servers and are never mirrored.
-- The name must be a valid slug — lowercase letters, digits and hyphens. A server with any other name is skipped with the log line `mcpapps: server not mirrored`, and because runs only receive mirrored applications, **it reaches no run at all**. Register it again under a valid name:
+The same over HTTP: `POST /api/applications` with `{"name": "mail", "command": "npx", "args": ["-y", "imap-mcp-server"], "env": {"IMAP_HOST": "imap.example.com"}}`. Editing a definition is `PATCH /api/applications/{resourceId}` with `{"entry": {...}}` — it replaces the fields the app knows (`type`, `command`, `args`, `url`, `env`) and keeps any other key the entry carries, so a definition imported from Claude's config does not lose what the CLI wrote there.
 
-```bash
-claude mcp remove --scope user My_Mail
-claude mcp add --scope user my-mail -- npx -y imap-mcp-server
-```
+**Removing** a server (`DELETE /api/applications/{resourceId}`) revokes the grants on its tools, deletes its secrets and drops the definition. It is refused with `409` while a routine still attaches it, and the message names those routines. The registry row stays behind as `orphaned` so grants anchored to it still resolve.
+
+### Servers registered with Claude Code
+
+Servers that existed in `~/.claude.json` when this version first started were imported once, definition and all, and are marked as mirrored back into that file. Afterwards the app's copy is the one runs use, and the two are compared rather than merged:
+
+- A server in `~/.claude.json` that the app does not know is offered in Settings → Applications as **Found `<name>` — import?**. Importing reads the definition out of that file; the browser never supplies one.
+- A server the app mirrors whose entry in that file was edited elsewhere is shown as **Changed outside the app**, with two ways out: *Take the change* stops mirroring, so the edit stands, and *Write the app's version back* overwrites it with the stored definition.
+- The dashboard watches the file and refreshes the panel when it changes, so neither banner needs a restart to appear. `GET /api/applications/drift` returns the same two lists. A config that cannot be read reports neither — no information is not evidence of an edit.
+
+### Also available in Claude Code sessions
+
+The switch on an application writes its definition into `~/.claude.json` as `mcpServers.<name>`, so a plain `claude` session sees the same server. The dashboard changes only that one key, keeps every other key and the file's mode, writes through a temporary file in the same directory, and refuses to write through a symlinked config. Secrets are never written: the exported entry is the stored definition, not the one a run gets with its secrets merged in.
 
 ### Routine run modes over MCP
 
@@ -151,7 +159,7 @@ claude mcp add --scope user my-mail -- npx -y imap-mcp-server
 
 A run receives the dashboard's own servers, every application marked **Attach to every run**, and the applications of the routine that created its task — nothing else from `~/.claude.json`.
 
-- The first time the dashboard mirrors servers, every server that already exists is marked **Attach to every run**, so existing setups keep working. Servers added later start unattached. Change it per application in Settings → Applications.
+- Servers that already existed when applications were introduced are marked **Attach to every run**, so existing setups keep working. Servers added later start unattached. Change it per application in Settings → Applications.
 - To attach an application to a routine, tick it under **Applications** in the routine form (**Build → Schedules**), or send `applications` — a list of application resource ids — with `POST` or `PATCH /api/schedules`. An unknown id is rejected with `400`.
 - The scheduler copies the routine's list onto every task it creates. The task API does not accept `applications`; a task gets applications only from its routine.
 
@@ -161,14 +169,14 @@ In Settings → Applications, add the environment variable names the server read
 
 - Values are encrypted with AES-256-GCM using the dashboard's secret key and never returned by any API; the panel only shows whether a value is set and when it last changed. Without a configured key, storing a value fails with `503`.
 - At spawn, the values are written into the `env` of that application's entry in the run's temporary MCP config. No other server in the run sees them.
-- If an attached application is missing a required value, or its server is no longer in `~/.claude.json`, the stage run **fails before the agent starts**, with a reason beginning `MCP applications:`. Add the value and retry the task.
-- If `~/.claude.json` cannot be read, the run gets no applications but still starts.
+- If an attached application is missing a required value, or has no server definition yet, the stage run **fails before the agent starts**, with a reason beginning `MCP applications:`. Add the value or the definition and retry the task.
+- An application reached only through **Attach to every run** and still without a definition is skipped silently instead, so one half-finished application cannot block every run in the system.
 
 The same over HTTP: `PATCH /api/applications/{resourceId}` with `{"requiredEnv": [...]}` or `{"attachAll": true}`; `PUT /api/applications/{resourceId}/secrets/{NAME}` with `{"value": "..."}`; `DELETE` on the same path.
 
 ### Tools and grants
 
-**Refresh tool list** (`POST /api/applications/{resourceId}/refresh`) starts the server with its secrets and reads its tool list. Only stdio servers — entries with a `command` — are supported; `http` and `sse` servers are refused with an error. A failed refresh keeps the previous list and shows the error.
+**Refresh tool list** (`POST /api/applications/{resourceId}/refresh`) starts the server from the definition stored in the app, with its secrets, and reads its tool list. Only stdio servers — entries with a `command` — are supported; `http` and `sse` servers are refused with an error. A failed refresh keeps the previous list and shows the error.
 
 Each tool becomes a capability named the way Claude Code names it, `mcp__<server>__<tool>`, with class `tool`. A later refresh never changes the class of a capability that already exists. The server's `readOnlyHint` and `destructiveHint` are shown for orientation only; the MCP specification says clients must not trust them.
 
