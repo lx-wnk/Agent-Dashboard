@@ -1403,7 +1403,7 @@ Branch `feat/applications-in-db`, worktree `/Users/alexanderwink/dashboard-workt
 - **F-1 — the entry is the source of truth.** `mcp_application.entry` (JSON, `mcpapps.ServerEntry` shape from `entry.go:8`) replaces `ReadServers` for runs and refresh. `claudeconfig.UserMCPServers` stays for the one-time import, the boot reconcile and onboarding.
 - **F-2 — drift is computed, the watcher only nudges.** The "found outside" / "changed outside" state is a pure function over (Claude's `mcpServers` map, the application rows) exposed at `GET /api/applications/drift`. The fsnotify watcher does not hold that state: it broadcasts `applications_changed` on the existing task stream (`sse.TaskBroadcaster`, the SPA already multiplexes `/api/tasks/stream` by payload type, `useSchedules.ts:111-119`) so the panel refetches. A missed event costs a manual refresh, never a wrong banner.
 - **F-3 — export is a single-key rewrite.** `claudeconfig.WriteServerEntry` / `RemoveServerEntry` change only `mcpServers.<name>`, keep every other key and the file mode, write atomically through a temp file in the same directory, and refuse a symlinked path — the shape `materializer/apply.go:78` and `refuseSymlinkBelow` (`apply.go:40-67`) already use. Secrets are never written: the export takes the stored `entry`, not the merged one from `mcpapps.WithEnv`.
-- **F-4 — `exported_hash` is the hash of what we wrote**, so "changed outside" compares the file's current entry against it. Hash = SHA-256 over the canonical JSON of the entry (`json.Marshal` of `ServerEntry`), hex-encoded.
+- **F-4 — `exported_hash` is the hash of what we wrote**, so "changed outside" compares the file's current entry against it. `mcpapps.EntryHash` = SHA-256, hex-encoded, over the entry bytes as they are stored. Both sides of a comparison are re-marshalled through `mcpapps.ServerEntry` first, so key order and whitespace in Claude's config never register as a change.
 
 ### Task 3.1: The application row holds the server entry
 
@@ -1453,11 +1453,11 @@ Branch `feat/applications-in-db`, worktree `/Users/alexanderwink/dashboard-workt
 
 **Interfaces:**
 - Consumes: `repo.MCPApplicationRepo.SetEntry`/`SetExport` (Task 3.1), `Markers` (`reconcile.go:20`, satisfied by `db.MarkerStore`), `channelconfig.IsReservedServerName`.
-- Produces: `const EntryImportMarker = "mcp-applications-entry-import"`; `func ImportEntries(ctx context.Context, servers map[string]json.RawMessage, apps repo.MCPApplicationRepo, markers Markers) (int, error)`.
+- Produces: `const EntryImportMarker = "mcp-applications-entry-import"`; `func ImportEntries(ctx context.Context, servers map[string]json.RawMessage, apps repo.MCPApplicationRepo, markers Markers) (int, error)`; `func EntryHash(entry []byte) string` — SHA-256 over the raw entry bytes, hex-encoded, `""` for an empty entry. `EntryHash` lives in `mcpapps` and nowhere else: `claudeconfig` is a leaf package that imports nothing from this project, and the writer in 3.6 has no use for the hash — its callers compute it.
 
 - [ ] **Step 1: Write the failing tests:** with two user servers (`mail`, `notes`) plus `dashboard-channel` and `dashboard-tasks` in the map and matching application rows: `ImportEntries` copies the raw entry onto each non-reserved row, sets `export_to_claude = true`, records `exported_hash` for it, leaves `attach_all` untouched, skips the reserved names, returns 2, and records the marker; a second call with a changed map imports nothing (marker) and leaves the rows as they were; a server with no application row is skipped (the reconcile that creates rows runs first); an error from the repo aborts without recording the marker.
 - [ ] **Step 2: Run** `go test ./internal/mcpapps/ -run TestImportEntries` — compile error.
-- [ ] **Step 3: Implement.** `ImportEntries` checks `markers.Has(ctx, EntryImportMarker)` first, walks the map skipping `channelconfig.IsReservedServerName`, looks the row up by `ResourceSlug(name)` (`reconcile.go:27`) via `apps.List` (one query, match on `ServerName`), and for each match calls `SetEntry(raw)` then `SetExport(true, EntryHash(raw))`. `EntryHash` lives in `claudeconfig` (Task 3.6) — until then define it here and move it in 3.6 only if the plan's own type check demands it; keep one definition. Record the marker last. Wire it in `di.go` right after the reconcile block, reusing the `servers` value already read there, and log `slog.Info("mcpapps: entries imported", "count", n)`.
+- [ ] **Step 3: Implement.** `ImportEntries` checks `markers.Has(ctx, EntryImportMarker)` first, walks the map skipping `channelconfig.IsReservedServerName`, looks the row up by `ResourceSlug(name)` (`reconcile.go:27`) via `apps.List` (one query, match on `ServerName`), and for each match calls `SetEntry(raw)` then `SetExport(true, EntryHash(raw))`. Record the marker last. Wire it in `di.go` right after the reconcile block, reusing the `servers` value already read there, and log `slog.Info("mcpapps: entries imported", "count", n)`.
 - [ ] **Step 4: Run** — PASS; `go test ./internal/mcpapps/... ./serverapp/...` PASS.
 - [ ] **Step 5: Mutation** — record the marker before importing → the "second call imports nothing" test still passes but the "error aborts without the marker" test goes red; restore identical.
 - [ ] **Step 6: Commit** `feat(applications): import the servers Claude Code already knows`.
@@ -1519,15 +1519,12 @@ Branch `feat/applications-in-db`, worktree `/Users/alexanderwink/dashboard-workt
 ### Task 3.6: Writing one entry into Claude's config, safely
 
 **Files:**
-- Modify: `server/internal/claudeconfig/claudeconfig.go` (new `WriteServerEntry`, `RemoveServerEntry`, `EntryHash`, unexported `atomicWrite`)
+- Modify: `server/internal/claudeconfig/claudeconfig.go` (new `WriteServerEntry`, `RemoveServerEntry`, unexported `atomicWrite`)
 - Test: `server/internal/claudeconfig/claudeconfig_write_test.go` (new)
 
 **Interfaces:**
-- Produces:
+- Produces (the hash is not here — it lives in `mcpapps.EntryHash`, 3.2, because `claudeconfig` imports nothing from this project):
 ```go
-// EntryHash is the fingerprint stored in mcp_application.exported_hash.
-func EntryHash(entry json.RawMessage) string
-
 // WriteServerEntry writes mcpServers.<name> into Claude's config, leaving every
 // other key and the file mode untouched. It refuses a symlinked path.
 func WriteServerEntry(name string, entry json.RawMessage) error
@@ -1536,7 +1533,7 @@ func WriteServerEntry(name string, entry json.RawMessage) error
 func RemoveServerEntry(name string) error
 ```
 
-- [ ] **Step 1: Write the failing tests** (each sets `t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())`): writing into a file that holds `{"numStartups":7,"mcpServers":{"other":{"command":"x"}}}` keeps `numStartups` and `other` and adds the new key; writing into a file with mode `0600` keeps `0600`; writing when the file does not exist creates it with `0600`; a symlinked `.claude.json` → error containing `symlink`, file untouched; `RemoveServerEntry` drops only that key; removing from a missing file returns nil; `EntryHash` is stable across key order (`{"command":"x","args":[]}` vs a re-marshalled equivalent) and differs for a changed command; a temp file is never left behind (read the directory after each case).
+- [ ] **Step 1: Write the failing tests** (each sets `t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())`): writing into a file that holds `{"numStartups":7,"mcpServers":{"other":{"command":"x"}}}` keeps `numStartups` and `other` and adds the new key; writing into a file with mode `0600` keeps `0600`; writing when the file does not exist creates it with `0600`; a symlinked `.claude.json` → error containing `symlink`, file untouched; `RemoveServerEntry` drops only that key; removing from a missing file returns nil; a temp file is never left behind (read the directory after each case).
 - [ ] **Step 2: Run** `go test ./internal/claudeconfig/` — FAIL.
 - [ ] **Step 3: Implement.** Read (missing file = empty object), decode into `map[string]json.RawMessage`, decode `mcpServers` into `map[string]json.RawMessage`, set or delete the one key, re-encode with `json.MarshalIndent(…, "", "  ")`, `os.Lstat` the target and refuse `os.ModeSymlink`, then the `materializer/apply.go:78` atomic-write shape with the existing mode (`os.Stat` → `Mode().Perm()`, default `0o600`).
 - [ ] **Step 4: Run** — PASS; `go test ./internal/claudeconfig/...` PASS.
@@ -1551,7 +1548,7 @@ func RemoveServerEntry(name string) error
 - Test: `server/internal/mcpapps/drift_test.go` (new), `server/internal/api/applications/handler_test.go` (extend)
 
 **Interfaces:**
-- Consumes: `claudeconfig.WriteServerEntry`/`RemoveServerEntry`/`EntryHash` (3.6), `claudeconfig.UserMCPServers`.
+- Consumes: `claudeconfig.WriteServerEntry`/`RemoveServerEntry` (3.6), `mcpapps.EntryHash` (3.2), `claudeconfig.UserMCPServers`.
 - Produces:
 ```go
 type Drift struct {
