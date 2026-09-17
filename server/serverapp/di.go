@@ -753,6 +753,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 			},
 			repo.NewGrantRepo(entClient),
 			resourceRepo,
+			repo.NewTaskScheduleRepo(entClient),
 		)
 	}
 

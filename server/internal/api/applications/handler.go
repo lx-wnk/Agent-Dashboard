@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net/http"
 	"regexp"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -26,10 +28,11 @@ type Handler struct {
 	refresher mcpapps.Refresher
 	grants    repo.GrantRepo
 	resources repo.ResourceRepo
+	schedules repo.TaskScheduleRepo
 }
 
-func NewHandler(apps repo.MCPApplicationRepo, secrets repo.ApplicationSecretRepo, refresher mcpapps.Refresher, grants repo.GrantRepo, resources repo.ResourceRepo) *Handler {
-	return &Handler{apps: apps, secrets: secrets, refresher: refresher, grants: grants, resources: resources}
+func NewHandler(apps repo.MCPApplicationRepo, secrets repo.ApplicationSecretRepo, refresher mcpapps.Refresher, grants repo.GrantRepo, resources repo.ResourceRepo, schedules repo.TaskScheduleRepo) *Handler {
+	return &Handler{apps: apps, secrets: secrets, refresher: refresher, grants: grants, resources: resources, schedules: schedules}
 }
 
 func (h *Handler) Mount(r chi.Router) {
@@ -40,6 +43,7 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Delete("/api/applications/{resourceId}/secrets/{envName}", apierr.ErrorMiddleware(h.deleteSecret))
 	r.Post("/api/applications/{resourceId}/refresh", apierr.ErrorMiddleware(h.refresh))
 	r.Post("/api/applications/{resourceId}/presets/{preset}", apierr.ErrorMiddleware(h.applyPreset))
+	r.Delete("/api/applications/{resourceId}", apierr.ErrorMiddleware(h.delete))
 }
 
 type toolView struct {
@@ -330,4 +334,66 @@ func (h *Handler) applyPreset(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	return writeJSON(w, http.StatusOK, res)
+}
+
+func (h *Handler) delete(w http.ResponseWriter, r *http.Request) error {
+	app, err := h.load(r)
+	if err != nil {
+		return err
+	}
+
+	schedules, err := h.schedules.ListForUser(r.Context(), "", true)
+	if err != nil {
+		return err
+	}
+	var attachedTo []string
+	for _, s := range schedules {
+		if slices.Contains(s.Applications, app.ResourceID) {
+			attachedTo = append(attachedTo, s.Name)
+		}
+	}
+	if len(attachedTo) > 0 {
+		return apierr.NewAppError(http.StatusConflict, "still attached to: "+strings.Join(attachedTo, ", "))
+	}
+
+	payload, ok := auth.PayloadFromContext(r.Context())
+	if !ok {
+		// Missing payload ⟹ bypass mode (DASHBOARD_AUTH=none); act as local admin.
+		payload = auth.BypassPayload()
+	}
+	for _, t := range app.Catalogue {
+		capName := mcpapps.CapabilityName(app.ServerName, t.Name)
+		grants, err := h.grants.ListForCapability(r.Context(), capName)
+		if err != nil {
+			return err
+		}
+		for _, g := range grants {
+			if g.RevokedAt != nil {
+				continue
+			}
+			if err := h.grants.Revoke(r.Context(), g.ID, payload.Sub); err != nil {
+				return err
+			}
+		}
+	}
+
+	secretMeta, err := h.secrets.List(r.Context(), app.ResourceID)
+	if err != nil {
+		return err
+	}
+	for _, m := range secretMeta {
+		if err := h.secrets.Delete(r.Context(), app.ResourceID, m.EnvName); err != nil {
+			return err
+		}
+	}
+
+	if err := h.apps.Delete(r.Context(), app.ResourceID); err != nil {
+		return err
+	}
+	if _, err := h.resources.SetState(r.Context(), app.ResourceID, repo.ResourceStateOrphaned); err != nil {
+		return err
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+	return nil
 }

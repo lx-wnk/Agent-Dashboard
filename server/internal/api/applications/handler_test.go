@@ -15,12 +15,14 @@ import (
 
 	"github.com/lx-wnk/agent-dashboard/server/internal/api/applications"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
+	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent/schema"
 	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
 	"github.com/lx-wnk/agent-dashboard/server/internal/mcpapps"
 	"github.com/lx-wnk/agent-dashboard/server/internal/secretbox"
 )
 
-func newMux(t *testing.T) (*chi.Mux, repo.MCPApplicationRepo, repo.GrantRepo) {
+func newMux(t *testing.T) (*chi.Mux, repo.MCPApplicationRepo, repo.GrantRepo, repo.ApplicationSecretRepo, repo.ResourceRepo, repo.TaskScheduleRepo) {
 	t.Helper()
 	bundle, err := db.Open(":memory:")
 	require.NoError(t, err)
@@ -31,11 +33,12 @@ func newMux(t *testing.T) (*chi.Mux, repo.MCPApplicationRepo, repo.GrantRepo) {
 	secrets := repo.NewApplicationSecretRepo(bundle.Client, box)
 	grants := repo.NewGrantRepo(bundle.Client)
 	resources := repo.NewResourceRepo(bundle.Client)
+	schedules := repo.NewTaskScheduleRepo(bundle.Client)
 	_, err = apps.Upsert(context.Background(), repo.UpsertMCPApplicationInput{ResourceID: "res-mail", ServerName: "mail"})
 	require.NoError(t, err)
 	mux := chi.NewRouter()
-	applications.NewHandler(apps, secrets, mcpapps.Refresher{Now: time.Now}, grants, resources).Mount(mux)
-	return mux, apps, grants
+	applications.NewHandler(apps, secrets, mcpapps.Refresher{Now: time.Now}, grants, resources, schedules).Mount(mux)
+	return mux, apps, grants, secrets, resources, schedules
 }
 
 func do(t *testing.T, mux http.Handler, method, path string, body any) *httptest.ResponseRecorder {
@@ -50,7 +53,7 @@ func do(t *testing.T, mux http.Handler, method, path string, body any) *httptest
 }
 
 func TestSecrets_AreWriteOnly(t *testing.T) {
-	mux, _, _ := newMux(t)
+	mux, _, _, _, _, _ := newMux(t)
 	rec := do(t, mux, http.MethodPut, "/api/applications/res-mail/secrets/MAIL_PASSWORD", map[string]string{"value": "hunter2"})
 	require.Equal(t, http.StatusNoContent, rec.Code, rec.Body.String())
 
@@ -61,13 +64,13 @@ func TestSecrets_AreWriteOnly(t *testing.T) {
 }
 
 func TestSecrets_RejectInvalidVariableNames(t *testing.T) {
-	mux, _, _ := newMux(t)
+	mux, _, _, _, _, _ := newMux(t)
 	rec := do(t, mux, http.MethodPut, "/api/applications/res-mail/secrets/not-an-env-name", map[string]string{"value": "x"})
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
 func TestPatch_SetsAttachAllAndRequiredEnv(t *testing.T) {
-	mux, apps, _ := newMux(t)
+	mux, apps, _, _, _, _ := newMux(t)
 	rec := do(t, mux, http.MethodPatch, "/api/applications/res-mail", map[string]any{
 		"attachAll": true, "requiredEnv": []string{"MAIL_PASSWORD"},
 	})
@@ -80,20 +83,20 @@ func TestPatch_SetsAttachAllAndRequiredEnv(t *testing.T) {
 }
 
 func TestUnknownApplicationIs404(t *testing.T) {
-	mux, _, _ := newMux(t)
+	mux, _, _, _, _, _ := newMux(t)
 	rec := do(t, mux, http.MethodPatch, "/api/applications/nope", map[string]any{"attachAll": true})
 	require.Equal(t, http.StatusNotFound, rec.Code)
 	require.False(t, strings.Contains(rec.Body.String(), "panic"))
 }
 
 func TestApplyPreset_MissingRoutineIdIs400(t *testing.T) {
-	mux, _, _ := newMux(t)
+	mux, _, _, _, _, _ := newMux(t)
 	rec := do(t, mux, http.MethodPost, "/api/applications/res-mail/presets/imap-mcp-server", map[string]any{})
 	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
 }
 
 func TestApplyPreset_UnconfirmedPresetIs409(t *testing.T) {
-	mux, _, grants := newMux(t)
+	mux, _, grants, _, _, _ := newMux(t)
 	rec := do(t, mux, http.MethodPost, "/api/applications/res-mail/presets/imap-mcp-server", map[string]any{"routineId": "routine-1"})
 	require.Equal(t, http.StatusConflict, rec.Code, rec.Body.String())
 
@@ -103,13 +106,13 @@ func TestApplyPreset_UnconfirmedPresetIs409(t *testing.T) {
 }
 
 func TestApplyPreset_UnknownPresetIs404(t *testing.T) {
-	mux, _, _ := newMux(t)
+	mux, _, _, _, _, _ := newMux(t)
 	rec := do(t, mux, http.MethodPost, "/api/applications/res-mail/presets/no-such-preset", map[string]any{"routineId": "routine-1"})
 	require.Equal(t, http.StatusNotFound, rec.Code, rec.Body.String())
 }
 
 func TestCreateApplication_Succeeds(t *testing.T) {
-	mux, apps, _ := newMux(t)
+	mux, apps, _, _, _, _ := newMux(t)
 	rec := do(t, mux, http.MethodPost, "/api/applications", map[string]any{
 		"name":    "notes",
 		"command": "uvx",
@@ -142,7 +145,7 @@ func TestCreateApplication_Succeeds(t *testing.T) {
 }
 
 func TestCreateApplication_InvalidSlugIs400(t *testing.T) {
-	mux, _, _ := newMux(t)
+	mux, _, _, _, _, _ := newMux(t)
 	rec := do(t, mux, http.MethodPost, "/api/applications", map[string]any{
 		"name": "Notes Server", "command": "uvx",
 	})
@@ -153,7 +156,7 @@ func TestCreateApplication_InvalidSlugIs400(t *testing.T) {
 func TestCreateApplication_ReservedNameIs400(t *testing.T) {
 	for _, name := range []string{"dashboard-channel", "dashboard-tasks"} {
 		t.Run(name, func(t *testing.T) {
-			mux, _, _ := newMux(t)
+			mux, _, _, _, _, _ := newMux(t)
 			rec := do(t, mux, http.MethodPost, "/api/applications", map[string]any{
 				"name": name, "command": "uvx",
 			})
@@ -163,7 +166,7 @@ func TestCreateApplication_ReservedNameIs400(t *testing.T) {
 }
 
 func TestCreateApplication_DuplicateNameIs409(t *testing.T) {
-	mux, _, _ := newMux(t)
+	mux, _, _, _, _, _ := newMux(t)
 	rec := do(t, mux, http.MethodPost, "/api/applications", map[string]any{
 		"name": "mail", "command": "uvx",
 	})
@@ -171,7 +174,7 @@ func TestCreateApplication_DuplicateNameIs409(t *testing.T) {
 }
 
 func TestCreateApplication_MissingCommandIs400(t *testing.T) {
-	mux, _, _ := newMux(t)
+	mux, _, _, _, _, _ := newMux(t)
 	rec := do(t, mux, http.MethodPost, "/api/applications", map[string]any{
 		"name": "notes",
 	})
@@ -180,7 +183,7 @@ func TestCreateApplication_MissingCommandIs400(t *testing.T) {
 }
 
 func TestCreateApplication_InvalidEnvKeyIs400(t *testing.T) {
-	mux, _, _ := newMux(t)
+	mux, _, _, _, _, _ := newMux(t)
 	rec := do(t, mux, http.MethodPost, "/api/applications", map[string]any{
 		"name": "notes", "command": "uvx", "env": map[string]string{"lower": "x"},
 	})
@@ -188,7 +191,7 @@ func TestCreateApplication_InvalidEnvKeyIs400(t *testing.T) {
 }
 
 func TestPatch_ReplacesEntry(t *testing.T) {
-	mux, apps, _ := newMux(t)
+	mux, apps, _, _, _, _ := newMux(t)
 	rec := do(t, mux, http.MethodPatch, "/api/applications/res-mail", map[string]any{
 		"attachAll": true,
 	})
@@ -208,14 +211,14 @@ func TestPatch_ReplacesEntry(t *testing.T) {
 }
 
 func TestView_NoEntryIsEmptyObject(t *testing.T) {
-	mux, _, _ := newMux(t)
+	mux, _, _, _, _, _ := newMux(t)
 	rec := do(t, mux, http.MethodGet, "/api/applications", nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Contains(t, rec.Body.String(), `"entry":{}`)
 }
 
 func TestPatch_EntryKeepsFieldsTheAppDoesNotEdit(t *testing.T) {
-	mux, apps, _ := newMux(t)
+	mux, apps, _, _, _, _ := newMux(t)
 	ctx := context.Background()
 	_, err := apps.SetEntry(ctx, "res-mail", json.RawMessage(`{"type":"http","url":"https://x","headers":{"A":"b"},"args":["old"]}`))
 	require.NoError(t, err)
@@ -232,4 +235,102 @@ func TestPatch_EntryKeepsFieldsTheAppDoesNotEdit(t *testing.T) {
 	require.Equal(t, map[string]any{"A": "b"}, obj["headers"], "a key the app does not edit must survive an edit")
 	require.Equal(t, "https://y", obj["url"])
 	require.NotContains(t, obj, "args", "a field cleared in the form must be removed")
+}
+
+// deletableApp gives res-mail everything a delete has to clean up: a registry
+// row to orphan, a catalogue so there is a capability to revoke, a live grant
+// on it and one secret.
+func deletableApp(t *testing.T, apps repo.MCPApplicationRepo, grants repo.GrantRepo, secrets repo.ApplicationSecretRepo, resources repo.ResourceRepo) string {
+	t.Helper()
+	ctx := context.Background()
+	res, err := resources.Upsert(ctx, repo.UpsertResourceInput{
+		Kind: repo.ResourceKindApplication, Slug: "mcp-mail", Name: "mail",
+		Scope: repo.GlobalScope(), State: repo.ResourceStateDiscovered,
+		Origin: repo.ResourceOriginLocal, OriginRef: "mail",
+	})
+	require.NoError(t, err)
+	_, err = apps.Upsert(ctx, repo.UpsertMCPApplicationInput{ResourceID: res.ID, ServerName: "notes"})
+	require.NoError(t, err)
+	require.NoError(t, apps.RecordCatalogue(ctx, res.ID, []schema.CatalogueTool{{Name: "read"}}, "", time.Now()))
+	require.NoError(t, secrets.Set(ctx, res.ID, "NOTES_TOKEN", "hunter2"))
+	_, err = grants.Create(ctx, repo.CreateGrantInput{
+		CapabilityName: mcpapps.CapabilityName("notes", "read"),
+		Context:        repo.GrantContextFor("application", res.ID),
+		Mode:           repo.GrantModeAllow,
+		GrantedBy:      "tester",
+	})
+	require.NoError(t, err)
+	return res.ID
+}
+
+func attachRoutine(t *testing.T, schedules repo.TaskScheduleRepo, name, resourceID string) {
+	t.Helper()
+	_, err := schedules.Create(context.Background(), repo.CreateTaskScheduleInput{
+		Name: name, CronExpr: "*/5 * * * *", SlugPrefix: name,
+		Title: name, Cwd: "/tmp", Priority: "medium",
+		MaxIterations: 20, StageTimeoutSeconds: 1800,
+		Applications: []string{resourceID},
+	})
+	require.NoError(t, err)
+}
+
+func liveGrants(t *testing.T, grants repo.GrantRepo, capName string) int {
+	t.Helper()
+	rows, err := grants.ListForCapability(context.Background(), capName)
+	require.NoError(t, err)
+	live := 0
+	for _, g := range rows {
+		if g.RevokedAt == nil {
+			live++
+		}
+	}
+	return live
+}
+
+func TestDeleteApplication_RemovesRowSecretsAndGrantsAndOrphansTheResource(t *testing.T) {
+	mux, apps, grants, secrets, resources, _ := newMux(t)
+	ctx := context.Background()
+	resID := deletableApp(t, apps, grants, secrets, resources)
+
+	rec := do(t, mux, http.MethodDelete, "/api/applications/"+resID, nil)
+	require.Equal(t, http.StatusNoContent, rec.Code, rec.Body.String())
+
+	_, err := apps.GetByResourceID(ctx, resID)
+	require.True(t, ent.IsNotFound(err))
+
+	meta, err := secrets.List(ctx, resID)
+	require.NoError(t, err)
+	require.Empty(t, meta)
+
+	require.Equal(t, 0, liveGrants(t, grants, mcpapps.CapabilityName("notes", "read")))
+
+	res, err := resources.Get(ctx, repo.ResourceKindApplication, repo.GlobalScope(), "mcp-mail")
+	require.NoError(t, err, "the resource row must survive so grants anchored to it still resolve")
+	require.Equal(t, repo.ResourceStateOrphaned, res.State)
+}
+
+func TestDeleteApplication_AttachedToRoutinesIs409AndRemovesNothing(t *testing.T) {
+	mux, apps, grants, secrets, resources, schedules := newMux(t)
+	ctx := context.Background()
+	resID := deletableApp(t, apps, grants, secrets, resources)
+	attachRoutine(t, schedules, "inbox", resID)
+	attachRoutine(t, schedules, "nightly", resID)
+
+	rec := do(t, mux, http.MethodDelete, "/api/applications/"+resID, nil)
+	require.Equal(t, http.StatusConflict, rec.Code)
+	require.Contains(t, rec.Body.String(), "inbox")
+	require.Contains(t, rec.Body.String(), "nightly")
+
+	_, err := apps.GetByResourceID(ctx, resID)
+	require.NoError(t, err, "nothing may be removed while a routine still attaches it")
+	meta, err := secrets.List(ctx, resID)
+	require.NoError(t, err)
+	require.Len(t, meta, 1)
+	require.Equal(t, 1, liveGrants(t, grants, mcpapps.CapabilityName("notes", "read")))
+}
+
+func TestDeleteApplication_UnknownIdIs404(t *testing.T) {
+	mux, _, _, _, _, _ := newMux(t)
+	rec := do(t, mux, http.MethodDelete, "/api/applications/res-nope", nil)
+	require.Equal(t, http.StatusNotFound, rec.Code)
 }
