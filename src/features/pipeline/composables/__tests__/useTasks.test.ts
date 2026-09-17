@@ -118,6 +118,30 @@ describe('useTasks', () => {
     wrapper.unmount()
   })
 
+  it('refetch requests all task kinds so routine jobs reach the needs-you band', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve([]) })
+    vi.stubGlobal('fetch', fetchMock)
+    const { result, wrapper } = withSetup(() => useTasks({ autoStart: false }))
+
+    await result.refetch()
+
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/tasks?kind=all')
+    wrapper.unmount()
+  })
+
+  it('excludes routine jobs from stage groupings while keeping them in the raw task list', () => {
+    const { result, wrapper } = withSetup(() => useTasks({ autoStart: false }))
+    result.tasks.value = [
+      { id: 'p1', kind: 'pipeline', currentStage: 'implementation', rank: 100, createdAt: '2026-01-01T00:00:00Z' },
+      { id: 'j1', kind: 'job', currentStage: 'job', needsUser: true, rank: 200, createdAt: '2026-01-01T00:00:00Z' },
+    ] as any
+
+    expect(result.tasks.value).toHaveLength(2)
+    expect((result.tasksByStageMap.value as Record<string, unknown>).job).toBeUndefined()
+    expect(result.tasksByStage('implementation').map(t => t.id)).toEqual(['p1'])
+    wrapper.unmount()
+  })
+
   it('tasksByStageMap orders each stage by rank ascending', () => {
     const { result, wrapper } = withSetup(() => useTasks({ autoStart: false }))
     result.tasks.value = [

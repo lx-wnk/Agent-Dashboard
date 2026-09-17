@@ -7,6 +7,9 @@ import { createSseResource } from '@/composables/useSseResource'
 import { errorMessage } from '@/utils/errorMessage'
 
 const tasks = shallowRef<PipelineTask[]>([])
+// Routine-owned jobs never appear on the pipeline board — filter once here so
+// every stage grouping (tasksByStage, tasksByStageMap) inherits the exclusion.
+const pipelineTasks = computed(() => tasks.value.filter(t => t.kind !== 'job'))
 const selectedTask = ref<PipelineTask | null>(null)
 const isLoading = ref(true)
 const error = ref<string | null>(null)
@@ -92,7 +95,7 @@ function midpointRank(before?: PipelineTask, after?: PipelineTask): number {
 
 async function fetchTasks() {
   try {
-    const res = await fetch('/api/tasks')
+    const res = await fetch('/api/tasks?kind=all')
     if (!res.ok)
       throw new Error(`HTTP ${res.status}`)
     tasks.value = await res.json() as PipelineTask[]
@@ -427,12 +430,12 @@ export function useTasks(options?: { autoStart?: boolean }) {
   }
 
   function tasksByStage(stage: PipelineStage): PipelineTask[] {
-    return tasks.value.filter(t => t.currentStage === stage).sort(byRank)
+    return pipelineTasks.value.filter(t => t.currentStage === stage).sort(byRank)
   }
 
   const tasksByStageMap = computed(() => {
     const map: Partial<Record<PipelineStage, PipelineTask[]>> = {}
-    for (const task of tasks.value) {
+    for (const task of pipelineTasks.value) {
       if (!map[task.currentStage])
         map[task.currentStage] = []
       map[task.currentStage]!.push(task)
@@ -444,6 +447,7 @@ export function useTasks(options?: { autoStart?: boolean }) {
 
   return {
     tasks,
+    pipelineTasks,
     selectedTask,
     isLoading,
     error,
