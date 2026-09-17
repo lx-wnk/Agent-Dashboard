@@ -63,27 +63,21 @@ func ApplyPreset(ctx context.Context, grants repo.GrantRepo, app *ent.MCPApplica
 			return nil
 		}
 		name := CapabilityName(app.ServerName, tool)
-		rows, err := grants.ListForCapability(ctx, name)
-		if err != nil {
-			return err
-		}
-		for _, row := range rows {
-			if row.RevokedAt == nil && row.ExpiresAt == nil && row.Pattern == "" && row.LimitCount == 0 &&
-				row.Mode == mode && row.ContextKind == grantCtx.Kind && row.ContextRef == grantCtx.Ref {
-				res.Existing = append(res.Existing, name)
-				return nil
-			}
-		}
-		if _, err := grants.Create(ctx, repo.CreateGrantInput{
+		created, err := EnsureGrant(ctx, grants, repo.CreateGrantInput{
 			CapabilityName: name,
 			Context:        grantCtx,
 			Mode:           mode,
 			GrantedBy:      grantedBy,
 			Reason:         "preset " + p.Server,
-		}); err != nil {
+		})
+		if err != nil {
 			return err
 		}
-		res.Created = append(res.Created, name)
+		if created {
+			res.Created = append(res.Created, name)
+		} else {
+			res.Existing = append(res.Existing, name)
+		}
 		return nil
 	}
 	for _, tool := range p.AllowForRoutine {
