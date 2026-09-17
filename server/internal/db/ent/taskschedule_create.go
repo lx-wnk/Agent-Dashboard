@@ -165,16 +165,16 @@ func (_c *TaskScheduleCreate) SetNillablePriority(v *string) *TaskScheduleCreate
 	return _c
 }
 
-// SetCurrentStage sets the "current_stage" field.
-func (_c *TaskScheduleCreate) SetCurrentStage(v string) *TaskScheduleCreate {
-	_c.mutation.SetCurrentStage(v)
+// SetRunMode sets the "run_mode" field.
+func (_c *TaskScheduleCreate) SetRunMode(v string) *TaskScheduleCreate {
+	_c.mutation.SetRunMode(v)
 	return _c
 }
 
-// SetNillableCurrentStage sets the "current_stage" field if the given value is not nil.
-func (_c *TaskScheduleCreate) SetNillableCurrentStage(v *string) *TaskScheduleCreate {
+// SetNillableRunMode sets the "run_mode" field if the given value is not nil.
+func (_c *TaskScheduleCreate) SetNillableRunMode(v *string) *TaskScheduleCreate {
 	if v != nil {
-		_c.SetCurrentStage(*v)
+		_c.SetRunMode(*v)
 	}
 	return _c
 }
@@ -339,6 +339,34 @@ func (_c *TaskScheduleCreate) SetNillableLastTaskID(v *string) *TaskScheduleCrea
 	return _c
 }
 
+// SetLastSkippedAt sets the "last_skipped_at" field.
+func (_c *TaskScheduleCreate) SetLastSkippedAt(v time.Time) *TaskScheduleCreate {
+	_c.mutation.SetLastSkippedAt(v)
+	return _c
+}
+
+// SetNillableLastSkippedAt sets the "last_skipped_at" field if the given value is not nil.
+func (_c *TaskScheduleCreate) SetNillableLastSkippedAt(v *time.Time) *TaskScheduleCreate {
+	if v != nil {
+		_c.SetLastSkippedAt(*v)
+	}
+	return _c
+}
+
+// SetSkippedCount sets the "skipped_count" field.
+func (_c *TaskScheduleCreate) SetSkippedCount(v int) *TaskScheduleCreate {
+	_c.mutation.SetSkippedCount(v)
+	return _c
+}
+
+// SetNillableSkippedCount sets the "skipped_count" field if the given value is not nil.
+func (_c *TaskScheduleCreate) SetNillableSkippedCount(v *int) *TaskScheduleCreate {
+	if v != nil {
+		_c.SetSkippedCount(*v)
+	}
+	return _c
+}
+
 // SetResourceID sets the "resource_id" field.
 func (_c *TaskScheduleCreate) SetResourceID(v string) *TaskScheduleCreate {
 	_c.mutation.SetResourceID(v)
@@ -458,9 +486,9 @@ func (_c *TaskScheduleCreate) defaults() {
 		v := taskschedule.DefaultPriority
 		_c.mutation.SetPriority(v)
 	}
-	if _, ok := _c.mutation.CurrentStage(); !ok {
-		v := taskschedule.DefaultCurrentStage
-		_c.mutation.SetCurrentStage(v)
+	if _, ok := _c.mutation.RunMode(); !ok {
+		v := taskschedule.DefaultRunMode
+		_c.mutation.SetRunMode(v)
 	}
 	if _, ok := _c.mutation.MaxIterations(); !ok {
 		v := taskschedule.DefaultMaxIterations
@@ -473,6 +501,10 @@ func (_c *TaskScheduleCreate) defaults() {
 	if _, ok := _c.mutation.SilverBullet(); !ok {
 		v := taskschedule.DefaultSilverBullet
 		_c.mutation.SetSilverBullet(v)
+	}
+	if _, ok := _c.mutation.SkippedCount(); !ok {
+		v := taskschedule.DefaultSkippedCount
+		_c.mutation.SetSkippedCount(v)
 	}
 	if _, ok := _c.mutation.ResourceID(); !ok {
 		v := taskschedule.DefaultResourceID
@@ -541,8 +573,8 @@ func (_c *TaskScheduleCreate) check() error {
 	if _, ok := _c.mutation.Priority(); !ok {
 		return &ValidationError{Name: "priority", err: errors.New(`ent: missing required field "TaskSchedule.priority"`)}
 	}
-	if _, ok := _c.mutation.CurrentStage(); !ok {
-		return &ValidationError{Name: "current_stage", err: errors.New(`ent: missing required field "TaskSchedule.current_stage"`)}
+	if _, ok := _c.mutation.RunMode(); !ok {
+		return &ValidationError{Name: "run_mode", err: errors.New(`ent: missing required field "TaskSchedule.run_mode"`)}
 	}
 	if _, ok := _c.mutation.MaxIterations(); !ok {
 		return &ValidationError{Name: "max_iterations", err: errors.New(`ent: missing required field "TaskSchedule.max_iterations"`)}
@@ -552,6 +584,9 @@ func (_c *TaskScheduleCreate) check() error {
 	}
 	if _, ok := _c.mutation.SilverBullet(); !ok {
 		return &ValidationError{Name: "silver_bullet", err: errors.New(`ent: missing required field "TaskSchedule.silver_bullet"`)}
+	}
+	if _, ok := _c.mutation.SkippedCount(); !ok {
+		return &ValidationError{Name: "skipped_count", err: errors.New(`ent: missing required field "TaskSchedule.skipped_count"`)}
 	}
 	if _, ok := _c.mutation.Applications(); !ok {
 		return &ValidationError{Name: "applications", err: errors.New(`ent: missing required field "TaskSchedule.applications"`)}
@@ -650,9 +685,9 @@ func (_c *TaskScheduleCreate) createSpec() (*TaskSchedule, *sqlgraph.CreateSpec)
 		_spec.SetField(taskschedule.FieldPriority, field.TypeString, value)
 		_node.Priority = value
 	}
-	if value, ok := _c.mutation.CurrentStage(); ok {
-		_spec.SetField(taskschedule.FieldCurrentStage, field.TypeString, value)
-		_node.CurrentStage = value
+	if value, ok := _c.mutation.RunMode(); ok {
+		_spec.SetField(taskschedule.FieldRunMode, field.TypeString, value)
+		_node.RunMode = value
 	}
 	if value, ok := _c.mutation.MaxIterations(); ok {
 		_spec.SetField(taskschedule.FieldMaxIterations, field.TypeInt, value)
@@ -701,6 +736,14 @@ func (_c *TaskScheduleCreate) createSpec() (*TaskSchedule, *sqlgraph.CreateSpec)
 	if value, ok := _c.mutation.LastTaskID(); ok {
 		_spec.SetField(taskschedule.FieldLastTaskID, field.TypeString, value)
 		_node.LastTaskID = &value
+	}
+	if value, ok := _c.mutation.LastSkippedAt(); ok {
+		_spec.SetField(taskschedule.FieldLastSkippedAt, field.TypeTime, value)
+		_node.LastSkippedAt = &value
+	}
+	if value, ok := _c.mutation.SkippedCount(); ok {
+		_spec.SetField(taskschedule.FieldSkippedCount, field.TypeInt, value)
+		_node.SkippedCount = value
 	}
 	if value, ok := _c.mutation.ResourceID(); ok {
 		_spec.SetField(taskschedule.FieldResourceID, field.TypeString, value)
@@ -954,15 +997,15 @@ func (u *TaskScheduleUpsert) UpdatePriority() *TaskScheduleUpsert {
 	return u
 }
 
-// SetCurrentStage sets the "current_stage" field.
-func (u *TaskScheduleUpsert) SetCurrentStage(v string) *TaskScheduleUpsert {
-	u.Set(taskschedule.FieldCurrentStage, v)
+// SetRunMode sets the "run_mode" field.
+func (u *TaskScheduleUpsert) SetRunMode(v string) *TaskScheduleUpsert {
+	u.Set(taskschedule.FieldRunMode, v)
 	return u
 }
 
-// UpdateCurrentStage sets the "current_stage" field to the value that was provided on create.
-func (u *TaskScheduleUpsert) UpdateCurrentStage() *TaskScheduleUpsert {
-	u.SetExcluded(taskschedule.FieldCurrentStage)
+// UpdateRunMode sets the "run_mode" field to the value that was provided on create.
+func (u *TaskScheduleUpsert) UpdateRunMode() *TaskScheduleUpsert {
+	u.SetExcluded(taskschedule.FieldRunMode)
 	return u
 }
 
@@ -1185,6 +1228,42 @@ func (u *TaskScheduleUpsert) UpdateLastTaskID() *TaskScheduleUpsert {
 // ClearLastTaskID clears the value of the "last_task_id" field.
 func (u *TaskScheduleUpsert) ClearLastTaskID() *TaskScheduleUpsert {
 	u.SetNull(taskschedule.FieldLastTaskID)
+	return u
+}
+
+// SetLastSkippedAt sets the "last_skipped_at" field.
+func (u *TaskScheduleUpsert) SetLastSkippedAt(v time.Time) *TaskScheduleUpsert {
+	u.Set(taskschedule.FieldLastSkippedAt, v)
+	return u
+}
+
+// UpdateLastSkippedAt sets the "last_skipped_at" field to the value that was provided on create.
+func (u *TaskScheduleUpsert) UpdateLastSkippedAt() *TaskScheduleUpsert {
+	u.SetExcluded(taskschedule.FieldLastSkippedAt)
+	return u
+}
+
+// ClearLastSkippedAt clears the value of the "last_skipped_at" field.
+func (u *TaskScheduleUpsert) ClearLastSkippedAt() *TaskScheduleUpsert {
+	u.SetNull(taskschedule.FieldLastSkippedAt)
+	return u
+}
+
+// SetSkippedCount sets the "skipped_count" field.
+func (u *TaskScheduleUpsert) SetSkippedCount(v int) *TaskScheduleUpsert {
+	u.Set(taskschedule.FieldSkippedCount, v)
+	return u
+}
+
+// UpdateSkippedCount sets the "skipped_count" field to the value that was provided on create.
+func (u *TaskScheduleUpsert) UpdateSkippedCount() *TaskScheduleUpsert {
+	u.SetExcluded(taskschedule.FieldSkippedCount)
+	return u
+}
+
+// AddSkippedCount adds v to the "skipped_count" field.
+func (u *TaskScheduleUpsert) AddSkippedCount(v int) *TaskScheduleUpsert {
+	u.Add(taskschedule.FieldSkippedCount, v)
 	return u
 }
 
@@ -1509,17 +1588,17 @@ func (u *TaskScheduleUpsertOne) UpdatePriority() *TaskScheduleUpsertOne {
 	})
 }
 
-// SetCurrentStage sets the "current_stage" field.
-func (u *TaskScheduleUpsertOne) SetCurrentStage(v string) *TaskScheduleUpsertOne {
+// SetRunMode sets the "run_mode" field.
+func (u *TaskScheduleUpsertOne) SetRunMode(v string) *TaskScheduleUpsertOne {
 	return u.Update(func(s *TaskScheduleUpsert) {
-		s.SetCurrentStage(v)
+		s.SetRunMode(v)
 	})
 }
 
-// UpdateCurrentStage sets the "current_stage" field to the value that was provided on create.
-func (u *TaskScheduleUpsertOne) UpdateCurrentStage() *TaskScheduleUpsertOne {
+// UpdateRunMode sets the "run_mode" field to the value that was provided on create.
+func (u *TaskScheduleUpsertOne) UpdateRunMode() *TaskScheduleUpsertOne {
 	return u.Update(func(s *TaskScheduleUpsert) {
-		s.UpdateCurrentStage()
+		s.UpdateRunMode()
 	})
 }
 
@@ -1779,6 +1858,48 @@ func (u *TaskScheduleUpsertOne) UpdateLastTaskID() *TaskScheduleUpsertOne {
 func (u *TaskScheduleUpsertOne) ClearLastTaskID() *TaskScheduleUpsertOne {
 	return u.Update(func(s *TaskScheduleUpsert) {
 		s.ClearLastTaskID()
+	})
+}
+
+// SetLastSkippedAt sets the "last_skipped_at" field.
+func (u *TaskScheduleUpsertOne) SetLastSkippedAt(v time.Time) *TaskScheduleUpsertOne {
+	return u.Update(func(s *TaskScheduleUpsert) {
+		s.SetLastSkippedAt(v)
+	})
+}
+
+// UpdateLastSkippedAt sets the "last_skipped_at" field to the value that was provided on create.
+func (u *TaskScheduleUpsertOne) UpdateLastSkippedAt() *TaskScheduleUpsertOne {
+	return u.Update(func(s *TaskScheduleUpsert) {
+		s.UpdateLastSkippedAt()
+	})
+}
+
+// ClearLastSkippedAt clears the value of the "last_skipped_at" field.
+func (u *TaskScheduleUpsertOne) ClearLastSkippedAt() *TaskScheduleUpsertOne {
+	return u.Update(func(s *TaskScheduleUpsert) {
+		s.ClearLastSkippedAt()
+	})
+}
+
+// SetSkippedCount sets the "skipped_count" field.
+func (u *TaskScheduleUpsertOne) SetSkippedCount(v int) *TaskScheduleUpsertOne {
+	return u.Update(func(s *TaskScheduleUpsert) {
+		s.SetSkippedCount(v)
+	})
+}
+
+// AddSkippedCount adds v to the "skipped_count" field.
+func (u *TaskScheduleUpsertOne) AddSkippedCount(v int) *TaskScheduleUpsertOne {
+	return u.Update(func(s *TaskScheduleUpsert) {
+		s.AddSkippedCount(v)
+	})
+}
+
+// UpdateSkippedCount sets the "skipped_count" field to the value that was provided on create.
+func (u *TaskScheduleUpsertOne) UpdateSkippedCount() *TaskScheduleUpsertOne {
+	return u.Update(func(s *TaskScheduleUpsert) {
+		s.UpdateSkippedCount()
 	})
 }
 
@@ -2280,17 +2401,17 @@ func (u *TaskScheduleUpsertBulk) UpdatePriority() *TaskScheduleUpsertBulk {
 	})
 }
 
-// SetCurrentStage sets the "current_stage" field.
-func (u *TaskScheduleUpsertBulk) SetCurrentStage(v string) *TaskScheduleUpsertBulk {
+// SetRunMode sets the "run_mode" field.
+func (u *TaskScheduleUpsertBulk) SetRunMode(v string) *TaskScheduleUpsertBulk {
 	return u.Update(func(s *TaskScheduleUpsert) {
-		s.SetCurrentStage(v)
+		s.SetRunMode(v)
 	})
 }
 
-// UpdateCurrentStage sets the "current_stage" field to the value that was provided on create.
-func (u *TaskScheduleUpsertBulk) UpdateCurrentStage() *TaskScheduleUpsertBulk {
+// UpdateRunMode sets the "run_mode" field to the value that was provided on create.
+func (u *TaskScheduleUpsertBulk) UpdateRunMode() *TaskScheduleUpsertBulk {
 	return u.Update(func(s *TaskScheduleUpsert) {
-		s.UpdateCurrentStage()
+		s.UpdateRunMode()
 	})
 }
 
@@ -2550,6 +2671,48 @@ func (u *TaskScheduleUpsertBulk) UpdateLastTaskID() *TaskScheduleUpsertBulk {
 func (u *TaskScheduleUpsertBulk) ClearLastTaskID() *TaskScheduleUpsertBulk {
 	return u.Update(func(s *TaskScheduleUpsert) {
 		s.ClearLastTaskID()
+	})
+}
+
+// SetLastSkippedAt sets the "last_skipped_at" field.
+func (u *TaskScheduleUpsertBulk) SetLastSkippedAt(v time.Time) *TaskScheduleUpsertBulk {
+	return u.Update(func(s *TaskScheduleUpsert) {
+		s.SetLastSkippedAt(v)
+	})
+}
+
+// UpdateLastSkippedAt sets the "last_skipped_at" field to the value that was provided on create.
+func (u *TaskScheduleUpsertBulk) UpdateLastSkippedAt() *TaskScheduleUpsertBulk {
+	return u.Update(func(s *TaskScheduleUpsert) {
+		s.UpdateLastSkippedAt()
+	})
+}
+
+// ClearLastSkippedAt clears the value of the "last_skipped_at" field.
+func (u *TaskScheduleUpsertBulk) ClearLastSkippedAt() *TaskScheduleUpsertBulk {
+	return u.Update(func(s *TaskScheduleUpsert) {
+		s.ClearLastSkippedAt()
+	})
+}
+
+// SetSkippedCount sets the "skipped_count" field.
+func (u *TaskScheduleUpsertBulk) SetSkippedCount(v int) *TaskScheduleUpsertBulk {
+	return u.Update(func(s *TaskScheduleUpsert) {
+		s.SetSkippedCount(v)
+	})
+}
+
+// AddSkippedCount adds v to the "skipped_count" field.
+func (u *TaskScheduleUpsertBulk) AddSkippedCount(v int) *TaskScheduleUpsertBulk {
+	return u.Update(func(s *TaskScheduleUpsert) {
+		s.AddSkippedCount(v)
+	})
+}
+
+// UpdateSkippedCount sets the "skipped_count" field to the value that was provided on create.
+func (u *TaskScheduleUpsertBulk) UpdateSkippedCount() *TaskScheduleUpsertBulk {
+	return u.Update(func(s *TaskScheduleUpsert) {
+		s.UpdateSkippedCount()
 	})
 }
 

@@ -29284,7 +29284,7 @@ type TaskScheduleMutation struct {
 	source_branch            *string
 	target_branch            *string
 	priority                 *string
-	current_stage            *string
+	run_mode                 *string
 	max_iterations           *int
 	addmax_iterations        *int
 	token_budget             *int
@@ -29301,6 +29301,9 @@ type TaskScheduleMutation struct {
 	next_run_at              *time.Time
 	last_run_at              *time.Time
 	last_task_id             *string
+	last_skipped_at          *time.Time
+	skipped_count            *int
+	addskipped_count         *int
 	resource_id              *string
 	applications             *[]string
 	appendapplications       []string
@@ -29937,40 +29940,40 @@ func (m *TaskScheduleMutation) ResetPriority() {
 	m.priority = nil
 }
 
-// SetCurrentStage sets the "current_stage" field.
-func (m *TaskScheduleMutation) SetCurrentStage(s string) {
-	m.current_stage = &s
+// SetRunMode sets the "run_mode" field.
+func (m *TaskScheduleMutation) SetRunMode(s string) {
+	m.run_mode = &s
 }
 
-// CurrentStage returns the value of the "current_stage" field in the mutation.
-func (m *TaskScheduleMutation) CurrentStage() (r string, exists bool) {
-	v := m.current_stage
+// RunMode returns the value of the "run_mode" field in the mutation.
+func (m *TaskScheduleMutation) RunMode() (r string, exists bool) {
+	v := m.run_mode
 	if v == nil {
 		return
 	}
 	return *v, true
 }
 
-// OldCurrentStage returns the old "current_stage" field's value of the TaskSchedule entity.
+// OldRunMode returns the old "run_mode" field's value of the TaskSchedule entity.
 // If the TaskSchedule object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *TaskScheduleMutation) OldCurrentStage(ctx context.Context) (v string, err error) {
+func (m *TaskScheduleMutation) OldRunMode(ctx context.Context) (v string, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldCurrentStage is only allowed on UpdateOne operations")
+		return v, errors.New("OldRunMode is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldCurrentStage requires an ID field in the mutation")
+		return v, errors.New("OldRunMode requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
-		return v, fmt.Errorf("querying old value for OldCurrentStage: %w", err)
+		return v, fmt.Errorf("querying old value for OldRunMode: %w", err)
 	}
-	return oldValue.CurrentStage, nil
+	return oldValue.RunMode, nil
 }
 
-// ResetCurrentStage resets all changes to the "current_stage" field.
-func (m *TaskScheduleMutation) ResetCurrentStage() {
-	m.current_stage = nil
+// ResetRunMode resets all changes to the "run_mode" field.
+func (m *TaskScheduleMutation) ResetRunMode() {
+	m.run_mode = nil
 }
 
 // SetMaxIterations sets the "max_iterations" field.
@@ -30604,6 +30607,111 @@ func (m *TaskScheduleMutation) ResetLastTaskID() {
 	delete(m.clearedFields, taskschedule.FieldLastTaskID)
 }
 
+// SetLastSkippedAt sets the "last_skipped_at" field.
+func (m *TaskScheduleMutation) SetLastSkippedAt(t time.Time) {
+	m.last_skipped_at = &t
+}
+
+// LastSkippedAt returns the value of the "last_skipped_at" field in the mutation.
+func (m *TaskScheduleMutation) LastSkippedAt() (r time.Time, exists bool) {
+	v := m.last_skipped_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLastSkippedAt returns the old "last_skipped_at" field's value of the TaskSchedule entity.
+// If the TaskSchedule object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TaskScheduleMutation) OldLastSkippedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLastSkippedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLastSkippedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLastSkippedAt: %w", err)
+	}
+	return oldValue.LastSkippedAt, nil
+}
+
+// ClearLastSkippedAt clears the value of the "last_skipped_at" field.
+func (m *TaskScheduleMutation) ClearLastSkippedAt() {
+	m.last_skipped_at = nil
+	m.clearedFields[taskschedule.FieldLastSkippedAt] = struct{}{}
+}
+
+// LastSkippedAtCleared returns if the "last_skipped_at" field was cleared in this mutation.
+func (m *TaskScheduleMutation) LastSkippedAtCleared() bool {
+	_, ok := m.clearedFields[taskschedule.FieldLastSkippedAt]
+	return ok
+}
+
+// ResetLastSkippedAt resets all changes to the "last_skipped_at" field.
+func (m *TaskScheduleMutation) ResetLastSkippedAt() {
+	m.last_skipped_at = nil
+	delete(m.clearedFields, taskschedule.FieldLastSkippedAt)
+}
+
+// SetSkippedCount sets the "skipped_count" field.
+func (m *TaskScheduleMutation) SetSkippedCount(i int) {
+	m.skipped_count = &i
+	m.addskipped_count = nil
+}
+
+// SkippedCount returns the value of the "skipped_count" field in the mutation.
+func (m *TaskScheduleMutation) SkippedCount() (r int, exists bool) {
+	v := m.skipped_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSkippedCount returns the old "skipped_count" field's value of the TaskSchedule entity.
+// If the TaskSchedule object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TaskScheduleMutation) OldSkippedCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSkippedCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSkippedCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSkippedCount: %w", err)
+	}
+	return oldValue.SkippedCount, nil
+}
+
+// AddSkippedCount adds i to the "skipped_count" field.
+func (m *TaskScheduleMutation) AddSkippedCount(i int) {
+	if m.addskipped_count != nil {
+		*m.addskipped_count += i
+	} else {
+		m.addskipped_count = &i
+	}
+}
+
+// AddedSkippedCount returns the value that was added to the "skipped_count" field in this mutation.
+func (m *TaskScheduleMutation) AddedSkippedCount() (r int, exists bool) {
+	v := m.addskipped_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetSkippedCount resets all changes to the "skipped_count" field.
+func (m *TaskScheduleMutation) ResetSkippedCount() {
+	m.skipped_count = nil
+	m.addskipped_count = nil
+}
+
 // SetResourceID sets the "resource_id" field.
 func (m *TaskScheduleMutation) SetResourceID(s string) {
 	m.resource_id = &s
@@ -30859,7 +30967,7 @@ func (m *TaskScheduleMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *TaskScheduleMutation) Fields() []string {
-	fields := make([]string, 0, 31)
+	fields := make([]string, 0, 33)
 	if m.name != nil {
 		fields = append(fields, taskschedule.FieldName)
 	}
@@ -30899,8 +31007,8 @@ func (m *TaskScheduleMutation) Fields() []string {
 	if m.priority != nil {
 		fields = append(fields, taskschedule.FieldPriority)
 	}
-	if m.current_stage != nil {
-		fields = append(fields, taskschedule.FieldCurrentStage)
+	if m.run_mode != nil {
+		fields = append(fields, taskschedule.FieldRunMode)
 	}
 	if m.max_iterations != nil {
 		fields = append(fields, taskschedule.FieldMaxIterations)
@@ -30937,6 +31045,12 @@ func (m *TaskScheduleMutation) Fields() []string {
 	}
 	if m.last_task_id != nil {
 		fields = append(fields, taskschedule.FieldLastTaskID)
+	}
+	if m.last_skipped_at != nil {
+		fields = append(fields, taskschedule.FieldLastSkippedAt)
+	}
+	if m.skipped_count != nil {
+		fields = append(fields, taskschedule.FieldSkippedCount)
 	}
 	if m.resource_id != nil {
 		fields = append(fields, taskschedule.FieldResourceID)
@@ -30987,8 +31101,8 @@ func (m *TaskScheduleMutation) Field(name string) (ent.Value, bool) {
 		return m.TargetBranch()
 	case taskschedule.FieldPriority:
 		return m.Priority()
-	case taskschedule.FieldCurrentStage:
-		return m.CurrentStage()
+	case taskschedule.FieldRunMode:
+		return m.RunMode()
 	case taskschedule.FieldMaxIterations:
 		return m.MaxIterations()
 	case taskschedule.FieldTokenBudget:
@@ -31013,6 +31127,10 @@ func (m *TaskScheduleMutation) Field(name string) (ent.Value, bool) {
 		return m.LastRunAt()
 	case taskschedule.FieldLastTaskID:
 		return m.LastTaskID()
+	case taskschedule.FieldLastSkippedAt:
+		return m.LastSkippedAt()
+	case taskschedule.FieldSkippedCount:
+		return m.SkippedCount()
 	case taskschedule.FieldResourceID:
 		return m.ResourceID()
 	case taskschedule.FieldApplications:
@@ -31058,8 +31176,8 @@ func (m *TaskScheduleMutation) OldField(ctx context.Context, name string) (ent.V
 		return m.OldTargetBranch(ctx)
 	case taskschedule.FieldPriority:
 		return m.OldPriority(ctx)
-	case taskschedule.FieldCurrentStage:
-		return m.OldCurrentStage(ctx)
+	case taskschedule.FieldRunMode:
+		return m.OldRunMode(ctx)
 	case taskschedule.FieldMaxIterations:
 		return m.OldMaxIterations(ctx)
 	case taskschedule.FieldTokenBudget:
@@ -31084,6 +31202,10 @@ func (m *TaskScheduleMutation) OldField(ctx context.Context, name string) (ent.V
 		return m.OldLastRunAt(ctx)
 	case taskschedule.FieldLastTaskID:
 		return m.OldLastTaskID(ctx)
+	case taskschedule.FieldLastSkippedAt:
+		return m.OldLastSkippedAt(ctx)
+	case taskschedule.FieldSkippedCount:
+		return m.OldSkippedCount(ctx)
 	case taskschedule.FieldResourceID:
 		return m.OldResourceID(ctx)
 	case taskschedule.FieldApplications:
@@ -31194,12 +31316,12 @@ func (m *TaskScheduleMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetPriority(v)
 		return nil
-	case taskschedule.FieldCurrentStage:
+	case taskschedule.FieldRunMode:
 		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
-		m.SetCurrentStage(v)
+		m.SetRunMode(v)
 		return nil
 	case taskschedule.FieldMaxIterations:
 		v, ok := value.(int)
@@ -31285,6 +31407,20 @@ func (m *TaskScheduleMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetLastTaskID(v)
 		return nil
+	case taskschedule.FieldLastSkippedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLastSkippedAt(v)
+		return nil
+	case taskschedule.FieldSkippedCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSkippedCount(v)
+		return nil
 	case taskschedule.FieldResourceID:
 		v, ok := value.(string)
 		if !ok {
@@ -31340,6 +31476,9 @@ func (m *TaskScheduleMutation) AddedFields() []string {
 	if m.addstage_timeout_seconds != nil {
 		fields = append(fields, taskschedule.FieldStageTimeoutSeconds)
 	}
+	if m.addskipped_count != nil {
+		fields = append(fields, taskschedule.FieldSkippedCount)
+	}
 	return fields
 }
 
@@ -31356,6 +31495,8 @@ func (m *TaskScheduleMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedCostBudgetCents()
 	case taskschedule.FieldStageTimeoutSeconds:
 		return m.AddedStageTimeoutSeconds()
+	case taskschedule.FieldSkippedCount:
+		return m.AddedSkippedCount()
 	}
 	return nil, false
 }
@@ -31392,6 +31533,13 @@ func (m *TaskScheduleMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddStageTimeoutSeconds(v)
+		return nil
+	case taskschedule.FieldSkippedCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddSkippedCount(v)
 		return nil
 	}
 	return fmt.Errorf("unknown TaskSchedule numeric field %s", name)
@@ -31439,6 +31587,9 @@ func (m *TaskScheduleMutation) ClearedFields() []string {
 	}
 	if m.FieldCleared(taskschedule.FieldLastTaskID) {
 		fields = append(fields, taskschedule.FieldLastTaskID)
+	}
+	if m.FieldCleared(taskschedule.FieldLastSkippedAt) {
+		fields = append(fields, taskschedule.FieldLastSkippedAt)
 	}
 	if m.FieldCleared(taskschedule.FieldResourceID) {
 		fields = append(fields, taskschedule.FieldResourceID)
@@ -31499,6 +31650,9 @@ func (m *TaskScheduleMutation) ClearField(name string) error {
 	case taskschedule.FieldLastTaskID:
 		m.ClearLastTaskID()
 		return nil
+	case taskschedule.FieldLastSkippedAt:
+		m.ClearLastSkippedAt()
+		return nil
 	case taskschedule.FieldResourceID:
 		m.ClearResourceID()
 		return nil
@@ -31552,8 +31706,8 @@ func (m *TaskScheduleMutation) ResetField(name string) error {
 	case taskschedule.FieldPriority:
 		m.ResetPriority()
 		return nil
-	case taskschedule.FieldCurrentStage:
-		m.ResetCurrentStage()
+	case taskschedule.FieldRunMode:
+		m.ResetRunMode()
 		return nil
 	case taskschedule.FieldMaxIterations:
 		m.ResetMaxIterations()
@@ -31590,6 +31744,12 @@ func (m *TaskScheduleMutation) ResetField(name string) error {
 		return nil
 	case taskschedule.FieldLastTaskID:
 		m.ResetLastTaskID()
+		return nil
+	case taskschedule.FieldLastSkippedAt:
+		m.ResetLastSkippedAt()
+		return nil
+	case taskschedule.FieldSkippedCount:
+		m.ResetSkippedCount()
 		return nil
 	case taskschedule.FieldResourceID:
 		m.ResetResourceID()

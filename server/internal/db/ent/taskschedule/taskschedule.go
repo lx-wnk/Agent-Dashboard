@@ -39,8 +39,8 @@ const (
 	FieldTargetBranch = "target_branch"
 	// FieldPriority holds the string denoting the priority field in the database.
 	FieldPriority = "priority"
-	// FieldCurrentStage holds the string denoting the current_stage field in the database.
-	FieldCurrentStage = "current_stage"
+	// FieldRunMode holds the string denoting the run_mode field in the database.
+	FieldRunMode = "run_mode"
 	// FieldMaxIterations holds the string denoting the max_iterations field in the database.
 	FieldMaxIterations = "max_iterations"
 	// FieldTokenBudget holds the string denoting the token_budget field in the database.
@@ -65,6 +65,10 @@ const (
 	FieldLastRunAt = "last_run_at"
 	// FieldLastTaskID holds the string denoting the last_task_id field in the database.
 	FieldLastTaskID = "last_task_id"
+	// FieldLastSkippedAt holds the string denoting the last_skipped_at field in the database.
+	FieldLastSkippedAt = "last_skipped_at"
+	// FieldSkippedCount holds the string denoting the skipped_count field in the database.
+	FieldSkippedCount = "skipped_count"
 	// FieldResourceID holds the string denoting the resource_id field in the database.
 	FieldResourceID = "resource_id"
 	// FieldApplications holds the string denoting the applications field in the database.
@@ -95,7 +99,7 @@ var Columns = []string{
 	FieldSourceBranch,
 	FieldTargetBranch,
 	FieldPriority,
-	FieldCurrentStage,
+	FieldRunMode,
 	FieldMaxIterations,
 	FieldTokenBudget,
 	FieldCostBudgetCents,
@@ -108,6 +112,8 @@ var Columns = []string{
 	FieldNextRunAt,
 	FieldLastRunAt,
 	FieldLastTaskID,
+	FieldLastSkippedAt,
+	FieldSkippedCount,
 	FieldResourceID,
 	FieldApplications,
 	FieldUserID,
@@ -142,14 +148,16 @@ var (
 	CwdValidator func(string) error
 	// DefaultPriority holds the default value on creation for the "priority" field.
 	DefaultPriority string
-	// DefaultCurrentStage holds the default value on creation for the "current_stage" field.
-	DefaultCurrentStage string
+	// DefaultRunMode holds the default value on creation for the "run_mode" field.
+	DefaultRunMode string
 	// DefaultMaxIterations holds the default value on creation for the "max_iterations" field.
 	DefaultMaxIterations int
 	// DefaultStageTimeoutSeconds holds the default value on creation for the "stage_timeout_seconds" field.
 	DefaultStageTimeoutSeconds int
 	// DefaultSilverBullet holds the default value on creation for the "silver_bullet" field.
 	DefaultSilverBullet bool
+	// DefaultSkippedCount holds the default value on creation for the "skipped_count" field.
+	DefaultSkippedCount int
 	// DefaultResourceID holds the default value on creation for the "resource_id" field.
 	DefaultResourceID string
 	// DefaultApplications holds the default value on creation for the "applications" field.
@@ -235,9 +243,9 @@ func ByPriority(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldPriority, opts...).ToFunc()
 }
 
-// ByCurrentStage orders the results by the current_stage field.
-func ByCurrentStage(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldCurrentStage, opts...).ToFunc()
+// ByRunMode orders the results by the run_mode field.
+func ByRunMode(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRunMode, opts...).ToFunc()
 }
 
 // ByMaxIterations orders the results by the max_iterations field.
@@ -293,6 +301,16 @@ func ByLastRunAt(opts ...sql.OrderTermOption) OrderOption {
 // ByLastTaskID orders the results by the last_task_id field.
 func ByLastTaskID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldLastTaskID, opts...).ToFunc()
+}
+
+// ByLastSkippedAt orders the results by the last_skipped_at field.
+func ByLastSkippedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldLastSkippedAt, opts...).ToFunc()
+}
+
+// BySkippedCount orders the results by the skipped_count field.
+func BySkippedCount(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSkippedCount, opts...).ToFunc()
 }
 
 // ByResourceID orders the results by the resource_id field.

@@ -764,6 +764,90 @@ func stageOf(t *testing.T, path, taskID string) string {
 	return stage
 }
 
+// runModeOf reads a schedule's stored run_mode straight from SQL.
+func runModeOf(t *testing.T, path, scheduleID string) string {
+	t.Helper()
+	raw, err := sql.Open("sqlite", "file:"+path)
+	require.NoError(t, err)
+	defer func() { _ = raw.Close() }()
+	var mode string
+	require.NoError(t, raw.QueryRow(`SELECT run_mode FROM task_schedules WHERE id = ?`, scheduleID).Scan(&mode))
+	return mode
+}
+
+func TestOpen_FreshDatabaseOpensWithoutScheduleStageColumn(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "fresh.db")
+	bundle, err := db.Open(path)
+	require.NoError(t, err)
+	defer func() { _ = bundle.Close() }()
+
+	rows, err := bundle.DB.Query(`PRAGMA table_info(task_schedules)`)
+	require.NoError(t, err)
+	defer func() { _ = rows.Close() }()
+
+	var cols []string
+	for rows.Next() {
+		var cid int
+		var name, colType string
+		var notNull, pk int
+		var dflt any
+		require.NoError(t, rows.Scan(&cid, &name, &colType, &notNull, &dflt, &pk))
+		cols = append(cols, name)
+	}
+	require.NoError(t, rows.Err())
+
+	assert.Contains(t, cols, "run_mode")
+	assert.Contains(t, cols, "skipped_count")
+	assert.Contains(t, cols, "last_skipped_at")
+	assert.NotContains(t, cols, "current_stage")
+}
+
+// TestOpen_ExistingRoutinesBecomePipelineOnce is the load-bearing test for the
+// run-mode migration. A pre-upgrade routine only exists in the database
+// because it fired as the (then only) pipeline-materializing kind of
+// schedule, so the upgrade must set it to "pipeline" — but the run_mode
+// column's own default is "job", so a routine created after the upgrade is
+// indistinguishable from a migrated one by value alone. The marker is what
+// keeps a later boot from re-sweeping a legitimately new "job" routine.
+func TestOpen_ExistingRoutinesBecomePipelineOnce(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "routines.db")
+
+	bundle0, err := db.Open(path)
+	require.NoError(t, err)
+	schedules := repo.NewTaskScheduleRepo(bundle0.Client)
+	old, err := schedules.Create(context.Background(), repo.CreateTaskScheduleInput{
+		Name: "old", CronExpr: "0 9 * * *", SlugPrefix: "old", Title: "Old",
+		Cwd: "/tmp", MaxIterations: 20, StageTimeoutSeconds: 1800,
+	})
+	require.NoError(t, err)
+	// The seeding Open already recorded the marker against the (then-empty)
+	// table, so clear it: this row stands in for one written before run
+	// modes shipped.
+	_, err = bundle0.DB.Exec(`DELETE FROM applied_migrations WHERE name = 'routine-run-mode-pipeline'`)
+	require.NoError(t, err)
+	_, err = bundle0.DB.Exec(`UPDATE task_schedules SET run_mode = 'job' WHERE id = ?`, old.ID)
+	require.NoError(t, err)
+	require.NoError(t, bundle0.Close())
+
+	bundle1, err := db.Open(path)
+	require.NoError(t, err)
+	require.Equal(t, "pipeline", runModeOf(t, path, old.ID), "pre-upgrade routine must become pipeline")
+
+	newSched, err := repo.NewTaskScheduleRepo(bundle1.Client).Create(context.Background(), repo.CreateTaskScheduleInput{
+		Name: "new", CronExpr: "0 9 * * *", SlugPrefix: "new", Title: "New",
+		Cwd: "/tmp", MaxIterations: 20, StageTimeoutSeconds: 1800,
+	})
+	require.NoError(t, err)
+	require.NoError(t, bundle1.Close())
+
+	bundle2, err := db.Open(path)
+	require.NoError(t, err)
+	defer func() { _ = bundle2.Close() }()
+	require.Equal(t, "job", runModeOf(t, path, newSched.ID), "a routine created after the upgrade must not be swept into pipeline")
+	require.Equal(t, "pipeline", runModeOf(t, path, old.ID), "second boot must not touch an already-migrated row")
+}
+
 // TestOpen_RenameStagesRunsOnlyOnce is the load-bearing test for the stage
 // rename. The rename is a chained one — "backlog"→"ready" then
 // "concept"→"backlog" — so a second unguarded pass would take the rows the

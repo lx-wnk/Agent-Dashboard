@@ -193,6 +193,14 @@ func Open(path string) (*DBBundle, error) {
 		_ = client.Close()
 		return nil, fmt.Errorf("db: rename stages: %w", err)
 	}
+	// Every routine that existed before run modes fired a pipeline task —
+	// "job" only became a choice once this column shipped. Must run after
+	// ent auto-migrate (task_schedules.run_mode exists) and is safe on every
+	// boot only because it records a one-shot marker, same as migrateRenameStages.
+	if err := migrateRoutineRunModes(sqlDB); err != nil {
+		_ = client.Close()
+		return nil, fmt.Errorf("db: routine run modes: %w", err)
+	}
 	if err := runRawMigrations(sqlDB); err != nil {
 		_ = client.Close()
 		return nil, fmt.Errorf("db: raw migrations: %w", err)
@@ -440,8 +448,6 @@ func migrateRenameStages(db *sql.DB) error {
 		{"tasks", "current_stage", "concept", "backlog"},
 		{"stage_runs", "stage", "backlog", "ready"},
 		{"stage_runs", "stage", "concept", "backlog"},
-		{"task_schedules", "current_stage", "backlog", "ready"},
-		{"task_schedules", "current_stage", "concept", "backlog"},
 	}
 	for _, r := range renames {
 		var count int
@@ -458,6 +464,40 @@ func migrateRenameStages(db *sql.DB) error {
 				return fmt.Errorf("rename %s.%s %q→%q: %w", r.table, r.column, r.from, r.to, err)
 			}
 		}
+	}
+
+	if _, err := db.Exec(
+		`INSERT INTO applied_migrations (name, applied_at) VALUES (?, datetime('now'))`, marker,
+	); err != nil {
+		return fmt.Errorf("record marker %q: %w", marker, err)
+	}
+	return nil
+}
+
+// migrateRoutineRunModes sets every routine that existed before run modes to
+// "pipeline", which is what those routines always fired. It runs once: the
+// column default is "job", so after the upgrade an existing row and a newly
+// created one look the same, and a second pass would turn new job routines
+// into pipeline routines.
+func migrateRoutineRunModes(db *sql.DB) error {
+	const marker = "routine-run-mode-pipeline"
+	if _, err := db.Exec(
+		`CREATE TABLE IF NOT EXISTS applied_migrations (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL)`,
+	); err != nil {
+		return fmt.Errorf("create applied_migrations: %w", err)
+	}
+	var applied int
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM applied_migrations WHERE name = ?`, marker,
+	).Scan(&applied); err != nil {
+		return fmt.Errorf("check marker %q: %w", marker, err)
+	}
+	if applied > 0 {
+		return nil
+	}
+
+	if _, err := db.Exec(`UPDATE task_schedules SET run_mode = 'pipeline'`); err != nil {
+		return fmt.Errorf("set existing routines to pipeline run mode: %w", err)
 	}
 
 	if _, err := db.Exec(

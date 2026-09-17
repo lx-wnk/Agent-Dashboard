@@ -36,7 +36,9 @@ func (TaskSchedule) Fields() []ent.Field {
 		field.String("source_branch").Optional().Nillable(),
 		field.String("target_branch").Optional().Nillable(),
 		field.String("priority").Default("medium"),
-		field.String("current_stage").Default("backlog"),
+		// run_mode "job" fires a job task; "pipeline" fires a pipeline task
+		// that starts in ready. Existing rows were migrated to "pipeline".
+		field.String("run_mode").Default("job"),
 		field.Int("max_iterations").Default(20),
 		field.Int("token_budget").Optional().Nillable(),
 		field.Int("cost_budget_cents").Optional().Nillable(),
@@ -51,6 +53,9 @@ func (TaskSchedule) Fields() []ent.Field {
 		field.Time("next_run_at").Optional().Nillable(),
 		field.Time("last_run_at").Optional().Nillable(),
 		field.String("last_task_id").Optional().Nillable(),
+		// Fires refused because the previous run was still in flight.
+		field.Time("last_skipped_at").Optional().Nillable(),
+		field.Int("skipped_count").Default(0),
 
 		field.String("resource_id").Optional().Default(""),
 		field.JSON("applications", []string{}).

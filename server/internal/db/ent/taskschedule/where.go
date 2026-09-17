@@ -129,9 +129,9 @@ func Priority(v string) predicate.TaskSchedule {
 	return predicate.TaskSchedule(sql.FieldEQ(FieldPriority, v))
 }
 
-// CurrentStage applies equality check predicate on the "current_stage" field. It's identical to CurrentStageEQ.
-func CurrentStage(v string) predicate.TaskSchedule {
-	return predicate.TaskSchedule(sql.FieldEQ(FieldCurrentStage, v))
+// RunMode applies equality check predicate on the "run_mode" field. It's identical to RunModeEQ.
+func RunMode(v string) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldEQ(FieldRunMode, v))
 }
 
 // MaxIterations applies equality check predicate on the "max_iterations" field. It's identical to MaxIterationsEQ.
@@ -187,6 +187,16 @@ func LastRunAt(v time.Time) predicate.TaskSchedule {
 // LastTaskID applies equality check predicate on the "last_task_id" field. It's identical to LastTaskIDEQ.
 func LastTaskID(v string) predicate.TaskSchedule {
 	return predicate.TaskSchedule(sql.FieldEQ(FieldLastTaskID, v))
+}
+
+// LastSkippedAt applies equality check predicate on the "last_skipped_at" field. It's identical to LastSkippedAtEQ.
+func LastSkippedAt(v time.Time) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldEQ(FieldLastSkippedAt, v))
+}
+
+// SkippedCount applies equality check predicate on the "skipped_count" field. It's identical to SkippedCountEQ.
+func SkippedCount(v int) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldEQ(FieldSkippedCount, v))
 }
 
 // ResourceID applies equality check predicate on the "resource_id" field. It's identical to ResourceIDEQ.
@@ -1039,69 +1049,69 @@ func PriorityContainsFold(v string) predicate.TaskSchedule {
 	return predicate.TaskSchedule(sql.FieldContainsFold(FieldPriority, v))
 }
 
-// CurrentStageEQ applies the EQ predicate on the "current_stage" field.
-func CurrentStageEQ(v string) predicate.TaskSchedule {
-	return predicate.TaskSchedule(sql.FieldEQ(FieldCurrentStage, v))
+// RunModeEQ applies the EQ predicate on the "run_mode" field.
+func RunModeEQ(v string) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldEQ(FieldRunMode, v))
 }
 
-// CurrentStageNEQ applies the NEQ predicate on the "current_stage" field.
-func CurrentStageNEQ(v string) predicate.TaskSchedule {
-	return predicate.TaskSchedule(sql.FieldNEQ(FieldCurrentStage, v))
+// RunModeNEQ applies the NEQ predicate on the "run_mode" field.
+func RunModeNEQ(v string) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldNEQ(FieldRunMode, v))
 }
 
-// CurrentStageIn applies the In predicate on the "current_stage" field.
-func CurrentStageIn(vs ...string) predicate.TaskSchedule {
-	return predicate.TaskSchedule(sql.FieldIn(FieldCurrentStage, vs...))
+// RunModeIn applies the In predicate on the "run_mode" field.
+func RunModeIn(vs ...string) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldIn(FieldRunMode, vs...))
 }
 
-// CurrentStageNotIn applies the NotIn predicate on the "current_stage" field.
-func CurrentStageNotIn(vs ...string) predicate.TaskSchedule {
-	return predicate.TaskSchedule(sql.FieldNotIn(FieldCurrentStage, vs...))
+// RunModeNotIn applies the NotIn predicate on the "run_mode" field.
+func RunModeNotIn(vs ...string) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldNotIn(FieldRunMode, vs...))
 }
 
-// CurrentStageGT applies the GT predicate on the "current_stage" field.
-func CurrentStageGT(v string) predicate.TaskSchedule {
-	return predicate.TaskSchedule(sql.FieldGT(FieldCurrentStage, v))
+// RunModeGT applies the GT predicate on the "run_mode" field.
+func RunModeGT(v string) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldGT(FieldRunMode, v))
 }
 
-// CurrentStageGTE applies the GTE predicate on the "current_stage" field.
-func CurrentStageGTE(v string) predicate.TaskSchedule {
-	return predicate.TaskSchedule(sql.FieldGTE(FieldCurrentStage, v))
+// RunModeGTE applies the GTE predicate on the "run_mode" field.
+func RunModeGTE(v string) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldGTE(FieldRunMode, v))
 }
 
-// CurrentStageLT applies the LT predicate on the "current_stage" field.
-func CurrentStageLT(v string) predicate.TaskSchedule {
-	return predicate.TaskSchedule(sql.FieldLT(FieldCurrentStage, v))
+// RunModeLT applies the LT predicate on the "run_mode" field.
+func RunModeLT(v string) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldLT(FieldRunMode, v))
 }
 
-// CurrentStageLTE applies the LTE predicate on the "current_stage" field.
-func CurrentStageLTE(v string) predicate.TaskSchedule {
-	return predicate.TaskSchedule(sql.FieldLTE(FieldCurrentStage, v))
+// RunModeLTE applies the LTE predicate on the "run_mode" field.
+func RunModeLTE(v string) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldLTE(FieldRunMode, v))
 }
 
-// CurrentStageContains applies the Contains predicate on the "current_stage" field.
-func CurrentStageContains(v string) predicate.TaskSchedule {
-	return predicate.TaskSchedule(sql.FieldContains(FieldCurrentStage, v))
+// RunModeContains applies the Contains predicate on the "run_mode" field.
+func RunModeContains(v string) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldContains(FieldRunMode, v))
 }
 
-// CurrentStageHasPrefix applies the HasPrefix predicate on the "current_stage" field.
-func CurrentStageHasPrefix(v string) predicate.TaskSchedule {
-	return predicate.TaskSchedule(sql.FieldHasPrefix(FieldCurrentStage, v))
+// RunModeHasPrefix applies the HasPrefix predicate on the "run_mode" field.
+func RunModeHasPrefix(v string) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldHasPrefix(FieldRunMode, v))
 }
 
-// CurrentStageHasSuffix applies the HasSuffix predicate on the "current_stage" field.
-func CurrentStageHasSuffix(v string) predicate.TaskSchedule {
-	return predicate.TaskSchedule(sql.FieldHasSuffix(FieldCurrentStage, v))
+// RunModeHasSuffix applies the HasSuffix predicate on the "run_mode" field.
+func RunModeHasSuffix(v string) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldHasSuffix(FieldRunMode, v))
 }
 
-// CurrentStageEqualFold applies the EqualFold predicate on the "current_stage" field.
-func CurrentStageEqualFold(v string) predicate.TaskSchedule {
-	return predicate.TaskSchedule(sql.FieldEqualFold(FieldCurrentStage, v))
+// RunModeEqualFold applies the EqualFold predicate on the "run_mode" field.
+func RunModeEqualFold(v string) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldEqualFold(FieldRunMode, v))
 }
 
-// CurrentStageContainsFold applies the ContainsFold predicate on the "current_stage" field.
-func CurrentStageContainsFold(v string) predicate.TaskSchedule {
-	return predicate.TaskSchedule(sql.FieldContainsFold(FieldCurrentStage, v))
+// RunModeContainsFold applies the ContainsFold predicate on the "run_mode" field.
+func RunModeContainsFold(v string) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldContainsFold(FieldRunMode, v))
 }
 
 // MaxIterationsEQ applies the EQ predicate on the "max_iterations" field.
@@ -1702,6 +1712,96 @@ func LastTaskIDEqualFold(v string) predicate.TaskSchedule {
 // LastTaskIDContainsFold applies the ContainsFold predicate on the "last_task_id" field.
 func LastTaskIDContainsFold(v string) predicate.TaskSchedule {
 	return predicate.TaskSchedule(sql.FieldContainsFold(FieldLastTaskID, v))
+}
+
+// LastSkippedAtEQ applies the EQ predicate on the "last_skipped_at" field.
+func LastSkippedAtEQ(v time.Time) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldEQ(FieldLastSkippedAt, v))
+}
+
+// LastSkippedAtNEQ applies the NEQ predicate on the "last_skipped_at" field.
+func LastSkippedAtNEQ(v time.Time) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldNEQ(FieldLastSkippedAt, v))
+}
+
+// LastSkippedAtIn applies the In predicate on the "last_skipped_at" field.
+func LastSkippedAtIn(vs ...time.Time) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldIn(FieldLastSkippedAt, vs...))
+}
+
+// LastSkippedAtNotIn applies the NotIn predicate on the "last_skipped_at" field.
+func LastSkippedAtNotIn(vs ...time.Time) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldNotIn(FieldLastSkippedAt, vs...))
+}
+
+// LastSkippedAtGT applies the GT predicate on the "last_skipped_at" field.
+func LastSkippedAtGT(v time.Time) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldGT(FieldLastSkippedAt, v))
+}
+
+// LastSkippedAtGTE applies the GTE predicate on the "last_skipped_at" field.
+func LastSkippedAtGTE(v time.Time) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldGTE(FieldLastSkippedAt, v))
+}
+
+// LastSkippedAtLT applies the LT predicate on the "last_skipped_at" field.
+func LastSkippedAtLT(v time.Time) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldLT(FieldLastSkippedAt, v))
+}
+
+// LastSkippedAtLTE applies the LTE predicate on the "last_skipped_at" field.
+func LastSkippedAtLTE(v time.Time) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldLTE(FieldLastSkippedAt, v))
+}
+
+// LastSkippedAtIsNil applies the IsNil predicate on the "last_skipped_at" field.
+func LastSkippedAtIsNil() predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldIsNull(FieldLastSkippedAt))
+}
+
+// LastSkippedAtNotNil applies the NotNil predicate on the "last_skipped_at" field.
+func LastSkippedAtNotNil() predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldNotNull(FieldLastSkippedAt))
+}
+
+// SkippedCountEQ applies the EQ predicate on the "skipped_count" field.
+func SkippedCountEQ(v int) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldEQ(FieldSkippedCount, v))
+}
+
+// SkippedCountNEQ applies the NEQ predicate on the "skipped_count" field.
+func SkippedCountNEQ(v int) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldNEQ(FieldSkippedCount, v))
+}
+
+// SkippedCountIn applies the In predicate on the "skipped_count" field.
+func SkippedCountIn(vs ...int) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldIn(FieldSkippedCount, vs...))
+}
+
+// SkippedCountNotIn applies the NotIn predicate on the "skipped_count" field.
+func SkippedCountNotIn(vs ...int) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldNotIn(FieldSkippedCount, vs...))
+}
+
+// SkippedCountGT applies the GT predicate on the "skipped_count" field.
+func SkippedCountGT(v int) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldGT(FieldSkippedCount, v))
+}
+
+// SkippedCountGTE applies the GTE predicate on the "skipped_count" field.
+func SkippedCountGTE(v int) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldGTE(FieldSkippedCount, v))
+}
+
+// SkippedCountLT applies the LT predicate on the "skipped_count" field.
+func SkippedCountLT(v int) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldLT(FieldSkippedCount, v))
+}
+
+// SkippedCountLTE applies the LTE predicate on the "skipped_count" field.
+func SkippedCountLTE(v int) predicate.TaskSchedule {
+	return predicate.TaskSchedule(sql.FieldLTE(FieldSkippedCount, v))
 }
 
 // ResourceIDEQ applies the EQ predicate on the "resource_id" field.

@@ -41,7 +41,6 @@ type CreateTaskScheduleInput struct {
 	SourceBranch        *string
 	TargetBranch        *string
 	Priority            string
-	CurrentStage        string
 	MaxIterations       int
 	TokenBudget         *int
 	CostBudgetCents     *int
@@ -130,9 +129,6 @@ func (r *entTaskScheduleRepo) Create(ctx context.Context, in CreateTaskScheduleI
 	}
 	if in.Priority != "" {
 		q = q.SetPriority(in.Priority)
-	}
-	if in.CurrentStage != "" {
-		q = q.SetCurrentStage(in.CurrentStage)
 	}
 	q = q.SetNillableNlText(in.NLText).
 		SetNillableDescription(in.Description).
