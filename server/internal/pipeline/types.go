@@ -237,8 +237,8 @@ const (
 	StageJob         = "job"
 )
 
-// stageKindViolation reports why a task of kind may not enter stage, or "".
-func stageKindViolation(kind, stage string) string {
+// StageKindViolation reports why a task of kind may not enter stage, or "".
+func StageKindViolation(kind, stage string) string {
 	if IsTerminalStage(stage) {
 		return ""
 	}

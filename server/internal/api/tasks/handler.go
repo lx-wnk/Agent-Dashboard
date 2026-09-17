@@ -438,6 +438,13 @@ func (h *Handler) CreateTaskFromInput(ctx context.Context, p CreateTaskParams) (
 	if stage == "" {
 		stage = db.DefaultStage
 	}
+	kind := p.Kind
+	if kind == "" {
+		kind = pipeline.TaskKindPipeline
+	}
+	if reason := pipeline.StageKindViolation(kind, stage); reason != "" {
+		return nil, apierr.NewAppError(http.StatusBadRequest, reason)
+	}
 	maxIter := p.MaxIterations
 	if maxIter <= 0 {
 		maxIter = db.DefaultMaxIterations
@@ -865,10 +872,14 @@ func (h *Handler) resume(w http.ResponseWriter, r *http.Request) error {
 		AdditionalPrompt string `json:"additionalPrompt"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
-	// When on_hold: move back to implementation before re-queuing.
+	// When on_hold: move back to its runnable stage before re-queuing. A held
+	// job returns to the job stage; every other kind returns to implementation.
 	if t.CurrentStage == "on_hold" {
-		impl := "implementation"
-		if _, err := h.taskRepo.Update(r.Context(), id, repo.UpdateTaskInput{CurrentStage: &impl}); err != nil {
+		target := "implementation"
+		if t.Kind == pipeline.TaskKindJob {
+			target = pipeline.StageJob
+		}
+		if _, err := h.taskRepo.Update(r.Context(), id, repo.UpdateTaskInput{CurrentStage: &target}); err != nil {
 			return fmt.Errorf("tasks.resume.unstage: %w", err)
 		}
 	}

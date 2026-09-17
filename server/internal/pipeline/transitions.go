@@ -14,7 +14,7 @@ import (
 // mid-write crashes or context cancellations.
 func (o *PipelineOrchestrator) applyTransition(ctx context.Context, task *ent.Task, sr *ent.StageRun, t StageTransition) (result *ent.StageRun, retErr error) {
 	if nt, ok := t.(NextTransition); ok {
-		if reason := stageKindViolation(task.Kind, nt.Stage); reason != "" {
+		if reason := StageKindViolation(task.Kind, nt.Stage); reason != "" {
 			t = FailTransition{Reason: reason}
 		}
 	}
