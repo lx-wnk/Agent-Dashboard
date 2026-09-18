@@ -1,14 +1,31 @@
 import { describe, expect, it } from 'vitest'
+import { ACTIVE_VIEWS } from '../composables/useViewState'
 import { NAV_GROUPS, NAV_ITEMS, viewTitle } from './navConfig'
 
 describe('navConfig', () => {
+  // Derived from ACTIVE_VIEWS, not from a list typed out here. The earlier
+  // version compared against a literal, so it never saw ACTIVE_VIEWS at all:
+  // the mission view was added there, got no entry here, and shipped green —
+  // unreachable from the sidebar, and titled "Dashboard" by viewTitle's
+  // fallback. A test that states an invariant must read both of its sides.
   it('has one item per ActiveView', () => {
-    const views = NAV_ITEMS.map(i => i.view).sort()
-    expect(views).toEqual(['cockpit', 'cost', 'dashboard', 'eval', 'pipeline', 'schedules', 'workflows'])
+    expect([...NAV_ITEMS.map(i => i.view)].sort()).toEqual([...ACTIVE_VIEWS].sort())
   })
 
-  it('cockpit is the first Monitor item and has a title', () => {
-    expect(NAV_ITEMS[0].view).toBe('cockpit')
+  // The fallback turns a missing entry into a plausible wrong title rather
+  // than an obvious gap, which is what let the above go unnoticed.
+  it('never falls back to the Dashboard title for a view that is not dashboard', () => {
+    for (const view of ACTIVE_VIEWS) {
+      if (view !== 'dashboard')
+        expect(viewTitle(view)).not.toBe('Dashboard')
+    }
+  })
+
+  // Mission is the entry point: it answers "what now", which is the question
+  // asked on arrival. Cockpit stays second, as the fuller overview.
+  it('mission is the first Monitor item and has a title', () => {
+    expect(NAV_ITEMS[0].view).toBe('mission')
+    expect(viewTitle('mission')).toBe('Mission')
     expect(viewTitle('cockpit')).toBe('Cockpit')
   })
 
