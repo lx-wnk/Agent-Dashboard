@@ -88,7 +88,14 @@ async function submit() {
           data-testid="mission-reading-label"
           class="font-mono text-[10px] rounded px-1.5 py-0.5 border border-line-strong text-fg-soft shrink-0"
         >{{ reading.label }}</span>
-        <span class="text-[12.5px] text-fg-mute leading-snug">{{ reading.will }}</span>
+        <!--
+          The badge and the sentence are a term and its description. Flex gap
+          separates them on screen but not in the text layer, so copying the
+          line or reading textContent produced "GO TOSwitches to the pipeline
+          view". This separator exists only there.
+        -->
+        <span class="sr-only">: </span>
+        <span data-testid="mission-reading-will" class="text-[12.5px] text-fg-mute leading-snug">{{ reading.will }}</span>
       </div>
     </div>
 

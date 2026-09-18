@@ -60,6 +60,11 @@ describe('missionInput', () => {
     expect(wrapper.get('[data-testid="mission-reading-label"]').text()).toBe('CAPTURE')
     expect(wrapper.get('[data-testid="mission-reading"]').text()).toContain('Nothing runs yet')
 
+    // The badge and the sentence must stay apart in the TEXT layer, not only
+    // on screen: flex gap separates them visually, so copying the line or
+    // reading textContent gave "CAPTUREBecomes a backlog item…".
+    expect(wrapper.get('[data-testid="mission-reading"]').text()).toMatch(/CAPTURE:\s\S/)
+
     await wrapper.get('[data-testid="mission-input-submit"]').trigger('click')
     await flushPromises()
 
