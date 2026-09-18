@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import type { SelectOption } from '@/components/ui/selectOption'
 import type { SettingView } from '@/features/settings/composables/useSettings'
 import { computed, onMounted, ref, watch } from 'vue'
 import AppButton from '@/components/ui/AppButton.vue'
+import AppSelect from '@/components/ui/AppSelect.vue'
 import { toast } from '@/composables/useToast'
 import { useSettings } from '@/features/settings/composables/useSettings'
 import { errorMessage } from '@/utils/errorMessage'
@@ -9,16 +11,18 @@ import { errorMessage } from '@/utils/errorMessage'
 const KEY_TOKEN = 'github.token'
 const KEY_REPOS = 'github.repos'
 const KEY_BASE_URL = 'github.baseURL'
+const KEY_TOKEN_SOURCE = 'github.tokenSource'
 
 interface GitHubFormState {
   token: string
   repos: string
   baseURL: string
+  tokenSource: string
 }
 
 const { items, loading, refetch, update } = useSettings()
 
-const form = ref<GitHubFormState>({ token: '', repos: '', baseURL: '' })
+const form = ref<GitHubFormState>({ token: '', repos: '', baseURL: '', tokenSource: 'setting' })
 const saving = ref(false)
 
 // Seeded exactly once from whatever the server first reports — items updates
@@ -36,6 +40,7 @@ watch(items, (list: SettingView[]) => {
     token: token.value,
     repos: byKey.get(KEY_REPOS)?.value ?? '',
     baseURL: byKey.get(KEY_BASE_URL)?.value ?? '',
+    tokenSource: byKey.get(KEY_TOKEN_SOURCE)?.value || 'setting',
   }
   seeded.value = true
 }, { immediate: true })
@@ -48,7 +53,21 @@ onMounted(refetch)
 // blocked rather than warned about. Both empty stays allowed: that is the
 // working "off" switch. github.baseURL is NOT part of the pair — it carries a
 // registry default, so it is never unset.
+// The project replaced native selects deliberately (see CHANGELOG, custom
+// listbox): AppSelect keeps the keyboard and Escape behaviour those lost.
+const TOKEN_SOURCE_OPTIONS: SelectOption<string>[] = [
+  { value: 'setting', label: 'Stored here (personal access token)' },
+  { value: 'gh-cli', label: 'From the GitHub CLI (gh auth token)' },
+]
+
+const fromGhCLI = computed(() => form.value.tokenSource === 'gh-cli')
+
+// With the token coming from the GitHub CLI it is not a setting at all, so it
+// cannot be the missing half: repositories alone decide whether the
+// integration is on, and every state boots.
 const pairComplete = computed(() => {
+  if (fromGhCLI.value)
+    return true
   const setCount = [form.value.token, form.value.repos].filter(v => v !== '').length
   return setCount === 0 || setCount === 2
 })
@@ -67,6 +86,7 @@ async function save() {
       [KEY_TOKEN, form.value.token],
       [KEY_REPOS, form.value.repos],
       [KEY_BASE_URL, form.value.baseURL],
+      [KEY_TOKEN_SOURCE, form.value.tokenSource],
     ]
 
     let applied: 'live' | 'restart' = 'live'
@@ -112,6 +132,24 @@ async function save() {
 
       <div class="grid grid-cols-1 gap-3 max-w-md">
         <div>
+          <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1">Token source</label>
+          <AppSelect
+            v-model="form.tokenSource"
+            :options="TOKEN_SOURCE_OPTIONS"
+            aria-label="GitHub token source"
+            data-testid="github-token-source"
+            class="w-full"
+          />
+          <p class="text-[11px] text-fg-mute mt-1">
+            <template v-if="fromGhCLI">
+              Read from <code>gh</code> at each start, so no token is stored here. The server refuses to start if <code>gh</code> is missing or logged out.
+            </template>
+            <template v-else>
+              Stored encrypted in the dashboard's database.
+            </template>
+          </p>
+        </div>
+        <div v-if="!fromGhCLI">
           <label class="block text-[10px] font-semibold uppercase tracking-wider text-fg-mute mb-1" for="github-token">Token</label>
           <input
             id="github-token"
