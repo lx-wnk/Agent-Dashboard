@@ -47,3 +47,42 @@ func TestVersionSet_KeepsAStampedValue(t *testing.T) {
 	version.Set("v1.2.3")
 	require.Equal(t, "v1.2.3", version.Version, "a real version must still be recorded")
 }
+
+// stale must go true only when both versions are known and disagree -- an
+// empty sourceVersion (no git repo, git missing, lookup failed) must never be
+// reported as staleness, or health would cry wolf on every non-git deploy.
+func TestHealthHandler_Stale(t *testing.T) {
+	originalVersion := version.Version
+	originalFn := sourceVersionFn
+	t.Cleanup(func() {
+		version.Version = originalVersion
+		sourceVersionFn = originalFn
+	})
+
+	cases := []struct {
+		name          string
+		version       string
+		sourceVersion string
+		wantStale     bool
+	}{
+		{"matching versions", "abc123", "abc123", false},
+		{"differing versions", "abc123", "def456", true},
+		{"empty source version", "abc123", "", false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			version.Version = tc.version
+			sourceVersionFn = func() string { return tc.sourceVersion }
+
+			rec := httptest.NewRecorder()
+			HealthHandler(rec, httptest.NewRequest(http.MethodGet, "/api/system/health", nil))
+
+			var body map[string]any
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+			require.Equal(t, tc.sourceVersion, body["sourceVersion"])
+			require.Equal(t, tc.wantStale, body["stale"])
+		})
+	}
+}
+
