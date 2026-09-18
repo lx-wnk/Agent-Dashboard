@@ -1,0 +1,46 @@
+<script setup lang="ts">
+import { computed, onMounted } from 'vue'
+import { usePendingPermissions } from '@/composables/usePendingPermissions'
+import { GitHubPanel, MemoryPanel } from '@/features/cockpit'
+import { useTasks } from '@/features/pipeline'
+import LiveWorkRail from './components/LiveWorkRail.vue'
+import MissionInput from './components/MissionInput.vue'
+import NextThing from './components/NextThing.vue'
+import { rankNextThings } from './composables/useNextThing'
+
+const emit = defineEmits<{ openTask: [taskId: string] }>()
+
+const { tasks, refetch } = useTasks()
+const { items: pending, refresh: refreshPending } = usePendingPermissions(tasks)
+
+onMounted(refetch)
+
+const running = computed(() => tasks.value.filter(t => t.currentStage !== 'done' && t.currentStage !== 'backlog' && t.currentStage !== 'ready'))
+
+const ranked = computed(() => rankNextThings(pending.value, tasks.value))
+const next = computed(() => ranked.value[0] ?? null)
+const remaining = computed(() => Math.max(0, ranked.value.length - 1))
+</script>
+
+<template>
+  <div class="flex min-h-0 flex-grow" data-testid="mission-control">
+    <div class="w-[360px] shrink-0 border-r border-line">
+      <LiveWorkRail :tasks="running" />
+    </div>
+
+    <div class="flex-grow min-w-0 flex flex-col justify-center gap-6 px-10 py-8">
+      <NextThing
+        :next="next"
+        :remaining="remaining"
+        @resolved="refreshPending"
+        @open="(id) => emit('openTask', id)"
+      />
+      <MissionInput @captured="(id) => emit('openTask', id)" />
+    </div>
+
+    <div class="w-[360px] shrink-0 border-l border-line p-4 flex flex-col gap-4 overflow-y-auto">
+      <GitHubPanel />
+      <MemoryPanel />
+    </div>
+  </div>
+</template>

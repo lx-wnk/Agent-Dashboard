@@ -1,11 +1,9 @@
 <script setup lang="ts">
-import type { Agent, PipelineTask, Project } from '../types'
+import type { Agent, PipelineTask } from '../types'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import { suggestFolders } from '@/composables/useProjectFolders'
+import { captureTask } from '@/composables/useCapture'
 import { useProjects } from '@/composables/useProjects'
 import { ACTIVE_VIEWS, useViewState } from '@/composables/useViewState'
-import { createTask } from '@/features/pipeline'
-import { slugFollowingName } from '@/utils/validation'
 import AppModal from './ui/AppModal.vue'
 
 const emit = defineEmits<{
@@ -126,39 +124,16 @@ function activate(result: FlatResult) {
   closeDialog()
 }
 
-// The server needs a working directory for every task. Asking for one is the
-// friction this field exists to remove, so it is derived: the first project,
-// then that project's default folder.
-async function deriveCwd(project: Project): Promise<string | null> {
-  const folders = await suggestFolders(project.id)
-  return (folders.find(f => f.isDefault) ?? folders[0])?.path ?? null
-}
-
 async function capture() {
   const title = query.value.trim()
   if (!title || busy.value)
     return
-  const project = projects.value[0]
-  if (!project) {
-    problem.value = 'No project exists yet - create one in Settings before capturing.'
-    return
-  }
   busy.value = true
   problem.value = ''
   try {
-    const cwd = await deriveCwd(project)
-    if (!cwd) {
-      problem.value = `Project "${project.name}" has no folder - add one in Settings.`
-      return
-    }
-    const task = await createTask({
-      title,
-      slug: slugFollowingName(title, '', false),
-      cwd,
-      projectId: project.id,
-    })
+    const taskId = await captureTask(title, projects.value)
     closeDialog()
-    emit('captured', task.id)
+    emit('captured', taskId)
   }
   catch (e) {
     problem.value = e instanceof Error ? e.message : 'Could not capture that.'
