@@ -15,7 +15,12 @@ const { items: pending, refresh: refreshPending } = usePendingPermissions(tasks)
 
 onMounted(refetch)
 
-const running = computed(() => tasks.value.filter(t => t.currentStage !== 'done' && t.currentStage !== 'backlog' && t.currentStage !== 'ready'))
+// Named positively on purpose. The first version excluded done, backlog and
+// ready, which silently let 'cancelled' and 'on_hold' through — ten cancelled
+// tasks rendered under the heading "10 running". A list of what counts cannot
+// grow a hole when a stage is added; a list of what does not, can.
+const RUNNING_STAGES = new Set(['plan_review', 'implementation', 'self_review', 'finalization'])
+const running = computed(() => tasks.value.filter(t => RUNNING_STAGES.has(t.currentStage)))
 
 const ranked = computed(() => rankNextThings(pending.value, tasks.value))
 const next = computed(() => ranked.value[0] ?? null)

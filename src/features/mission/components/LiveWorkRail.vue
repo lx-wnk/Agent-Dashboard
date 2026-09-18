@@ -5,9 +5,10 @@ import { STAGE_LABELS } from '@/utils/stageLabels'
 
 const props = defineProps<{ tasks: PipelineTask[] }>()
 
-// The stages a pipeline task walks, in order. The bar is one segment each, so
-// "how far along" is answerable at a glance — which a spinner never answers.
-const TRACK = ['ready', 'implementation', 'self_review', 'finalization'] as const
+// The stages a pipeline task walks while work is in flight. The bar is one
+// segment each, so "how far along" is answerable at a glance — which a spinner
+// never answers.
+const TRACK = ['plan_review', 'implementation', 'self_review', 'finalization'] as const
 
 interface Segment { key: string, state: 'done' | 'now' | 'todo' }
 
@@ -15,9 +16,10 @@ function segments(task: PipelineTask): Segment[] {
   const at = TRACK.indexOf(task.currentStage as typeof TRACK[number])
   return TRACK.map((key, i) => ({
     key,
-    // A stage the task never reaches (it is past the track, e.g. done) counts
-    // as done rather than pending, so a finished task does not read as stuck.
-    state: at < 0 ? 'done' : i < at ? 'done' : i === at ? 'now' : 'todo',
+    // A stage off the track reads as NOT started, never as finished. The first
+    // version treated it as finished, and a cancelled task — which is off the
+    // track — drew four full bars as if it had completed.
+    state: at < 0 ? 'todo' : i < at ? 'done' : i === at ? 'now' : 'todo',
   }))
 }
 
