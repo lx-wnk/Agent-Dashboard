@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { GitHubChecks } from '../composables/useGitHubSummary'
 import type { PanelState } from '../panelState'
 import { computed, onMounted } from 'vue'
 import { useGitHubSummary } from '../composables/useGitHubSummary'
@@ -38,6 +39,36 @@ const state = computed<PanelState>(() => {
   return repoFailures.value.length > 0 ? 'failed' : 'empty'
 })
 
+// Shape and text carry the state, never hue alone: a red dot and a green dot
+// read identically to a colour-blind eye and to a screen reader.
+const CHECK_MARKS: Record<GitHubChecks['state'], string> = {
+  success: 'OK',
+  failure: 'X',
+  pending: '...',
+  none: '-',
+}
+
+function checkLabel(checks: GitHubChecks): string {
+  switch (checks.state) {
+    case 'success':
+      return `${checks.passed}/${checks.total}`
+    case 'failure':
+      return `${checks.failed} failed`
+    case 'pending':
+      return `${checks.passed + checks.failed}/${checks.total}`
+    case 'none':
+      return 'no checks'
+  }
+}
+
+// "none" means the lookup found nothing OR failed -- the handler collapses
+// both, so the wording must not promise which one it was.
+function checkTitle(checks: GitHubChecks): string {
+  return checks.state === 'none'
+    ? 'No check runs reported for this pull request'
+    : `Checks ${checks.state}: ${checks.passed} passed, ${checks.failed} failed, ${checks.total} total`
+}
+
 const message = computed(() => {
   if (unconfigured.value)
     return 'Set github.token and github.repos in Settings → GitHub to switch this on.'
@@ -69,6 +100,13 @@ const message = computed(() => {
         <a :href="pr.url" target="_blank" rel="noopener noreferrer" class="truncate text-fg hover:text-accent">
           {{ pr.title }}
         </a>
+        <span
+          v-if="pr.checks"
+          :data-testid="`cockpit-github-checks-${pr.number}`"
+          class="shrink-0 tabular-nums text-fg-mute"
+          :title="checkTitle(pr.checks)"
+          :aria-label="checkTitle(pr.checks)"
+        >{{ CHECK_MARKS[pr.checks.state] }} {{ checkLabel(pr.checks) }}</span>
         <span class="shrink-0 text-fg-mute">{{ pr.repo }}#{{ pr.number }}</span>
       </li>
     </ul>

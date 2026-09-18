@@ -201,6 +201,55 @@ func TestNewClientRequiresLoopbackOptOut(t *testing.T) {
 	require.Error(t, err)
 }
 
+// TestChecksSummarisesMixedCheckRuns proves the state/count collapse: one
+// failed run makes the whole commit "failure", and the counts are exact.
+func TestChecksSummarisesMixedCheckRuns(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/repos/lx-wnk/agent-dashboard/commits/deadbeef/check-runs", r.URL.Path)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"total_count": 3,
+			"check_runs": []map[string]any{
+				{"status": "completed", "conclusion": "success"},
+				{"status": "completed", "conclusion": "failure"},
+				{"status": "in_progress", "conclusion": nil},
+			},
+		})
+	}))
+	t.Cleanup(ts.Close)
+
+	summary, err := newTestClient(t, ts).Checks(context.Background(), "lx-wnk/agent-dashboard", "deadbeef")
+	require.NoError(t, err)
+	require.Equal(t, github.CheckStateFailure, summary.State)
+	require.Equal(t, 1, summary.Passed)
+	require.Equal(t, 1, summary.Failed)
+	require.Equal(t, 3, summary.Total)
+}
+
+// TestChecksReportsNoneWhenGitHubHasNoCheckRuns proves the zero-total case:
+// a commit nobody configured CI for must read as "none", not "success" —
+// zero checks is not the same claim as zero failures.
+func TestChecksReportsNoneWhenGitHubHasNoCheckRuns(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"total_count": 0, "check_runs": []any{}})
+	}))
+	t.Cleanup(ts.Close)
+
+	summary, err := newTestClient(t, ts).Checks(context.Background(), "lx-wnk/agent-dashboard", "deadbeef")
+	require.NoError(t, err)
+	require.Equal(t, github.CheckStateNone, summary.State)
+	require.Zero(t, summary.Total)
+}
+
+// TestChecksRefusesARepoOutsideTheAllowList is D4 at the client level, same
+// as TestEveryRepoScopedCallRefusesARepoOutsideTheAllowList.
+func TestChecksRefusesARepoOutsideTheAllowList(t *testing.T) {
+	ts, _, called := newFakeGitHub(t)
+	c := newTestClient(t, ts)
+	_, err := c.Checks(context.Background(), "evil/repo", "deadbeef")
+	require.ErrorIs(t, err, github.ErrRepoNotAllowed)
+	require.False(t, *called)
+}
+
 // TestStatusErrorDistinguishesNotFoundFromForbidden proves a caller can tell
 // "no such repository/PR" (404) apart from "token lacks scope" (403) via
 // errors.As, instead of parsing the error string — the distinction Task 5/6

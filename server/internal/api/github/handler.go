@@ -134,12 +134,32 @@ func githubStatusError(err error) error {
 // this package's contract, and a field added to the client later must not
 // silently become public.
 type pullRequestView struct {
-	Number    int       `json:"number"`
-	Title     string    `json:"title"`
-	Author    string    `json:"author"`
-	URL       string    `json:"url"`
-	Draft     bool      `json:"draft"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	Number    int        `json:"number"`
+	Title     string     `json:"title"`
+	Author    string     `json:"author"`
+	URL       string     `json:"url"`
+	Draft     bool       `json:"draft"`
+	UpdatedAt time.Time  `json:"updatedAt"`
+	Checks    checksView `json:"checks"`
+}
+
+// checksView is the pull request's check-run state, collapsed to what the
+// cockpit panel draws: a state plus the counts behind it. State is "none"
+// both when GitHub reports no checks for the commit and when the check-run
+// lookup itself failed — see summary(), which never lets that lookup turn a
+// working 200 summary into an error or blank the other pull requests.
+type checksView struct {
+	State  string `json:"state"`
+	Passed int    `json:"passed"`
+	Failed int    `json:"failed"`
+	Total  int    `json:"total"`
+	URL    string `json:"url"`
+}
+
+// noChecksView is the checksView every pull request starts with: "none",
+// pointing at the checks tab a human would open to look for themselves.
+func noChecksView(prURL string) checksView {
+	return checksView{State: string(githubapp.CheckStateNone), URL: prURL + "/checks"}
 }
 
 // repoSummary carries one repository's open pull requests, or the reason that
@@ -189,9 +209,22 @@ func (h *Handler) summary(w http.ResponseWriter, r *http.Request) error {
 		}
 		views := make([]pullRequestView, 0, len(prs))
 		for _, p := range prs {
+			// A failed check-run lookup falls back to noChecksView rather
+			// than propagating the error: the PR list this repository
+			// already answered with must not be blanked by a lookup that
+			// merely enriches it, the same rule the repository loop above
+			// applies to OpenPullRequests itself.
+			checks := noChecksView(p.URL)
+			if summary, err := h.client.Checks(r.Context(), name, p.HeadSHA); err == nil {
+				checks = checksView{
+					State: string(summary.State), Passed: summary.Passed,
+					Failed: summary.Failed, Total: summary.Total, URL: p.URL + "/checks",
+				}
+			}
 			views = append(views, pullRequestView{
 				Number: p.Number, Title: p.Title, Author: p.Author,
 				URL: p.URL, Draft: p.Draft, UpdatedAt: p.UpdatedAt,
+				Checks: checks,
 			})
 		}
 		out.Repos = append(out.Repos, repoSummary{Repo: name, PullRequests: views})

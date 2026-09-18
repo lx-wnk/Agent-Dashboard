@@ -102,4 +102,59 @@ describe('gitHubPanel', () => {
       expect(wrapper.findAll(`[data-testid="cockpit-github-${state}"]`)).toHaveLength(0)
     expect(wrapper.get('[data-testid="cockpit-github-pr-42"]').text()).toContain('Add the cockpit')
   })
+  it('shows the check state and counts for each pull request', async () => {
+    stubFetch(200, {
+      repos: [{
+        repo: 'lx-wnk/agent-dashboard',
+        pullRequests: [
+          { number: 42, title: 'Green', author: 'lx-wnk', url: 'https://example.test/42', draft: false, updatedAt: '2026-09-01T10:00:00Z', checks: { state: 'success', passed: 34, failed: 0, total: 34, url: 'https://example.test/42/checks' } },
+          { number: 43, title: 'Red', author: 'lx-wnk', url: 'https://example.test/43', draft: false, updatedAt: '2026-09-01T10:00:00Z', checks: { state: 'failure', passed: 33, failed: 1, total: 34, url: 'https://example.test/43/checks' } },
+          { number: 44, title: 'Running', author: 'lx-wnk', url: 'https://example.test/44', draft: false, updatedAt: '2026-09-01T10:00:00Z', checks: { state: 'pending', passed: 12, failed: 0, total: 34, url: 'https://example.test/44/checks' } },
+          { number: 45, title: 'Nothing', author: 'lx-wnk', url: 'https://example.test/45', draft: false, updatedAt: '2026-09-01T10:00:00Z', checks: { state: 'none', passed: 0, failed: 0, total: 0, url: 'https://example.test/45/checks' } },
+        ],
+      }],
+    })
+    const wrapper = await mountPanel()
+    expect(wrapper.get('[data-testid="cockpit-github-checks-42"]').text()).toContain('34/34')
+    expect(wrapper.get('[data-testid="cockpit-github-checks-43"]').text()).toContain('1 failed')
+    expect(wrapper.get('[data-testid="cockpit-github-checks-44"]').text()).toContain('12/34')
+    expect(wrapper.get('[data-testid="cockpit-github-checks-45"]').text()).toContain('no checks')
+    wrapper.unmount()
+  })
+
+  // The state must survive a colour-blind reader and a screen reader, so the
+  // marker carries text and the element carries a full label.
+  it('distinguishes the states without relying on colour', async () => {
+    stubFetch(200, {
+      repos: [{
+        repo: 'lx-wnk/agent-dashboard',
+        pullRequests: [
+          { number: 42, title: 'Green', author: 'lx-wnk', url: 'https://example.test/42', draft: false, updatedAt: '2026-09-01T10:00:00Z', checks: { state: 'success', passed: 2, failed: 0, total: 2, url: 'https://example.test/42/checks' } },
+          { number: 43, title: 'Red', author: 'lx-wnk', url: 'https://example.test/43', draft: false, updatedAt: '2026-09-01T10:00:00Z', checks: { state: 'failure', passed: 1, failed: 1, total: 2, url: 'https://example.test/43/checks' } },
+        ],
+      }],
+    })
+    const wrapper = await mountPanel()
+    const ok = wrapper.get('[data-testid="cockpit-github-checks-42"]')
+    const bad = wrapper.get('[data-testid="cockpit-github-checks-43"]')
+    expect(ok.text()).not.toBe(bad.text())
+    expect(ok.attributes('aria-label')).toContain('success')
+    expect(bad.attributes('aria-label')).toContain('failure')
+    wrapper.unmount()
+  })
+
+  // A server that predates the check-run field omits the key entirely; the
+  // panel must still draw the pull request rather than throwing on it.
+  it('renders a pull request from a server that sends no checks field', async () => {
+    stubFetch(200, {
+      repos: [{
+        repo: 'lx-wnk/agent-dashboard',
+        pullRequests: [{ number: 42, title: 'Add the cockpit', author: 'lx-wnk', url: 'https://example.test/42', draft: false, updatedAt: '2026-09-01T10:00:00Z' }],
+      }],
+    })
+    const wrapper = await mountPanel()
+    expect(wrapper.get('[data-testid="cockpit-github-pr-42"]').text()).toContain('Add the cockpit')
+    expect(wrapper.findAll('[data-testid="cockpit-github-checks-42"]')).toHaveLength(0)
+    wrapper.unmount()
+  })
 })
