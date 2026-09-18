@@ -1,5 +1,10 @@
 import { ref } from 'vue'
+import { refreshServiceWorker } from '../utils/serviceWorker'
 import { RECONNECT_POLL_MS } from '../utils/sse'
+
+// Bound on the worker refresh below. A stale page is bad; a page that never
+// comes back is worse, so the reload happens either way once this elapses.
+const SW_REFRESH_TIMEOUT_MS = 3000
 
 // After ~30s of consecutive failures, stop auto-polling and surface stalled state.
 const STALL_THRESHOLD = 20
@@ -16,7 +21,15 @@ function poll() {
       const res = await fetch('/api/system/health')
       if (res.ok) {
         if (seenDown) {
-          // Down→up transition confirmed: safe to reload.
+          // Down→up transition confirmed: safe to reload. The SPA is precached,
+          // so a bare reload here can be served entirely from the old worker
+          // and the restarted server then 404s the bundle that page asks for —
+          // the window would show the previous build while reporting itself
+          // up to date. Hand control to a fresh worker first.
+          await Promise.race([
+            refreshServiceWorker(),
+            new Promise(resolve => setTimeout(resolve, SW_REFRESH_TIMEOUT_MS)),
+          ])
           window.location.reload()
           return
         }

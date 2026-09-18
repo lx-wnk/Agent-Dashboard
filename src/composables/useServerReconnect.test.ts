@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { _resetForTesting, useServerReconnect } from './useServerReconnect'
 
+const refreshServiceWorker = vi.fn().mockResolvedValue(undefined)
+vi.mock('../utils/serviceWorker', () => ({
+  refreshServiceWorker: () => refreshServiceWorker(),
+}))
+
 describe('useServerReconnect', () => {
   beforeEach(() => {
     vi.useFakeTimers()
@@ -71,5 +76,53 @@ describe('useServerReconnect', () => {
     // No further polls should fire
     await vi.advanceTimersByTimeAsync(1_500 * 5)
     expect((fetch as any).mock.calls.length).toBe(callsBefore)
+  })
+})
+
+describe('useServerReconnect service-worker refresh', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.stubGlobal('fetch', vi.fn())
+    refreshServiceWorker.mockClear()
+    refreshServiceWorker.mockResolvedValue(undefined)
+  })
+  afterEach(() => {
+    _resetForTesting()
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  // A bare reload can be served from the old precache, against a server that
+  // now 404s that bundle: the window would show the previous build while
+  // reporting itself up to date.
+  it('hands control to a fresh worker before reloading', async () => {
+    const reload = vi.fn()
+    vi.stubGlobal('location', { reload } as any)
+    const { beginReconnect } = useServerReconnect()
+
+    ;(fetch as any).mockRejectedValueOnce(new Error('down'))
+    ;(fetch as any).mockResolvedValue({ ok: true, status: 200 })
+    beginReconnect()
+    await vi.advanceTimersByTimeAsync(5_000)
+
+    expect(refreshServiceWorker).toHaveBeenCalled()
+    expect(reload).toHaveBeenCalled()
+  })
+
+  // The refresh is a courtesy, the reload is the point. A worker that hangs
+  // must not strand the page on a server that already restarted.
+  it('reloads anyway when the refresh never settles', async () => {
+    const reload = vi.fn()
+    vi.stubGlobal('location', { reload } as any)
+    refreshServiceWorker.mockReturnValue(new Promise(() => {}))
+    const { beginReconnect } = useServerReconnect()
+
+    ;(fetch as any).mockRejectedValueOnce(new Error('down'))
+    ;(fetch as any).mockResolvedValue({ ok: true, status: 200 })
+    beginReconnect()
+    await vi.advanceTimersByTimeAsync(10_000)
+
+    expect(reload).toHaveBeenCalled()
   })
 })
