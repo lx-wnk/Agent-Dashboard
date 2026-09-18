@@ -461,6 +461,21 @@ stray click cannot merge. `Client.do`
 (`server/internal/apps/github/client.go`) builds every error from the
 response's own status and message, never from the request, so the token
 cannot ride along in something a user is likely to paste somewhere public;
+**`github.tokenSource = gh-cli` removes the stored secret, and nothing else.**
+With it the token is read from `gh auth token` at each start and never written
+to the settings table, so the dashboard's database holds no GitHub credential
+and a database copied off this machine carries none. That is the whole of the
+gain. It does **not** reduce what an agent on this machine can reach: an agent
+with Bash runs as the same OS user that `gh` stores its credential for, so it
+can invoke `gh auth token` itself whether or not the dashboard does. Nor does
+it narrow the token's own scope — a `gh` session is typically authorised for
+every repository its account can see, which is wider than a fine-grained PAT
+limited to one repository, so the two choices trade a stored secret against a
+smaller blast radius and neither dominates. The command is hardcoded in
+`server/internal/apps/github/ghcli.go`: no setting, request or environment
+value reaches its argument list, which is why this path is not a way to run a
+configured command.
+
 `buildGitHubClient` is the one place in the server that holds the token
 decrypted, and its own doc comment states the same rule for itself: nothing
 in that function may put the token in an error or a log line.

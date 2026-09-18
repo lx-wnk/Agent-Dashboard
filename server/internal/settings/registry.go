@@ -146,6 +146,11 @@ var definitions = func() map[string]Definition {
 		// github.baseURL is deliberately NOT part of that pair — it has a
 		// Default, so it is never unset and cannot be a missing half of
 		// anything.
+		// github.tokenSource decides where the token comes from. "gh-cli" reads
+		// it from the GitHub CLI's credential store at start, so no token is held
+		// here at all; github.token is then unused and github.repos is the only
+		// half of the pair that still has to be set.
+		{Key: "github.tokenSource", Type: TypeEnum, Enum: []string{"setting", "gh-cli"}, Default: "setting", Apply: ApplyRestart, Category: "github"},
 		{Key: "github.token", Type: TypeString, Secret: true, Apply: ApplyRestart, Category: "github"},
 		{Key: "github.repos", Type: TypeString, Default: "", Apply: ApplyRestart, Category: "github"},
 		{Key: "github.baseURL", Type: TypeString, Default: "https://api.github.com", Apply: ApplyRestart, Category: "github"},

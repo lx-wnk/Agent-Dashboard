@@ -181,6 +181,14 @@ half-set pair fails the next start and names the missing key, rather than bootin
 integration silently disabled; the base URL is not part of that pair, since it always carries a
 default and so is never a missing half of anything.
 
+**Or no token at all.** Set **Token source** to *From the GitHub CLI* (`github.tokenSource =
+gh-cli`) and the dashboard reads the token from `gh auth token` at each start instead of holding
+one. The token field disappears, the pair rule reduces to the repository list alone, and nothing is
+stored: the credential stays in the GitHub CLI's own store. A `gh` that is missing or logged out
+fails the next start and says which, rather than booting into GitHub calls that all answer 401. This
+narrows what is *stored*, not what an agent on this machine can *reach* — an agent with Bash runs as
+the same OS user and can invoke `gh` itself either way.
+
 Once configured, the cockpit's **GitHub** panel reads open pull requests from
 `GET /api/github/summary`. `GET /api/github/search`, `POST /api/github/comment`, and
 `POST /api/github/merge` reach the same allow-listed repositories — every route bounded to
