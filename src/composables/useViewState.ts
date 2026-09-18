@@ -5,7 +5,9 @@ import { AGENT_GROUP_OPTIONS, AGENT_SORT_OPTIONS, resolveGroup } from '../utils/
 export type ActiveView = 'cockpit' | 'dashboard' | 'workflows' | 'pipeline' | 'cost' | 'schedules' | 'eval'
 export type DashboardLayout = 'cards' | 'list'
 
-const ACTIVE_VIEWS: ActiveView[] = ['cockpit', 'dashboard', 'workflows', 'pipeline', 'cost', 'schedules', 'eval']
+// Exported: the command palette derives one navigation command per view, so
+// a view added here shows up there without a second list to keep in step.
+export const ACTIVE_VIEWS: ActiveView[] = ['cockpit', 'dashboard', 'workflows', 'pipeline', 'cost', 'schedules', 'eval']
 const AGENT_SORT_VALUES: AgentSort[] = AGENT_SORT_OPTIONS.map(o => o.value)
 const AGENT_GROUP_VALUES: AgentGroup[] = AGENT_GROUP_OPTIONS.map(o => o.value)
 
