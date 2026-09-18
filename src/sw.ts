@@ -24,6 +24,15 @@ declare const self: ServiceWorkerGlobalScope & {
 // Nothing ever reads the property.
 self.__unusedPrecacheManifest = self.__WB_MANIFEST
 
+// Take over as soon as this worker installs. registerType is 'prompt' so a new
+// worker never swaps precached assets under a running session — but this one
+// precaches nothing, so there is nothing to swap, and waiting is what kept the
+// eviction below from ever running: the previous worker holds control, the new
+// one sits in "waiting", and the stale cache is served on indefinitely.
+self.addEventListener('install', () => {
+  void self.skipWaiting()
+})
+
 // An install that already carries a precache keeps being served from it until
 // the cache is gone, so the first worker without precaching has to take it out.
 self.addEventListener('activate', (event) => {
