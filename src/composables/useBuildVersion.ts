@@ -13,6 +13,12 @@ import { ref } from 'vue'
  * reloads the page.
  */
 const version = ref<string | null>(null)
+// The source revision the binary was built from, and whether the binary lags
+// it. Older servers don't send these fields at all — absence means "unknown"
+// / "not stale", and `stale` is never recomputed here: the server already
+// decided.
+const sourceVersion = ref<string | null>(null)
+const stale = ref(false)
 let started = false
 
 export function useBuildVersion() {
@@ -23,10 +29,14 @@ export function useBuildVersion() {
       .then((data) => {
         if (typeof data?.version === 'string')
           version.value = data.version
+        if (typeof data?.sourceVersion === 'string' && data.sourceVersion !== '')
+          sourceVersion.value = data.sourceVersion
+        if (typeof data?.stale === 'boolean')
+          stale.value = data.stale
       })
       .catch(() => {
         // Offline or blocked: showing nothing beats showing a wrong version.
       })
   }
-  return { version }
+  return { version, sourceVersion, stale }
 }
