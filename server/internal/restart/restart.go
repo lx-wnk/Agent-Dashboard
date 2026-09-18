@@ -6,6 +6,7 @@ package restart
 import (
 	"context"
 	"errors"
+	"github.com/lx-wnk/agent-dashboard/server/internal/version"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -52,6 +53,17 @@ func (OSRestarter) Reexec() error {
 // Exit terminates the process cleanly so a supervisor restarts it.
 func (OSRestarter) Exit() { os.Exit(0) }
 
+// buildArgs is the "go" argument list for a rebuild, split out so the stamp is
+// testable without running a compiler. An unknown revision stamps nothing
+// rather than stamping the empty string, which would read as a real version.
+func buildArgs(exe, rev string) []string {
+	args := []string{"build", "-o", exe}
+	if rev != "" {
+		args = append(args, "-ldflags", "-X main.version="+rev)
+	}
+	return append(args, "./cmd/serve/...")
+}
+
 // Build runs `go build -o <running binary's path> ./cmd/serve/...` — the same
 // command Taskfile.yml's `build` task runs, minus the version ldflags. The
 // command and its arguments are fixed constants; nothing dynamic (request
@@ -83,7 +95,16 @@ func (OSRestarter) Build(ctx context.Context) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, buildTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "go", "build", "-o", exe, "./cmd/serve/...")
+	// Stamp the revision being compiled, exactly as Taskfile.yml does. Without
+	// it the new binary reports "dev" while the source reports a revision, so
+	// the staleness banner this rebuild exists to clear would instead be stuck
+	// on forever -- the button would create the condition it removes.
+	// #nosec G204 -- no part of this command line is caller-supplied: "go" is
+	// PATH-resolved, exe comes from os.Executable(), srcDir from this package's
+	// own compiled-in path, and rev from "git describe" run in that directory.
+	// The restart handler reads only a boolean from its request body and passes
+	// nothing through; argv reaches exec.CommandContext without a shell.
+	cmd := exec.CommandContext(ctx, "go", buildArgs(exe, version.DescribeIn(ctx, srcDir))...)
 	cmd.Dir = srcDir
 	return cmd.CombinedOutput()
 }

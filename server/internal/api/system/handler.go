@@ -5,9 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"os/exec"
 	"runtime"
-	"strings"
 	"sync"
 	"time"
 
@@ -46,13 +44,7 @@ func sourceVersion() string {
 		return sourceVersionCache.value
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	out, err := exec.CommandContext(ctx, "git", "describe", "--tags", "--always", "--dirty").Output()
-	v := ""
-	if err == nil {
-		v = strings.TrimSpace(string(out))
-	}
+	v := version.DescribeIn(context.Background(), "")
 	sourceVersionCache.value = v
 	sourceVersionCache.fetched = time.Now()
 	return v

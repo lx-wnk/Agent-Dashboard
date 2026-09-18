@@ -85,4 +85,3 @@ func TestHealthHandler_Stale(t *testing.T) {
 		})
 	}
 }
-
