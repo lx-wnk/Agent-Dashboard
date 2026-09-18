@@ -1,6 +1,11 @@
 # Remote Execution Nodes — Design Spec
 
-> Status: **proposed, not approved**. Written 2026-09-18. Nothing below is built.
+> Status: **V2 — deferred by the requester on 2026-09-18.** "Before we sit down to remote
+> binaries the local OS has to run first; the rest we define as V2." Nothing below is
+> built, and nothing below is started until the local product is done.
+>
+> D1 was decided against this document's first recommendation — see the decision record
+> there. D2 and the rest stand as written.
 >
 > Goal, in the requester's words: *a second binary I can run on any server, which handles
 > spawning there; registered in my desktop app as a spawner so jobs do not have to run
@@ -79,16 +84,51 @@ A remote node needs a channel to the dashboard. Who dials whom.
 
 | Option | Pro | Con |
 |---|---|---|
-| **A. Dashboard → node over HTTPS** | Simplest mental model; node is an ordinary server; reuses the existing HTTP client shape. | Needs an inbound port on the node, so NAT and firewalls are the user's problem. Needs an SSRF carve-out for every private address, which is the widest possible version of that carve-out. |
-| **B. Node → dashboard, long-lived connection, work pulled** | No inbound port, no port forwarding, works behind NAT and on a VPN. **No SSRF question at all** — the dashboard never dials out. Authentication is the node presenting a bearer token, which `api_keys` already does. | A persistent connection to keep alive, reconnect and fence. Work must be queued and leased rather than called. |
-| **C. SSH transport around the existing exec path** | Nearly free: `CustomCommandSpawner{Command: "ssh node …"}` works today with no new code. | Ties the design to SSH keys and a shell; no per-user spawners, no rate limiting, no revocation, no health signal. Debugging is reading someone else's `~/.ssh/config`. |
+| **A. Dashboard → node over HTTPS** | The node has a stable address; the dashboard is pointed at it once. Ordinary request/response, no connection to keep alive, no leases. | Needs an inbound port on the node, and a deliberate carve-out in the SSRF guard for the address the node actually has. |
+| **B. Node → dashboard, long-lived connection, work pulled** | No inbound port on the node. | **Requires the dashboard to be reachable from the node**, which is the same NAT problem with the roles swapped — and worse, because the dashboard is the desktop app on a laptop that changes networks, while a server's address does not. |
+| **C. SSH transport around the existing exec path** | Nearly free today. | No per-user spawners, no rate limiting, no revocation, no health signal. |
 
-**Recommendation: B.** It is the only option that removes the SSRF question instead of
-carving around it, and the requirement is *any* server — which in practice means one
-behind NAT, on a VPN, or on a CGNAT address the guard blocks by name. It also inverts
-the trust direction the right way: the node proves who it is to the dashboard, rather
-than the dashboard being talked into dialling an arbitrary address. C is worth naming as
-the thing to use *today* if the need is urgent and single-user; it is a stopgap, not this.
+**Decision: A.** The first draft of this spec recommended B on the grounds that it removes
+the SSRF question. That reasoning was wrong: it does not remove the reachability problem,
+it moves it onto the machine least able to satisfy it. A server has a fixed address and an
+operator who can open a port; a desktop app does not and should not.
+
+**The security argument that makes A defensible.** `validation.IsBlockedIP` exists to stop
+**server-side request forgery** — a URL supplied by an attacker steering the server at
+addresses the attacker cannot otherwise reach. A node URL an operator types into their own
+dashboard is categorically not that: it is a configuration value, entered by the person the
+server acts for, in a UI bound to loopback. The guard cannot tell those two apart, which is
+why the carve-out has to be explicit rather than a widening.
+
+### D1a — What the carve-out looks like
+
+Following `apps/github/client.go:128-137`, `validation.IsBlockedIP` is **not touched**. A
+node client gets its own dial policy, and that policy is bounded by all of the following,
+every one of which must hold:
+
+1. **Registered destinations only.** The dialler resolves against the `node` table, not
+   against a URL taken from a request. An address that is not a stored, enrolled node is
+   refused before DNS.
+2. **Pinned at enrolment.** `node enrol` records the resolved IP alongside the host. If a
+   later resolution returns a different address, the connection is refused and the node is
+   marked `address-changed` for a human to confirm — this is the DNS-rebinding guard
+   `SafeDialContext` provides, kept rather than dropped.
+3. **Loopback stays blocked.** The private and CGNAT ranges are allowed for an enrolled
+   node; loopback, link-local and unspecified are not. A "node" on 127.0.0.1 is the
+   dashboard talking to itself and has no legitimate use.
+4. **TLS with a pinned certificate.** The node presents a self-signed certificate captured
+   at enrolment; a changed fingerprint refuses the connection. A LAN address with no name
+   cannot get a public certificate, and trusting any certificate on a private network is
+   the whole attack.
+5. **Mutual proof.** The dashboard presents the node's bearer key (D3) and the node
+   verifies it; the node's identity is its pinned certificate. Neither side accepts an
+   unauthenticated peer.
+6. **Audited.** Every dial to a private address is an audit row naming the node. A
+   carve-out nobody can see is a carve-out nobody can revoke.
+
+The resulting rule is small enough to state in one sentence: *the dashboard may dial a
+private address only when it belongs to a node the operator enrolled, at the address and
+certificate recorded then.*
 
 ### D2 — What is a node, thin or full?
 
@@ -125,11 +165,10 @@ The gap the survey names — *no per-host identity, no revoke-by-host* — is cl
 
 ### D4 — What happens to the SSRF guard?
 
-**Recommendation: nothing.** Under D1-B the dashboard never dials the node, so
-`IsBlockedIP` is never on this path. The existing `/api/remotes` registration keeps its
-guard, and `validation.IsBlockedIP` is not touched — which is the position
-`apps/github/client.go:128-137` already recorded. If a future feature does need to dial a
-LAN host, the answer stays a narrow per-client dial policy on that client.
+**Decision: `validation.IsBlockedIP` is not touched.** The six conditions in D1a are a
+per-client dial policy on the node client, which is exactly the shape
+`apps/github/client.go:128-137` recorded as the right answer to this question. The existing
+`/api/remotes` path keeps the unmodified guard.
 
 ### D5 — How do per-user spawners work?
 
@@ -186,10 +225,12 @@ that a stage ran elsewhere.
 
 ### 3.4 The node protocol
 
-Node dials the dashboard, presents its bearer token, and holds a connection. Over it:
-`claim` (lease a unit of work), `heartbeat`, `report` (progress and result), `release`.
-Leases expire, so a node that dies returns its work rather than stranding it — the same
-reasoning as the pipeline's existing lingering-pending gate.
+The dashboard calls the node over HTTPS through the pinned dial policy of D1a. The node
+exposes `POST /work` (start a unit), `GET /work/{id}` (progress and result), `DELETE
+/work/{id}` (cancel) and `GET /health` (version, platform, capacity). A node that stops
+answering has its work failed and requeued by the dashboard's existing infrastructure-
+failure requeue path — the dashboard is the only place that knows a run exists, so it is
+the only place that can decide it is lost.
 
 ### 3.5 Rate limiting
 
@@ -231,7 +272,8 @@ concurrency limit and a node with four cores should say so.
 
 Slices, each shippable on its own:
 
-1. **#427 first** — make the admin role grantable and reinstate the gate. Prerequisite.
+0. **The local product first.** This whole document is V2 and starts only after that.
+1. **#427** — make the admin role grantable and reinstate the gate. Prerequisite.
 2. `node` entity, `node enrol` / `node status`, key issuance and revocation, dashboard
    list showing nodes and their last-seen. No work dispatched yet.
 3. The connection and the lease protocol, with a synthetic work unit. Proves reconnect,
