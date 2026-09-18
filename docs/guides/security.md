@@ -453,7 +453,11 @@ held open for a human to click through. This does not depend on whether an
 an `ask` decision fails closed anyway, but a merge with a `reach` class
 would still surface as a held request the moment `DASHBOARD_AUTH` and an
 asker were both configured, and a merge is not the decision this project
-wants one tired approval away from happening by accident. `Client.do`
+wants one tired approval away from happening by accident. The cockpit's **Merge**
+button calls that same gated route and is refused the same way without a
+grant; it adds a second barrier of its own rather than removing one, replacing
+itself with a confirmation that names the repository, number and title, so a
+stray click cannot merge. `Client.do`
 (`server/internal/apps/github/client.go`) builds every error from the
 response's own status and message, never from the request, so the token
 cannot ride along in something a user is likely to paste somewhere public;

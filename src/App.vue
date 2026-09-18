@@ -23,7 +23,6 @@ import { useInstallPrompt } from './composables/useInstallPrompt'
 import { useOnboarding } from './composables/useOnboarding'
 import { usePendingPermissions } from './composables/usePendingPermissions'
 import { usePermissionResolve } from './composables/usePermissionResolve'
-import { usePWA } from './composables/usePWA'
 import { useServerConfig } from './composables/useServerConfig'
 import { useSidebar } from './composables/useSidebar'
 import { useTheme } from './composables/useTheme'
@@ -65,7 +64,6 @@ watch(showLogin, (visible) => {
   if (visible)
     nextTick(() => loginPageRef.value?.focusLogin())
 })
-const { needsRefresh, updateSW } = usePWA()
 const { canInstall, promptInstall } = useInstallPrompt()
 const { theme, toggleTheme } = useTheme()
 
@@ -354,22 +352,7 @@ onMounted(() => usageComposable.start())
          announce the content when it is inserted (ARIA live regions must exist in the DOM
          before content changes to be reliably announced). -->
     <div role="status" aria-live="polite" aria-atomic="true" class="pointer-events-none">
-      <Transition name="toast">
-        <div
-          v-if="needsRefresh"
-          class="pointer-events-auto fixed bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-slate-900 dark:bg-slate-800 border border-slate-700 text-slate-100 px-5 py-2.5 rounded-lg text-[13px] z-[2000] shadow-[0_4px_16px_rgba(0,0,0,0.4)]"
-        >
-          <span>A new version is available.</span>
-          <button
-            type="button"
-            class="bg-blue-600 text-white border-none rounded-md px-3 py-1 text-[12px] font-semibold cursor-pointer hover:brightness-110"
-            aria-label="A new version is available, reload to apply"
-            @click="updateSW"
-          >
-            Reload
-          </button>
-        </div>
-      </Transition>
+      <Transition name="toast" />
     </div>
     <ToastHost />
     <SpawnDialog :open="showSpawnDialog" @close="showSpawnDialog = false" @spawned="selectAgentWhenAvailable" />

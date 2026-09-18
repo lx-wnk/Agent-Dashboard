@@ -117,9 +117,12 @@ describe('dispatchSlashCommand', () => {
     expect(result.ok).toBe(true)
     expect(result.message).toContain('Bash')
     expect(mockFetch).toHaveBeenCalledTimes(2)
+    // This assertion used to name /api/permission-requests/{id}/resolve, a
+    // route the server does not register — so it pinned the defect in place
+    // and stayed green while the command answered 404.
     expect(mockFetch).toHaveBeenNthCalledWith(
       2,
-      '/api/permission-requests/req-1/resolve',
+      '/api/permission-requests/bulk-resolve',
       expect.objectContaining({ method: 'POST' }),
     )
     vi.unstubAllGlobals()
@@ -209,6 +212,45 @@ describe('fetchDynamicCommands', () => {
 
     expect(set.builtinsMayBeStale).toBe(true)
     expect(set.engineVersion).toBe('2.1.224')
+    vi.unstubAllGlobals()
+  })
+})
+
+// /grant posted to /api/permission-requests/{id}/resolve, a route the server
+// does not register, so the command answered 404 from the day it was written.
+// The assertion is on the URL, not merely that some POST went out.
+describe('/grant resolves through the route the server actually registers', () => {
+  it('posts the decision to bulk-resolve with the task and request id', async () => {
+    const calls: Array<{ url: string, body: unknown }> = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url, body: init?.body ? JSON.parse(init.body as string) : null })
+      if (url.endsWith('/permission-requests'))
+        return new Response(JSON.stringify([{ id: 'req-1', tool: 'Bash' }]), { status: 200 })
+      return new Response(JSON.stringify({ resolved: 1 }), { status: 200 })
+    }))
+
+    const res = await dispatchSlashCommand('/grant', ['Bash'], { taskId: 'task-1' } as never)
+
+    expect(res.ok).toBe(true)
+    const post = calls.find(c => c.body !== null)
+    expect(post?.url).toBe('/api/permission-requests/bulk-resolve')
+    expect(post?.body).toMatchObject({ taskId: 'task-1', permissionIds: ['req-1'] })
+    vi.unstubAllGlobals()
+  })
+
+  it('says which tool it could not find instead of posting anything', async () => {
+    const posts: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === 'POST')
+        posts.push(url)
+      return new Response(JSON.stringify([]), { status: 200 })
+    }))
+
+    const res = await dispatchSlashCommand('/grant', ['Bash'], { taskId: 'task-1' } as never)
+
+    expect(res.ok).toBe(false)
+    expect(res.message).toContain('Bash')
+    expect(posts).toHaveLength(0)
     vi.unstubAllGlobals()
   })
 })

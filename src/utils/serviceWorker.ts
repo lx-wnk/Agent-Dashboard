@@ -4,8 +4,8 @@ import { isWorkboxCache, SW_MSG_SKIP_WAITING } from './swConstants'
 /**
  * Service-worker lifecycle for the two hosts of this SPA.
  *
- * Browser: register, so the PWA keeps its offline precache and the
- * "A new version is available" prompt (see usePWA).
+ * Browser: register, so push notifications and the background replay of
+ * agent messages have a worker to run in. Nothing is cached.
  *
  * Desktop shell: do not register, and evict whatever is already installed. The
  * shell serves this SPA from its own in-process server, so precaching buys no
@@ -43,12 +43,9 @@ export async function unregisterServiceWorkers(): Promise<number> {
  * Fetch a new worker and hand control to it, for the one moment the page is
  * about to reload deliberately: right after a server restart.
  *
- * registerType is 'prompt' precisely so a new worker never swaps assets under
- * a running session, and usePWA.updateSW covers the case where one is already
- * waiting. Neither helps after a rebuild: nothing has fetched the new sw.js
- * yet, so nothing is waiting, and a bare reload can be served entirely from
- * the old precache -- the rebuilt server then answers 404 for the very bundle
- * that page asks for.
+ * The worker takes over on install, so after a rebuild this mainly forces the
+ * new sw.js to be fetched before the page reloads rather than on the next
+ * navigation.
  *
  * Never throws. A worker that cannot be refreshed must not stop the reload.
  */
