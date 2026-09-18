@@ -1,12 +1,40 @@
 <script setup lang="ts">
-import type { Agent, PipelineTask } from '../types'
+import type { Agent, PipelineTask, Project } from '../types'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { suggestFolders } from '@/composables/useProjectFolders'
+import { useProjects } from '@/composables/useProjects'
+import { ACTIVE_VIEWS, useViewState } from '@/composables/useViewState'
+import { createTask } from '@/features/pipeline'
+import { slugFollowingName } from '@/utils/validation'
 import AppModal from './ui/AppModal.vue'
 
 const emit = defineEmits<{
   navigateTask: [task: PipelineTask]
   navigateAgent: [agent: Agent]
+  captured: [taskId: string]
 }>()
+
+const { activeView } = useViewState()
+const { projects } = useProjects()
+
+interface Command {
+  id: string
+  label: string
+  run: () => void
+}
+
+// Derived from ACTIVE_VIEWS so a view added there shows up here without a
+// second list to keep in step.
+const commands = computed<Command[]>(() =>
+  ACTIVE_VIEWS.map(view => ({
+    id: `view:${view}`,
+    label: `Go to ${view}`,
+    run: () => { activeView.value = view },
+  })),
+)
+
+const busy = ref(false)
+const problem = ref('')
 
 const open = ref(false)
 const query = ref('')
@@ -26,12 +54,32 @@ const loading = ref(false)
 let debounceHandle: ReturnType<typeof setTimeout> | null = null
 let abortController: AbortController | null = null
 
-const flatResults = computed((): Array<{ type: 'task', item: PipelineTask } | { type: 'agent', item: Agent }> => {
+type FlatResult
+  = | { type: 'task', item: PipelineTask }
+    | { type: 'agent', item: Agent }
+    | { type: 'command', item: Command }
+
+const matchingCommands = computed(() => {
+  const q = query.value.trim().toLowerCase()
+  if (!q)
+    return []
+  return commands.value.filter(c => c.label.toLowerCase().includes(q))
+})
+
+const flatResults = computed((): FlatResult[] => {
   return [
     ...results.value.tasks.map(t => ({ type: 'task' as const, item: t })),
     ...results.value.agents.map(a => ({ type: 'agent' as const, item: a })),
+    ...matchingCommands.value.map(c => ({ type: 'command' as const, item: c })),
   ]
 })
+
+// Text that matches nothing is not a dead end: it becomes a backlog item.
+// That is the capture the origin document asked for -- one line in, something
+// refinable out, without first deciding slug, project or priority.
+const capturing = computed(() =>
+  query.value.trim().length > 0 && !loading.value && flatResults.value.length === 0,
+)
 
 // Clamp selectedIdx when results shrink to avoid out-of-bounds
 watch(flatResults, (newResults) => {
@@ -68,12 +116,56 @@ async function search(q: string) {
   }
 }
 
-function activate(result: typeof flatResults.value[number]) {
+function activate(result: FlatResult) {
   if (result.type === 'task')
     emit('navigateTask', result.item)
-  else
+  else if (result.type === 'agent')
     emit('navigateAgent', result.item)
+  else
+    result.item.run()
   closeDialog()
+}
+
+// The server needs a working directory for every task. Asking for one is the
+// friction this field exists to remove, so it is derived: the first project,
+// then that project's default folder.
+async function deriveCwd(project: Project): Promise<string | null> {
+  const folders = await suggestFolders(project.id)
+  return (folders.find(f => f.isDefault) ?? folders[0])?.path ?? null
+}
+
+async function capture() {
+  const title = query.value.trim()
+  if (!title || busy.value)
+    return
+  const project = projects.value[0]
+  if (!project) {
+    problem.value = 'No project exists yet - create one in Settings before capturing.'
+    return
+  }
+  busy.value = true
+  problem.value = ''
+  try {
+    const cwd = await deriveCwd(project)
+    if (!cwd) {
+      problem.value = `Project "${project.name}" has no folder - add one in Settings.`
+      return
+    }
+    const task = await createTask({
+      title,
+      slug: slugFollowingName(title, '', false),
+      cwd,
+      projectId: project.id,
+    })
+    closeDialog()
+    emit('captured', task.id)
+  }
+  catch (e) {
+    problem.value = e instanceof Error ? e.message : 'Could not capture that.'
+  }
+  finally {
+    busy.value = false
+  }
 }
 
 function openDialog() {
@@ -85,6 +177,7 @@ function openDialog() {
 function closeDialog() {
   open.value = false
   query.value = ''
+  problem.value = ''
   results.value = { tasks: [], agents: [] }
   // Restore focus to the element that was focused before the dialog opened
   if (previouslyFocusedElement instanceof HTMLElement) {
@@ -129,6 +222,10 @@ function onKeydown(e: KeyboardEvent) {
   }
   if (e.key === 'Enter') {
     e.preventDefault()
+    if (capturing.value) {
+      void capture()
+      return
+    }
     const selected = flatResults.value[selectedIdx.value]
     if (!selected)
       return
@@ -230,11 +327,55 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
               <span class="ml-auto text-[10px] text-fg-faint">{{ agent.status }}</span>
             </div>
           </template>
+
+          <!-- Commands section -->
+          <template v-if="matchingCommands.length > 0">
+            <div
+              class="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-fg-faint"
+              :class="{ 'border-t border-line mt-1': results.tasks.length + results.agents.length > 0 }"
+            >
+              Commands
+            </div>
+            <div
+              v-for="(command, idx) in matchingCommands"
+              :id="`spotlight-opt-${results.tasks.length + results.agents.length + idx}`"
+              :key="command.id"
+              role="option"
+              tabindex="-1"
+              :aria-selected="selectedIdx === (results.tasks.length + results.agents.length + idx)"
+              :data-testid="`spotlight-command-${command.id}`"
+              class="w-full text-left px-4 py-2 text-sm flex items-center gap-3 transition-colors cursor-pointer"
+              :class="selectedIdx === (results.tasks.length + results.agents.length + idx)
+                ? 'bg-accent-soft text-accent'
+                : 'text-fg-soft hover:bg-raised'"
+              @click="activate({ type: 'command', item: command })"
+              @mouseenter="selectedIdx = results.tasks.length + results.agents.length + idx"
+            >
+              <span class="text-[10px] uppercase tracking-wide text-fg-faint w-10 flex-shrink-0">Go</span>
+              <span class="truncate">{{ command.label }}</span>
+            </div>
+          </template>
         </template>
+
+        <p
+          v-if="problem"
+          data-testid="spotlight-problem"
+          role="alert"
+          class="mx-3 my-2 text-[12px] rounded-md px-2 py-1.5 bg-warning-soft text-warning-text"
+        >
+          {{ problem }}
+        </p>
+        <p
+          v-else-if="capturing"
+          data-testid="spotlight-capture"
+          class="px-4 py-2 text-[12px] text-fg-faint"
+        >
+          {{ busy ? 'Capturing…' : 'Nothing matched — ↵ captures this as a backlog item.' }}
+        </p>
       </div>
       <div class="px-4 py-2 border-t border-line flex gap-3 text-[10px] text-fg-faint">
         <span>↑↓ navigate</span>
-        <span>↵ open</span>
+        <span>↵ open or capture</span>
         <span>Esc close</span>
       </div>
     </div>

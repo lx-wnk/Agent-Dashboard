@@ -32,7 +32,6 @@ import { useTodayCost } from './composables/useTodayCost'
 import { useUsage } from './composables/useUsage'
 import { useUser } from './composables/useUser'
 import { useViewState } from './composables/useViewState'
-import CommandPalette from './features/command/CommandPalette.vue'
 import { formatCost } from './utils/format'
 
 // PERF-BUNDLE1: AgentModal is only ever rendered on agent selection — split into its own chunk
@@ -387,7 +386,6 @@ onMounted(() => usageComposable.start())
       @approved="showPlanReview = false; activePlanTask = null"
       @rejected="showPlanReview = false; activePlanTask = null"
     />
-    <CommandPalette @captured="(taskId: string) => navigateTo({ taskId })" />
     <AppModal :open="showBacklogForm" width="560px" @close="showBacklogForm = false">
       <AppModalHeader title="New Task" @close="showBacklogForm = false" />
       <div class="flex-1 min-h-0 overflow-y-auto p-5">
@@ -402,6 +400,7 @@ onMounted(() => usageComposable.start())
     <SpotlightSearch
       @navigate-task="task => openTask(task)"
       @navigate-agent="agent => selectAgent(agent)"
+      @captured="(taskId: string) => navigateTo({ taskId })"
     />
   </div>
   <div v-else class="min-h-screen bg-app" />

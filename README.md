@@ -33,7 +33,7 @@ Most agent monitors require you to wire hooks or wrappers into every project. Th
 
 ## Features
 
-**Monitor** — real-time agent roster over SSE (list, card, kanban) with tokens, cost, status, and uptime; live active-subtask metrics (token usage, duration, latest output) on every agent and task card; chat-style transcript with collapsible tool groups and subagent badges; `Cmd+K` spotlight search and n-gram pattern discovery.
+**Monitor** — real-time agent roster over SSE (list, card, kanban) with tokens, cost, status, and uptime; live active-subtask metrics (token usage, duration, latest output) on every agent and task card; chat-style transcript with collapsible tool groups and subagent badges; `Cmd+K` spotlight search and n-gram pattern discovery. The same `Cmd+K` field also runs navigation commands, and — when your text matches nothing at all — captures it as a backlog item, deriving the slug from the title and the working directory from the first project's default folder, so an idea can be written down without first choosing a project.
 
 A **Working** indicator shows when an agent is actively generating, rather than just recently active. It's inferred from whether the agent owes the next reply (conversation turn-state) together with live session output from tmux or the pty broker, so it's distinct from the staleness-based active/waiting/idle states.
 
@@ -121,6 +121,10 @@ notarization steps are documented in [docs/desktop-distribution.md](docs/desktop
 **Activating an `auth_provider` plugin requires a restart to apply** (auth is boot-wired, not live-reloadable).
 
 **Default (`DASHBOARD_RESTART_MODE=reexec`):** the process re-execs itself in place — same PID, no supervisor needed. Works with plain `./bin/agent-dashboard serve`.
+
+**Rebuilding first.** A plain restart re-execs the *same binary on disk*, so it never picks up a merged change. Send `{"rebuild": true}` — or use **Rebuild and restart** in **Settings → Server** — and the server builds first and only relaunches if that succeeded. A failed build answers **500** with the last 40 lines of output and leaves the running binary untouched. The build command is fixed in Go; nothing from the request reaches it.
+
+The status bar warns when the running build is older than the source it was built from, comparing the binary's stamped version against `git describe` in the server's working directory. If either is unknown, no warning is shown.
 
 **Supervised (`DASHBOARD_RESTART_MODE=exit`):** the process exits cleanly so the supervisor relaunches it.
 
