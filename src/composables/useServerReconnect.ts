@@ -45,20 +45,39 @@ function beginReconnect() {
   poll()
 }
 
-async function triggerRestart() {
+/**
+ * Thrown by triggerRestart on a non-2xx response. Carries the build output a
+ * rebuild failure reports, when the server sent one.
+ */
+export class RestartError extends Error {
+  output?: string
+  constructor(message: string, output?: string) {
+    super(message)
+    this.name = 'RestartError'
+    this.output = output
+  }
+}
+
+async function triggerRestart(opts: { rebuild?: boolean } = {}) {
   const res = await fetch('/api/admin/restart', {
     method: 'POST',
-    headers: { Origin: window.location.origin },
+    headers: opts.rebuild
+      ? { 'Origin': window.location.origin, 'Content-Type': 'application/json' }
+      : { Origin: window.location.origin },
+    body: opts.rebuild ? JSON.stringify({ rebuild: true }) : undefined,
   })
   if (!res.ok) {
     let detail = `restart failed (${res.status})`
+    let output: string | undefined
     try {
       const body = await res.json()
       if (body?.error)
         detail = body.error
+      if (typeof body?.output === 'string')
+        output = body.output
     }
     catch { /* no body */ }
-    throw new Error(detail)
+    throw new RestartError(detail, output)
   }
   beginReconnect()
 }
