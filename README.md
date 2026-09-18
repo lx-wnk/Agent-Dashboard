@@ -33,6 +33,8 @@ Most agent monitors require you to wire hooks or wrappers into every project. Th
 
 ## Features
 
+**Mission control** — the default view puts one thing in the centre: the item actually blocking a person, with the reason it is first. Running tasks sit to the left as stage bars, the GitHub and memory panels to the right. Its input shows the reading it will act on — navigate, command, or capture — before you press Enter.
+
 **Monitor** — real-time agent roster over SSE (list, card, kanban) with tokens, cost, status, and uptime; live active-subtask metrics (token usage, duration, latest output) on every agent and task card; chat-style transcript with collapsible tool groups and subagent badges; `Cmd+K` spotlight search and n-gram pattern discovery. The same `Cmd+K` field also runs navigation commands, and — when your text matches nothing at all — captures it as a backlog item, deriving the slug from the title and the working directory from the first project's default folder, so an idea can be written down without first choosing a project.
 
 A **Working** indicator shows when an agent is actively generating, rather than just recently active. It's inferred from whether the agent owes the next reply (conversation turn-state) together with live session output from tmux or the pty broker, so it's distinct from the staleness-based active/waiting/idle states.

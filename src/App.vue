@@ -31,6 +31,7 @@ import { useTodayCost } from './composables/useTodayCost'
 import { useUsage } from './composables/useUsage'
 import { useUser } from './composables/useUser'
 import { useViewState } from './composables/useViewState'
+import MissionControlView from './features/mission/MissionControlView.vue'
 import { formatCost } from './utils/format'
 
 // PERF-BUNDLE1: AgentModal is only ever rendered on agent selection — split into its own chunk
@@ -306,6 +307,10 @@ onMounted(() => usageComposable.start())
           Error: {{ error }}
         </p>
 
+        <MissionControlView
+          v-else-if="activeView === 'mission'"
+          @open-task="(taskId: string) => navigateTo({ taskId })"
+        />
         <CockpitView v-else-if="activeView === 'cockpit'" />
 
         <DashboardView
