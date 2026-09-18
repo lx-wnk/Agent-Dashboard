@@ -75,13 +75,17 @@ func buildArgs(exe, rev string) []string {
 // forever.
 //
 // exec.CommandContext's default Cancel is SIGKILL on ctx expiry, and that is
-// left as-is deliberately: `go build -o` compiles to a scratch file and only
-// renames it onto the target path on success — the OS refuses an in-place
-// overwrite of a binary that is currently executing ("text file busy"), so
-// the toolchain has to work this way regardless. A build killed mid-compile
-// therefore never touches the target path; the old binary that is still
-// running is left completely intact, which is exactly the fail-safe this
-// endpoint needs.
+// left as-is deliberately: `go build -o` compiles to a scratch file and
+// renames it onto the target path only on success, so a build killed
+// mid-compile never touches that path and the binary still running is left
+// intact — the fail-safe this endpoint needs.
+//
+// It is the rename that carries this, not any refusal by the OS. An earlier
+// version of this comment claimed the kernel rejects overwriting a running
+// binary ("text file busy"); that is wrong, and a rebuild through this
+// endpoint was observed replacing its own running binary on macOS (the file's
+// hash changed while the process kept its PID). ETXTBSY applies to writing
+// into the file in place, which is not what the toolchain does.
 func (OSRestarter) Build(ctx context.Context) ([]byte, error) {
 	exe, err := os.Executable()
 	if err != nil {
