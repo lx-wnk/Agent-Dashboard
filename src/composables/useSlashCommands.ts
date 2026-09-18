@@ -1,3 +1,4 @@
+import { bulkResolvePermissionRequests } from '@/features/pipeline'
 import { SLUG_RE } from '../utils/validation'
 
 interface ApiError { error?: string }
@@ -123,16 +124,10 @@ export async function dispatchSlashCommand(
         if (!match)
           return { ok: false, message: `No open permission request found for tool "${toolName}".` }
 
-        // Step 2: resolve the permission
-        const resolveRes = await fetch(`/api/permission-requests/${match.id}/resolve`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ outcome: 'granted' }),
-        })
-        if (!resolveRes.ok) {
-          const data = await resolveRes.json().catch(() => ({})) as ApiError
-          return { ok: false, message: data.error ?? `Error ${resolveRes.status}` }
-        }
+        // Step 2: resolve it. The single-request route this used to post to
+        // is not registered, so the command has never worked; bulk-resolve is
+        // the one the triage band uses and it takes the same four decisions.
+        await bulkResolvePermissionRequests(ctx.taskId, [match.id], 'allow_once')
         return { ok: true, message: `Permission granted for "${toolName}".` }
       }
       catch {

@@ -81,3 +81,30 @@ export function useGitHubSummary() {
 
   return { repos, loading, error, denied, unconfigured, fetchSummary }
 }
+
+/**
+ * Thrown by mergePullRequest so the panel can tell a refusal apart from a
+ * GitHub-side failure: 403 is this server refusing (the repository is not in
+ * `github.repos`, or no `github.merge` grant exists), anything else came back
+ * from GitHub — a conflict, branch protection, an unmergeable head.
+ */
+export class MergeRefused extends Error {
+  status: number
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'MergeRefused'
+    this.status = status
+  }
+}
+
+export async function mergePullRequest(repo: string, number: number): Promise<string> {
+  const res = await fetch('/api/github/merge', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Origin': window.location.origin },
+    body: JSON.stringify({ repo, number }),
+  })
+  if (!res.ok)
+    throw new MergeRefused(await readErrorMessage(res, `Merge failed (HTTP ${res.status})`), res.status)
+  const body = await res.json() as { sha?: string }
+  return body.sha ?? ''
+}

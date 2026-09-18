@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import type { GitHubChecks } from '../composables/useGitHubSummary'
 import type { PanelState } from '../panelState'
-import { computed, onMounted } from 'vue'
-import { useGitHubSummary } from '../composables/useGitHubSummary'
+import { computed, onMounted, ref } from 'vue'
+import { mergePullRequest, MergeRefused, useGitHubSummary } from '../composables/useGitHubSummary'
 import CockpitPanel from './CockpitPanel.vue'
 
 const { repos, loading, error, denied, unconfigured, fetchSummary } = useGitHubSummary()
@@ -69,6 +69,41 @@ function checkTitle(checks: GitHubChecks): string {
     : `Checks ${checks.state}: ${checks.passed} passed, ${checks.failed} failed, ${checks.total} total`
 }
 
+// A merge cannot be taken back, so it takes two deliberate clicks and the
+// confirmation names the pull request it would merge. `pending` holds the key
+// of the row awaiting confirmation, never more than one.
+const pending = ref<string | null>(null)
+const merging = ref<string | null>(null)
+const mergeError = ref('')
+
+const prKey = (pr: { repo: string, number: number }) => `${pr.repo}#${pr.number}`
+
+function askToMerge(pr: { repo: string, number: number }) {
+  mergeError.value = ''
+  pending.value = prKey(pr)
+}
+
+async function confirmMerge(pr: { repo: string, number: number, title: string }) {
+  const key = prKey(pr)
+  merging.value = key
+  mergeError.value = ''
+  try {
+    await mergePullRequest(pr.repo, pr.number)
+    pending.value = null
+    await fetchSummary()
+  }
+  catch (e) {
+    // A 403 is this server refusing, and both of its causes are the operator's
+    // to fix, so the message names them rather than guessing which one applies.
+    mergeError.value = e instanceof MergeRefused && e.status === 403
+      ? `${e.message} — check Settings → GitHub for the repository allow-list, and Settings → Grants for a github.merge grant.`
+      : e instanceof Error ? e.message : 'Merge failed.'
+  }
+  finally {
+    merging.value = null
+  }
+}
+
 const message = computed(() => {
   if (unconfigured.value)
     return 'Set github.token and github.repos in Settings → GitHub to switch this on.'
@@ -108,7 +143,46 @@ const message = computed(() => {
           :aria-label="checkTitle(pr.checks)"
         >{{ CHECK_MARKS[pr.checks.state] }} {{ checkLabel(pr.checks) }}</span>
         <span class="shrink-0 text-fg-mute">{{ pr.repo }}#{{ pr.number }}</span>
+        <button
+          v-if="pending !== `${pr.repo}#${pr.number}`"
+          type="button"
+          :data-testid="`cockpit-github-merge-${pr.number}`"
+          class="shrink-0 rounded-md border border-line px-2 py-0.5 text-[11px] text-fg-mute hover:text-fg hover:border-accent"
+          @click="askToMerge(pr)"
+        >
+          Merge
+        </button>
+        <span v-else class="shrink-0 flex items-center gap-1.5">
+          <span :data-testid="`cockpit-github-merge-confirm-text-${pr.number}`" class="text-[11px] text-fg">
+            Merge {{ pr.repo }}#{{ pr.number }} “{{ pr.title }}”?
+          </span>
+          <button
+            type="button"
+            :data-testid="`cockpit-github-merge-confirm-${pr.number}`"
+            :disabled="merging !== null"
+            class="rounded-md border border-danger px-2 py-0.5 text-[11px] text-danger-text hover:brightness-110 disabled:opacity-60"
+            @click="confirmMerge(pr)"
+          >
+            {{ merging === `${pr.repo}#${pr.number}` ? 'Merging…' : 'Confirm' }}
+          </button>
+          <button
+            type="button"
+            :data-testid="`cockpit-github-merge-cancel-${pr.number}`"
+            class="rounded-md border border-line px-2 py-0.5 text-[11px] text-fg-mute hover:text-fg"
+            @click="pending = null"
+          >
+            Cancel
+          </button>
+        </span>
       </li>
     </ul>
+    <p
+      v-if="mergeError"
+      data-testid="cockpit-github-merge-error"
+      role="alert"
+      class="text-[12px] rounded-md px-3 py-2 mt-2 bg-warning-soft text-warning-text"
+    >
+      {{ mergeError }}
+    </p>
   </CockpitPanel>
 </template>

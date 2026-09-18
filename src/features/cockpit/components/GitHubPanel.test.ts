@@ -158,3 +158,96 @@ describe('gitHubPanel', () => {
     wrapper.unmount()
   })
 })
+
+describe('merging from the cockpit', () => {
+  const PR = { number: 42, title: 'Add the cockpit', author: 'lx-wnk', url: 'https://example.test/42', draft: false, updatedAt: '2026-09-01T10:00:00Z' }
+
+  // Routes by URL: the summary and the merge must answer differently, which
+  // the shared stubFetch above cannot do.
+  function stubRoutes(mergeStatus: number, mergeBody: unknown) {
+    const posts: Array<{ url: string, body: unknown }> = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes('/api/github/merge')) {
+        posts.push({ url, body: init?.body ? JSON.parse(init.body as string) : null })
+        return new Response(JSON.stringify(mergeBody), { status: mergeStatus, headers: { 'Content-Type': 'application/json' } })
+      }
+      return new Response(JSON.stringify({ repos: [{ repo: 'lx-wnk/agent-dashboard', pullRequests: [PR] }] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }))
+    return posts
+  }
+
+  // A merge cannot be taken back, so one stray click must never perform one.
+  it('asks before merging, naming the pull request', async () => {
+    const posts = stubRoutes(200, { sha: 'abc' })
+    const wrapper = await mountPanel()
+
+    await wrapper.get('[data-testid="cockpit-github-merge-42"]').trigger('click')
+
+    const confirmText = wrapper.get('[data-testid="cockpit-github-merge-confirm-text-42"]').text()
+    expect(confirmText).toContain('lx-wnk/agent-dashboard#42')
+    expect(confirmText).toContain('Add the cockpit')
+    expect(posts).toHaveLength(0)
+    wrapper.unmount()
+  })
+
+  it('merges only on the second, explicit click', async () => {
+    const posts = stubRoutes(200, { sha: 'abc' })
+    const wrapper = await mountPanel()
+
+    await wrapper.get('[data-testid="cockpit-github-merge-42"]').trigger('click')
+    await wrapper.get('[data-testid="cockpit-github-merge-confirm-42"]').trigger('click')
+    await flushPromises()
+
+    expect(posts).toHaveLength(1)
+    expect(posts[0].body).toMatchObject({ repo: 'lx-wnk/agent-dashboard', number: 42 })
+    wrapper.unmount()
+  })
+
+  it('cancels back to the plain button without merging', async () => {
+    const posts = stubRoutes(200, { sha: 'abc' })
+    const wrapper = await mountPanel()
+
+    await wrapper.get('[data-testid="cockpit-github-merge-42"]').trigger('click')
+    await wrapper.get('[data-testid="cockpit-github-merge-cancel-42"]').trigger('click')
+
+    expect(wrapper.find('[data-testid="cockpit-github-merge-42"]').exists()).toBe(true)
+    expect(posts).toHaveLength(0)
+    wrapper.unmount()
+  })
+
+  // A 403 is this server refusing, and it has two causes the operator fixes in
+  // two different places. Naming only one of them sends them to the wrong screen.
+  it('names both causes when the server refuses with 403', async () => {
+    stubRoutes(403, { error: 'github.merge: denied' })
+    const wrapper = await mountPanel()
+
+    await wrapper.get('[data-testid="cockpit-github-merge-42"]').trigger('click')
+    await wrapper.get('[data-testid="cockpit-github-merge-confirm-42"]').trigger('click')
+    await flushPromises()
+
+    const text = wrapper.get('[data-testid="cockpit-github-merge-error"]').text()
+    expect(text).toContain('github.merge: denied')
+    expect(text).toContain('allow-list')
+    expect(text).toContain('Grants')
+    wrapper.unmount()
+  })
+
+  // A conflict or branch protection comes back from GitHub, not from the gate;
+  // pointing at local settings there would send the operator nowhere useful.
+  it('shows a GitHub-side failure without the settings hint', async () => {
+    stubRoutes(409, { error: 'Pull Request is not mergeable' })
+    const wrapper = await mountPanel()
+
+    await wrapper.get('[data-testid="cockpit-github-merge-42"]').trigger('click')
+    await wrapper.get('[data-testid="cockpit-github-merge-confirm-42"]').trigger('click')
+    await flushPromises()
+
+    const text = wrapper.get('[data-testid="cockpit-github-merge-error"]').text()
+    expect(text).toContain('not mergeable')
+    expect(text).not.toContain('Grants')
+    wrapper.unmount()
+  })
+})

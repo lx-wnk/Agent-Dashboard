@@ -163,7 +163,7 @@ self.addEventListener('sync', (event) => {
   }
 })
 
-// Activate a freshly installed SW when the page (usePWA.updateSW) requests it.
+// Activate when refreshServiceWorker asks a waiting worker to take over.
 // Without this handler the waiting worker never takes control and prompt-mode
 // updates can never apply — the stale precached bundle is served indefinitely.
 self.addEventListener('message', (event) => {
