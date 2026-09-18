@@ -235,6 +235,49 @@ describe('useSchedules', () => {
     await expect(mod.previewSchedule({ nlText: 'gibberish' })).rejects.toThrow('unparseable phrase')
   })
 
+  it('autoStart:false consumer does not decrement subscriberCount on unmount', async () => {
+    // Active consumer starts the stream
+    const { result: active, wrapper: activeWrapper } = withSetup(() => mod.useSchedules())
+    await Promise.resolve()
+    await Promise.resolve()
+    await nextTick()
+
+    expect(MockEventSource.instances).toHaveLength(1)
+    expect(active.schedules.value).toHaveLength(1)
+
+    // Passive consumer — never starts the stream
+    const { wrapper: passiveWrapper } = withSetup(() => mod.useSchedules({ autoStart: false }))
+    await nextTick()
+
+    // No second EventSource created — shared stream reused
+    expect(MockEventSource.instances).toHaveLength(1)
+
+    // Unmount the passive consumer
+    passiveWrapper.unmount()
+    await nextTick()
+
+    // Stream must still be alive — EventSource not closed
+    const es = MockEventSource.instances[0]
+    expect(es.readyState).not.toBe(2)
+
+    // Active consumer still works: SSE event still triggers re-fetch
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve([makeSchedule('s1', 'Daily'), makeSchedule('s2', 'Weekly')]),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    es.onmessage?.(new MessageEvent('message', {
+      data: JSON.stringify({ type: 'schedule_changed' }),
+    }))
+    await Promise.resolve()
+    await Promise.resolve()
+    await nextTick()
+
+    expect(active.schedules.value).toHaveLength(2)
+    activeWrapper.unmount()
+  })
+
   it('createSchedule throws on non-ok response', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,
