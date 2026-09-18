@@ -400,6 +400,7 @@ onMounted(() => usageComposable.start())
     <SpotlightSearch
       @navigate-task="task => openTask(task)"
       @navigate-agent="agent => selectAgent(agent)"
+      @captured="(taskId: string) => navigateTo({ taskId })"
     />
   </div>
   <div v-else class="min-h-screen bg-app" />

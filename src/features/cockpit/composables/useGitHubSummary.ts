@@ -3,6 +3,17 @@ import { errorMessage, readErrorMessage } from '@/utils/errorMessage'
 
 // Mirrors pullRequestView / repoSummary in server/internal/api/github/handler.go.
 // That handler owns the wire shape; these names must match its json tags.
+// "none" covers both "GitHub reports no check runs" and "the lookup itself
+// failed" -- the handler collapses them on purpose, so nothing here may try to
+// tell them apart. `total` can exceed passed + failed while runs are queued.
+export interface GitHubChecks {
+  state: 'success' | 'failure' | 'pending' | 'none'
+  passed: number
+  failed: number
+  total: number
+  url: string
+}
+
 export interface GitHubPullRequest {
   number: number
   title: string
@@ -10,6 +21,8 @@ export interface GitHubPullRequest {
   url: string
   draft: boolean
   updatedAt: string
+  // Optional: a server older than the check-run field omits the key entirely.
+  checks?: GitHubChecks
 }
 
 export interface GitHubRepoSummary {

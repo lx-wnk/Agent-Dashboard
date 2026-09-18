@@ -24,4 +24,38 @@ describe('appSettings', () => {
     expect(toastMod.toast.error).toHaveBeenCalled()
     expect(w.find('.text-danger-text').exists()).toBe(false)
   })
+
+  it('posts a rebuild restart request', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })
+      .mockResolvedValueOnce({ ok: true, status: 202, json: async () => ({ status: 'restarting' }) })
+    globalThis.fetch = fetchMock
+    const w = mount(AppSettings)
+    await flushPromises()
+    await w.get('[data-testid="rebuild-restart"]').trigger('click')
+    await flushPromises()
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/admin/restart', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ rebuild: true }),
+    }))
+  })
+
+  // A failed rebuild must show the build output, not claim the restart happened.
+  it('shows the build output on a failed rebuild instead of claiming success', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        json: async () => ({ error: 'build failed', output: 'src/main.go:12: syntax error' }),
+      })
+    globalThis.fetch = fetchMock
+    const w = mount(AppSettings)
+    await flushPromises()
+    await w.get('[data-testid="rebuild-restart"]').trigger('click')
+    await flushPromises()
+    const output = w.get('[data-testid="rebuild-output"]')
+    expect(output.text()).toContain('src/main.go:12: syntax error')
+    expect(toastMod.toast.error).toHaveBeenCalled()
+  })
 })

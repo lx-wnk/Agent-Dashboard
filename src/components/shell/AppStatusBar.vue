@@ -13,7 +13,7 @@ const props = defineProps<{
 }>()
 
 const { collapsed, openSegment, toggleSegment, toggleCollapsed } = useStatusBar()
-const { version } = useBuildVersion()
+const { version, sourceVersion, stale } = useBuildVersion()
 const resources = useSystemResources()
 // Explicitly read .value so this works with both a real Ref<SystemInfo> (production)
 // and a plain { value: SystemInfo } object returned by the test mock.
@@ -113,6 +113,9 @@ function formatDelta(d: number | null): string {
       <div v-if="version" data-testid="build-version" class="mt-2 pt-2 border-t border-line font-mono">
         BUILD {{ version }}
       </div>
+      <div v-if="stale" data-testid="stale-detail" class="mt-2 pt-2 border-t border-line font-mono text-warning-text">
+        Running build {{ version || 'unknown' }} is behind source {{ sourceVersion || 'a newer revision' }} — rebuild and restart in Settings.
+      </div>
     </div>
     <div v-if="openSegment === 'cost'" data-testid="panel-cost" class="px-4 py-3 border-b border-line text-[12px] text-fg-mute font-mono flex flex-col gap-1">
       <span>Today's spend: {{ todayCostLabel }}</span>
@@ -140,6 +143,16 @@ function formatDelta(d: number | null): string {
     </div>
 
     <div class="flex items-center gap-3 px-3 h-7 text-[11px] font-mono text-fg-mute">
+      <button
+        v-if="stale"
+        type="button"
+        data-testid="stale-banner"
+        class="flex items-center gap-1 rounded px-1.5 py-0.5 bg-warning-soft text-warning-text hover:brightness-95 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-card"
+        aria-label="Running build is stale — rebuild and restart in Settings"
+        @click="toggleSegment('system')"
+      >
+        ⚠ STALE BUILD
+      </button>
       <button
         type="button"
         data-testid="seg-usage"

@@ -187,6 +187,135 @@ func TestSummaryAndSearchAndCommentEachGateOnTheirOwnCapability(t *testing.T) {
 	}
 }
 
+// checksField is the subset of pullRequestView's JSON shape these tests read.
+type checksField struct {
+	Number int    `json:"number"`
+	Title  string `json:"title"`
+	Checks struct {
+		State  string `json:"state"`
+		Passed int    `json:"passed"`
+		Failed int    `json:"failed"`
+		Total  int    `json:"total"`
+	} `json:"checks"`
+}
+
+func decodeSummaryPullRequests(t *testing.T, rec *httptest.ResponseRecorder) []checksField {
+	t.Helper()
+	var body struct {
+		Repos []struct {
+			PullRequests []checksField `json:"pullRequests"`
+		} `json:"repos"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	require.Len(t, body.Repos, 1)
+	return body.Repos[0].PullRequests
+}
+
+func summaryPullFixture(number int, title, sha string) map[string]any {
+	return map[string]any{
+		"number": number, "title": title, "html_url": "https://example.test/" + title, "draft": false,
+		"updated_at": "2026-09-01T10:00:00Z", "user": map[string]any{"login": "lx-wnk"},
+		"head": map[string]any{"sha": sha},
+	}
+}
+
+// TestSummaryChecksReportsMixedResultsWithCounts proves the state/count
+// collapse reaches the wire: one failed check run makes checks.state
+// "failure", and passed/failed/total are exact, not just the state.
+func TestSummaryChecksReportsMixedResultsWithCounts(t *testing.T) {
+	h, grants, ctx := newEnvWithUpstream(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/pulls"):
+			_ = json.NewEncoder(w).Encode([]map[string]any{summaryPullFixture(42, "t", "deadbeef")})
+		case strings.HasSuffix(r.URL.Path, "/check-runs"):
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"total_count": 2,
+				"check_runs": []map[string]any{
+					{"status": "completed", "conclusion": "success"},
+					{"status": "completed", "conclusion": "failure"},
+				},
+			})
+		default:
+			_ = json.NewEncoder(w).Encode(map[string]any{})
+		}
+	})
+	allowGlobally(t, grants, ctx, githubapp.CapabilityRead)
+	rec := do(t, h, http.MethodGet, "/api/github/summary", "")
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	prs := decodeSummaryPullRequests(t, rec)
+	require.Len(t, prs, 1)
+	require.Equal(t, "failure", prs[0].Checks.State)
+	require.Equal(t, 1, prs[0].Checks.Passed)
+	require.Equal(t, 1, prs[0].Checks.Failed)
+	require.Equal(t, 2, prs[0].Checks.Total)
+}
+
+// TestSummaryChecksReportsNoneWhenThePullRequestHasNoChecks proves a commit
+// with zero check runs reads as "none", the same state a failed lookup uses —
+// both mean "the panel has nothing to say about CI here".
+func TestSummaryChecksReportsNoneWhenThePullRequestHasNoChecks(t *testing.T) {
+	h, grants, ctx := newEnvWithUpstream(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/pulls"):
+			_ = json.NewEncoder(w).Encode([]map[string]any{summaryPullFixture(42, "t", "deadbeef")})
+		case strings.HasSuffix(r.URL.Path, "/check-runs"):
+			_ = json.NewEncoder(w).Encode(map[string]any{"total_count": 0, "check_runs": []any{}})
+		default:
+			_ = json.NewEncoder(w).Encode(map[string]any{})
+		}
+	})
+	allowGlobally(t, grants, ctx, githubapp.CapabilityRead)
+	rec := do(t, h, http.MethodGet, "/api/github/summary", "")
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	prs := decodeSummaryPullRequests(t, rec)
+	require.Len(t, prs, 1)
+	require.Equal(t, "none", prs[0].Checks.State)
+	require.Zero(t, prs[0].Checks.Total)
+}
+
+// TestSummaryChecksLookupFailureDoesNotBlankThePullRequest is the case that
+// matters: a check-run lookup that itself fails (GitHub 500s the check-runs
+// endpoint for one pull request) must not turn the summary route's 200 into
+// an error, must not drop that pull request from the list, and must not
+// affect the other pull request's own checks — only that one PR's checks
+// read as "none".
+func TestSummaryChecksLookupFailureDoesNotBlankThePullRequest(t *testing.T) {
+	h, grants, ctx := newEnvWithUpstream(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/pulls"):
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				summaryPullFixture(1, "good", "good-sha"),
+				summaryPullFixture(2, "broken lookup", "bad-sha"),
+			})
+		case strings.Contains(r.URL.Path, "/commits/bad-sha/"):
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]any{"message": "server error"})
+		case strings.Contains(r.URL.Path, "/commits/good-sha/"):
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"total_count": 1,
+				"check_runs":  []map[string]any{{"status": "completed", "conclusion": "success"}},
+			})
+		default:
+			_ = json.NewEncoder(w).Encode(map[string]any{})
+		}
+	})
+	allowGlobally(t, grants, ctx, githubapp.CapabilityRead)
+	rec := do(t, h, http.MethodGet, "/api/github/summary", "")
+	require.Equal(t, http.StatusOK, rec.Code, "a failed check-run lookup must not turn the whole summary into an error: %s", rec.Body.String())
+
+	prs := decodeSummaryPullRequests(t, rec)
+	require.Len(t, prs, 2, "the pull request whose check lookup failed must still be listed")
+
+	byNumber := map[int]string{}
+	for _, pr := range prs {
+		byNumber[pr.Number] = pr.Checks.State
+	}
+	require.Equal(t, "none", byNumber[2], "a failed check-run lookup must read as 'none', not an error")
+	require.Equal(t, "success", byNumber[1], "the other pull request's checks must be unaffected")
+}
+
 // TestNoResponseEverCarriesTheToken is spec §6 row 5, on the HTTP surface.
 //
 // It drives the FAILURE paths on purpose. A token can only escape through a

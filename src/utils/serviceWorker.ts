@@ -1,4 +1,5 @@
 import { isDesktopShell } from './desktopShell'
+import { isWorkboxCache, SW_MSG_SKIP_WAITING } from './swConstants'
 
 /**
  * Service-worker lifecycle for the two hosts of this SPA.
@@ -19,11 +20,6 @@ function swContainer(): ServiceWorkerContainer | undefined {
   return typeof navigator === 'undefined' ? undefined : navigator.serviceWorker
 }
 
-// Workbox names every cache it creates `workbox-*` or `<prefix>-precache-*`.
-function isWorkboxCache(name: string): boolean {
-  return name.startsWith('workbox-') || name.includes('-precache-') || name.includes('-runtime-')
-}
-
 export async function unregisterServiceWorkers(): Promise<number> {
   const container = swContainer()
   if (!container)
@@ -41,6 +37,36 @@ export async function unregisterServiceWorkers(): Promise<number> {
     await Promise.all(keys.filter(isWorkboxCache).map(k => caches.delete(k)))
   }
   return registrations.length
+}
+
+/**
+ * Fetch a new worker and hand control to it, for the one moment the page is
+ * about to reload deliberately: right after a server restart.
+ *
+ * registerType is 'prompt' precisely so a new worker never swaps assets under
+ * a running session, and usePWA.updateSW covers the case where one is already
+ * waiting. Neither helps after a rebuild: nothing has fetched the new sw.js
+ * yet, so nothing is waiting, and a bare reload can be served entirely from
+ * the old precache -- the rebuilt server then answers 404 for the very bundle
+ * that page asks for.
+ *
+ * Never throws. A worker that cannot be refreshed must not stop the reload.
+ */
+export async function refreshServiceWorker(): Promise<void> {
+  const container = swContainer()
+  if (!container)
+    return
+
+  try {
+    const registrations = await container.getRegistrations()
+    await Promise.all(registrations.map(async (registration) => {
+      await registration.update()
+      registration.waiting?.postMessage({ type: SW_MSG_SKIP_WAITING })
+    }))
+  }
+  catch {
+    // Blocked, offline, or the worker is gone — the caller reloads regardless.
+  }
 }
 
 export async function initServiceWorker(): Promise<void> {

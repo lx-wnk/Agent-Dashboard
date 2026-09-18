@@ -1,6 +1,7 @@
 package restart_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -10,8 +11,9 @@ import (
 
 type fakeRestarter struct{ reexec, exit int }
 
-func (f *fakeRestarter) Reexec() error { f.reexec++; return nil }
-func (f *fakeRestarter) Exit()         { f.exit++ }
+func (f *fakeRestarter) Reexec() error                         { f.reexec++; return nil }
+func (f *fakeRestarter) Exit()                                 { f.exit++ }
+func (f *fakeRestarter) Build(context.Context) ([]byte, error) { return nil, nil }
 
 func TestExecuteReexecMode(t *testing.T) {
 	f := &fakeRestarter{}

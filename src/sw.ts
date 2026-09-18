@@ -1,16 +1,47 @@
 /// <reference lib="webworker" />
 
 import type { PendingMessage } from './utils/pendingMessages'
-import { cleanupOutdatedCaches, precacheAndRoute } from 'workbox-precaching'
 import { DB_NAME, DB_VERSION, STORE } from './utils/pendingMessages'
 import { parsePushNotice } from './utils/pushPayload'
-import { BACKGROUND_SYNC_TAG, SW_MSG_MESSAGES_REPLAYED, SW_MSG_SKIP_WAITING } from './utils/swConstants'
+import { BACKGROUND_SYNC_TAG, isWorkboxCache, SW_MSG_MESSAGES_REPLAYED, SW_MSG_SKIP_WAITING } from './utils/swConstants'
 
-declare const self: ServiceWorkerGlobalScope
+// __WB_MANIFEST was typed by workbox-precaching, which is no longer imported.
+declare const self: ServiceWorkerGlobalScope & {
+  __WB_MANIFEST: unknown
+  __unusedPrecacheManifest: unknown
+}
 
-// Workbox precache manifest injected at build time by vite-plugin-pwa
-precacheAndRoute(self.__WB_MANIFEST)
-cleanupOutdatedCaches()
+// Nothing here precaches. Push, background sync and skip-waiting below need no
+// cache, and the one thing a cache bought — a shell while the server is down —
+// could never render anything, because the API and the stream are down with it.
+// What it cost was real: a previous build's index.html served against a
+// restarted server that answers 404 for the bundle that document names, while
+// the status bar reported the app up to date.
+//
+// injectManifest aborts the build unless it finds this token, and it searches
+// the BUNDLED worker, where a bare expression statement is dropped as dead
+// code. Assigning it to a global is a side effect the bundler has to keep.
+// Nothing ever reads the property.
+self.__unusedPrecacheManifest = self.__WB_MANIFEST
+
+// Take over as soon as this worker installs. registerType is 'prompt' so a new
+// worker never swaps precached assets under a running session — but this one
+// precaches nothing, so there is nothing to swap, and waiting is what kept the
+// eviction below from ever running: the previous worker holds control, the new
+// one sits in "waiting", and the stale cache is served on indefinitely.
+self.addEventListener('install', () => {
+  void self.skipWaiting()
+})
+
+// An install that already carries a precache keeps being served from it until
+// the cache is gone, so the first worker without precaching has to take it out.
+self.addEventListener('activate', (event) => {
+  event.waitUntil((async () => {
+    const keys = await caches.keys()
+    await Promise.all(keys.filter(isWorkboxCache).map(k => caches.delete(k)))
+    await self.clients.claim()
+  })())
+})
 
 // ---------- IndexedDB helpers (inlined — SW cannot import ES modules at runtime) ----------
 

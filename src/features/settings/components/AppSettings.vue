@@ -2,12 +2,16 @@
 import type { SettingView } from '@/features/settings/composables/useSettings'
 import { computed, onMounted, ref } from 'vue'
 import AppSelect from '@/components/ui/AppSelect.vue'
+import { RestartError, useServerReconnect } from '@/composables/useServerReconnect'
 import { toast } from '@/composables/useToast'
 import { useSettings } from '@/features/settings/composables/useSettings'
 import { errorMessage } from '@/utils/errorMessage'
 
 const { items, loading, refetch, update } = useSettings()
+const { triggerRestart } = useServerReconnect()
 const saving = ref<string | null>(null)
+const rebuilding = ref(false)
+const rebuildOutput = ref<string | null>(null)
 
 const notice = ref<{ kind: 'success' | 'warning', text: string } | null>(null)
 let noticeTimer: ReturnType<typeof setTimeout> | null = null
@@ -70,6 +74,22 @@ function onSelectChange(item: SettingView, value: string) {
   apply(item, value)
 }
 
+async function onRebuildAndRestart() {
+  rebuilding.value = true
+  rebuildOutput.value = null
+  try {
+    await triggerRestart({ rebuild: true })
+  }
+  catch (e) {
+    if (e instanceof RestartError && e.output)
+      rebuildOutput.value = e.output
+    toast.error(errorMessage(e, 'Rebuild failed'))
+  }
+  finally {
+    rebuilding.value = false
+  }
+}
+
 onMounted(refetch)
 </script>
 
@@ -84,6 +104,24 @@ onMounted(refetch)
         server restart.
       </p>
     </div>
+
+    <div class="flex items-center gap-3">
+      <button
+        type="button"
+        data-testid="rebuild-restart"
+        class="text-xs rounded-md border border-line px-3 py-1.5 hover:bg-raised disabled:opacity-50 disabled:cursor-not-allowed"
+        :disabled="rebuilding"
+        @click="onRebuildAndRestart"
+      >
+        {{ rebuilding ? 'Rebuilding…' : 'Rebuild and restart' }}
+      </button>
+    </div>
+
+    <pre
+      v-if="rebuildOutput"
+      data-testid="rebuild-output"
+      class="text-xs rounded-md px-3 py-2 bg-danger-soft text-danger-text whitespace-pre-wrap"
+    >{{ rebuildOutput }}</pre>
 
     <div
       v-if="notice"

@@ -1,6 +1,7 @@
 import type { UsageData } from '../../composables/useUsage'
 import { mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ref } from 'vue'
 
 const store: Record<string, string> = {}
 globalThis.localStorage = {
@@ -187,5 +188,52 @@ describe('appStatusBar', () => {
     const w = mount(Bar, { props: { costDelta: 0, todayCostLabel: '$0.00', usageData: null } })
     const mem = w.get('[data-testid="mem-pct-strip"]')
     expect(mem.classes()).toContain('text-danger-text')
+  })
+
+  it('shows the stale banner and detail when the server reports stale', async () => {
+    vi.doMock('../../composables/useBuildVersion', () => ({
+      useBuildVersion: () => ({
+        version: ref('a0ebcfc6'),
+        sourceVersion: ref('a1b2c3d4'),
+        stale: ref(true),
+      }),
+    }))
+    const Bar = await load()
+    const w = mount(Bar, { props: { costDelta: 0, todayCostLabel: '$0.00', usageData: null } })
+    expect(w.find('[data-testid="stale-banner"]').exists()).toBe(true)
+    await w.get('[data-testid="seg-system"]').trigger('click')
+    const detail = w.get('[data-testid="stale-detail"]')
+    expect(detail.text()).toContain('a0ebcfc6')
+    expect(detail.text()).toContain('a1b2c3d4')
+  })
+
+  it('does not show the stale banner when the server reports not stale', async () => {
+    vi.doMock('../../composables/useBuildVersion', () => ({
+      useBuildVersion: () => ({
+        version: ref('a0ebcfc6'),
+        sourceVersion: ref('a0ebcfc6'),
+        stale: ref(false),
+      }),
+    }))
+    const Bar = await load()
+    const w = mount(Bar, { props: { costDelta: 0, todayCostLabel: '$0.00', usageData: null } })
+    expect(w.find('[data-testid="stale-banner"]').exists()).toBe(false)
+    expect(w.find('[data-testid="stale-detail"]').exists()).toBe(false)
+  })
+
+  // An older server never sends sourceVersion/stale — the composable defaults
+  // them, and the status bar must render exactly like it does today.
+  it('does not throw and renders no stale banner when the fields are absent', async () => {
+    vi.doMock('../../composables/useBuildVersion', () => ({
+      useBuildVersion: () => ({
+        version: ref('a0ebcfc6'),
+        sourceVersion: ref(null),
+        stale: ref(false),
+      }),
+    }))
+    const Bar = await load()
+    expect(() => mount(Bar, { props: { costDelta: 0, todayCostLabel: '$0.00', usageData: null } })).not.toThrow()
+    const w = mount(Bar, { props: { costDelta: 0, todayCostLabel: '$0.00', usageData: null } })
+    expect(w.find('[data-testid="stale-banner"]').exists()).toBe(false)
   })
 })
