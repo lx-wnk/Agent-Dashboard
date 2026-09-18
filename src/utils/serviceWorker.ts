@@ -1,5 +1,5 @@
 import { isDesktopShell } from './desktopShell'
-import { SW_MSG_SKIP_WAITING } from './swConstants'
+import { isWorkboxCache, SW_MSG_SKIP_WAITING } from './swConstants'
 
 /**
  * Service-worker lifecycle for the two hosts of this SPA.
@@ -18,11 +18,6 @@ export const SW_URL = '/sw.js'
 // undefined, so the container itself is what gets checked.
 function swContainer(): ServiceWorkerContainer | undefined {
   return typeof navigator === 'undefined' ? undefined : navigator.serviceWorker
-}
-
-// Workbox names every cache it creates `workbox-*` or `<prefix>-precache-*`.
-function isWorkboxCache(name: string): boolean {
-  return name.startsWith('workbox-') || name.includes('-precache-') || name.includes('-runtime-')
 }
 
 export async function unregisterServiceWorkers(): Promise<number> {
