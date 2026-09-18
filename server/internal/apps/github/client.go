@@ -259,6 +259,10 @@ type PullRequest struct {
 	URL       string
 	Draft     bool
 	UpdatedAt time.Time
+	// HeadSHA is the pull request's head commit. It is not part of the
+	// panel's own wire shape — it exists only so a caller can look up the
+	// commit's check-run state with Checks.
+	HeadSHA string
 }
 
 // OpenPullRequests lists the most recently updated open pull requests in
@@ -283,6 +287,9 @@ func (c *Client) OpenPullRequests(ctx context.Context, repoName string, limit in
 		User      struct {
 			Login string `json:"login"`
 		} `json:"user"`
+		Head struct {
+			SHA string `json:"sha"`
+		} `json:"head"`
 	}
 	q := url.Values{
 		"state":     {"open"},
@@ -298,9 +305,84 @@ func (c *Client) OpenPullRequests(ctx context.Context, repoName string, limit in
 		out = append(out, PullRequest{
 			Number: r.Number, Title: r.Title, Author: r.User.Login,
 			URL: r.HTMLURL, Draft: r.Draft, UpdatedAt: r.UpdatedAt,
+			HeadSHA: r.Head.SHA,
 		})
 	}
 	return out, nil
+}
+
+// CheckState is the coarse state of a commit's check runs, collapsed from
+// GitHub's per-run status/conclusion pairs into the four states the cockpit
+// panel draws.
+type CheckState string
+
+const (
+	CheckStateSuccess CheckState = "success"
+	CheckStateFailure CheckState = "failure"
+	CheckStatePending CheckState = "pending"
+	// CheckStateNone means either GitHub reports no check runs for the
+	// commit, or the lookup itself failed — see Checks and handler.summary,
+	// which never lets a check-run failure blank an otherwise-working PR.
+	CheckStateNone CheckState = "none"
+)
+
+// CheckSummary is the aggregate check-run state of one commit.
+type CheckSummary struct {
+	State  CheckState
+	Passed int
+	Failed int
+	Total  int
+}
+
+// Checks summarises the check runs GitHub has recorded against sha (normally
+// a pull request's head commit). Total counts every run GitHub reports,
+// including ones still queued or in progress; Passed and Failed count only
+// completed runs, so Passed+Failed can be less than Total while checks are
+// still running.
+func (c *Client) Checks(ctx context.Context, repoName, sha string) (CheckSummary, error) {
+	if err := c.checkRepo(repoName); err != nil {
+		return CheckSummary{}, err
+	}
+	var raw struct {
+		TotalCount int `json:"total_count"`
+		CheckRuns  []struct {
+			Status     string `json:"status"`
+			Conclusion string `json:"conclusion"`
+		} `json:"check_runs"`
+	}
+	path := "/repos/" + repoName + "/commits/" + sha + "/check-runs"
+	if err := c.do(ctx, http.MethodGet, path, url.Values{"per_page": {"100"}}, nil, &raw); err != nil {
+		return CheckSummary{}, err
+	}
+	if raw.TotalCount == 0 {
+		return CheckSummary{State: CheckStateNone}, nil
+	}
+	summary := CheckSummary{Total: raw.TotalCount}
+	pending := false
+	for _, run := range raw.CheckRuns {
+		if run.Status != "completed" {
+			pending = true
+			continue
+		}
+		switch run.Conclusion {
+		case "success":
+			summary.Passed++
+		case "neutral", "skipped":
+			// Neither a pass nor a failure: excluded from both counts but
+			// still part of Total.
+		default:
+			summary.Failed++
+		}
+	}
+	switch {
+	case summary.Failed > 0:
+		summary.State = CheckStateFailure
+	case pending:
+		summary.State = CheckStatePending
+	default:
+		summary.State = CheckStateSuccess
+	}
+	return summary, nil
 }
 
 // SearchHit is one issue or pull request matched by a search.
