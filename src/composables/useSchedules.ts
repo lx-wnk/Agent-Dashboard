@@ -223,10 +223,15 @@ export async function previewSchedule(body: { nlText?: string, cronExpr?: string
 }
 
 export function useSchedules(options?: { autoStart?: boolean }) {
-  if (options?.autoStart !== false)
+  let started = false
+  if (options?.autoStart !== false) {
     startStream()
+    started = true
+  }
 
   onUnmounted(() => {
+    if (!started)
+      return
     subscriberCount--
     if (subscriberCount === 0) {
       stopSSE()
