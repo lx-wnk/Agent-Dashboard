@@ -24,7 +24,7 @@ const testAdminJWTSecret = "test-sp8-admin-secret"
 // authenticated caller", which is what this test now states out loud.
 func TestRestart_AnyAuthenticatedUserIsAccepted(t *testing.T) {
 	triggered := make(chan struct{}, 1)
-	h := admin.New(fakeValidator{}, "reexec", func() { triggered <- struct{}{} })
+	h := admin.New(fakeValidator{}, "reexec", &fakeRestarter{}, func() { triggered <- struct{}{} })
 
 	r := chi.NewRouter()
 	r.Use(auth.RequireAuth(testAdminJWTSecret))
@@ -51,7 +51,7 @@ func TestRestart_AnyAuthenticatedUserIsAccepted(t *testing.T) {
 // TestRestart_UnauthenticatedIsRejected is the assertion that still carries the
 // security weight: with auth enabled, no token means no restart.
 func TestRestart_UnauthenticatedIsRejected(t *testing.T) {
-	h := admin.New(fakeValidator{}, "reexec", func() { t.Fatal("must not trigger") })
+	h := admin.New(fakeValidator{}, "reexec", &fakeRestarter{}, func() { t.Fatal("must not trigger") })
 
 	r := chi.NewRouter()
 	r.Use(auth.RequireAuth(testAdminJWTSecret))
@@ -66,7 +66,7 @@ func TestRestart_UnauthenticatedIsRejected(t *testing.T) {
 // mode, where no JWT middleware is mounted at all.
 func TestRestart_BypassModeAllowsAnyRequest(t *testing.T) {
 	triggered := make(chan struct{}, 1)
-	h := admin.New(fakeValidator{}, "reexec", func() { triggered <- struct{}{} })
+	h := admin.New(fakeValidator{}, "reexec", &fakeRestarter{}, func() { triggered <- struct{}{} })
 
 	r := chi.NewRouter()
 	h.Mount(r)

@@ -1084,6 +1084,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		AdminHandler: admin.New(
 			restart.NewAuthProviderValidator(pluginRegistry, activePluginIDs(pluginRepo), cfg.PluginDir),
 			string(restartCtl.Mode()),
+			restart.OSRestarter{},
 			restartCtl.Trigger,
 		),
 	}
