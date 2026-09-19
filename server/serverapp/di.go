@@ -737,6 +737,10 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		}
 	}
 
+	// A module's stage kinds become resolvable now that the orchestrator exists.
+	// A kind that collides with a core stage is refused there and logged.
+	registerModuleStageKinds(orch, pluginRegistry)
+
 	mcpHandler := provideMCPHandler(entClient, orch, sched, taskBroadcaster, projectBroadcaster, refineRunner, memRepo, memRetriever, grantUsageRepo, askerArg, obsidianClient, githubClient, newModuleToolSource(pluginRegistry))
 
 	var histImporter *histsvc.Importer

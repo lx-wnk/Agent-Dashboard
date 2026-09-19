@@ -38,9 +38,12 @@ type Descriptor struct {
 	// Tools are the tools this module offers to agents. They reach an agent
 	// namespaced by the module id, so one module's `search` cannot be mistaken
 	// for another's.
-	Tools     []ToolDecl     `json:"tools"`
-	Settings  []SettingField `json:"settings"`
-	Lifecycle LifecycleHooks `json:"lifecycle"`
+	Tools []ToolDecl `json:"tools"`
+	// StageKinds are the kinds of pipeline stage this module can run. Core
+	// lifecycle states stay core's; a module adds a kind that plugs into them.
+	StageKinds []StageKindDecl `json:"stageKinds"`
+	Settings   []SettingField  `json:"settings"`
+	Lifecycle  LifecycleHooks  `json:"lifecycle"`
 }
 
 // ToolDecl declares one tool a module offers.
@@ -48,6 +51,12 @@ type ToolDecl struct {
 	Name        string         `json:"name"`
 	Description string         `json:"description"`
 	InputSchema map[string]any `json:"inputSchema"`
+}
+
+// StageKindDecl declares one kind of stage a module can run.
+type StageKindDecl struct {
+	Name           string `json:"name"`
+	TimeoutSeconds int    `json:"timeoutSeconds"`
 }
 
 // SettingField declares one configurable setting. Secret fields are encrypted at
