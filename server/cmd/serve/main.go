@@ -32,8 +32,8 @@ func main() {
 	var cfgFile string
 
 	root := &cobra.Command{
-		Use:     "agent-dashboard",
-		Short:   "Claude Code agent monitoring dashboard",
+		Use:     "kontor",
+		Short:   "Monitor and orchestrate local coding agents",
 		Version: version,
 	}
 
