@@ -31,6 +31,7 @@ func provideMCPHandler(
 	memAsker capability.Asker,
 	obsidianClient *obsidian.Client,
 	githubClient *github.Client,
+	modules mcp.ModuleTools,
 ) http.Handler {
 	if client == nil || orch == nil {
 		return nil
@@ -164,5 +165,5 @@ func provideMCPHandler(
 			Asker:        memAsker,
 		},
 	})
-	return mcp.MCPHandler(registry)
+	return mcp.MCPHandler(registry, modules)
 }

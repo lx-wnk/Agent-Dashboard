@@ -34,9 +34,20 @@ type Descriptor struct {
 	// into the server. They become the scopes of the credential it is issued;
 	// anything outside the list is refused by the same check that governs every
 	// other caller.
-	Uses      []string       `json:"uses"`
+	Uses []string `json:"uses"`
+	// Tools are the tools this module offers to agents. They reach an agent
+	// namespaced by the module id, so one module's `search` cannot be mistaken
+	// for another's.
+	Tools     []ToolDecl     `json:"tools"`
 	Settings  []SettingField `json:"settings"`
 	Lifecycle LifecycleHooks `json:"lifecycle"`
+}
+
+// ToolDecl declares one tool a module offers.
+type ToolDecl struct {
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	InputSchema map[string]any `json:"inputSchema"`
 }
 
 // SettingField declares one configurable setting. Secret fields are encrypted at
