@@ -71,7 +71,8 @@ A module remains an OS process started and supervised by core. Three things are 
   "taskKinds": [{ "name": "research", "stages": ["intake", "gather", "report"] }],
   "stageKinds": [{ "name": "gather", "timeoutSeconds": 900 }],
   "providers": ["providers/*.yaml"],       // merged into the existing provider registry
-  "routines": ["routines/*.yaml"]          // materialised as task_schedule rows on install
+  "routines": ["routines/*.yaml"],         // materialised as task_schedule rows on install
+  "widgets": [{ "id": "recent", "title": "Recent notes", "minCols": 1 }]
 }
 ```
 
@@ -88,9 +89,15 @@ MCP surface under a namespace: a module tool appears to an agent as `<moduleId>_
 Aggregation is dynamic — an unhealthy module's tools drop out of the tool list instead of
 failing mid-call.
 
-Each module tool is a permission subject in the existing grants machinery, default deny. A
-grant names `module:<id>` plus the tool, so "this routine may use Obsidian search" is
-expressible with what already exists.
+Each module tool is a permission subject in the existing grants machinery, **one grant per
+tool**, default deny, learned on first use. A grant names `module:<id>` plus the tool, which
+the grant table already supports through its `pattern` column
+(`server/internal/db/ent/schema/grant.go:25-38`) — no schema change. So "this routine may use
+Obsidian search but not Obsidian write" is expressible with what exists.
+
+One gap this creates: `Gate.Authorize` checks a single capability per call
+(`server/internal/memory/authorize.go:99`). Listing the tools an agent may see would issue one
+check per tool and burn rate-limit budget, so Slice 2 adds a bulk form before it aggregates.
 
 Direction of calls:
 
@@ -100,8 +107,14 @@ Direction of calls:
 ### Axis (b) — Own data
 
 A module owns its own store. Core guarantees a stable directory per module,
-`<dataRoot>/<moduleId>/`, passed in as `KONTOR_MODULE_DATA_DIR`, preserved across module
-updates, removed on uninstall (after an archive copy). Core's SQLite file stays core's.
+`~/.claude/kontor/modules/<moduleId>/`, passed in as `KONTOR_MODULE_DATA_DIR`, preserved
+across module updates, removed on uninstall (after an archive copy). Core's SQLite file stays
+core's.
+
+The directory deliberately sits beside the core database rather than inside the module's git
+clone: modules are installed and updated with `git clone` and `git checkout`, so data kept in
+the clone would share a tree with the update mechanism — every reinstall would be a data loss
+and every module's working tree would be permanently dirty.
 
 Rejected alternative: modules shipping migrations against the shared ent database. ent has no
 mechanism to merge a foreign migration graph, and this project has already paid for a
@@ -190,9 +203,19 @@ module ──scoped bearer──▶ core HTTP API (limited to manifest `uses`)
 | 5 | Provider, spawner, and routine declarations; `kontor module add/update` | Consolidates the three mechanisms |
 | 6 | Toolchain decoupling: CI module list read from disk, license generation, schema `$schema` URL, published SDK | Removes the last in-repo assumptions |
 
-## Open questions
+## Decisions taken 2026-09-19
 
-1. Does every module tool require an explicit user grant on first use, or is a manifest-wide
-   grant per module enough? Recommendation: per tool, default deny, learned on use.
-2. Where does `<dataRoot>` live — beside the core database or under the module root?
-3. Do the five UI slots stay unchanged in v1? Recommendation: yes, out of scope here.
+1. **Grants are per tool**, default deny, learned on first use — through the grant table's
+   existing `pattern` column. Slice 2 adds the bulk authorize form it implies.
+2. **`<dataRoot>` is `~/.claude/kontor/modules/`**, beside the core database, never inside
+   the module's git clone.
+3. **The five UI slots stay as they are in v1, and the surface they belong to is being
+   replaced.** The operator wants the cockpit to be composed by hand — widgets added, moved
+   and removed — plus pages of their own. That is a subsystem of its own (widget registry,
+   layout model, edit mode, server-side persistence so the desktop window and the browser
+   agree), and it gets its own design document. This contract reserves exactly one thing for
+   it: the manifest's `widgets` key, so a module can contribute a widget once the grid
+   exists. Today's cockpit hardcodes five panels
+   (`src/features/cockpit/components/CockpitView.vue:9-17`) and `agent-dashboard-layout` in
+   localStorage only switches the agent list between `cards` and `list`
+   (`src/composables/useViewState.ts:21,129`) — there is no registry and no layout model yet.
