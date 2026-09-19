@@ -20,11 +20,15 @@ Preparing the first public release.
   `github.com/lx-wnk/kontor/{sdk,server,desktop}` with plugins under
   `github.com/lx-wnk/kontor-plugin-*`. The installer's environment variables are
   now `KONTOR_BIN_DIR` and `KONTOR_VERSION`.
-- Nothing an existing installation stores changed in this release: the
-  `DASHBOARD_*` environment variables, the database path, the encryption key, the
-  installed hook scripts, the registered MCP servers and the worktree root keep
-  their names. A separate release renames them behind a compatibility layer that
-  reads the old names when the new ones are absent.
+- Configuration variables are now `KONTOR_*`. The old `DASHBOARD_*` names are
+  still read, the new ones win when both are set, and the server warns once at
+  boot when it found only old ones.
+- A new installation writes `~/.claude/kontor-tasks.db`; one that already has
+  `dashboard-tasks.db` keeps using it. The plugin encryption key is copied to
+  `kontor-secret.key` on first boot and the previous file is kept as a backup.
+- The hook script and its secret file keep their old names in this release. The
+  copy already installed in `~/.claude` has those paths baked in, so renaming
+  them without reinstalling the script would stop it authenticating.
 
 ### Changed
 - **The sidebar stops moving the item you are aiming at.** Hovering the icon rail expanded it, and two things that render only in the expanded state changed the geometry underneath the pointer: the group captions (`MONITOR`, `BUILD`, `INSIGHTS`) inserted three rows, and the footer laid its three action buttons out in a row instead of a column, making it ~80px shorter. Because the last nav group is bottom-anchored with `mt-auto`, that second one lifted every Insights item by that much. Measured against the running app: `Workflows`, `Cost` and `Eval` moved 76px the moment the panel opened — nearly two rows — so a click begun over one of them landed on its neighbour. The caption now sits in a fixed-height box present in both states (the icon rail keeps its centred rule inside it), and the footer keeps one column layout throughout. After the fix those three rows sit at the same offsets in both states; the top five move 3px, from the title block that still appears only when expanded, which is well inside a 40px row. Both invariants have tests that fail against the old markup.

@@ -20,23 +20,32 @@ variables below are read from `.env`/env; runtime settings live in the database.
 
 These are the only environment variables still read by the core server. They cannot be set through the Settings UI because they are needed before (or independently of) the database.
 
+> **Renamed from `DASHBOARD_*`.** Every variable below is also read under its
+> old `DASHBOARD_` name; when both are set the `KONTOR_` one wins, and the server
+> warns once at boot when it found only old ones. The same applies to the files:
+> a new installation writes `~/.claude/kontor-tasks.db` and `kontor-secret.key`,
+> while an installation that already has `dashboard-tasks.db` keeps using it. The
+> encryption key is the exception — it is copied to the new name on first boot and
+> the old file is kept as a backup, because a key that cannot be found is replaced
+> rather than reported, and every stored plugin secret would become unreadable.
+
 | Variable | Default | Description |
 |---|---|---|
-| `DASHBOARD_HOST` | `127.0.0.1` | Bind address. A non-loopback address fails to boot unless `DASHBOARD_REMOTES_ENABLED=true` |
-| `DASHBOARD_PORT` | `13120` | HTTP server port |
-| `DASHBOARD_JWT_SECRET` | auto-generated (ephemeral) | Secret for signing JWT session tokens (min 32 chars). Set a stable value to survive restarts |
-| `DASHBOARD_DB_PATH` | `~/.claude/dashboard-tasks.db` | SQLite path for the task pipeline and the settings store |
-| `DASHBOARD_PLUGIN_DIR` | — | Directory of auth/route-extension plugins to load. Empty disables plugin loading. (Which discovered plugins are *enabled* is a runtime setting — see `plugins.enabled` below) |
-| `DASHBOARD_PROVIDER_DIR` | — | Optional directory of user provider descriptors merged over the built-ins |
-| `DASHBOARD_WORKTREE_ROOT` | `~/.claude/dashboard-worktrees` | Per-task git worktree root |
-| `DASHBOARD_HOOKS_SECRET` | auto-generated & persisted | Shared bearer token for `/api/hooks/*`. Persisted to `~/.claude/dashboard-hooks-secret` if unset |
-| `DASHBOARD_SECRET_KEY` | auto-generated & persisted | Master key (64 hex chars / 32 bytes) that encrypts plugin **secret** settings at rest (AES-256-GCM). If unset, a key is generated and persisted to `~/.claude/dashboard-secret.key` (mode `0600`). Set a stable value to share encrypted secrets across machines. **Losing it makes stored plugin secrets unreadable — you must re-enter them** |
-| `DASHBOARD_MCP_TOKEN` | — | Bearer token for dashboard MCP access |
-| `DASHBOARD_AUTH_PLUGIN_SECRET` | — | Shared secret between the core server and an auth plugin (`POST /api/auth/session`). Required when using an auth plugin. Min 32 chars |
-| `DASHBOARD_REMOTES_ENABLED` | `false` | Opt-in to binding on a non-loopback address. The dashboard reads sensitive Claude session data — only enable behind a VPN or SSH tunnel |
-| `DASHBOARD_RESTART_MODE` | `reexec` | How `POST /api/admin/restart` relaunches the server: `reexec` replaces the process image in-place (no supervisor needed); `exit` exits 0 so an external supervisor (systemd/launchd) restarts it |
+| `KONTOR_HOST` | `127.0.0.1` | Bind address. A non-loopback address fails to boot unless `KONTOR_REMOTES_ENABLED=true` |
+| `KONTOR_PORT` | `13120` | HTTP server port |
+| `KONTOR_JWT_SECRET` | auto-generated (ephemeral) | Secret for signing JWT session tokens (min 32 chars). Set a stable value to survive restarts |
+| `KONTOR_DB_PATH` | `~/.claude/kontor-tasks.db` | SQLite path for the task pipeline and the settings store |
+| `KONTOR_PLUGIN_DIR` | — | Directory of auth/route-extension plugins to load. Empty disables plugin loading. (Which discovered plugins are *enabled* is a runtime setting — see `plugins.enabled` below) |
+| `KONTOR_PROVIDER_DIR` | — | Optional directory of user provider descriptors merged over the built-ins |
+| `KONTOR_WORKTREE_ROOT` | `~/.claude/dashboard-worktrees` | Per-task git worktree root |
+| `KONTOR_HOOKS_SECRET` | auto-generated & persisted | Shared bearer token for `/api/hooks/*`. Persisted to `~/.claude/dashboard-hooks-secret` if unset |
+| `KONTOR_SECRET_KEY` | auto-generated & persisted | Master key (64 hex chars / 32 bytes) that encrypts plugin **secret** settings at rest (AES-256-GCM). If unset, a key is generated and persisted to `~/.claude/dashboard-secret.key` (mode `0600`). Set a stable value to share encrypted secrets across machines. **Losing it makes stored plugin secrets unreadable — you must re-enter them** |
+| `KONTOR_MCP_TOKEN` | — | Bearer token for dashboard MCP access |
+| `KONTOR_AUTH_PLUGIN_SECRET` | — | Shared secret between the core server and an auth plugin (`POST /api/auth/session`). Required when using an auth plugin. Min 32 chars |
+| `KONTOR_REMOTES_ENABLED` | `false` | Opt-in to binding on a non-loopback address. The dashboard reads sensitive Claude session data — only enable behind a VPN or SSH tunnel |
+| `KONTOR_RESTART_MODE` | `reexec` | How `POST /api/admin/restart` relaunches the server: `reexec` replaces the process image in-place (no supervisor needed); `exit` exits 0 so an external supervisor (systemd/launchd) restarts it |
 
-**Flag:** `--config <path>` — load a JSON config file whose keys mirror the variables above (without the `DASHBOARD_` prefix, lowercased). Precedence: defaults → JSON file → environment variables.
+**Flag:** `--config <path>` — load a JSON config file whose keys mirror the variables above (without the `KONTOR_` prefix, lowercased). Precedence: defaults → JSON file → environment variables.
 
 ### Other env vars (not migrated)
 
@@ -44,9 +53,9 @@ A few operational env vars are read directly by their subsystems and are **not**
 
 | Variable | Default | Description |
 |---|---|---|
-| `DASHBOARD_CLAUDE_CONFIG_DIRS` | — | Comma-separated extra Claude config dirs to scan for sessions, e.g. `~/.claude-personal,~/.claude-work` |
-| `DASHBOARD_INJECT_TOKEN_ROTATE_MS` | `300000` | Discovery bearer-token rotation interval (ms); `<= 0` disables. Previous token honored one extra interval (grace). Read by the `channel`/`live`/`pty-host` child processes (which have no DB access), so it stays a child-process env var rather than a runtime setting |
-| `DASHBOARD_SPAWN_COMMAND` | — | Path to a custom spawner binary for the `custom` LLM adapter |
+| `KONTOR_CLAUDE_CONFIG_DIRS` | — | Comma-separated extra Claude config dirs to scan for sessions, e.g. `~/.claude-personal,~/.claude-work` |
+| `KONTOR_INJECT_TOKEN_ROTATE_MS` | `300000` | Discovery bearer-token rotation interval (ms); `<= 0` disables. Previous token honored one extra interval (grace). Read by the `channel`/`live`/`pty-host` child processes (which have no DB access), so it stays a child-process env var rather than a runtime setting |
+| `KONTOR_SPAWN_COMMAND` | — | Path to a custom spawner binary for the `custom` LLM adapter |
 
 ### Injected automatically (do not set by hand)
 
@@ -54,15 +63,15 @@ The orchestrator injects these into spawned stage agents; you rarely set them yo
 
 | Variable | Description |
 |---|---|
-| `DASHBOARD_MCP_URL` | Dashboard MCP URL injected into stage agents |
-| `DASHBOARD_STAGE_RUN_ID` | Stage-run ID injected into stage agents |
-| `DASHBOARD_TASK_ID` | Task ID injected into stage agents |
+| `KONTOR_MCP_URL` | Dashboard MCP URL injected into stage agents |
+| `KONTOR_STAGE_RUN_ID` | Stage-run ID injected into stage agents |
+| `KONTOR_TASK_ID` | Task ID injected into stage agents |
 
 ## Runtime settings (Settings UI or `kontor settings` CLI)
 
 These keys live in the database `app_setting` table — the single source of truth is `server/internal/settings/registry.go`. Edit them in the **Settings** UI (the generic **Server** panel, plus the **Plugins** and **Providers** panels) or with the `kontor settings` CLI.
 
-> The matching `DASHBOARD_*` environment variables that used to set these are **no longer read**. If one is still set, it is ignored and the server logs a warning on boot.
+> The matching `KONTOR_*` environment variables that used to set these are **no longer read**. If one is still set, it is ignored and the server logs a warning on boot.
 
 **Apply** is when a change takes effect: `live` applies without a restart; `restart` requires a server restart. Auth mode is `restart` even though it lives here.
 
@@ -103,7 +112,7 @@ kontor settings get <key>       # one value (falls back to the registry default)
 kontor settings set <key> <value>
 ```
 
-Database resolution order: `--db <path>` flag → `DASHBOARD_DB_PATH` → default `~/.claude/dashboard-tasks.db`.
+Database resolution order: `--db <path>` flag → `KONTOR_DB_PATH` → default `~/.claude/kontor-tasks.db`.
 
 `auth.mode` is an ordinary settings key, so the CLI doubles as lockout recovery:
 
@@ -128,7 +137,7 @@ kontor grants capabilities                                                      
 
 `--pattern` is required on `add`: `'*'` covers every value, `'git status*'` is a prefix pattern. A non-`global` `--scope` must carry a ref (`project:/home/me/app`, not bare `project`), and `--expires-in` must be a positive duration — both are rejected at write time rather than stored as a grant that can never apply. `revoke` refuses an already-revoked grant. `add` still writes the grant when no enforcement point reads that capability, but says so on stderr; `list`'s `ENFORCEMENT` column shows the same per row.
 
-Database resolution uses the same `--db` flag / `DASHBOARD_DB_PATH` / default path as the settings CLI.
+Database resolution uses the same `--db` flag / `KONTOR_DB_PATH` / default path as the settings CLI.
 
 ### Plugin CLI / lockout recovery
 
@@ -140,7 +149,7 @@ kontor plugins disable <id>      # set active=false
 kontor plugins enable <id>       # set active=true
 ```
 
-Database resolution uses the same `--db` flag / `DASHBOARD_DB_PATH` / default path as the settings CLI.
+Database resolution uses the same `--db` flag / `KONTOR_DB_PATH` / default path as the settings CLI.
 
 Use `disable` to recover when a broken `auth_provider` plugin prevents the server from booting:
 
@@ -160,7 +169,7 @@ Spawners can use different `adapter_type` values to route stage-agent calls to d
 | `claude` (or empty) | Native Claude Code CLI subprocess (default) | None — uses the installed `claude` binary |
 | `openai` | OpenAI-compatible HTTP endpoint | `base_url`, `api_key_env`, `default_model` in `AdapterConfig`; the named env var must hold the key |
 | `ollama` | Ollama local server | `host`, `default_model` in `AdapterConfig`; defaults to `http://localhost:11434` |
-| `anthropic` | Anthropic Messages API via `anthropic-spawner` binary (see below) | `ANTHROPIC_API_KEY` in server env; binary on `PATH` or `DASHBOARD_ANTHROPIC_SPAWNER_CMD` |
+| `anthropic` | Anthropic Messages API via `anthropic-spawner` binary (see below) | `ANTHROPIC_API_KEY` in server env; binary on `PATH` or `KONTOR_ANTHROPIC_SPAWNER_CMD` |
 | `custom` | Any binary following the custom-exec contract | `spawner.command` must point to the binary |
 
 ### `anthropic` adapter
@@ -170,7 +179,7 @@ The `anthropic` adapter runs pipeline stage agents and refinement chat against t
 **Prerequisites:**
 
 1. `ANTHROPIC_API_KEY` set in the server environment (inherited by the spawner binary).
-2. The `anthropic-spawner` binary on `PATH`, or its absolute path in `DASHBOARD_ANTHROPIC_SPAWNER_CMD`.
+2. The `anthropic-spawner` binary on `PATH`, or its absolute path in `KONTOR_ANTHROPIC_SPAWNER_CMD`.
 
 **Default model:** `claude-opus-5`, the newest Opus model (can be overridden per-spawner via the model resolution chain described in the [Pipeline stage configuration](#pipeline-stage-configuration) section).
 
@@ -251,7 +260,7 @@ Each routine also carries a **run mode**, stored on the routine itself rather th
 
 ## Plugin lifecycle
 
-Plugins are discovered from `DASHBOARD_PLUGIN_DIR` and tracked in the database `plugin`
+Plugins are discovered from `KONTOR_PLUGIN_DIR` and tracked in the database `plugin`
 table, which is the source of truth for each plugin's state. The legacy `plugins.enabled`
 runtime setting is **superseded** by this table; on first boot the server migrates any
 existing `plugins.enabled` value into it automatically.
@@ -300,13 +309,13 @@ addresses, commands, and secrets are never returned to the client.
 ### Secret settings at rest
 
 Settings marked `secret: true` are encrypted with AES-256-GCM using the
-`DASHBOARD_SECRET_KEY` master key (see [Bootstrap configuration](#bootstrap-configuration-env--flags))
+`KONTOR_SECRET_KEY` master key (see [Bootstrap configuration](#bootstrap-configuration-env--flags))
 before they touch the database, and are masked in every API response. Losing the master
 key makes existing secrets undecryptable — you must re-enter them.
 
 ## Multi-machine (advanced)
 
-Binding to a non-loopback address is gated by the `DASHBOARD_REMOTES_ENABLED` bootstrap variable (see [Bootstrap configuration](#bootstrap-configuration-env--flags)). Remote dashboard instances to aggregate are registered through the API and stored in the database — there is no longer a `DASHBOARD_REMOTES` env var.
+Binding to a non-loopback address is gated by the `KONTOR_REMOTES_ENABLED` bootstrap variable (see [Bootstrap configuration](#bootstrap-configuration-env--flags)). Remote dashboard instances to aggregate are registered through the API and stored in the database — there is no longer a `KONTOR_REMOTES` env var.
 
 > Multi-machine mode requires remote instances to be network-accessible. Use a VPN or SSH tunnel — **never** bind to `0.0.0.0` on an untrusted network. The dashboard reads sensitive Claude session data.
 
