@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/lx-wnk/kontor/server/internal/envsec"
-	"github.com/lx-wnk/kontor/server/internal/validation"
 )
 
 // Registry discovers, starts, and health-checks plugins from a directory.
@@ -153,8 +152,11 @@ func (r *Registry) Load(serverCtx context.Context, hooks Hooks) error {
 			slog.Warn("plugin: skip — invalid plugin.json", "dir", entry.Name(), "err", err)
 			continue
 		}
-		if !ValidID(desc.ID) {
-			slog.Warn("plugin: skip — "+validation.SlugPatternMessage, "dir", entry.Name(), "id", desc.ID)
+		if err := desc.Validate(); err != nil {
+			// Refused, not skipped quietly: the manifest is the module's
+			// statement about what it needs, and a core that ignores an
+			// unreadable one loads a module it cannot honour.
+			slog.Warn("plugin: refused", "dir", entry.Name(), "err", err)
 			continue
 		}
 		if !r.isEnabled(desc.ID) {

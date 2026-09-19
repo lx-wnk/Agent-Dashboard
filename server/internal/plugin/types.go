@@ -1,10 +1,24 @@
 // Package plugin provides runtime plugin discovery and lifecycle management.
 package plugin
 
-import "context"
+import (
+	"context"
+	"fmt"
+
+	"github.com/lx-wnk/kontor/server/internal/validation"
+)
+
+// CurrentContract is the module contract this core implements. A module
+// declares the contract it was built against and is refused when the two do not
+// match: an integer handshake cannot be half-satisfied, and a module that
+// cannot state what it expects fails at runtime rather than at load.
+const CurrentContract = 1
 
 // Descriptor is read from plugin.json in each plugin directory.
 type Descriptor struct {
+	// Contract is the module contract version this module was built against.
+	// Required.
+	Contract     int      `json:"contract"`
 	ID           string   `json:"id"`
 	Name         string   `json:"name"`
 	Version      string   `json:"version"`
@@ -64,3 +78,23 @@ const (
 // Called at every subprocess spawn; errors are logged and the plugin starts
 // without settings so a DB failure never blocks plugin availability.
 type SettingsProvider func(ctx context.Context, id string) (map[string]string, error)
+
+// Validate refuses a manifest that this core cannot honour, naming the field
+// that is wrong. Refusing is the point: skipping silently is how a module ends
+// up half-loaded, and reporting at runtime is how the failure reaches a user
+// instead of the operator installing it.
+func (d Descriptor) Validate() error {
+	if d.Contract == 0 {
+		return fmt.Errorf("plugin %q: contract is required (this core implements contract %d)", d.ID, CurrentContract)
+	}
+	if d.Contract != CurrentContract {
+		return fmt.Errorf("plugin %q: contract %d is not supported (this core implements contract %d)", d.ID, d.Contract, CurrentContract)
+	}
+	if !validation.IsValidSlug(d.ID) {
+		return fmt.Errorf("plugin id %q: %s", d.ID, validation.SlugPatternMessage)
+	}
+	if d.Name == "" {
+		return fmt.Errorf("plugin %q: name is required", d.ID)
+	}
+	return nil
+}
