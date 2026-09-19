@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -220,4 +221,21 @@ func TestLoad_PrefersKontorPrefixAndFallsBackToDashboard(t *testing.T) {
 	both, err := Load("")
 	require.NoError(t, err)
 	assert.Equal(t, 13600, both.Port, "the new prefix must win when both are set")
+}
+
+// A database is not copied behind the operator's back: when the file under the
+// old name exists and the new one does not, keep using the old file.
+func TestDefaults_KeepsAnExistingDatabaseUnderItsOldName(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".claude"), 0o700))
+
+	fresh := Defaults()
+	assert.Equal(t, filepath.Join(home, ".claude", "kontor-tasks.db"), fresh.DBPath,
+		"a fresh install uses the new name")
+
+	old := filepath.Join(home, ".claude", "dashboard-tasks.db")
+	require.NoError(t, os.WriteFile(old, []byte("not really sqlite"), 0o600))
+	assert.Equal(t, old, Defaults().DBPath,
+		"an existing database keeps being used under the name it already has")
 }

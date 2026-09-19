@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/joho/godotenv"
@@ -55,10 +56,26 @@ func Defaults() Config {
 	return Config{
 		Host:         "127.0.0.1",
 		Port:         13120,
-		DBPath:       home + "/.claude/dashboard-tasks.db",
-		WorktreeRoot: home + "/" + worktree.DefaultRootDirName,
+		DBPath:       keepExisting(filepath.Join(home, ".claude", "kontor-tasks.db"), filepath.Join(home, ".claude", "dashboard-tasks.db")),
+		WorktreeRoot: keepExisting(filepath.Join(home, worktree.DefaultRootDirName), filepath.Join(home, worktree.RenamedRootDirName)),
 		RestartMode:  "reexec",
 	}
+}
+
+// keepExisting returns preferred unless it is absent and legacy is present, in
+// which case the installation keeps using what it already has. Nothing is
+// copied or moved: a database can be large and a worktree root holds checkouts
+// that running agents are working in, so relocating either behind the
+// operator's back would be the more dangerous of the two options.
+func keepExisting(preferred, legacy string) string {
+	if _, err := os.Stat(preferred); err == nil {
+		return preferred
+	}
+	if _, err := os.Stat(legacy); err == nil {
+		slog.Info("using the pre-rename path because it exists", "path", legacy, "new", preferred)
+		return legacy
+	}
+	return preferred
 }
 
 // EnvPrefix is the prefix every configuration variable carries. legacyEnvPrefix
