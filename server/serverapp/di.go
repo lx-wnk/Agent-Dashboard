@@ -484,6 +484,9 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		pluginRegistry.SetSettingsProvider(func(ctx context.Context, id string) (map[string]string, error) {
 			return pluginSettingsSvc.DecryptedAll(ctx, id)
 		})
+		// A module's callback credential: scoped to what its manifest declares,
+		// re-minted on every start, revoked when it stops.
+		pluginRegistry.SetCredentialIssuer(moduleCredentials{keys: repo.NewApiKeyRepo(entClient)})
 	}
 
 	// oauthProvider and pluginLoginURL are set by the SetAuth hook when an auth_provider

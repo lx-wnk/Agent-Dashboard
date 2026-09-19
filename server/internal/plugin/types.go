@@ -29,7 +29,12 @@ type Descriptor struct {
 	// If empty, the plugin is expected to already be running.
 	Command []string `json:"command"`
 	// Env lists env var names the plugin reads from the parent environment.
-	Env       []string       `json:"env"`
+	Env []string `json:"env"`
+	// Uses lists the capabilities this module may exercise when it calls back
+	// into the server. They become the scopes of the credential it is issued;
+	// anything outside the list is refused by the same check that governs every
+	// other caller.
+	Uses      []string       `json:"uses"`
 	Settings  []SettingField `json:"settings"`
 	Lifecycle LifecycleHooks `json:"lifecycle"`
 }

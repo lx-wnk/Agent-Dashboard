@@ -35,6 +35,9 @@ type Registry struct {
 	// settings is the optional provider that fetches decrypted per-plugin values
 	// for env injection at every spawn. Nil means no settings are injected.
 	settings SettingsProvider
+	// credentials is the optional issuer of the token a module calls back with.
+	// Nil means modules start without one and can be called but cannot call.
+	credentials CredentialIssuer
 }
 
 // Entry is a loaded plugin with its descriptor and running process (if started by us).
@@ -83,9 +86,30 @@ func (r *Registry) SetEnabled(fn func(id string) bool) { r.enabled = fn }
 // for env injection at every spawn. Call before Load.
 func (r *Registry) SetSettingsProvider(fn SettingsProvider) { r.settings = fn }
 
+// SetCredentialIssuer wires the issuer that mints a module's callback token.
+// Optional, like the settings provider: a registry without one still starts
+// modules, they simply receive no credential.
+func (r *Registry) SetCredentialIssuer(issuer CredentialIssuer) { r.credentials = issuer }
+
 // appendSettingsEnv returns base with PLUGIN_SETTING_<KEY> vars from the settings
 // provider appended. A nil provider or a provider error leaves base unchanged
 // (the plugin starts without settings rather than not at all).
+// appendModuleTokenEnv mints the module's callback credential and appends it.
+// A failure is logged and the module starts without one: it can still serve
+// what core asks of it, and a module that cannot call back is a smaller
+// problem than a module that will not start.
+func (r *Registry) appendModuleTokenEnv(ctx context.Context, base []string, desc Descriptor) []string {
+	if r.credentials == nil {
+		return base
+	}
+	token, err := r.credentials.Issue(ctx, desc.ID, desc.Uses)
+	if err != nil {
+		slog.Warn("plugin: no callback credential issued", "id", desc.ID, "err", err)
+		return base
+	}
+	return append(base, ModuleTokenEnvVar+"="+token)
+}
+
 func (r *Registry) appendSettingsEnv(ctx context.Context, base []string, id string) []string {
 	if r.settings == nil {
 		return base
@@ -195,7 +219,7 @@ func (r *Registry) startEntry(serverCtx, startupCtx context.Context, pluginDir s
 		cmd := exec.CommandContext(serverCtx, desc.Command[0], desc.Command[1:]...)
 		disableContextKill(cmd)
 		cmd.Dir = pluginDir
-		cmd.Env = r.appendSettingsEnv(serverCtx, buildPluginEnv(desc.Env), desc.ID)
+		cmd.Env = r.appendModuleTokenEnv(serverCtx, r.appendSettingsEnv(serverCtx, buildPluginEnv(desc.Env), desc.ID), desc)
 		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 		if err := cmd.Start(); err != nil {
@@ -312,7 +336,24 @@ func (r *Registry) StopOne(id string) error {
 		gracefulStop(target.cmd, target.cmdDone)
 	}
 	r.removeByID(id)
+	r.revokeModuleCredential(id)
 	return nil
+}
+
+// revokeModuleCredential retires the token the module was started with. A
+// stopped module must not keep a usable credential: the process is gone, so
+// anything still presenting its token is not it.
+func (r *Registry) revokeModuleCredential(id string) {
+	if r.credentials == nil {
+		return
+	}
+	ctx := r.serverCtx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := r.credentials.Revoke(ctx, id); err != nil {
+		slog.Warn("plugin: callback credential not revoked", "id", id, "err", err)
+	}
 }
 
 // setIntentionalStop marks the entry's pending exit as deliberate so watchPlugin
@@ -716,7 +757,7 @@ func (r *Registry) watchPlugin(ctx context.Context, pluginDir string, desc Descr
 		newCmd := exec.CommandContext(ctx, desc.Command[0], desc.Command[1:]...)
 		disableContextKill(newCmd)
 		newCmd.Dir = pluginDir
-		newCmd.Env = r.appendSettingsEnv(ctx, buildPluginEnv(desc.Env), desc.ID)
+		newCmd.Env = r.appendModuleTokenEnv(ctx, r.appendSettingsEnv(ctx, buildPluginEnv(desc.Env), desc.ID), desc)
 		newCmd.Stdout = os.Stdout
 		newCmd.Stderr = os.Stderr
 		newCmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
