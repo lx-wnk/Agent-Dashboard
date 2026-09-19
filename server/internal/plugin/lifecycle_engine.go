@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/lx-wnk/kontor/server/internal/db/ent"
@@ -65,7 +66,15 @@ type Engine struct {
 	hooks    HookCaller
 	settings SettingsClearer
 	proc     ProcessManager
+	// dataRoot is where module data directories live. Empty means uninstall
+	// leaves nothing to archive, which is the case for an engine built without
+	// one.
+	dataRoot string
 }
+
+// SetDataRoot tells the engine where module data lives, so uninstalling can
+// move a module's directory aside instead of leaving it orphaned.
+func (e *Engine) SetDataRoot(root string) { e.dataRoot = root }
 
 func NewLifecycleEngine(repo StateRepo, hooks HookCaller, settings SettingsClearer, proc ProcessManager) *Engine {
 	return &Engine{repo: repo, hooks: hooks, settings: settings, proc: proc}
@@ -201,6 +210,17 @@ func (e *Engine) Uninstall(ctx context.Context, d Descriptor) error {
 	}
 	if err := e.repo.SetInstalledAt(ctx, d.ID, nil); err != nil {
 		return err
+	}
+	// Archived rather than deleted, and after the state change rather than
+	// before: an uninstall that fails halfway must not already have taken the
+	// module's data with it. A failure here is reported but does not undo the
+	// uninstall, which has otherwise succeeded.
+	if e.dataRoot != "" {
+		if archive, err := ArchiveModuleDataDir(e.dataRoot, d.ID); err != nil {
+			slog.Warn("module data not archived", "id", d.ID, "err", err)
+		} else if archive != "" {
+			slog.Info("module data archived", "id", d.ID, "archive", archive)
+		}
 	}
 	return e.settings.Clear(ctx, d.ID)
 }

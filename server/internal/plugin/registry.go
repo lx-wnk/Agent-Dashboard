@@ -38,6 +38,9 @@ type Registry struct {
 	// credentials is the optional issuer of the token a module calls back with.
 	// Nil means modules start without one and can be called but cannot call.
 	credentials CredentialIssuer
+	// dataRoot is where each module's own directory lives. Empty means modules
+	// are started without one, the same way they start without settings.
+	dataRoot string
 }
 
 // Entry is a loaded plugin with its descriptor and running process (if started by us).
@@ -91,9 +94,27 @@ func (r *Registry) SetSettingsProvider(fn SettingsProvider) { r.settings = fn }
 // modules, they simply receive no credential.
 func (r *Registry) SetCredentialIssuer(issuer CredentialIssuer) { r.credentials = issuer }
 
+// SetDataRoot names the directory under which each module gets one of its own.
+func (r *Registry) SetDataRoot(root string) { r.dataRoot = root }
+
 // appendSettingsEnv returns base with PLUGIN_SETTING_<KEY> vars from the settings
 // provider appended. A nil provider or a provider error leaves base unchanged
 // (the plugin starts without settings rather than not at all).
+// appendModuleDataDirEnv creates the module's own directory and names it. A
+// failure is logged and the module starts without one: it can still serve what
+// core asks of it, which is a smaller problem than refusing to start.
+func (r *Registry) appendModuleDataDirEnv(base []string, id string) []string {
+	if r.dataRoot == "" {
+		return base
+	}
+	dir, err := EnsureModuleDataDir(r.dataRoot, id)
+	if err != nil {
+		slog.Warn("plugin: no data directory", "id", id, "err", err)
+		return base
+	}
+	return append(base, ModuleDataDirEnvVar+"="+dir)
+}
+
 // appendModuleTokenEnv mints the module's callback credential and appends it.
 // A failure is logged and the module starts without one: it can still serve
 // what core asks of it, and a module that cannot call back is a smaller
@@ -219,7 +240,7 @@ func (r *Registry) startEntry(serverCtx, startupCtx context.Context, pluginDir s
 		cmd := exec.CommandContext(serverCtx, desc.Command[0], desc.Command[1:]...)
 		disableContextKill(cmd)
 		cmd.Dir = pluginDir
-		cmd.Env = r.appendModuleTokenEnv(serverCtx, r.appendSettingsEnv(serverCtx, buildPluginEnv(desc.Env), desc.ID), desc)
+		cmd.Env = r.appendModuleDataDirEnv(r.appendModuleTokenEnv(serverCtx, r.appendSettingsEnv(serverCtx, buildPluginEnv(desc.Env), desc.ID), desc), desc.ID)
 		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 		if err := cmd.Start(); err != nil {
@@ -757,7 +778,7 @@ func (r *Registry) watchPlugin(ctx context.Context, pluginDir string, desc Descr
 		newCmd := exec.CommandContext(ctx, desc.Command[0], desc.Command[1:]...)
 		disableContextKill(newCmd)
 		newCmd.Dir = pluginDir
-		newCmd.Env = r.appendModuleTokenEnv(ctx, r.appendSettingsEnv(ctx, buildPluginEnv(desc.Env), desc.ID), desc)
+		newCmd.Env = r.appendModuleDataDirEnv(r.appendModuleTokenEnv(ctx, r.appendSettingsEnv(ctx, buildPluginEnv(desc.Env), desc.ID), desc), desc.ID)
 		newCmd.Stdout = os.Stdout
 		newCmd.Stderr = os.Stderr
 		newCmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}

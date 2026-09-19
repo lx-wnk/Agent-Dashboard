@@ -17,6 +17,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"path/filepath"
 	"time"
 
 	sdk "github.com/lx-wnk/kontor/sdk"
@@ -488,6 +489,14 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		// re-minted on every start, revoked when it stops.
 		pluginRegistry.SetCredentialIssuer(moduleCredentials{keys: repo.NewApiKeyRepo(entClient)})
 	}
+	// Beside the core database rather than inside a module's checkout: a module
+	// is updated with git, so data kept in the checkout would be taken along by
+	// the update.
+	if home, err := os.UserHomeDir(); err == nil {
+		pluginRegistry.SetDataRoot(filepath.Join(home, ".claude", "kontor", "modules"))
+	} else {
+		slog.Warn("modules start without a data directory: home is unknown", "err", err)
+	}
 
 	// oauthProvider and pluginLoginURL are set by the SetAuth hook when an auth_provider
 	// plugin passes health-check. If no auth_provider plugin is configured both stay at
@@ -548,6 +557,11 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 			pluginSettingsSvc,
 			pluginProcessAdapter{reg: pluginRegistry},
 		)
+		// The same root the registry hands to a starting module, so an
+		// uninstall archives exactly what that module wrote.
+		if home, err := os.UserHomeDir(); err == nil {
+			lifecycleEngine.SetDataRoot(filepath.Join(home, ".claude", "kontor", "modules"))
+		}
 		discoverer := plugin.NewDiscoverer(cfg.PluginDir, pluginDiscoverRepoAdapter{inner: pluginRepo, settings: pluginSettingRepo})
 		lifecycleProbe := func(id string) (bool, bool) {
 			e, ok := pluginRegistry.Lookup(id)
