@@ -432,9 +432,16 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 			return nil, fmt.Errorf("obsidian: build client: %w", err)
 		}
 
+		// A read-only integration does not get to take the server down. The
+		// builder still reports precisely why it could not be constructed —
+		// most often a gh login that expired — but the dashboard, its agents
+		// and its pipeline have nothing to do with GitHub, and an operator
+		// whose server refuses to boot cannot even open the page that would
+		// tell them what is wrong.
 		githubClient, err = buildGitHubClient(ctx, settingsSvc)
 		if err != nil {
-			return nil, fmt.Errorf("github: build client: %w", err)
+			slog.Warn("github: integration disabled", "err", err)
+			githubClient = nil
 		}
 
 		if rows, err := capabilityRepo.List(ctx); err != nil {
