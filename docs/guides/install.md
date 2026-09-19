@@ -1,6 +1,6 @@
-# Installing Agent Dashboard
+# Installing Kontor
 
-Agent Dashboard is a single self-contained binary that embeds its own web UI. No Go, Node.js, or
+Kontor is a single self-contained binary that embeds its own web UI. No Go, Node.js, or
 build tools are needed at runtime. macOS and Linux only.
 
 **Prerequisite for all methods:** [Claude Code](https://claude.ai/code) must be installed and have
@@ -11,14 +11,14 @@ been run at least once — the dashboard reads the session data Claude Code writ
 ## Option A — One-liner (binary, macOS / Linux)
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/lx-wnk/Agent-Dashboard/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/lx-wnk/kontor/main/install.sh | sh
 ```
 
 Downloads the latest release archive for your platform, verifies the checksum, and installs
-`agent-dashboard` to `~/.local/bin` (or `/usr/local/bin` if writable). After install:
+`kontor` to `~/.local/bin` (or `/usr/local/bin` if writable). After install:
 
 ```sh
-agent-dashboard serve
+kontor serve
 ```
 
 Then open **http://localhost:13120**.
@@ -27,7 +27,7 @@ To pin a specific version or choose a different install dir:
 
 ```sh
 AGENT_DASHBOARD_VERSION=v0.1.0 AGENT_DASHBOARD_BIN_DIR=~/bin \
-  sh -c "$(curl -fsSL https://raw.githubusercontent.com/lx-wnk/Agent-Dashboard/main/install.sh)"
+  sh -c "$(curl -fsSL https://raw.githubusercontent.com/lx-wnk/kontor/main/install.sh)"
 ```
 
 ---
@@ -35,15 +35,15 @@ AGENT_DASHBOARD_VERSION=v0.1.0 AGENT_DASHBOARD_BIN_DIR=~/bin \
 ## Option B — Homebrew (macOS)
 
 ```sh
-brew install lx-wnk/tap/agent-dashboard
+brew install lx-wnk/tap/kontor
 ```
 
-Installs the `agent-dashboard` cask from the `lx-wnk/tap` tap (created as part of the release
+Installs the `kontor` cask from the `lx-wnk/tap` tap (created as part of the release
 process). Homebrew Cask is macOS-only — on Linux use Option A (binary) or Option C (Docker)
 instead. After install:
 
 ```sh
-agent-dashboard serve
+kontor serve
 ```
 
 ---
@@ -56,7 +56,7 @@ docker run --rm \
   -e DASHBOARD_HOST=0.0.0.0 \
   -e DASHBOARD_REMOTES_ENABLED=true \
   -v ~/.claude:/home/nonroot/.claude:ro \
-  ghcr.io/lx-wnk/agent-dashboard:latest
+  ghcr.io/lx-wnk/kontor:latest
 ```
 
 Then open **http://localhost:13120**.
@@ -89,10 +89,10 @@ Homebrew installs are recommended.
 See [CONTRIBUTING.md](../../CONTRIBUTING.md) for prerequisites and dev setup.
 
 ```sh
-git clone https://github.com/lx-wnk/Agent-Dashboard.git
-cd Agent-Dashboard
+git clone https://github.com/lx-wnk/kontor.git
+cd Kontor
 pnpm install     # frontend dependencies
 pnpm build       # builds the Vue SPA into server/frontend/dist
-task build       # embeds SPA → bin/agent-dashboard
-./bin/agent-dashboard serve
+task build       # embeds SPA → bin/kontor
+./bin/kontor serve
 ```

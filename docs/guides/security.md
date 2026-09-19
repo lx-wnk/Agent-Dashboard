@@ -57,7 +57,7 @@ sites do not wrap these routes in the admin middleware they ask for:
   authorization"
 
 They are kept as the specification of where the gate belongs once the role is
-grantable, tracked in [#427](https://github.com/lx-wnk/Agent-Dashboard/issues/427).
+grantable, tracked in [#427](https://github.com/lx-wnk/kontor/issues/427).
 
 ### When this posture is wrong for you
 
@@ -68,7 +68,7 @@ therefore inside the trust boundary rather than outside it.
 
 If that is not the posture you want, set `auth.mode` to `plugin` and configure an auth
 provider. `auth.mode` is registered `ApplyRestart`: the running server holds the value
-it read at startup, so changing it — through the settings UI or `agent-dashboard
+it read at startup, so changing it — through the settings UI or `kontor
 settings set` — has no effect until the server restarts. Verify by reloading the
 dashboard and confirming you are asked to log in; do not assume the write took.
 
@@ -226,17 +226,17 @@ able to give up on purpose:
 
 ### Creating and revoking grants
 
-The `agent-dashboard grants` CLI, `GET`/`POST /api/grants` plus
+The `kontor grants` CLI, `GET`/`POST /api/grants` plus
 `DELETE /api/grants/{id}` (`server/internal/api/grants/handler.go`), and
 **Settings → Grants** all create and revoke `grants` rows (the boot
 backfill migration writes rows too, but nobody invokes it by hand). Only
 the CLI opens the SQLite database directly, the same way
-`agent-dashboard settings` and `agent-dashboard plugins` do, so it is the
+`kontor settings` and `kontor plugins` do, so it is the
 one that still works while the server is down.
 
 ```bash
-agent-dashboard grants add memory.read --pattern '*' --scope global --mode allow
-agent-dashboard grants list --capability memory.read
+kontor grants add memory.read --pattern '*' --scope global --mode allow
+kontor grants list --capability memory.read
 ```
 
 `add`, `list`, `revoke`, and `capabilities` are the four subcommands —
@@ -284,8 +284,8 @@ a narrower one matches.
 So these two grants do **not** compose the way they read:
 
 ```bash
-agent-dashboard grants add memory.read --pattern '*' --scope global --mode deny
-agent-dashboard grants add memory.read --pattern '*' --scope project:/home/me/app --mode allow
+kontor grants add memory.read --pattern '*' --scope global --mode deny
+kontor grants add memory.read --pattern '*' --scope project:/home/me/app --mode allow
 ```
 
 Inside `/home/me/app` the request is **allowed**. The global `deny` is not a
@@ -482,4 +482,4 @@ in that function may put the token in an error or a log line.
 
 ## Reporting a vulnerability
 
-Please report security issues privately via [GitHub Security Advisories](https://github.com/lx-wnk/Agent-Dashboard/security/advisories/new) rather than opening a public issue.
+Please report security issues privately via [GitHub Security Advisories](https://github.com/lx-wnk/kontor/security/advisories/new) rather than opening a public issue.

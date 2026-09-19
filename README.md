@@ -1,6 +1,6 @@
 <div align="center">
 
-# Agent Dashboard
+# Kontor
 
 **A real-time monitoring and control plane for locally running Claude Code agents.**
 
@@ -10,15 +10,15 @@ See every running agent at a glance — tokens, cost, status, tools, tasks, and 
 [![Go 1.26](https://img.shields.io/badge/go-1.26-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 [![Vue 3](https://img.shields.io/badge/vue-3-4FC08D?logo=vue.js&logoColor=white)](https://vuejs.org/)
 [![pnpm](https://img.shields.io/badge/pnpm-10-F69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
-[![Status](https://img.shields.io/badge/status-active-brightgreen)](https://github.com/lx-wnk/Agent-Dashboard)
+[![Status](https://img.shields.io/badge/status-active-brightgreen)](https://github.com/lx-wnk/kontor)
 
 </div>
 
 <p align="center">
-  <img src="docs/assets/hero.png" alt="Agent Dashboard — live agent roster with permission triage band, per-agent cost, and system footer" width="900">
+  <img src="docs/assets/hero.png" alt="Kontor — live agent roster with permission triage band, per-agent cost, and system footer" width="900">
 </p>
 
-## Why Agent Dashboard
+## Why Kontor
 
 Most agent monitors require you to wire hooks or wrappers into every project. This one doesn't — it reads what Claude Code already writes to disk and watches the processes you already run.
 
@@ -61,17 +61,17 @@ See [`docs/`](docs/README.md) for the full feature reference.
 
 **One-liner (macOS / Linux):**
 ```sh
-curl -fsSL https://raw.githubusercontent.com/lx-wnk/Agent-Dashboard/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/lx-wnk/kontor/main/install.sh | sh
 ```
 
 Or use Homebrew (macOS):
 ```sh
-brew install lx-wnk/tap/agent-dashboard
+brew install lx-wnk/tap/kontor
 ```
 
 Then:
 ```sh
-agent-dashboard serve
+kontor serve
 ```
 
 Open **http://localhost:13120** — any running Claude Code agents appear automatically. On loopback with no OAuth configured, the dashboard runs in local-trust mode (no login). See [Security](docs/guides/security.md) before exposing it anywhere.
@@ -87,8 +87,8 @@ On first launch, a guided setup flow opens automatically and walks you through t
 Requires Go 1.26+, [Task](https://taskfile.dev), [air](https://github.com/air-verse/air), Node.js 22+, and [pnpm](https://pnpm.io/installation).
 
 ```bash
-git clone https://github.com/lx-wnk/Agent-Dashboard.git
-cd Agent-Dashboard
+git clone https://github.com/lx-wnk/kontor.git
+cd Kontor
 pnpm install        # frontend dependencies (Go deps are fetched on first build)
 task dev            # Go backend (air hot-reload) + Vite — serves on :13120
 ```
@@ -97,7 +97,7 @@ When iterating on the UI, run `pnpm dev` in a second terminal for HMR on `:5173`
 
 ## Desktop app (macOS)
 
-A native macOS shell (`desktop/`, [wails](https://wails.io) v2) wraps the same dashboard as one binary — no separate server process, no sidecar. It starts the dashboard HTTP server in-process on `127.0.0.1:13120` and opens a native WKWebView window pointed at it, so it's the identical Vue SPA you get in a browser tab, just packaged as an app. Other platforms keep running `agent-dashboard serve` in a browser; the desktop shell is macOS-only.
+A native macOS shell (`desktop/`, [wails](https://wails.io) v2) wraps the same dashboard as one binary — no separate server process, no sidecar. It starts the dashboard HTTP server in-process on `127.0.0.1:13120` and opens a native WKWebView window pointed at it, so it's the identical Vue SPA you get in a browser tab, just packaged as an app. Other platforms keep running `kontor serve` in a browser; the desktop shell is macOS-only.
 
 Build and run it for a smoke test (requires macOS + Xcode command-line tools; no `wails` CLI needed for this):
 
@@ -134,15 +134,15 @@ The status bar warns when the running build is older than the source it was buil
 |---|---|
 | systemd | `Restart=always` in the service unit |
 | launchd | `KeepAlive` in the plist |
-| Wrapper loop | `while true; do ./bin/agent-dashboard serve; done` |
+| Wrapper loop | `while true; do ./bin/kontor serve; done` |
 
 ## Locked out?
 
 A bad `auth.mode` or a broken `auth_provider` plugin can lock you out of the UI. The CLI edits the SQLite database directly, so it works even while the server is down:
 
 ```bash
-agent-dashboard settings set auth.mode none   # reset auth, then restart the server
-agent-dashboard grants add memory.read --pattern '*' --scope global --mode allow
+kontor settings set auth.mode none   # reset auth, then restart the server
+kontor grants add memory.read --pattern '*' --scope global --mode allow
 ```
 
 See [Configuration](docs/guides/configuration.md) for the full settings/grants/plugins CLI reference.
@@ -163,9 +163,9 @@ into searchable memory pointers — but only once the `obsidian.read`, `obsidian
 `memory.write` capability grants exist. A fresh install denies the run otherwise:
 
 ```bash
-agent-dashboard grants add obsidian.read --pattern '*' --scope global --mode allow
-agent-dashboard grants add obsidian.search --pattern '*' --scope global --mode allow
-agent-dashboard grants add memory.write --pattern '*' --scope global --mode allow
+kontor grants add obsidian.read --pattern '*' --scope global --mode allow
+kontor grants add obsidian.search --pattern '*' --scope global --mode allow
+kontor grants add memory.write --pattern '*' --scope global --mode allow
 ```
 
 (or the same three from **Settings → Grants**). Agents can also reach the vault directly — read,
@@ -198,8 +198,8 @@ Once configured, the cockpit's **GitHub** panel reads open pull requests from
 MCP tool, is gated by one of four capabilities. A fresh install denies all four by default:
 
 ```bash
-agent-dashboard grants add github.read --pattern '*' --scope global --mode allow
-agent-dashboard grants add github.search --pattern '*' --scope global --mode allow
+kontor grants add github.read --pattern '*' --scope global --mode allow
+kontor grants add github.search --pattern '*' --scope global --mode allow
 ```
 
 `github.comment` and `github.merge` are deliberately not on that list. Posting a comment is public
@@ -242,7 +242,7 @@ task lint           # golangci-lint
 pnpm typecheck      # vue-tsc
 ```
 
-Found a bug or have an idea? [Open an issue](https://github.com/lx-wnk/Agent-Dashboard/issues/new/choose).
+Found a bug or have an idea? [Open an issue](https://github.com/lx-wnk/kontor/issues/new/choose).
 
 ## License
 

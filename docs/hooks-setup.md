@@ -6,7 +6,7 @@ tool call rather than waiting for the next SSE poll interval (default 3 s).
 
 > **Not the permission bridge.** Answering a session's permission prompts from
 > the dashboard is a different feature with its own installer —
-> `agent-dashboard hooks install`, described in
+> `kontor hooks install`, described in
 > [agent-control.md](guides/agent-control.md#answering-a-permission-prompt-from-the-dashboard).
 > It manages its own entries in the same `hooks` object and preserves the ones
 > below, but both write to the same file: edit by hand with that in mind.
@@ -42,18 +42,18 @@ For full per-event granularity, install all of them:
 ```json
 {
   "hooks": {
-    "PreToolUse": [{ "matcher": "", "hooks": [{ "type": "command", "command": "node /absolute/path/to/agent-dashboard/scripts/hooks/notify.js" }] }],
-    "PostToolUse": [{ "matcher": "", "hooks": [{ "type": "command", "command": "node /absolute/path/to/agent-dashboard/scripts/hooks/notify.js" }] }],
-    "Notification": [{ "matcher": "", "hooks": [{ "type": "command", "command": "node /absolute/path/to/agent-dashboard/scripts/hooks/notify.js" }] }],
-    "Stop": [{ "matcher": "", "hooks": [{ "type": "command", "command": "node /absolute/path/to/agent-dashboard/scripts/hooks/notify.js" }] }],
-    "SubagentStop": [{ "matcher": "", "hooks": [{ "type": "command", "command": "node /absolute/path/to/agent-dashboard/scripts/hooks/notify.js" }] }],
-    "UserPromptSubmit": [{ "matcher": "", "hooks": [{ "type": "command", "command": "node /absolute/path/to/agent-dashboard/scripts/hooks/notify.js" }] }],
-    "SessionStart": [{ "matcher": "", "hooks": [{ "type": "command", "command": "node /absolute/path/to/agent-dashboard/scripts/hooks/notify.js" }] }]
+    "PreToolUse": [{ "matcher": "", "hooks": [{ "type": "command", "command": "node /absolute/path/to/kontor/scripts/hooks/notify.js" }] }],
+    "PostToolUse": [{ "matcher": "", "hooks": [{ "type": "command", "command": "node /absolute/path/to/kontor/scripts/hooks/notify.js" }] }],
+    "Notification": [{ "matcher": "", "hooks": [{ "type": "command", "command": "node /absolute/path/to/kontor/scripts/hooks/notify.js" }] }],
+    "Stop": [{ "matcher": "", "hooks": [{ "type": "command", "command": "node /absolute/path/to/kontor/scripts/hooks/notify.js" }] }],
+    "SubagentStop": [{ "matcher": "", "hooks": [{ "type": "command", "command": "node /absolute/path/to/kontor/scripts/hooks/notify.js" }] }],
+    "UserPromptSubmit": [{ "matcher": "", "hooks": [{ "type": "command", "command": "node /absolute/path/to/kontor/scripts/hooks/notify.js" }] }],
+    "SessionStart": [{ "matcher": "", "hooks": [{ "type": "command", "command": "node /absolute/path/to/kontor/scripts/hooks/notify.js" }] }]
   }
 }
 ```
 
-Replace `/absolute/path/to/agent-dashboard` with the actual path on your machine.
+Replace `/absolute/path/to/kontor` with the actual path on your machine.
 To keep it minimal, install only `PostToolUse` — you still get faster refreshes,
 just without the other event types in the Hook events list.
 
