@@ -16,7 +16,7 @@ import (
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
 
-	"github.com/lx-wnk/agent-dashboard/server/internal/worktree"
+	"github.com/lx-wnk/kontor/server/internal/worktree"
 )
 
 // Config holds bootstrap and secret configuration. Operational config now lives

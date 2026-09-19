@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/lx-wnk/agent-dashboard/server/internal/mcp"
+	"github.com/lx-wnk/kontor/server/internal/mcp"
 )
 
 // mcpServerEntry mirrors the claude CLI's mcpServers JSON shape. A stdio

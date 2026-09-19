@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lx-wnk/agent-dashboard/server/internal/config"
-	"github.com/lx-wnk/agent-dashboard/server/internal/restart"
+	"github.com/lx-wnk/kontor/server/internal/config"
+	"github.com/lx-wnk/kontor/server/internal/restart"
 )
 
 // freePort asks the OS for an unused loopback port and immediately releases it.

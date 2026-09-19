@@ -11,16 +11,16 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/lx-wnk/agent-dashboard/server/internal/capability"
-	"github.com/lx-wnk/agent-dashboard/server/internal/channelconfig"
-	"github.com/lx-wnk/agent-dashboard/server/internal/db/ent"
-	"github.com/lx-wnk/agent-dashboard/server/internal/db/repo"
-	"github.com/lx-wnk/agent-dashboard/server/internal/envsec"
-	"github.com/lx-wnk/agent-dashboard/server/internal/mcp"
-	"github.com/lx-wnk/agent-dashboard/server/internal/mcpapps"
-	"github.com/lx-wnk/agent-dashboard/server/internal/pathutil"
-	"github.com/lx-wnk/agent-dashboard/server/internal/permissions"
-	"github.com/lx-wnk/agent-dashboard/server/internal/taskcontrol"
+	"github.com/lx-wnk/kontor/server/internal/capability"
+	"github.com/lx-wnk/kontor/server/internal/channelconfig"
+	"github.com/lx-wnk/kontor/server/internal/db/ent"
+	"github.com/lx-wnk/kontor/server/internal/db/repo"
+	"github.com/lx-wnk/kontor/server/internal/envsec"
+	"github.com/lx-wnk/kontor/server/internal/mcp"
+	"github.com/lx-wnk/kontor/server/internal/mcpapps"
+	"github.com/lx-wnk/kontor/server/internal/pathutil"
+	"github.com/lx-wnk/kontor/server/internal/permissions"
+	"github.com/lx-wnk/kontor/server/internal/taskcontrol"
 )
 
 var gitPushRE = regexp.MustCompile(`(?i)\bgit push\b`)

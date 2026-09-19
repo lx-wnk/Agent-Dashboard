@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lx-wnk/agent-dashboard/server/internal/hookscript"
+	"github.com/lx-wnk/kontor/server/internal/hookscript"
 )
 
 const testScript = "/opt/dash/dashboard-hooks/dashboard-permission.sh"

@@ -9,7 +9,7 @@ import (
 
 	"strings"
 
-	"github.com/lx-wnk/agent-dashboard/server/internal/hookscript"
+	"github.com/lx-wnk/kontor/server/internal/hookscript"
 	"github.com/spf13/cobra"
 )
 
