@@ -39,6 +39,9 @@ type Descriptor struct {
 	// namespaced by the module id, so one module's `search` cannot be mistaken
 	// for another's.
 	Tools []ToolDecl `json:"tools"`
+	// TaskKinds are kinds of work this module defines, each with its own
+	// sequence of stages. The core's sequence is untouched.
+	TaskKinds []TaskKindDecl `json:"taskKinds"`
 	// StageKinds are the kinds of pipeline stage this module can run. Core
 	// lifecycle states stay core's; a module adds a kind that plugs into them.
 	StageKinds []StageKindDecl `json:"stageKinds"`
@@ -51,6 +54,12 @@ type ToolDecl struct {
 	Name        string         `json:"name"`
 	Description string         `json:"description"`
 	InputSchema map[string]any `json:"inputSchema"`
+}
+
+// TaskKindDecl declares one kind of work and the stages it runs through.
+type TaskKindDecl struct {
+	Name   string   `json:"name"`
+	Stages []string `json:"stages"`
 }
 
 // StageKindDecl declares one kind of stage a module can run.

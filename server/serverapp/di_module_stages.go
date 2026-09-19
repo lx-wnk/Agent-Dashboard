@@ -113,6 +113,11 @@ func registerModuleStageKinds(orch *pipeline.PipelineOrchestrator, registry *plu
 	}
 	client := &http.Client{Timeout: moduleStageTimeout}
 	for _, entry := range registry.All() {
+		for _, kind := range entry.Descriptor.TaskKinds {
+			if err := pipeline.RegisterTaskKindSequence(kind.Name, kind.Stages); err != nil {
+				slog.Warn("module task kind refused", "module", entry.Descriptor.ID, "kind", kind.Name, "err", err)
+			}
+		}
 		for _, kind := range entry.Descriptor.StageKinds {
 			h := moduleStageHandler{kind: kind.Name, moduleID: entry.Descriptor.ID, registry: registry, client: client}
 			if err := orch.RegisterStageKind(kind.Name, h); err != nil {
