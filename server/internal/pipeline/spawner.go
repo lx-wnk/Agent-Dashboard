@@ -417,7 +417,7 @@ func buildSpawnArgsWithChannelConfig(opts SpawnAgentOptions, channelCfgPath stri
 }
 
 // allowedEnvPrefixes are env var prefixes always forwarded to spawned agents.
-var allowedEnvPrefixes = []string{"CLAUDE_", "DASHBOARD_"}
+var allowedEnvPrefixes = []string{"CLAUDE_", "DASHBOARD_", "KONTOR_"}
 
 // deniedEnvKeys are secrets that must never reach spawned agents even if they
 // match an allowedEnvPrefixes entry. Canonical set — see envsec.DeniedSecretEnvKeys.

@@ -832,6 +832,7 @@ func buildDashboardSecretEnv() map[string]bool {
 		m[k] = true
 	}
 	m["DASHBOARD_MCP_TOKEN"] = true
+	m["KONTOR_MCP_TOKEN"] = true
 	return m
 }
 

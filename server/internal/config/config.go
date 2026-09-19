@@ -61,8 +61,37 @@ func Defaults() Config {
 	}
 }
 
+// EnvPrefix is the prefix every configuration variable carries. legacyEnvPrefix
+// is the name it had before the project was renamed; it is still read so an
+// installation whose shell profile or .env file predates the rename keeps its
+// configuration.
+const (
+	EnvPrefix       = "KONTOR_"
+	legacyEnvPrefix = "DASHBOARD_"
+)
+
+// warnIfOnlyLegacyEnvPrefix says once, at boot, that the configuration came in
+// under the old prefix — the only signal an operator gets that a future release
+// dropping it will change their setup.
+func warnIfOnlyLegacyEnvPrefix() {
+	legacy, current := 0, 0
+	for _, kv := range os.Environ() {
+		switch {
+		case strings.HasPrefix(kv, EnvPrefix):
+			current++
+		case strings.HasPrefix(kv, legacyEnvPrefix):
+			legacy++
+		}
+	}
+	if legacy > 0 && current == 0 {
+		slog.Warn("configuration read from the old environment prefix",
+			"old", legacyEnvPrefix, "new", EnvPrefix, "variables", legacy)
+	}
+}
+
 // Load returns a Config merged from defaults → optional JSON file → env vars.
-// Env vars are prefixed with DASHBOARD_ and case-insensitive.
+// Env vars carry EnvPrefix and are case-insensitive; legacyEnvPrefix is still
+// accepted, see the loop below.
 func Load(cfgFile string) (Config, error) {
 	// Load a .env file from the working directory into the process environment
 	// so both `task dev` (air) and `./bin/agent-dashboard serve` pick it up — the
@@ -96,12 +125,21 @@ func Load(cfgFile string) (Config, error) {
 		}
 	}
 
-	// Env vars: DASHBOARD_HOST → host, DASHBOARD_JWT_SECRET → jwt_secret
-	if err := k.Load(env.Provider("DASHBOARD_", ".", func(s string) string {
-		return strings.ToLower(strings.TrimPrefix(s, "DASHBOARD_"))
-	}), nil); err != nil {
-		return Config{}, fmt.Errorf("config env: %w", err)
+	// Env vars: KONTOR_HOST → host, KONTOR_JWT_SECRET → jwt_secret.
+	//
+	// The old prefix is loaded first and the new one after it, so a value set
+	// under both wins under the new name. Reading the old prefix is not a
+	// courtesy: it lives in shell profiles and .env files this process cannot
+	// see, and dropping it would change an existing installation's configuration
+	// without anyone touching it.
+	for _, prefix := range []string{legacyEnvPrefix, EnvPrefix} {
+		if err := k.Load(env.Provider(prefix, ".", func(s string) string {
+			return strings.ToLower(strings.TrimPrefix(s, prefix))
+		}), nil); err != nil {
+			return Config{}, fmt.Errorf("config env %s: %w", prefix, err)
+		}
 	}
+	warnIfOnlyLegacyEnvPrefix()
 
 	if err := k.Unmarshal("", &cfg); err != nil {
 		return Config{}, fmt.Errorf("config unmarshal: %w", err)

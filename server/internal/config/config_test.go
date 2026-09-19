@@ -206,3 +206,18 @@ func TestRestartModeExitAccepted(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "exit", cfg.RestartMode)
 }
+
+// The rename keeps reading the old prefix: an installation's shell profile and
+// .env file carry DASHBOARD_* today, and a rename that stopped reading them
+// would change the configuration of every existing install silently.
+func TestLoad_PrefersKontorPrefixAndFallsBackToDashboard(t *testing.T) {
+	t.Setenv("DASHBOARD_PORT", "13500")
+	old, err := Load("")
+	require.NoError(t, err)
+	assert.Equal(t, 13500, old.Port, "the old prefix must still be read")
+
+	t.Setenv("KONTOR_PORT", "13600")
+	both, err := Load("")
+	require.NoError(t, err)
+	assert.Equal(t, 13600, both.Port, "the new prefix must win when both are set")
+}
