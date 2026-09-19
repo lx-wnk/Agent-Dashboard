@@ -643,6 +643,10 @@ func (r *Registry) HasDir() bool {
 	return r.dir != ""
 }
 
+// Dir is the directory the module was loaded from. Its own files — provider
+// descriptors, routine definitions — are resolved relative to it.
+func (e Entry) Dir() string { return e.pluginDir }
+
 // Healthy reports whether this entry's process is currently considered healthy.
 func (e Entry) Healthy() bool { return e.healthy }
 
@@ -667,6 +671,14 @@ func (r *Registry) InjectEntryForTest(d Descriptor, healthy bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.plugins = append(r.plugins, Entry{Descriptor: d, BaseURL: "http://" + d.Addr, healthy: healthy})
+}
+
+// InjectEntryWithDirForTest is InjectEntryForTest for a module whose own
+// directory matters — the files it ships are resolved relative to it.
+func (r *Registry) InjectEntryWithDirForTest(d Descriptor, dir string, healthy bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.plugins = append(r.plugins, Entry{Descriptor: d, BaseURL: "http://" + d.Addr, pluginDir: dir, healthy: healthy})
 }
 
 // NewHealthyEntryForTest builds a healthy Entry for tests in other packages.

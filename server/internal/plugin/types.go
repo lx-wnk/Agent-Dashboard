@@ -39,6 +39,9 @@ type Descriptor struct {
 	// namespaced by the module id, so one module's `search` cannot be mistaken
 	// for another's.
 	Tools []ToolDecl `json:"tools"`
+	// Providers are globs, relative to the module's directory, naming provider
+	// descriptors it ships.
+	Providers []string `json:"providers"`
 	// TaskKinds are kinds of work this module defines, each with its own
 	// sequence of stages. The core's sequence is untouched.
 	TaskKinds []TaskKindDecl `json:"taskKinds"`

@@ -538,6 +538,10 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		slog.Info("auth: no auth_provider plugin found — bypass-auth active for loopback")
 	}
 
+	// A module carries its provider descriptors with it, so they are loaded
+	// once the modules are.
+	registerModuleProviders(pluginRegistry, providerRegistry)
+
 	// A module's tools become grantable the moment the module is loaded: the
 	// catalogue is what the grants surface lists, so without a row nobody could
 	// allow the tool even though the gate is asked about it.
