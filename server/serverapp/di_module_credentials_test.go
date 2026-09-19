@@ -41,3 +41,28 @@ func TestModuleCredentials_IssueScopesAndRevoke(t *testing.T) {
 	_, err = keys.GetByHash(t.Context(), mcp.HashToken(second))
 	require.Error(t, err, "a revoked credential must not authenticate")
 }
+
+// Visibility is one query, not one authorization per tool: Gate.Authorize
+// books usage against a grant's rate limit, so asking it per listed tool would
+// spend on a tool list what exists to bound real calls.
+func TestModuleToolGate_VisibleReadsGrantsWithoutSpendingTheBudget(t *testing.T) {
+	bundle, err := db.Open(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+
+	grantRepo := repo.NewGrantRepo(bundle.Client)
+	gate := moduleToolGate{grants: grantRepo}
+
+	granted := "module:obsidian:search"
+	_, err = grantRepo.Create(t.Context(), repo.CreateGrantInput{
+		CapabilityName: granted,
+		Context:        repo.GrantContextFor("global", ""),
+		Mode:           "allow",
+		GrantedBy:      "test",
+	})
+	require.NoError(t, err)
+
+	visible := gate.Visible(t.Context(), []string{granted, "module:obsidian:write"})
+	assert.True(t, visible[granted], "a granted tool is visible")
+	assert.False(t, visible["module:obsidian:write"], "an ungranted tool is not")
+}

@@ -4,12 +4,33 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/lx-wnk/kontor/server/internal/mcp"
 )
+
+// stubGate allows exactly the capabilities it was given.
+type stubGate struct{ allowed map[string]bool }
+
+func (g stubGate) Visible(_ context.Context, names []string) map[string]bool {
+	out := make(map[string]bool, len(names))
+	for _, n := range names {
+		out[n] = g.allowed[n]
+	}
+	return out
+}
+
+func (g stubGate) Authorize(_ context.Context, name string) error {
+	if g.allowed[name] {
+		return nil
+	}
+	return errNotGranted
+}
+
+var errNotGranted = errors.New("no grant")
 
 type stubModuleTools struct {
 	tools  []mcp.ModuleTool
@@ -23,21 +44,14 @@ func (s *stubModuleTools) Call(_ context.Context, moduleID, tool string, _ map[s
 	return "from the module", nil
 }
 
-// rpc calls the handler as a caller holding the given scopes.
-func rpc(t *testing.T, h http.HandlerFunc, method string, params any, scopes ...string) map[string]any {
+func rpc(t *testing.T, h http.HandlerFunc, method string, params any) map[string]any {
 	t.Helper()
 	body, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	granted := make(map[string]bool, len(scopes))
-	for _, s := range scopes {
-		granted[s] = true
-	}
-	req := httptest.NewRequest(http.MethodPost, "/api/mcp", bytes.NewReader(body))
-	req = req.WithContext(mcp.ContextWithAuth(req.Context(), &mcp.MCPAuthInfo{KeyID: "k", Scopes: granted}))
 	rr := httptest.NewRecorder()
-	h(rr, req)
+	h(rr, httptest.NewRequest(http.MethodPost, "/api/mcp", bytes.NewReader(body)))
 	var out map[string]any
 	if err := json.Unmarshal(rr.Body.Bytes(), &out); err != nil {
 		t.Fatalf("unmarshal %q: %v", rr.Body.String(), err)
@@ -65,24 +79,24 @@ func TestMCPHandler_ListsModuleToolsUnderTheirNamespace(t *testing.T) {
 	src := &stubModuleTools{tools: []mcp.ModuleTool{
 		{ModuleID: "obsidian", Name: "search", Description: "search the vault"},
 	}}
-	h := mcp.MCPHandler(mcp.ToolRegistry{}, src)
+	h := mcp.MCPHandler(mcp.ToolRegistry{}, src, stubGate{allowed: map[string]bool{"module:obsidian:search": true}})
 
-	names := toolNames(t, rpc(t, h, "tools/list", map[string]any{}, "module:obsidian:search"))
+	names := toolNames(t, rpc(t, h, "tools/list", map[string]any{}))
 	if len(names) != 1 || names[0] != "obsidian__search" {
 		t.Fatalf("tools = %v, want the namespaced module tool", names)
 	}
 
 	src.tools = nil
-	if names := toolNames(t, rpc(t, h, "tools/list", map[string]any{}, "module:obsidian:search")); len(names) != 0 {
+	if names := toolNames(t, rpc(t, h, "tools/list", map[string]any{})); len(names) != 0 {
 		t.Fatalf("tools = %v, want none once the module is gone", names)
 	}
 }
 
 func TestMCPHandler_RoutesAModuleToolCall(t *testing.T) {
 	src := &stubModuleTools{tools: []mcp.ModuleTool{{ModuleID: "obsidian", Name: "search"}}}
-	h := mcp.MCPHandler(mcp.ToolRegistry{}, src)
+	h := mcp.MCPHandler(mcp.ToolRegistry{}, src, stubGate{allowed: map[string]bool{"module:obsidian:search": true}})
 
-	resp := rpc(t, h, "tools/call", map[string]any{"name": "obsidian__search", "arguments": map[string]any{"q": "x"}}, "module:obsidian:search")
+	resp := rpc(t, h, "tools/call", map[string]any{"name": "obsidian__search", "arguments": map[string]any{"q": "x"}})
 	if resp["error"] != nil {
 		t.Fatalf("call returned an error: %v", resp["error"])
 	}
@@ -94,7 +108,7 @@ func TestMCPHandler_RoutesAModuleToolCall(t *testing.T) {
 // A qualified name whose module is not listed must read as an unknown tool,
 // not as a call attempted against nothing.
 func TestMCPHandler_UnknownModuleToolIsNotFound(t *testing.T) {
-	h := mcp.MCPHandler(mcp.ToolRegistry{}, &stubModuleTools{})
+	h := mcp.MCPHandler(mcp.ToolRegistry{}, &stubModuleTools{}, stubGate{})
 	resp := rpc(t, h, "tools/call", map[string]any{"name": "gone__search"})
 	if resp["error"] == nil {
 		t.Fatal("a tool nobody offers must be reported as not found")
@@ -106,13 +120,13 @@ func TestMCPHandler_UnknownModuleToolIsNotFound(t *testing.T) {
 // coarse permission this avoids.
 func TestMCPHandler_ModuleToolIsDeniedWithoutItsOwnScope(t *testing.T) {
 	src := &stubModuleTools{tools: []mcp.ModuleTool{{ModuleID: "obsidian", Name: "write"}}}
-	h := mcp.MCPHandler(mcp.ToolRegistry{}, src)
+	h := mcp.MCPHandler(mcp.ToolRegistry{}, src, stubGate{allowed: map[string]bool{"module:obsidian:search": true}})
 
-	if names := toolNames(t, rpc(t, h, "tools/list", map[string]any{}, "module:obsidian:search")); len(names) != 0 {
+	if names := toolNames(t, rpc(t, h, "tools/list", map[string]any{})); len(names) != 0 {
 		t.Errorf("tools = %v, want none: the caller may search, not write", names)
 	}
 
-	resp := rpc(t, h, "tools/call", map[string]any{"name": "obsidian__write"}, "module:obsidian:search")
+	resp := rpc(t, h, "tools/call", map[string]any{"name": "obsidian__write"})
 	if resp["error"] == nil {
 		t.Fatal("calling an ungranted module tool must be refused")
 	}

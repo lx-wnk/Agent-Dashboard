@@ -35,7 +35,7 @@ type rpcError struct {
 // It handles: initialize, tools/list, tools/call.
 // modules may be nil: a server built without a module source serves exactly the
 // core tools.
-func MCPHandler(registry ToolRegistry, modules ModuleTools) http.HandlerFunc {
+func MCPHandler(registry ToolRegistry, modules ModuleTools, moduleGate ModuleToolAuthorizer) http.HandlerFunc {
 	coreTools := buildToolsList(registry)
 	return func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB
@@ -66,11 +66,12 @@ func MCPHandler(registry ToolRegistry, modules ModuleTools) http.HandlerFunc {
 			// and then failing when called.
 			tools := coreTools
 			if modules != nil {
-				auth := AuthFromContext(r.Context())
-				for _, t := range modules.List(r.Context()) {
+				offered := modules.List(r.Context())
+				visible := moduleToolVisibility(r.Context(), moduleGate, offered)
+				for _, t := range offered {
 					// Listed only when the caller may call it: a tool an agent
 					// can see but never use is an invitation to keep trying.
-					if auth == nil || !auth.Scopes[ModuleToolScope(t.ModuleID, t.Name)] {
+					if !visible[ModuleToolScope(t.ModuleID, t.Name)] {
 						continue
 					}
 					tools = append(tools, map[string]any{
@@ -94,7 +95,7 @@ func MCPHandler(registry ToolRegistry, modules ModuleTools) http.HandlerFunc {
 			if modules != nil {
 				if moduleID, tool, isQualified := SplitQualifiedName(p.Name); isQualified {
 					if _, known := registry[p.Name]; !known {
-						handleModuleToolCall(w, r, req.ID, modules, moduleID, tool, p.Arguments)
+						handleModuleToolCall(w, r, req.ID, modules, moduleGate, moduleID, tool, p.Arguments)
 						return
 					}
 				}
@@ -171,7 +172,7 @@ func buildToolsList(registry ToolRegistry) []map[string]any {
 // The module is looked up in the live list rather than trusted from the name:
 // a call naming a module that is not currently offering the tool is an unknown
 // tool, which is what an agent can act on, not a failed round trip.
-func handleModuleToolCall(w http.ResponseWriter, r *http.Request, id any, modules ModuleTools, moduleID, tool string, args map[string]any) {
+func handleModuleToolCall(w http.ResponseWriter, r *http.Request, id any, modules ModuleTools, moduleGate ModuleToolAuthorizer, moduleID, tool string, args map[string]any) {
 	offered := false
 	for _, t := range modules.List(r.Context()) {
 		if t.ModuleID == moduleID && t.Name == tool {
@@ -183,9 +184,15 @@ func handleModuleToolCall(w http.ResponseWriter, r *http.Request, id any, module
 		writeRPC(w, rpcResponse{JSONRPC: "2.0", ID: id, Error: &rpcError{Code: -32601, Message: "tool not found: " + moduleID + NamespaceSeparator + tool}})
 		return
 	}
-	scope := ModuleToolScope(moduleID, tool)
-	if auth := AuthFromContext(r.Context()); auth == nil || !auth.Scopes[scope] {
-		writeRPC(w, rpcResponse{JSONRPC: "2.0", ID: id, Error: &rpcError{Code: -32003, Message: "Insufficient scope: requires " + scope}})
+	capName := ModuleToolScope(moduleID, tool)
+	// Fail closed: a handler built without an authorizer refuses every module
+	// tool rather than serving them ungoverned.
+	if moduleGate == nil {
+		writeRPC(w, rpcResponse{JSONRPC: "2.0", ID: id, Error: &rpcError{Code: -32003, Message: "not permitted: " + capName}})
+		return
+	}
+	if err := moduleGate.Authorize(r.Context(), capName); err != nil {
+		writeRPC(w, rpcResponse{JSONRPC: "2.0", ID: id, Error: &rpcError{Code: -32003, Message: "not permitted: " + capName + ": " + err.Error()}})
 		return
 	}
 	out, err := modules.Call(r.Context(), moduleID, tool, args)
@@ -199,4 +206,17 @@ func handleModuleToolCall(w http.ResponseWriter, r *http.Request, id any, module
 	writeRPC(w, rpcResponse{JSONRPC: "2.0", ID: id, Result: map[string]any{
 		"content": []map[string]any{{"type": "text", "text": out}},
 	}})
+}
+
+// moduleToolVisibility asks once for every offered tool. Nil authorizer means
+// nothing is visible, the same refusal the call path makes.
+func moduleToolVisibility(ctx context.Context, gate ModuleToolAuthorizer, offered []ModuleTool) map[string]bool {
+	if gate == nil || len(offered) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(offered))
+	for _, t := range offered {
+		names = append(names, ModuleToolScope(t.ModuleID, t.Name))
+	}
+	return gate.Visible(ctx, names)
 }

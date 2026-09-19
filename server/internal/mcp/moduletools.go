@@ -40,6 +40,18 @@ func ModuleToolScope(moduleID, tool string) string {
 	return "module:" + moduleID + ":" + tool
 }
 
+// ModuleToolAuthorizer decides which module tools a caller may see and use.
+// Listing and calling are separate questions on purpose: listing happens on
+// every tools/list and must not spend the budget that bounds real calls, while
+// a call is the moment a decision is actually being made and may record usage
+// or ask a human.
+type ModuleToolAuthorizer interface {
+	// Visible answers for many capabilities at once and records nothing.
+	Visible(ctx context.Context, capabilities []string) map[string]bool
+	// Authorize is the check before the call itself.
+	Authorize(ctx context.Context, capability string) error
+}
+
 // ModuleTools supplies the tools modules contribute. It is consulted per
 // request rather than built once, because a module can start, stop or become
 // unhealthy while the server runs: a tool list that outlives the module behind

@@ -529,6 +529,13 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		slog.Info("auth: no auth_provider plugin found — bypass-auth active for loopback")
 	}
 
+	// A module's tools become grantable the moment the module is loaded: the
+	// catalogue is what the grants surface lists, so without a row nobody could
+	// allow the tool even though the gate is asked about it.
+	if entClient != nil {
+		registerModuleToolCapabilities(ctx, pluginRegistry, repo.NewCapabilityRepo(entClient))
+	}
+
 	// SP1 plugin lifecycle: DB-backed plugin state, per-plugin settings (secret
 	// fields encrypted at rest), lifecycle transitions, and on-disk discovery.
 	// Constructed only with a database — the handler stays nil otherwise.

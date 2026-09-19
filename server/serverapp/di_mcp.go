@@ -165,5 +165,17 @@ func provideMCPHandler(
 			Asker:        memAsker,
 		},
 	})
-	return mcp.MCPHandler(registry, modules)
+	// The same gate the memory and application tools are checked against, so a
+	// module tool is one more grantable capability rather than a second
+	// permission system.
+	moduleGate := moduleToolGate{
+		gate: memory.Gate{
+			Capabilities: repo.NewCapabilityRepo(client),
+			Grants:       repo.NewGrantRepo(client),
+			GrantUsage:   grantUsageRepo,
+			Asker:        memAsker,
+		},
+		grants: repo.NewGrantRepo(client),
+	}
+	return mcp.MCPHandler(registry, modules, moduleGate)
 }
