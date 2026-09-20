@@ -542,6 +542,12 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	// once the modules are.
 	registerModuleProviders(pluginRegistry, providerRegistry)
 
+	// Routines a module ships are created once, owned by it, and disabled
+	// until the operator points them at a directory.
+	if entClient != nil {
+		registerModuleRoutines(ctx, pluginRegistry, repo.NewTaskScheduleRepo(entClient))
+	}
+
 	// A module's tools become grantable the moment the module is loaded: the
 	// catalogue is what the grants surface lists, so without a row nobody could
 	// allow the tool even though the gate is asked about it.
