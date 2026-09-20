@@ -538,6 +538,17 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		slog.Info("auth: no auth_provider plugin found — bypass-auth active for loopback")
 	}
 
+	// The rename left this installation's own entries in the claude CLI's
+	// config under their old names. They are renamed in place, not removed:
+	// the entry carries the credential the operator registered, and deleting
+	// it would leave them with nothing registered at all. Only entries that
+	// still point at this application are touched.
+	if moved, err := claudeconfig.MigrateLegacyEntries(); err != nil {
+		slog.Warn("pre-rename MCP entries not migrated", "err", err)
+	} else if len(moved) > 0 {
+		slog.Info("pre-rename MCP entries renamed in place", "entries", moved)
+	}
+
 	// A module carries its provider descriptors with it, so they are loaded
 	// once the modules are.
 	registerModuleProviders(pluginRegistry, providerRegistry)
