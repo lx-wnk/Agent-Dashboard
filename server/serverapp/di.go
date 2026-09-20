@@ -566,6 +566,10 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		if home, err := os.UserHomeDir(); err == nil {
 			lifecycleEngine.SetDataRoot(filepath.Join(home, ".claude", "kontor", "modules"))
 		}
+		// Deactivating a module takes its routines out of service; they are
+		// disabled rather than deleted, so what they already produced stays
+		// traceable.
+		lifecycleEngine.SetRoutineRetirer(repo.NewTaskScheduleRepo(entClient))
 		discoverer := plugin.NewDiscoverer(cfg.PluginDir, pluginDiscoverRepoAdapter{inner: pluginRepo, settings: pluginSettingRepo})
 		lifecycleProbe := func(id string) (bool, bool) {
 			e, ok := pluginRegistry.Lookup(id)

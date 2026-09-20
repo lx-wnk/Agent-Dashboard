@@ -66,10 +66,43 @@ type Engine struct {
 	hooks    HookCaller
 	settings SettingsClearer
 	proc     ProcessManager
+	// routines retires the routines a module owns when it is taken out of
+	// service. Nil means a module's routines outlive it, which is why it is
+	// wired wherever schedules exist.
+	routines RoutineRetirer
 	// dataRoot is where module data directories live. Empty means uninstall
 	// leaves nothing to archive, which is the case for an engine built without
 	// one.
 	dataRoot string
+}
+
+// RoutineRetirer takes a module's own routines out of service. It is the
+// engine's only view of schedules: a module's routines are disabled, never
+// deleted, so a routine that already produced work leaves that work traceable.
+type RoutineRetirer interface {
+	DisableForModule(ctx context.Context, moduleID string) (int, error)
+}
+
+// SetRoutineRetirer wires the retirer used when a module is deactivated or
+// uninstalled.
+func (e *Engine) SetRoutineRetirer(r RoutineRetirer) { e.routines = r }
+
+// retireRoutines disables the routines the module owns. A failure is reported
+// and does not block the transition: a module that cannot be deactivated
+// because its routines could not be disabled would be worse than a routine
+// that is disabled a moment later by hand.
+func (e *Engine) retireRoutines(ctx context.Context, id string) {
+	if e.routines == nil {
+		return
+	}
+	n, err := e.routines.DisableForModule(ctx, id)
+	if err != nil {
+		slog.Warn("module routines not disabled", "id", id, "err", err)
+		return
+	}
+	if n > 0 {
+		slog.Info("module routines disabled", "id", id, "count", n)
+	}
 }
 
 // SetDataRoot tells the engine where module data lives, so uninstalling can
@@ -168,6 +201,9 @@ func (e *Engine) Deactivate(ctx context.Context, d Descriptor) error {
 	if err := e.repo.SetActive(ctx, d.ID, false); err != nil {
 		return err
 	}
+	// A deactivated module must stop causing work: its routines would
+	// otherwise keep firing into a module that is no longer running.
+	e.retireRoutines(ctx, d.ID)
 	return e.stop(ctx, d.ID)
 }
 

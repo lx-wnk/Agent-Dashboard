@@ -42,6 +42,10 @@ type Descriptor struct {
 	// Providers are globs, relative to the module's directory, naming provider
 	// descriptors it ships.
 	Providers []string `json:"providers"`
+	// Routines are globs naming routine definitions the module brings. They are
+	// created once, owned by the module, and taken out of service when it is
+	// removed — never deleted, because what they produced is the operator's.
+	Routines []string `json:"routines"`
 	// TaskKinds are kinds of work this module defines, each with its own
 	// sequence of stages. The core's sequence is untouched.
 	TaskKinds []TaskKindDecl `json:"taskKinds"`
