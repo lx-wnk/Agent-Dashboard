@@ -13,10 +13,36 @@ let loading: Promise<void> | null = null
 // Saves run one after another, so an older layout can never land after a newer one.
 let saving: Promise<void> = Promise.resolve()
 
+const MAX_429_RETRIES = 3
+const DEFAULT_RETRY_AFTER_MS = 1000
+const MAX_RETRY_AFTER_MS = 5000
+
+function retryDelayMs(res: Response): number {
+  const seconds = Number.parseInt(res.headers.get('Retry-After') ?? '', 10)
+  const ms = Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : DEFAULT_RETRY_AFTER_MS
+  return Math.min(ms, MAX_RETRY_AFTER_MS)
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+// The dashboard's own boot burst can exhaust the shared per-IP rate limiter
+// (server/internal/api/middleware.go); a 429 here is transient load, not a
+// real failure, so it gets a few retries before the workspace locks.
+async function fetchSettings(): Promise<Response> {
+  let res = await fetch('/api/settings')
+  for (let attempt = 0; attempt < MAX_429_RETRIES && res.status === 429; attempt++) {
+    await sleep(retryDelayMs(res))
+    res = await fetch('/api/settings')
+  }
+  return res
+}
+
 async function load(): Promise<void> {
   loading ??= (async () => {
     try {
-      const res = await fetch('/api/settings')
+      const res = await fetchSettings()
       if (!res.ok)
         throw new Error(`HTTP ${res.status}`)
       const items = await res.json() as Array<{ key: string, value: string }>

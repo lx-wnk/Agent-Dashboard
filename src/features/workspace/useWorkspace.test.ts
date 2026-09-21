@@ -70,4 +70,41 @@ describe('useWorkspace', () => {
     expect(ws.layout.value).toEqual(DEFAULT_LAYOUT)
     expect(ws.locked.value).toMatch(/could not be loaded/i)
   })
+
+  it('retries a 429 with Retry-After and shows the stored layout once it succeeds', async () => {
+    vi.useFakeTimers()
+    const stored = { ...DEFAULT_LAYOUT, pages: [{ ...DEFAULT_LAYOUT.pages[0], tiles: [] }] }
+    const fetch = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('', { status: 429, headers: { 'Retry-After': '1' } }))
+      .mockResolvedValueOnce(settingsResponse(serializeLayout(stored)))
+    const ws = await fresh()
+    const loadPromise = ws.load()
+    await vi.advanceTimersByTimeAsync(1000)
+    await loadPromise
+    expect(fetch).toHaveBeenCalledTimes(2)
+    expect(ws.layout.value).toEqual(stored)
+    expect(ws.locked.value).toBeNull()
+    vi.useRealTimers()
+  })
+
+  it('locks editing after a 4th consecutive 429', async () => {
+    vi.useFakeTimers()
+    const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('', { status: 429 }))
+    const ws = await fresh()
+    const loadPromise = ws.load()
+    await vi.advanceTimersByTimeAsync(3000)
+    await loadPromise
+    expect(fetch).toHaveBeenCalledTimes(4)
+    expect(ws.layout.value).toEqual(DEFAULT_LAYOUT)
+    expect(ws.locked.value).toMatch(/could not be loaded/i)
+    vi.useRealTimers()
+  })
+
+  it('does not retry a 500', async () => {
+    const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('', { status: 500 }))
+    const ws = await fresh()
+    await ws.load()
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(ws.locked.value).toMatch(/could not be loaded/i)
+  })
 })

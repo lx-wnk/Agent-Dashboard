@@ -19,15 +19,6 @@ test('the Zentrale is the default page with the nine widgets', async ({ page }) 
 })
 
 test('a moved tile stays moved after a reload', async ({ page }) => {
-  // useWorkspace's load() does a plain `fetch('/api/settings')` with no
-  // cache-busting; GET /api/settings sends no Cache-Control/ETag either
-  // (verified with curl: a PATCH is visible to a fresh GET instantly and
-  // consistently), so this is a browser HTTP-cache hazard, not a server
-  // race — disable the cache for this page the way DevTools' "Disable
-  // cache" checkbox does, matching what a hard reload guarantees.
-  const cdp = await page.context().newCDPSession(page)
-  await cdp.send('Network.setCacheDisabled', { cacheDisabled: true })
-
   await page.goto('/', { waitUntil: 'domcontentloaded' })
   await page.getByTestId('workspace-edit-toggle').click()
   await page.getByTestId('workspace-tile-cost-today').focus()
@@ -64,11 +55,6 @@ test('"/" opens the Kontor tile and Escape closes it', async ({ page }) => {
 // order above the tile's own pointer-events:none overlay — can only be
 // exercised by a real browser drag.
 test('a pointer drag on the resize handle resizes the cost-today tile and the new size persists', async ({ page }) => {
-  // See the comment on the "moved tile" test above: disables the browser
-  // HTTP cache so the reload below cannot serve a stale /api/settings.
-  const cdp = await page.context().newCDPSession(page)
-  await cdp.send('Network.setCacheDisabled', { cacheDisabled: true })
-
   await page.goto('/', { waitUntil: 'domcontentloaded' })
   await page.getByTestId('workspace-edit-toggle').click()
 
