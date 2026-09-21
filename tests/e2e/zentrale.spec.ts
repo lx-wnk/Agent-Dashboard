@@ -22,8 +22,18 @@ test('a moved tile stays moved after a reload', async ({ page }) => {
   await page.goto('/', { waitUntil: 'domcontentloaded' })
   await page.getByTestId('workspace-edit-toggle').click()
   await page.getByTestId('workspace-tile-cost-today').focus()
+  // Each keypress saves through a fire-and-forget fetch (useWorkspace's
+  // `write`, chained one save after the other), so reloading right after can
+  // race an in-flight PATCH and revert to the still-unsaved value (observed
+  // flaky) — wait for each save in turn before the next input or the reload.
+  const patched = () => page.waitForResponse(resp =>
+    resp.url().includes('/api/settings/workspace.layout') && resp.request().method() === 'PATCH')
+  const firstSaved = patched()
   await page.keyboard.press('Shift+ArrowUp') // 3×3 → 3×2 frees row 12
+  await firstSaved
+  const secondSaved = patched()
   await page.keyboard.press('ArrowDown')
+  await secondSaved
   await page.getByTestId('workspace-edit-toggle').click()
   await page.reload({ waitUntil: 'domcontentloaded' })
   await expect(page.getByTestId('workspace-tile-cost-today')).toHaveAttribute('style', /--row: 11/)
@@ -62,26 +72,39 @@ test('a pointer drag on the resize handle resizes the cost-today tile and the ne
   // Default layout: cost-today spans rows 10-12 of 12 — the page's last row.
   // cellAt() (gridGeometry.ts) maps a pointer position to a row via
   // floor((y - top) / (rowHeight + gap)) + 1, so moving the pointer down by
-  // one row's pitch from anywhere inside row 12's band lands inside row 13's
-  // band — one row past the grid, which growing the grid allows. Landing
-  // exactly on that boundary is a coin flip against floating-point rounding
-  // (observed flaky), so the target overshoots to the middle of row 13's
-  // band instead of its top edge.
-  const rows = 12
-  const gap = 12
-  const rowPitch = (grid.height + gap) / rows
+  // roughly one row's pitch from row 12's band reaches row 13 — one row past
+  // the grid, which growing the grid allows. Rather than trust one blind
+  // pixel offset (observed flaky against sub-pixel layout variance), the drag
+  // watches the live ghost preview (workspace-ghost carries the same
+  // --row-span the app renders) and stops the moment it shows the target
+  // size — the same feedback a real user watches while dragging.
+  const rowPitch = (grid.height + 12) / 12
   const x = handle.x + handle.width / 2
   const startY = handle.y + handle.height / 2
-  const targetY = startY + rowPitch * 1.5
+  const ghost = page.getByTestId('workspace-ghost')
+
+  // The resize saves through a fire-and-forget fetch (useWorkspace's `write`),
+  // so the drop and its PATCH are two different moments — reloading before the
+  // request lands reverts to the still-unsaved server value (observed flaky:
+  // the ghost proves the drag itself always lands correctly, but the reload
+  // assertion below does not). Arm the wait before the drop that triggers it.
+  const saved = page.waitForResponse(resp =>
+    resp.url().includes('/api/settings/workspace.layout') && resp.request().method() === 'PATCH')
 
   await page.mouse.move(x, startY)
   await page.mouse.down()
-  const steps = 5
-  for (let i = 1; i <= steps; i++)
-    await page.mouse.move(x, startY + ((targetY - startY) * i) / steps)
+  let reachedTarget = false
+  for (let i = 1; i <= 20 && !reachedTarget; i++) {
+    await page.mouse.move(x, startY + i * (rowPitch / 4))
+    const style = await ghost.getAttribute('style')
+    reachedTarget = !!style && /--row-span: 4\b/.test(style)
+  }
   await page.mouse.up()
+  if (!reachedTarget)
+    throw new Error('drag never reached a 4-row ghost preview')
 
   await expect(page.getByTestId('workspace-tile-cost-today')).toHaveAttribute('style', /--row-span: 4\b/)
+  await saved
 
   await page.getByTestId('workspace-edit-toggle').click()
   await page.reload({ waitUntil: 'domcontentloaded' })
