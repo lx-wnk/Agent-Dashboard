@@ -32,14 +32,18 @@ func (f *fakeStageRunRepo) Update(_ context.Context, _ string, in repo.UpdateSta
 }
 
 // fakeApiKeyRepo implements repo.ApiKeyRepo; GetByHash returns a valid key or error.
+// A zero-value kind (the unset default in tests that only set `valid`) must behave
+// like repo.ApiKeyKindUser, matching the ent schema/Create default.
 type fakeApiKeyRepo struct {
 	repo.ApiKeyRepo
-	valid bool
+	valid      bool
+	kind       string
+	stageRunID string
 }
 
 func (f *fakeApiKeyRepo) GetByHash(_ context.Context, _ string) (*ent.ApiKey, error) {
 	if f.valid {
-		return &ent.ApiKey{}, nil
+		return &ent.ApiKey{Kind: f.kind, StageRunID: f.stageRunID}, nil
 	}
 	return nil, errors.New("invalid token")
 }
@@ -75,6 +79,61 @@ func TestChannelStageOutput_ValidImplementation_Persists(t *testing.T) {
 	}
 	if fake.capturedInput.Output["summary"] != "did it" {
 		t.Errorf("unexpected output: %v", fake.capturedInput.Output)
+	}
+}
+
+// TestChannelStageOutput_KeyScoping pins the fix for a stage-run key that
+// could submit output for ANY stage run, not just its own: only the matching
+// stage_run key, or an operator (user) key, may write.
+func TestChannelStageOutput_KeyScoping(t *testing.T) {
+	tests := []struct {
+		name       string
+		kind       string
+		stageRunID string
+		wantStatus int
+	}{
+		{"stage_run key for its own run", repo.ApiKeyKindStageRun, "run-1", http.StatusOK},
+		{"stage_run key for another run", repo.ApiKeyKindStageRun, "run-2", http.StatusForbidden},
+		{"user key", repo.ApiKeyKindUser, "", http.StatusOK},
+		{"legacy empty kind behaves like a user key", "", "", http.StatusOK},
+		{"kontor_session key", repo.ApiKeyKindKontorSession, "", http.StatusForbidden},
+		{"module key", repo.ApiKeyKindModule, "", http.StatusForbidden},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fake := &fakeStageRunRepo{
+				run: &ent.StageRun{ID: "run-1", Stage: "implementation", Status: "running"},
+			}
+			fakeKeys := &fakeApiKeyRepo{valid: true, kind: tt.kind, stageRunID: tt.stageRunID}
+
+			h := agents.NewChannelStageOutputHandler(fake, fakeKeys, nil)
+
+			body, _ := json.Marshal(map[string]any{
+				"stageRunId": "run-1",
+				"output": map[string]any{
+					"summary":   "did it",
+					"commits":   []any{"abc"},
+					"openItems": []any{},
+				},
+			})
+			req := httptest.NewRequest(http.MethodPost, "/api/channel-stage-output", bytes.NewReader(body))
+			req.Header.Set("Authorization", "Bearer some-token")
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+
+			h.Post(w, req)
+
+			if w.Code != tt.wantStatus {
+				t.Fatalf("expected %d, got %d: %s", tt.wantStatus, w.Code, w.Body.String())
+			}
+			if tt.wantStatus == http.StatusOK && fake.capturedInput == nil {
+				t.Error("Update should have been called")
+			}
+			if tt.wantStatus != http.StatusOK && fake.capturedInput != nil {
+				t.Error("Update should not have been called")
+			}
+		})
 	}
 }
 

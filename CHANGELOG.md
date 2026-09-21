@@ -12,6 +12,10 @@ from [Conventional Commits](https://www.conventionalcommits.org/) by GoReleaser.
 
 Preparing the first public release.
 
+### Security
+
+- Stage output submitted over the channel is accepted only from the stage run's own key or an operator key.
+
 ### Changed
 
 - The project is called **Kontor**. The binary is `kontor`, the Homebrew cask is
