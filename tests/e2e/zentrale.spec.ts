@@ -26,8 +26,11 @@ test('a moved tile stays moved after a reload', async ({ page }) => {
   // `write`, chained one save after the other), so reloading right after can
   // race an in-flight PATCH and revert to the still-unsaved value (observed
   // flaky) — wait for each save in turn before the next input or the reload.
+  // The client itself retries a 429 (useWorkspace's fetchWithRateLimitRetry), so
+  // an in-between 429 is not the save's outcome — skip it and wait for the
+  // response that actually settles the request.
   const patched = () => page.waitForResponse(resp =>
-    resp.url().includes('/api/settings/workspace.layout') && resp.request().method() === 'PATCH')
+    resp.url().includes('/api/settings/workspace.layout') && resp.request().method() === 'PATCH' && resp.status() !== 429)
   const firstSaved = patched()
   await page.keyboard.press('Shift+ArrowUp') // 3×3 → 3×2 frees row 12
   expect((await firstSaved).ok(), 'first save (resize) request').toBe(true)
