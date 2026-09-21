@@ -18,7 +18,7 @@ defineEmits<{
       v-if="canInstall"
       type="button"
       data-testid="footer-install"
-      class="flex items-center gap-3 w-full rounded-lg px-2.5 min-h-[36px] text-[12px] text-fg-mute hover:text-fg hover:bg-raised transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+      class="flex items-center gap-3 w-full overflow-hidden rounded-lg px-2.5 min-h-[36px] text-[12px] text-fg-mute hover:text-fg hover:bg-raised transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
       :title="!expanded ? 'Install PWA' : undefined"
       @click="$emit('install')"
     >
@@ -36,7 +36,7 @@ defineEmits<{
       <button
         type="button"
         data-testid="footer-sessions"
-        class="flex items-center gap-3 w-full rounded-lg px-2.5 min-h-[36px] text-[12px] text-fg-mute hover:text-fg hover:bg-raised transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+        class="flex items-center gap-3 w-full overflow-hidden rounded-lg px-2.5 min-h-[36px] text-[12px] text-fg-mute hover:text-fg hover:bg-raised transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
         :title="!expanded ? 'Sessions' : undefined"
         @click="$emit('openSessions')"
       >
@@ -49,7 +49,7 @@ defineEmits<{
       <button
         type="button"
         data-testid="footer-settings"
-        class="w-full flex items-center justify-center rounded-lg px-2 min-h-[36px] min-w-[36px] text-[14px] text-fg-mute hover:text-fg hover:bg-raised transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+        class="w-full flex items-center justify-center rounded-lg px-2 min-h-[36px] text-[14px] text-fg-mute hover:text-fg hover:bg-raised transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
         aria-label="Settings"
         @click="$emit('openSettings')"
       >
@@ -58,7 +58,7 @@ defineEmits<{
       <button
         type="button"
         data-testid="footer-theme"
-        class="w-full flex items-center justify-center rounded-lg px-2 min-h-[36px] min-w-[36px] text-[14px] text-fg-mute hover:text-fg hover:bg-raised transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+        class="w-full flex items-center justify-center rounded-lg px-2 min-h-[36px] text-[14px] text-fg-mute hover:text-fg hover:bg-raised transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
         :aria-label="theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'"
         @click="$emit('toggleTheme')"
       >

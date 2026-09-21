@@ -104,4 +104,16 @@ test.describe('sidebar hover expansion', () => {
     assertStable(sample, expandedBaseline)
     expect(Math.min(...sample.navWidths)).toBeLessThanOrEqual(57)
   })
+
+  test('collapsed nav cannot scroll sideways — the always-rendered labels clip inside their buttons instead of widening the scroll containers', async ({ page }: { page: Page }) => {
+    const overflow = await page.evaluate(() => {
+      const readOverflow = (el: HTMLElement) => ({ scrollWidth: el.scrollWidth, clientWidth: el.clientWidth })
+      const navItems = document.querySelector('[data-testid="nav-items"]') as HTMLElement
+      const footerActions = document.querySelector('[data-testid="footer-actions"]') as HTMLElement
+      return { navItems: readOverflow(navItems), footerActions: readOverflow(footerActions) }
+    })
+
+    expect(overflow.navItems.scrollWidth).toBeLessThanOrEqual(overflow.navItems.clientWidth)
+    expect(overflow.footerActions.scrollWidth).toBeLessThanOrEqual(overflow.footerActions.clientWidth)
+  })
 })

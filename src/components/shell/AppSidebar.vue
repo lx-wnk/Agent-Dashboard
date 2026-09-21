@@ -104,7 +104,7 @@ function selectView(view: ActiveView): void {
         </button>
       </div>
 
-      <div class="flex-1 flex flex-col gap-0.5 overflow-y-auto">
+      <div class="flex-1 flex flex-col gap-0.5 overflow-y-auto overflow-x-hidden" data-testid="nav-items">
         <div
           v-for="(g, gi) in grouped"
           :key="g.group"
@@ -117,7 +117,7 @@ function selectView(view: ActiveView): void {
                you aimed at an icon and clicked whatever slid under the cursor. -->
           <div
             data-testid="nav-group-slot"
-            class="relative h-7 shrink-0"
+            class="relative h-7 shrink-0 overflow-hidden"
           >
             <span
               class="absolute inset-0 flex items-center px-2 text-[9px] uppercase tracking-wider text-fg-faint font-bold whitespace-nowrap transition-opacity duration-150 motion-reduce:transition-none"
