@@ -117,8 +117,14 @@ export function addTile(page: WorkspacePage, widget: string): OpResult<Workspace
     return fail(`Unknown widget ${widget}.`)
   if (page.tiles.some(tile => tile.widget === widget))
     return fail(`${s.title} is already on this page.`)
+  if (page.tiles.length >= MAX_TILES)
+    return fail(`At most ${MAX_TILES} tiles on a page.`)
   const spot = firstFreeSpot(page.tiles, s.defaultColSpan, s.defaultRowSpan)
-  return ok({ ...page, tiles: [...page.tiles, { widget, ...spot, colSpan: s.defaultColSpan, rowSpan: s.defaultRowSpan }] })
+  const candidate: PlacedTile = { widget, ...spot, colSpan: s.defaultColSpan, rowSpan: s.defaultRowSpan }
+  const reason = validatePlacement(page.tiles, candidate)
+  if (reason)
+    return fail(reason)
+  return ok({ ...page, tiles: [...page.tiles, candidate] })
 }
 
 export function readingOrder(tiles: PlacedTile[]): Array<{ tile: PlacedTile, index: number }> {

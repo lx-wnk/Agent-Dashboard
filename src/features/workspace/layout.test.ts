@@ -87,6 +87,19 @@ describe('tile operations', () => {
     expect(r.ok && r.value.tiles[1]).toEqual(tile('github', 1, 3, 3, 3))
   })
 
+  it('refuses to add a tile once the page holds 100 tiles', () => {
+    const tiles = Array.from({ length: 100 }, (_, i) => tile(`w${i}`, (i % 12) + 1, Math.floor(i / 12) + 1, 1, 1))
+    const r = addTile(page(...tiles), 'github')
+    expect(r.ok).toBe(false)
+    expect(!r.ok && r.reason).toMatch(/100/)
+  })
+
+  it('refuses to add a tile that would run past the last row', () => {
+    const r = addTile(page(tile('x', 1, 1, 12, 500)), 'github')
+    expect(r.ok).toBe(false)
+    expect(!r.ok && r.reason).toMatch(/row/i)
+  })
+
   it('removes a tile', () => {
     expect(removeTile(page(tile('agents', 1, 1), tile('github', 4, 1)), 0).tiles).toEqual([tile('github', 4, 1)])
   })
