@@ -12,8 +12,8 @@ describe('needsYouPlacement', () => {
     expect(needsYouPlacement({ view: 'zentrale', pageHasHub: false, error: false })).toEqual({ strip: true })
   })
 
-  it('leaves the dashboard to its triage band', () => {
-    expect(needsYouPlacement({ view: 'dashboard', pageHasHub: false, error: false })).toEqual({ strip: false })
+  it('on the dashboard is a strip of only the plan reviews its triage band lacks', () => {
+    expect(needsYouPlacement({ view: 'dashboard', pageHasHub: false, error: false })).toEqual({ strip: true, kinds: ['plan'] })
   })
 
   it('is a full strip when the error line replaces the page, hub or triage band alike', () => {

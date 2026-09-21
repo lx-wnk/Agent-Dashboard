@@ -33,9 +33,9 @@ const { default: NeedsYouQueue } = await import('../components/NeedsYouQueue.vue
 // App.vue is the one owner of usePendingPermissions(tasks) (SSOT) — every
 // mount here provides a fresh stand-in instead of letting the component reach
 // for a second, out-of-sync cache.
-function mountQueue(variant: 'docked' | 'strip', overrides: { openTask?: (taskId: string) => void, refresh?: () => void } = {}) {
+function mountQueue(variant: 'docked' | 'strip', overrides: { openTask?: (taskId: string) => void, refresh?: () => void, kinds?: NextThing['kind'][] } = {}) {
   return mount(NeedsYouQueue, {
-    props: { variant },
+    props: { variant, kinds: overrides.kinds },
     global: {
       provide: {
         [PENDING_PERMISSIONS]: { items: ref([]), refresh: overrides.refresh ?? vi.fn() },
@@ -68,6 +68,19 @@ describe('needsYouQueue', () => {
     expect(strip.find('[data-testid="needs-you"]').exists()).toBe(false)
     docked.unmount()
     strip.unmount()
+  })
+
+  it('shows only the given kinds, and nothing as a strip when none of them waits', async () => {
+    const permission: NextThing = { kind: 'permission', taskId: 't1', taskTitle: 'Perm', projectName: 'Dashboard', stage: 'implementation', title: 'Perm', why: 'w' }
+    const plan: NextThing = { kind: 'plan', taskId: 't2', taskTitle: 'Plan', projectName: '', stage: 'plan_review', title: 'Plan', why: 'w' }
+    items.value = [permission, plan]
+    const w = mountQueue('strip', { kinds: ['plan'] })
+    expect(w.get('[data-testid="stub-next"]').text()).toBe('Plan')
+    expect(w.find('[data-testid="needs-you-position"]').exists()).toBe(false)
+    items.value = [permission]
+    await nextTick()
+    expect(w.find('[data-testid="needs-you"]').exists()).toBe(false)
+    w.unmount()
   })
 
   it('keeps a valid position when the list shrinks', async () => {

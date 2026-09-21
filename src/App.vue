@@ -339,7 +339,7 @@ onMounted(() => usageComposable.start())
       </template>
 
       <div class="p-5 flex flex-col min-h-full" :class="{ 'h-full': currentPageId !== null }">
-        <NeedsYouQueue v-if="needsYou.strip" variant="strip" class="mb-3" />
+        <NeedsYouQueue v-if="needsYou.strip" variant="strip" :kinds="needsYou.kinds" class="mb-3" />
         <div v-if="isLoading && activeView === 'dashboard'" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
           <SkeletonCard v-for="n in 6" :key="n" />
         </div>

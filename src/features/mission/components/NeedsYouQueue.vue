@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { NextKind } from '../composables/useNextThing'
 import { computed, inject, onMounted, ref, watch } from 'vue'
 import { OPEN_TASK, PENDING_PERMISSIONS } from '@/composables/openTask'
 import { useAgents } from '@/features/agents'
@@ -6,7 +7,7 @@ import { useTasks } from '@/features/pipeline'
 import { rankNextThings } from '../composables/useNextThing'
 import NextThing from './NextThing.vue'
 
-defineProps<{ variant: 'docked' | 'strip' }>()
+const props = defineProps<{ variant: 'docked' | 'strip', kinds?: NextKind[] }>()
 
 const { tasks, refetch } = useTasks()
 // App.vue provides the one usePendingPermissions(tasks) instance — a local
@@ -20,7 +21,10 @@ const { agents } = useAgents({ autoStart: false })
 const openTask = inject(OPEN_TASK, () => {})
 onMounted(refetch)
 
-const ranked = computed(() => rankNextThings(pending.value, tasks.value, agents.value))
+const ranked = computed(() => {
+  const all = rankNextThings(pending.value, tasks.value, agents.value)
+  return props.kinds ? all.filter(t => props.kinds!.includes(t.kind)) : all
+})
 const index = ref(0)
 watch(() => ranked.value.length, (n) => {
   if (index.value >= n)
