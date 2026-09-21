@@ -23,13 +23,16 @@ type fakeSessions struct {
 }
 
 func (f *fakeSessions) Current(context.Context) (int, bool, error) { return f.pid, f.running, nil }
-func (f *fakeSessions) Start(_ context.Context, p string) (int, error) {
+func (f *fakeSessions) Start(_ context.Context, p string) (int, bool, error) {
 	if f.startErr != nil {
-		return 0, f.startErr
+		return 0, false, f.startErr
+	}
+	if f.running {
+		return f.pid, false, nil
 	}
 	f.started = append(f.started, p)
 	f.pid, f.running = 7, true
-	return 7, nil
+	return 7, true, nil
 }
 func (f *fakeSessions) Renew(_ context.Context, p string) (int, error) {
 	f.started = append(f.started, "renew:"+p)
@@ -60,9 +63,19 @@ func TestPost_StartsWithThePrompt(t *testing.T) {
 	f := &fakeSessions{}
 	rec := do(f, http.MethodPost, "/api/kontor-session", `{"prompt":"hallo"}`)
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.JSONEq(t, `{"pid":7}`, rec.Body.String())
+	require.JSONEq(t, `{"pid":7,"started":true}`, rec.Body.String())
 	require.Equal(t, []string{"hallo"}, f.started)
 	require.JSONEq(t, `{"pid":7}`, do(f, http.MethodGet, "/api/kontor-session", "").Body.String())
+}
+
+func TestPost_RunningSessionIsReturnedUnchanged(t *testing.T) {
+	f := &fakeSessions{}
+	require.Equal(t, http.StatusOK, do(f, http.MethodPost, "/api/kontor-session", `{"prompt":"a"}`).Code)
+
+	rec := do(f, http.MethodPost, "/api/kontor-session", `{"prompt":"b"}`)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.JSONEq(t, `{"pid":7,"started":false}`, rec.Body.String())
+	require.Equal(t, []string{"a"}, f.started)
 }
 
 func TestPost_BlankPromptIsRejected(t *testing.T) {
@@ -82,7 +95,7 @@ func TestRenew_ReplacesTheSession(t *testing.T) {
 	f := &fakeSessions{}
 	rec := do(f, http.MethodPost, "/api/kontor-session/renew", `{"prompt":"neu"}`)
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.JSONEq(t, `{"pid":8}`, rec.Body.String())
+	require.JSONEq(t, `{"pid":8,"started":true}`, rec.Body.String())
 }
 
 func TestRenew_AcceptsABlankPrompt(t *testing.T) {

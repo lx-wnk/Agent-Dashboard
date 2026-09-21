@@ -15,7 +15,7 @@ import (
 // sessions is the test seam over *kontorsession.Service.
 type sessions interface {
 	Current(ctx context.Context) (int, bool, error)
-	Start(ctx context.Context, prompt string) (int, error)
+	Start(ctx context.Context, prompt string) (int, bool, error)
 	Renew(ctx context.Context, prompt string) (int, error)
 	End(ctx context.Context, reason string) error
 }
@@ -33,6 +33,8 @@ func (h *Handler) Mount(r chi.Router) {
 
 type view struct {
 	PID *int `json:"pid"`
+	// Started is omitted on GET, where the field is meaningless.
+	Started *bool `json:"started,omitempty"`
 }
 
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) error {
@@ -49,29 +51,43 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (h *Handler) start(w http.ResponseWriter, r *http.Request) error {
-	return h.spawn(w, r, h.svc.Start, true)
+	prompt, err := decodePrompt(w, r, true)
+	if err != nil {
+		return err
+	}
+	pid, started, err := h.svc.Start(r.Context(), prompt)
+	if err != nil {
+		return apierr.NewAppError(http.StatusInternalServerError, "kontor session: "+err.Error())
+	}
+	apierr.WriteJSON(w, http.StatusOK, view{PID: &pid, Started: &started})
+	return nil
 }
 
 func (h *Handler) renew(w http.ResponseWriter, r *http.Request) error {
-	return h.spawn(w, r, h.svc.Renew, false)
+	prompt, err := decodePrompt(w, r, false)
+	if err != nil {
+		return err
+	}
+	pid, err := h.svc.Renew(r.Context(), prompt)
+	if err != nil {
+		return apierr.NewAppError(http.StatusInternalServerError, "kontor session: "+err.Error())
+	}
+	started := true
+	apierr.WriteJSON(w, http.StatusOK, view{PID: &pid, Started: &started})
+	return nil
 }
 
-func (h *Handler) spawn(w http.ResponseWriter, r *http.Request, fn func(context.Context, string) (int, error), promptRequired bool) error {
+func decodePrompt(w http.ResponseWriter, r *http.Request, required bool) (string, error) {
 	var body struct {
 		Prompt string `json:"prompt"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&body); err != nil {
-		return apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
+		return "", apierr.NewAppError(http.StatusBadRequest, "invalid JSON body")
 	}
-	if promptRequired && strings.TrimSpace(body.Prompt) == "" {
-		return apierr.NewAppError(http.StatusBadRequest, "prompt is required")
+	if required && strings.TrimSpace(body.Prompt) == "" {
+		return "", apierr.NewAppError(http.StatusBadRequest, "prompt is required")
 	}
-	pid, err := fn(r.Context(), body.Prompt)
-	if err != nil {
-		return apierr.NewAppError(http.StatusInternalServerError, "kontor session: "+err.Error())
-	}
-	apierr.WriteJSON(w, http.StatusOK, view{PID: &pid})
-	return nil
+	return body.Prompt, nil
 }
 
 func (h *Handler) end(w http.ResponseWriter, r *http.Request) error {

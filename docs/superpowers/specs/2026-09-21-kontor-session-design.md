@@ -34,8 +34,10 @@ it, a briefing, and a place in the UI.
    Spotlight matches nothing, Enter hands the text to the Kontor tile. The
    session chooses the project from context and asks when it cannot tell.
 3. **The session key carries every scope except `keys:manage`**, so a session
-   can never mint itself a credential that outlives it. Writing tools still go
-   through Claude Code's own permission prompt, shown in the tile's terminal.
+   can never mint itself a credential that outlives it — a real boundary only
+   under JWT auth. Under the documented local-trust mode (`auth.mode=none`),
+   Claude Code's own permission prompt, shown in the tile's terminal, is the
+   boundary instead.
 4. **One session per installation, living until the operator ends or renews
    it.** It survives a view switch, a reload and a server restart.
 
@@ -75,7 +77,7 @@ A new service, `kontorsession`, owns the session. Its HTTP surface:
 | Route | Effect |
 | --- | --- |
 | `GET /api/kontor-session` | `{ "pid": n }` of the live session, or `{ "pid": null }` |
-| `POST /api/kontor-session` | Starts a session with `{ prompt }`; if one is already running, returns it unchanged |
+| `POST /api/kontor-session` | Starts a session with `{ prompt }`, returning `{ "pid": n, "started": true }`; if one is already running, returns it unchanged as `{ "pid": n, "started": false }` |
 | `POST /api/kontor-session/renew` | Ends the running session, then starts one with `{ prompt }`; the prompt may be empty |
 | `DELETE /api/kontor-session` | Ends the running session; ending none is not an error |
 
@@ -113,6 +115,12 @@ The directory is registered as an explicit extra root of the spawn policy, so
 the policy stays the one gate every spawn passes through. Transcripts do not
 live here — Claude writes them under its own config directory — so the directory
 holds nothing worth keeping.
+
+Every start first removes `<Dir>/.claude`, so a `settings.local.json` an
+earlier session wrote there — Claude Code's own "don't ask again" answers —
+never silently applies to the next one. The session always runs under the pty
+host, the transport whose `<pid>.pty.json` file the tile's terminal route
+needs to attach.
 
 ## The credential is the session record
 

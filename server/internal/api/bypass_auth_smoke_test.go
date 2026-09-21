@@ -188,10 +188,10 @@ func buildBypassRouter(t *testing.T) http.Handler {
 
 type stubKontorSessions struct{}
 
-func (stubKontorSessions) Current(context.Context) (int, bool, error) { return 0, false, nil }
-func (stubKontorSessions) Start(context.Context, string) (int, error) { return 1, nil }
-func (stubKontorSessions) Renew(context.Context, string) (int, error) { return 1, nil }
-func (stubKontorSessions) End(context.Context, string) error          { return nil }
+func (stubKontorSessions) Current(context.Context) (int, bool, error)       { return 0, false, nil }
+func (stubKontorSessions) Start(context.Context, string) (int, bool, error) { return 1, true, nil }
+func (stubKontorSessions) Renew(context.Context, string) (int, error)       { return 1, nil }
+func (stubKontorSessions) End(context.Context, string) error                { return nil }
 
 // bypassSkip reports routes that legitimately do NOT pass through the session-auth
 // group in bypass mode and therefore may return 401/403 by design.

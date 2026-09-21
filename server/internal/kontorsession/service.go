@@ -64,13 +64,30 @@ func (s *Service) current(ctx context.Context) (int, bool, error) {
 	return pid, true, nil
 }
 
-func (s *Service) Start(ctx context.Context, prompt string) (int, error) {
+// Start reports the pid and whether it started a fresh process: false means a
+// running session was returned unchanged, so a caller with a dropped prompt
+// knows not to treat it as delivered.
+func (s *Service) Start(ctx context.Context, prompt string) (int, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if pid, ok, err := s.current(ctx); err != nil || ok {
-		return pid, err
+	pid, ok, err := s.current(ctx)
+	if err != nil {
+		return 0, false, err
 	}
-	return s.start(ctx, prompt)
+	if ok && !s.Alive(pid) {
+		if err := s.end(ctx, "process gone"); err != nil {
+			return 0, false, err
+		}
+		ok = false
+	}
+	if ok {
+		return pid, false, nil
+	}
+	pid, err = s.start(ctx, prompt)
+	if err != nil {
+		return 0, false, err
+	}
+	return pid, true, nil
 }
 
 func (s *Service) Renew(ctx context.Context, prompt string) (int, error) {
@@ -110,6 +127,12 @@ func (s *Service) Reconcile(ctx context.Context) error {
 func (s *Service) start(ctx context.Context, prompt string) (int, error) {
 	if err := os.MkdirAll(s.Dir, 0o700); err != nil {
 		return 0, fmt.Errorf("kontorsession: session dir: %w", err)
+	}
+	// A prior session's "don't ask again" answers, written by Claude Code to
+	// <Dir>/.claude/settings.local.json, must not silently apply to this one.
+	if err := os.RemoveAll(filepath.Join(s.Dir, ".claude")); err != nil && !errors.Is(err, os.ErrNotExist) {
+		slog.Warn("kontorsession: remove stale settings failed", "dir", s.Dir, "err", err)
+		return 0, fmt.Errorf("kontorsession: remove stale settings: %w", err)
 	}
 	// A client disconnect can cancel ctx after Spawn already started the
 	// process; the cleanup writes below must still land, so they run on a
@@ -155,13 +178,16 @@ func (s *Service) end(ctx context.Context, reason string) error {
 			return fmt.Errorf("kontorsession: stop pid %d: %w", pid, err)
 		}
 	}
-	if ok {
-		if err := s.Keys.Revoke(context.WithoutCancel(ctx)); err != nil {
-			return err
-		}
-		s.audit(ctx, "kontor_session.end", pid, reason)
+	if !ok {
+		s.removeConfig()
+		return nil
 	}
+	revokeErr := s.Keys.Revoke(context.WithoutCancel(ctx))
 	s.removeConfig()
+	if revokeErr != nil {
+		return revokeErr
+	}
+	s.audit(ctx, "kontor_session.end", pid, reason)
 	return nil
 }
 

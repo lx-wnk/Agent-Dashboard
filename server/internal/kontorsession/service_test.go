@@ -94,7 +94,7 @@ func TestStart_OneSessionAtATime(t *testing.T) {
 	pids := make([]int, 2)
 	for i := range pids {
 		wg.Go(func() {
-			pid, err := s.Start(t.Context(), "hallo")
+			pid, _, err := s.Start(t.Context(), "hallo")
 			assert.NoError(t, err)
 			pids[i] = pid
 		})
@@ -117,7 +117,7 @@ func TestStart_OneSessionAtATime(t *testing.T) {
 func TestStart_FailedSpawnRevokesTheKey(t *testing.T) {
 	s, f, keys := newService(t)
 	f.failErr = errors.New("boom")
-	_, err := s.Start(t.Context(), "hallo")
+	_, _, err := s.Start(t.Context(), "hallo")
 	require.ErrorContains(t, err, "boom")
 	k, err := keys.ActiveKontorSession(t.Context())
 	require.NoError(t, err)
@@ -131,7 +131,7 @@ func TestStart_ClientDisconnectMidSpawnStillRevokesTheKey(t *testing.T) {
 		cancel() // simulates the request context dying while claude is starting
 		return 4242, nil
 	}
-	_, err := s.Start(ctx, "hallo")
+	_, _, err := s.Start(ctx, "hallo")
 	require.Error(t, err)
 
 	k, err := keys.ActiveKontorSession(context.Background())
@@ -139,9 +139,48 @@ func TestStart_ClientDisconnectMidSpawnStillRevokesTheKey(t *testing.T) {
 	require.Nil(t, k)
 }
 
+func TestStart_ReturnsWhetherItStarted(t *testing.T) {
+	s, _, _ := newService(t)
+	first, started, err := s.Start(t.Context(), "a")
+	require.NoError(t, err)
+	require.True(t, started)
+
+	second, started, err := s.Start(t.Context(), "b")
+	require.NoError(t, err)
+	require.False(t, started)
+	require.Equal(t, first, second)
+}
+
+func TestStart_DeadRecordedPidEndsAndStartsFresh(t *testing.T) {
+	s, f, _ := newService(t)
+	first, started, err := s.Start(t.Context(), "a")
+	require.NoError(t, err)
+	require.True(t, started)
+
+	f.alive[first] = false
+
+	second, started, err := s.Start(t.Context(), "b")
+	require.NoError(t, err)
+	require.True(t, started)
+	require.NotEqual(t, first, second)
+	require.Equal(t, []string{"spawn", "spawn"}, f.events)
+}
+
+func TestStart_RemovesStaleLocalSettingsBeforeSpawning(t *testing.T) {
+	s, _, _ := newService(t)
+	require.NoError(t, os.MkdirAll(filepath.Join(s.Dir, ".claude"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(s.Dir, ".claude", "settings.local.json"), []byte(`{"foo":"bar"}`), 0o600))
+
+	_, _, err := s.Start(t.Context(), "a")
+	require.NoError(t, err)
+
+	_, statErr := os.Stat(filepath.Join(s.Dir, ".claude"))
+	require.ErrorIs(t, statErr, os.ErrNotExist)
+}
+
 func TestRenew_EndsBeforeItStarts(t *testing.T) {
 	s, f, _ := newService(t)
-	first, err := s.Start(t.Context(), "a")
+	first, _, err := s.Start(t.Context(), "a")
 	require.NoError(t, err)
 	before, err := os.ReadFile(s.ConfigPath)
 	require.NoError(t, err)
@@ -153,12 +192,12 @@ func TestRenew_EndsBeforeItStarts(t *testing.T) {
 
 	after, err := os.ReadFile(s.ConfigPath)
 	require.NoError(t, err)
-	require.NotEqual(t, before, after) // proves end() removed it and start() rewrote it, not a stale leftover
+	require.NotEqual(t, before, after) // proves start() wrote a fresh config, not that end() removed the old one — TestReconcile_EndsADeadPid proves removal
 }
 
 func TestExit_OfAnOldProcessDoesNotEndTheRenewedSession(t *testing.T) {
 	s, f, _ := newService(t)
-	first, err := s.Start(t.Context(), "a")
+	first, _, err := s.Start(t.Context(), "a")
 	require.NoError(t, err)
 	second, err := s.Renew(t.Context(), "b")
 	require.NoError(t, err)
@@ -171,7 +210,7 @@ func TestExit_OfAnOldProcessDoesNotEndTheRenewedSession(t *testing.T) {
 
 func TestExit_SurvivesATransientLookupError(t *testing.T) {
 	s, f, keys := newService(t)
-	pid, err := s.Start(t.Context(), "a")
+	pid, _, err := s.Start(t.Context(), "a")
 	require.NoError(t, err)
 
 	s.Keys.Keys = &flakyOnce{ApiKeyRepo: keys}
@@ -189,7 +228,7 @@ func TestEnd_WithoutSessionIsNotAnError(t *testing.T) {
 
 func TestEnd_FailingTerminateKeepsTheKeyActive(t *testing.T) {
 	s, f, keys := newService(t)
-	_, err := s.Start(t.Context(), "a")
+	_, _, err := s.Start(t.Context(), "a")
 	require.NoError(t, err)
 
 	f.terminateErr = errors.New("kill failed")
@@ -201,9 +240,33 @@ func TestEnd_FailingTerminateKeepsTheKeyActive(t *testing.T) {
 	require.NotNil(t, k) // operator can retry End once the process is dealt with
 }
 
+// failingRevoke wraps a real ApiKeyRepo and fails RevokeKontorSessions every time.
+type failingRevoke struct {
+	repo.ApiKeyRepo
+	err error
+}
+
+func (f *failingRevoke) RevokeKontorSessions(ctx context.Context) (int, error) {
+	return 0, f.err
+}
+
+func TestEnd_RemovesTheConfigEvenWhenRevokeFails(t *testing.T) {
+	s, _, keys := newService(t)
+	_, _, err := s.Start(t.Context(), "a")
+	require.NoError(t, err)
+	require.FileExists(t, s.ConfigPath)
+
+	s.Keys.Keys = &failingRevoke{ApiKeyRepo: keys, err: errors.New("revoke failed")}
+	err = s.End(t.Context(), "operator")
+	require.ErrorContains(t, err, "revoke failed")
+
+	_, statErr := os.Stat(s.ConfigPath)
+	require.ErrorIs(t, statErr, os.ErrNotExist)
+}
+
 func TestReconcile_EndsADeadPid(t *testing.T) {
 	s, f, keys := newService(t)
-	pid, err := s.Start(t.Context(), "a")
+	pid, _, err := s.Start(t.Context(), "a")
 	require.NoError(t, err)
 	require.FileExists(t, s.ConfigPath)
 	f.alive[pid] = false
@@ -221,9 +284,24 @@ func TestReconcile_EndsADeadPid(t *testing.T) {
 	require.ErrorIs(t, statErr, os.ErrNotExist)
 }
 
+func TestReconcile_EndsAnActiveKeyNeverAttached(t *testing.T) {
+	s, f, keys := newService(t)
+	_, err := s.Keys.Issue(t.Context()) // simulates a crash between Issue and Attach
+	require.NoError(t, err)
+
+	restarted := &kontorsession.Service{
+		Keys: s.Keys, Dir: s.Dir, ConfigPath: s.ConfigPath,
+		Spawn: f.spawn, Terminate: f.terminate, Alive: f.isAlive, WaitExit: f.wait,
+	}
+	require.NoError(t, restarted.Reconcile(t.Context()))
+	k, err := keys.ActiveKontorSession(t.Context())
+	require.NoError(t, err)
+	require.Nil(t, k)
+}
+
 func TestReconcile_RearmsALivePid(t *testing.T) {
 	s, f, keys := newService(t)
-	pid, err := s.Start(t.Context(), "a")
+	pid, _, err := s.Start(t.Context(), "a")
 	require.NoError(t, err)
 	f.exits[pid] = make(chan struct{})
 	restarted := &kontorsession.Service{
