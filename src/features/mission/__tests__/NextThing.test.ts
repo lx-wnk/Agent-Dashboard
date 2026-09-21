@@ -1,6 +1,7 @@
 import type { NextThing as NextThingItem } from '../composables/useNextThing'
 import { mount } from '@vue/test-utils'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { resolvePermissionRequest } from '@/features/pipeline'
 import NextThing from '../components/NextThing.vue'
 
 vi.mock('@/features/pipeline', () => ({ resolvePermissionRequest: vi.fn() }))
@@ -74,6 +75,33 @@ describe('nextThing', () => {
     expect(calm.text()).toContain('Nothing needs you')
     expect(w.find('h2').exists()).toBe(false)
     expect(w.find('[data-testid="mission-next"]').exists()).toBe(false)
+    w.unmount()
+  })
+})
+
+// A stale click aimed at the request just resolved must not land on whatever
+// the refresh puts in its place — see Security Minor 2.
+describe('nextThing decision guard', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('disables the decision buttons for 500ms after the shown request changes, then re-enables them', async () => {
+    vi.useFakeTimers()
+    const w = mountNext(permission)
+    await vi.advanceTimersByTimeAsync(500)
+    expect(w.get('[data-testid="mission-decide-allow_once"]').attributes('disabled')).toBeUndefined()
+
+    const next: NextThingItem = { ...permission, request: { ...permission.request, id: 'r2' } as never }
+    await w.setProps({ next })
+    expect(w.get('[data-testid="mission-decide-allow_once"]').attributes('disabled')).toBeDefined()
+    await w.get('[data-testid="mission-decide-allow_once"]').trigger('click')
+    expect(resolvePermissionRequest).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(500)
+    expect(w.get('[data-testid="mission-decide-allow_once"]').attributes('disabled')).toBeUndefined()
+    await w.get('[data-testid="mission-decide-allow_once"]').trigger('click')
+    expect(resolvePermissionRequest).toHaveBeenCalledWith('t1', 'r2', 'allow_once')
     w.unmount()
   })
 })

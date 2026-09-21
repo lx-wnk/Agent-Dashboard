@@ -2,7 +2,7 @@
 import type { NextThing } from '../composables/useNextThing'
 import type { PermissionDecision } from '@/features/pipeline'
 import type { AnswerIntent } from '@/utils/answerKeys'
-import { ref } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import ConfirmCard from '@/components/ConfirmCard.vue'
 import QuestionCard from '@/components/QuestionCard.vue'
 import { toast } from '@/composables/useToast'
@@ -17,6 +17,41 @@ const busy = ref<PermissionDecision | null>(null)
 const answering = ref(false)
 const problem = ref('')
 
+// Identifies which item is on screen so the card below can remount on
+// change: a permission's own id, or the agent holding a question/confirm
+// screen, or the task for a plan.
+const itemKey = computed(() => {
+  const n = props.next
+  if (!n)
+    return null
+  if (n.kind === 'permission')
+    return `permission:${n.request?.id ?? ''}`
+  if (n.pid !== undefined)
+    return `question:${n.pid}`
+  return `task:${n.taskId}`
+})
+
+// Guards the decision buttons for a short window after the shown item
+// changes, so a click already in flight for the previous item (e.g. a
+// double-click or a repeated Enter) cannot land on the new one.
+const DECISION_GUARD_MS = 500
+const guarding = ref(true)
+let guardTimer: ReturnType<typeof setTimeout> | null = null
+
+watch(itemKey, () => {
+  guarding.value = true
+  if (guardTimer)
+    clearTimeout(guardTimer)
+  guardTimer = setTimeout(() => {
+    guarding.value = false
+  }, DECISION_GUARD_MS)
+}, { immediate: true })
+
+onUnmounted(() => {
+  if (guardTimer)
+    clearTimeout(guardTimer)
+})
+
 // The four decisions the needs-you band already offers. The centre must not
 // invent a fifth, or a decision made here would mean something else there.
 const DECISIONS: Array<{ value: PermissionDecision, label: string, primary?: boolean }> = [
@@ -27,7 +62,7 @@ const DECISIONS: Array<{ value: PermissionDecision, label: string, primary?: boo
 
 async function decide(decision: PermissionDecision) {
   const n = props.next
-  if (!n?.request || busy.value)
+  if (!n?.request || busy.value || guarding.value)
     return
   busy.value = decision
   problem.value = ''
@@ -74,7 +109,7 @@ async function answer(intent: AnswerIntent) {
       {{ next.why }}
     </p>
 
-    <div class="rounded-2xl border border-line-strong bg-card p-7 flex flex-col gap-4">
+    <div :key="itemKey" class="rounded-2xl border border-line-strong bg-card p-7 flex flex-col gap-4">
       <div class="flex items-center gap-2.5">
         <span class="font-mono text-[10px] uppercase rounded px-1.5 py-0.5 border border-warning-line text-warning-text">
           {{ next.kind }}
@@ -112,7 +147,7 @@ async function answer(intent: AnswerIntent) {
           :key="d.value"
           type="button"
           :data-testid="`mission-decide-${d.value}`"
-          :disabled="busy !== null"
+          :disabled="busy !== null || guarding"
           class="h-9 rounded-lg px-4 text-[13.5px] disabled:opacity-60"
           :class="d.primary ? 'bg-accent text-accent-contrast font-semibold' : 'border border-line-strong text-fg-soft'"
           @click="decide(d.value)"
