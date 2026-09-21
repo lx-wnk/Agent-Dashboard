@@ -104,7 +104,7 @@ func TestSpawnSession_BuildsKontorArgsAndReportsExit(t *testing.T) {
 	require.GreaterOrEqual(t, i, 0)
 	_, err = uuid.Parse(args[i+1])
 	require.NoError(t, err)
-	require.True(t, containsConsecutive(args, "--permission-mode", "default"))
+	require.True(t, containsConsecutive(args, "--permission-mode", "auto"))
 	require.True(t, containsConsecutive(args, "--append-system-prompt", "brief"))
 	require.True(t, containsConsecutive(args, "-n", "Kontor"))
 	require.True(t, containsConsecutive(args, "--allowedTools", "mcp__kontor-tasks__get_task"))
@@ -123,7 +123,7 @@ func TestSpawnSession_BuildsKontorArgsAndReportsExit(t *testing.T) {
 
 // A prompt that happens to look like a flag must still reach claude as the
 // positional prompt, not be parsed as an option — which could silently
-// override the pinned --permission-mode default.
+// override the pinned --permission-mode auto.
 func TestSpawnSession_FlagShapedPromptStaysPositional(t *testing.T) {
 	home := sessionHome(t)
 	captured := stubPIDExec(t)
@@ -152,20 +152,20 @@ func TestSpawnSession_PolicyRefusalSpawnsNothing(t *testing.T) {
 	require.Nil(t, *captured)
 }
 
-// The operator's default spawner runs --permission-mode auto; a Kontor session
-// must still prompt before a write, so the spawner's posture is replaced.
+// A Kontor session always runs in auto mode, whatever posture the default
+// spawner carries: the tile has no terminal to answer a permission prompt in.
 func TestSpawnSession_OverridesTheSpawnersPermissionPosture(t *testing.T) {
 	home := sessionHome(t)
 	captured := stubPIDExec(t)
-	stored := []string{"--permission-mode", "auto", "--dangerously-skip-permissions", "--verbose"}
+	stored := []string{"--permission-mode", "plan", "--dangerously-skip-permissions", "--verbose"}
 	row := &ent.Spawner{ID: "d", Name: "auto", AdapterType: "claude", Command: "claude", IsDefault: true, Args: slices.Clone(stored)}
 	m := NewSpawnManager(0, 0, 0, 0, &fakeSpawnerRepo{byID: map[string]*ent.Spawner{"d": row}}, services.NewSpawnPolicy(nil))
 
 	_, err := m.SpawnSession(t.Context(), SessionSpawnOptions{Cwd: home, Name: "Kontor", MCPConfigPath: "/tmp/k.json"})
 	require.NoError(t, err)
 	args := *captured
-	require.True(t, containsConsecutive(args, "--permission-mode", "default"))
-	require.NotContains(t, args, "auto")
+	require.True(t, containsConsecutive(args, "--permission-mode", "auto"))
+	require.NotContains(t, args, "plan")
 	require.NotContains(t, args, "--dangerously-skip-permissions")
 	require.Contains(t, args, "--verbose", "other spawner args survive")
 	require.Equal(t, "--strict-mcp-config", args[len(args)-1], "an empty prompt adds no positional argument")

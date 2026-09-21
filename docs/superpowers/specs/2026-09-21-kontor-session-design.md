@@ -2,6 +2,9 @@
 
 Status: approved by the operator, 2026-09-21
 Date: 2026-09-21
+Amended: 2026-09-21 — the session runs in `auto` permission mode and the tile
+shows it as a chat (the agent modal's pane) instead of its terminal, at the
+operator's request.
 
 ## Why
 
@@ -36,15 +39,17 @@ it, a briefing, and a place in the UI.
 3. **The session key carries every scope except `keys:manage`**, so a session
    can never mint itself a credential that outlives it — a real boundary only
    under JWT auth. Under the documented local-trust mode (`auth.mode=none`),
-   Claude Code's own permission prompt, shown in the tile's terminal, is the
-   boundary instead.
+   the session's `auto` permission mode is the boundary instead: Claude Code's
+   classifier, not a human prompt, decides each write. The tile has no
+   terminal to answer a prompt in.
 4. **One session per installation, living until the operator ends or renews
    it.** It survives a view switch, a reload and a server restart.
 
 ## Non-goals
 
-- Chat bubbles. The tile shows the real terminal, which already handles
-  AskUserQuestion screens (`src/features/agents/components/AgentTerminal.vue`).
+- A terminal in the tile. The session's AskUserQuestion screens surface in
+  `NextThing` above the tile, like any agent's; its terminal stays reachable
+  from its agent card.
 - Several Kontor sessions at once.
 - An idle timeout.
 - Registering the tile as a composable-workspace widget. The component is built
@@ -61,12 +66,15 @@ it, a briefing, and a place in the UI.
 | Anything else | Starts a session; the text is its first prompt | Sent to the session |
 
 Text is delivered to a running session through the existing message endpoint
-(`POST /api/agents/{pid}/message`, `server/internal/api/router.go:530`). The
-operator can also type straight into the terminal.
+(`POST /api/agents/{pid}/message`, `server/internal/api/router.go:530`).
 
-The tile header shows "Kontor", the session state, and two buttons: **New**
-(end the current session and start a fresh one) and **End**. "Nothing needs
-you" shrinks to a single faint line so the tile gets the height.
+Once the scanner lists the session's pid, the tile shows it through
+`AgentSessionPane` — the same header, context, transcript and prompt the agent
+modal uses — titled "Kontor", with **New** (end the current session and start
+a fresh one) and **End** in its header. The pane's prompt replaces the tile
+input; navigation stays in Spotlight. Until the pid is listed, the tile keeps
+its own header, state and input from the table above. "Nothing needs you"
+shrinks to a single faint line so the tile gets the height.
 
 The reading badge under the input (`src/features/mission/composables/useReading.ts`)
 loses its `capture` reading and gains `ask`, labelled START KONTOR or SEND TO
@@ -90,7 +98,7 @@ windows cannot start two sessions.
 
 A native `claude` from the global default spawner, with:
 
-- `--permission-mode default`, replacing whatever permission flags the default spawner carries (the live default runs `auto`), so writes prompt.
+- `--permission-mode auto`, replacing whatever permission flags the default spawner carries, so no write waits on a prompt nobody can see.
 - `--append-system-prompt <briefing>`. Not `--system-prompt`, which the
   existing spawn path uses (`spawn.go:312`) and which replaces Claude Code's own
   system prompt.
@@ -101,11 +109,14 @@ A native `claude` from the global default spawner, with:
   user-scope `kontor-tasks` registration out.
 - `--allowedTools` listing the tools of every `:read` scope, derived the way
   `StageRunAllowedTools` derives its list (`server/internal/mcp/stagekey.go:39`).
-  Every other Kontor tool raises a permission prompt on first use.
+  Every other Kontor tool is left to auto mode.
 
 The briefing is a Markdown file embedded in the service package. It says what
 Kontor is, which tools exist, that the session creates no backlog item unless
-asked, and that it picks a task's project from context and asks when unsure.
+asked, and that it picks a task's project from context and asks when unsure. It
+also says the session runs in auto mode, so it confirms in chat before granting
+a permission, approving a plan or pending requests, merging, or creating
+anything unasked.
 
 ### The working directory
 
@@ -121,8 +132,8 @@ holds nothing worth keeping.
 Every start first removes `<Dir>/.claude`, so a `settings.local.json` an
 earlier session wrote there — Claude Code's own "don't ask again" answers —
 never silently applies to the next one. The session always runs under the pty
-host, the transport whose `<pid>.pty.json` file the tile's terminal route
-needs to attach.
+host, the transport that delivers messages live and whose `<pid>.pty.json`
+file the agent card's terminal needs to attach.
 
 ## The credential is the session record
 
@@ -157,8 +168,8 @@ it was given before the error is returned.
 - `useKontorSession` holds the shared state — `pid`, `status`, `start(text)`,
   `send(text)`, `end()`, `renew(text)` — so the tile and Spotlight act on the
   same session.
-- `KontorTile.vue` renders the header, the input and `<AgentTerminal :pid>`. It
-  does not know about `MissionControlView`.
+- `KontorTile.vue` renders `AgentSessionPane` for a listed session, and its own
+  header and input otherwise. It does not know about `MissionControlView`.
 - `MissionControlView.vue` stacks `NextThing` and `KontorTile` in the centre
   column. `NextThing`'s empty state becomes one line.
 - `useCapture.ts` is deleted. Spotlight's "nothing matched" hint and handler

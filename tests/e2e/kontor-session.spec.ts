@@ -23,8 +23,6 @@ test('Mission input starts a Kontor session instead of creating a task', async (
     }
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ pid: running ? PID : null }) })
   })
-  // The tile's terminal attaches over a WebSocket; the backend knows no such pid.
-  await page.routeWebSocket(/\/api\/agents\/\d+\/terminal$/, () => {})
 
   const taskPosts: string[] = []
   page.on('request', (req) => {

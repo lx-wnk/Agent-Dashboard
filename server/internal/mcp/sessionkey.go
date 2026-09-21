@@ -24,7 +24,7 @@ func KontorSessionScopes() []string {
 }
 
 // KontorSessionAllowedTools pre-approves the read tools. Every other Kontor
-// tool raises Claude Code's permission prompt on first use.
+// tool is left to the session's auto mode.
 func KontorSessionAllowedTools() []string {
 	var tools []string
 	for tool, scope := range ToolScopeMap {

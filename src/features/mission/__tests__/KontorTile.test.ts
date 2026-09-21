@@ -12,10 +12,15 @@ const session = {
   renew: vi.fn(),
 }
 const activeView = ref('mission')
+const agents = ref<Array<{ pid: number }>>([])
 
 vi.mock('../composables/useKontorSession', () => ({ useKontorSession: () => session }))
 vi.mock('@/features/agents', () => ({
-  AgentTerminal: { props: ['pid'], template: '<div data-testid="stub-terminal" :data-pid="pid" />' },
+  useAgents: () => ({ agents }),
+  AgentSessionPane: {
+    props: ['agent', 'title'],
+    template: '<div data-testid="stub-pane" :data-pid="agent.pid" :data-title="title"><slot name="actions" /></div>',
+  },
 }))
 vi.mock('@/composables/useViewState', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/composables/useViewState')>()
@@ -41,6 +46,7 @@ beforeEach(() => {
   session.send.mockResolvedValue(true)
   session.renew.mockResolvedValue(true)
   activeView.value = 'mission'
+  agents.value = []
 })
 
 describe('kontorTile', () => {
@@ -49,7 +55,7 @@ describe('kontorTile', () => {
     expect(session.refresh).toHaveBeenCalledOnce()
     expect(w.get('[data-testid="kontor-state"]').text()).toBe('No session')
     expect(w.find('[data-testid="kontor-empty"]').exists()).toBe(true)
-    expect(w.find('[data-testid="stub-terminal"]').exists()).toBe(false)
+    expect(w.find('[data-testid="stub-pane"]').exists()).toBe(false)
     expect(w.get('[data-testid="kontor-end"]').attributes('disabled')).toBeDefined()
     w.unmount()
   })
@@ -76,12 +82,14 @@ describe('kontorTile', () => {
     w.unmount()
   })
 
-  it('shows the running session terminal and sends slash commands to it', async () => {
+  it('keeps the tile input for a running session the scanner has not listed yet', async () => {
     session.pid.value = 1234
     session.status.value = 'running'
+    agents.value = [{ pid: 99 }]
     const w = mount(KontorTile)
     expect(w.get('[data-testid="kontor-state"]').text()).toBe('Running')
-    expect(w.get('[data-testid="stub-terminal"]').attributes('data-pid')).toBe('1234')
+    expect(w.find('[data-testid="stub-pane"]').exists()).toBe(false)
+    expect(w.get('[data-testid="kontor-empty"]').text()).toBe('Starting a Kontor session…')
     await typeInto(w, '/compact')
     expect(w.get('[data-testid="mission-reading-label"]').text()).toBe('SEND TO KONTOR')
     await w.get('[data-testid="mission-input-submit"]').trigger('click')
@@ -140,6 +148,28 @@ describe('kontorTile', () => {
     await flushPromises()
     expect(session.renew).toHaveBeenLastCalledWith('fresh start')
     expect(inputValue(w)).toBe('')
+    w.unmount()
+  })
+
+  it('shows a listed session as its chat pane, with its own prompt instead of the tile input', async () => {
+    session.pid.value = 1234
+    session.status.value = 'running'
+    agents.value = [{ pid: 99 }, { pid: 1234 }]
+    const w = mount(KontorTile)
+    const pane = w.get('[data-testid="stub-pane"]')
+    expect(pane.attributes('data-pid')).toBe('1234')
+    expect(pane.attributes('data-title')).toBe('Kontor')
+    expect(w.find('[data-testid="mission-input"]').exists()).toBe(false)
+    await pane.get('[data-testid="kontor-new"]').trigger('click')
+    await flushPromises()
+    expect(session.renew).toHaveBeenCalledWith('')
+    await pane.get('[data-testid="kontor-end"]').trigger('click')
+    expect(session.end).toHaveBeenCalledOnce()
+    // A renew in flight keeps the old pid listed; a second New must not start another.
+    session.status.value = 'starting'
+    await flushPromises()
+    expect(pane.get('[data-testid="kontor-new"]').attributes('disabled')).toBeDefined()
+    expect(pane.get('[data-testid="kontor-end"]').attributes('disabled')).toBeDefined()
     w.unmount()
   })
 })

@@ -45,7 +45,7 @@ func (m *SpawnManager) SpawnSession(ctx context.Context, opts SessionSpawnOption
 	if row != nil && spawnerArgsControlPermissionMode(row.Args) {
 		return 0, errors.New("agents: could not strip the spawner's permission posture")
 	}
-	req := &spawnRequest{cwd: opts.Cwd, permissionMode: "default"}
+	req := &spawnRequest{cwd: opts.Cwd, permissionMode: "auto"}
 	if row != nil && row.ModelOverride != nil {
 		req.model = *row.ModelOverride
 	}
@@ -61,7 +61,7 @@ func (m *SpawnManager) SpawnSession(ctx context.Context, opts SessionSpawnOption
 	if opts.Prompt != "" {
 		// "--" stops claude from parsing a flag-shaped prompt (e.g. one
 		// starting with "-") as an option, which could otherwise override
-		// the pinned --permission-mode default.
+		// the pinned --permission-mode auto.
 		args = append(args, "--", opts.Prompt)
 	}
 
