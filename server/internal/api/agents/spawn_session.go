@@ -65,7 +65,7 @@ func (m *SpawnManager) SpawnSession(ctx context.Context, opts SessionSpawnOption
 		args = append(args, "--", opts.Prompt)
 	}
 
-	pid, watch, err := m.launchInteractive(binary, args, resolveSpawnEnv(row), opts.Cwd, "")
+	pid, watch, err := m.launchPTY(binary, args, resolveSpawnEnv(row), opts.Cwd, "")
 	if err != nil {
 		return 0, fmt.Errorf("spawn failed: %w", err)
 	}
@@ -79,6 +79,9 @@ func (m *SpawnManager) SpawnSession(ctx context.Context, opts SessionSpawnOption
 	go func() {
 		watch()
 		WaitForExit(pid)
+		m.mu.Lock()
+		delete(m.spawnStore, pid)
+		m.mu.Unlock()
 		if opts.OnExit != nil {
 			opts.OnExit(pid)
 		}

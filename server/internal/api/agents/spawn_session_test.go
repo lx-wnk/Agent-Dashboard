@@ -258,6 +258,69 @@ func TestSpawnSession_OnExitFiresOnlyAfterTheProcessIsGone(t *testing.T) {
 	}
 }
 
+// SpawnSession must always use the pty transport, even with tmux on PATH:
+// only the pty host writes <pid>.pty.json, which the Kontor tile's terminal
+// route needs (terminal.go -> TerminalTarget). If SpawnSession picked tmux
+// whenever it is installed, the terminal would 409 forever.
+func TestSpawnSession_AlwaysUsesThePtyHostEvenWithTmuxOnPath(t *testing.T) {
+	home := sessionHome(t)
+	prevLook := lookTmuxPath
+	lookTmuxPath = func() string { return "/usr/bin/tmux" }
+	t.Cleanup(func() { lookTmuxPath = prevLook })
+
+	sh, err := exec.LookPath("sh")
+	require.NoError(t, err)
+	var captured []string
+	orig := execStart
+	execStart = func(cmd *exec.Cmd) error {
+		captured = slices.Clone(cmd.Args)
+		cmd.Path, cmd.Args, cmd.Err = sh, []string{sh, "-c", "echo $$"}, nil
+		return cmd.Start()
+	}
+	t.Cleanup(func() { execStart = orig })
+
+	cwd := filepath.Join(home, "session")
+	require.NoError(t, os.MkdirAll(cwd, 0o700))
+
+	m := NewSpawnManager(0, 0, 0, 0, nil, services.NewSpawnPolicy(nil))
+	pid, err := m.SpawnSession(t.Context(), SessionSpawnOptions{Cwd: cwd, Name: "Kontor", MCPConfigPath: "/tmp/k.json"})
+	require.NoError(t, err)
+	require.Positive(t, pid)
+
+	require.Contains(t, captured, channelconfig.SubcommandPtyHost,
+		"SpawnSession must launch via the pty host, never tmux, so the terminal route works")
+	require.NotEqual(t, "tmux", filepath.Base(captured[0]))
+}
+
+// The exit goroutine must forget pid once the process is gone. Otherwise a
+// spawnStore entry for an exited session keeps counting as "owned" forever
+// in OwnsLiveSession, and with pid reuse that would let TerminateSession
+// signal a foreign process group.
+func TestSpawnSession_ForgetsThePidAfterExit(t *testing.T) {
+	home := sessionHome(t)
+	stubPIDExec(t)
+	cwd := filepath.Join(home, "session")
+	require.NoError(t, os.MkdirAll(cwd, 0o700))
+
+	m := NewSpawnManager(0, 0, 0, 0, nil, services.NewSpawnPolicy(nil))
+	exited := make(chan int, 1)
+	pid, err := m.SpawnSession(t.Context(), SessionSpawnOptions{
+		Cwd: cwd, Name: "Kontor", MCPConfigPath: "/tmp/k.json",
+		OnExit: func(p int) { exited <- p },
+	})
+	require.NoError(t, err)
+	require.Positive(t, pid)
+
+	select {
+	case got := <-exited:
+		require.Equal(t, pid, got)
+	case <-time.After(10 * time.Second):
+		t.Fatal("OnExit was not called")
+	}
+
+	require.Nil(t, m.GetStatus(pid), "the spawnStore entry must be forgotten once the process exits")
+}
+
 // TerminateSession must actually stop a session this manager spawned, and
 // the exit-watch goroutine must notice and fire OnExit.
 func TestTerminateSession_StopsASpawnedSession(t *testing.T) {
