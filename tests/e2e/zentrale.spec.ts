@@ -19,6 +19,15 @@ test('the Zentrale is the default page with the nine widgets', async ({ page }) 
 })
 
 test('a moved tile stays moved after a reload', async ({ page }) => {
+  // useWorkspace's load() does a plain `fetch('/api/settings')` with no
+  // cache-busting; GET /api/settings sends no Cache-Control/ETag either
+  // (verified with curl: a PATCH is visible to a fresh GET instantly and
+  // consistently), so this is a browser HTTP-cache hazard, not a server
+  // race — disable the cache for this page the way DevTools' "Disable
+  // cache" checkbox does, matching what a hard reload guarantees.
+  const cdp = await page.context().newCDPSession(page)
+  await cdp.send('Network.setCacheDisabled', { cacheDisabled: true })
+
   await page.goto('/', { waitUntil: 'domcontentloaded' })
   await page.getByTestId('workspace-edit-toggle').click()
   await page.getByTestId('workspace-tile-cost-today').focus()
@@ -30,10 +39,10 @@ test('a moved tile stays moved after a reload', async ({ page }) => {
     resp.url().includes('/api/settings/workspace.layout') && resp.request().method() === 'PATCH')
   const firstSaved = patched()
   await page.keyboard.press('Shift+ArrowUp') // 3×3 → 3×2 frees row 12
-  await firstSaved
+  expect((await firstSaved).ok(), 'first save (resize) request').toBe(true)
   const secondSaved = patched()
   await page.keyboard.press('ArrowDown')
-  await secondSaved
+  expect((await secondSaved).ok(), 'second save (move) request').toBe(true)
   await page.getByTestId('workspace-edit-toggle').click()
   await page.reload({ waitUntil: 'domcontentloaded' })
   await expect(page.getByTestId('workspace-tile-cost-today')).toHaveAttribute('style', /--row: 11/)
@@ -55,6 +64,11 @@ test('"/" opens the Kontor tile and Escape closes it', async ({ page }) => {
 // order above the tile's own pointer-events:none overlay — can only be
 // exercised by a real browser drag.
 test('a pointer drag on the resize handle resizes the cost-today tile and the new size persists', async ({ page }) => {
+  // See the comment on the "moved tile" test above: disables the browser
+  // HTTP cache so the reload below cannot serve a stale /api/settings.
+  const cdp = await page.context().newCDPSession(page)
+  await cdp.send('Network.setCacheDisabled', { cacheDisabled: true })
+
   await page.goto('/', { waitUntil: 'domcontentloaded' })
   await page.getByTestId('workspace-edit-toggle').click()
 
@@ -104,7 +118,7 @@ test('a pointer drag on the resize handle resizes the cost-today tile and the ne
     throw new Error('drag never reached a 4-row ghost preview')
 
   await expect(page.getByTestId('workspace-tile-cost-today')).toHaveAttribute('style', /--row-span: 4\b/)
-  await saved
+  expect((await saved).ok(), 'save (resize) request').toBe(true)
 
   await page.getByTestId('workspace-edit-toggle').click()
   await page.reload({ waitUntil: 'domcontentloaded' })
