@@ -1,6 +1,6 @@
 # The Zentrale — Design
 
-Status: design approved by the operator 2026-09-21; written spec awaiting review
+Status: slices 1-5 implemented on feat/kontor-zentrale (2026-09-22); slices 6-11 open
 Date: 2026-09-21
 Extends: `2026-09-20-composable-workspace-design.md` — the anchored grid, the
 collision rule, edit mode, own pages and the server-side layout store stay exactly
