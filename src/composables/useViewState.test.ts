@@ -66,7 +66,7 @@ describe('useViewState', () => {
   })
 
   // The two views folded into the Zentrale. Someone whose last view was one of
-  // them must land on the Zentrale, not on the invalid-value fallback.
+  // them falls back to the Zentrale, and the stale value is overwritten.
   it.each(['mission', 'cockpit'])('reads a stored %s view as zentrale', async (old) => {
     localStorage.setItem('agent-active-view', old)
     const { useViewState } = await freshModule()

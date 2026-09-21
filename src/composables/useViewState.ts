@@ -8,9 +8,6 @@ export type DashboardLayout = 'cards' | 'list'
 // Exported: the command palette derives one navigation command per view, so
 // a view added here shows up there without a second list to keep in step.
 export const ACTIVE_VIEWS: ActiveView[] = ['zentrale', 'dashboard', 'workflows', 'pipeline', 'cost', 'schedules', 'eval']
-
-// Views folded into the Zentrale; a stored one reads as the Zentrale.
-const FOLDED_INTO_ZENTRALE = new Set(['mission', 'cockpit'])
 const AGENT_SORT_VALUES: AgentSort[] = AGENT_SORT_OPTIONS.map(o => o.value)
 const AGENT_GROUP_VALUES: AgentGroup[] = AGENT_GROUP_OPTIONS.map(o => o.value)
 
@@ -22,11 +19,6 @@ function readInitial(): { view: ActiveView, layout: DashboardLayout } {
   const legacy = ls?.getItem('agent-view-mode')
   let view: ActiveView
   let layout: DashboardLayout = storedLayout === 'list' ? 'list' : 'cards'
-
-  if (stored && FOLDED_INTO_ZENTRALE.has(stored)) {
-    ls?.setItem('agent-active-view', 'zentrale')
-    return { view: 'zentrale', layout }
-  }
 
   if (stored && ACTIVE_VIEWS.includes(stored as ActiveView)) {
     view = stored as ActiveView

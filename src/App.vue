@@ -33,7 +33,7 @@ import { useUsage } from './composables/useUsage'
 import { useUser } from './composables/useUser'
 import { useViewState } from './composables/useViewState'
 import { NeedsYouQueue, rankNextThings } from './features/mission'
-import { useWorkspace } from './features/workspace'
+import { useWorkspace, ZENTRALE_PAGE_ID } from './features/workspace'
 import { formatCost } from './utils/format'
 
 // PERF-BUNDLE1: AgentModal is only ever rendered on agent selection — split into its own chunk
@@ -255,13 +255,14 @@ function navigateTo(target: { agent?: Agent, taskId?: string }) {
   })
 }
 
-// Widgets outside the mission view open a task through this — App.vue owns navigation.
+// Widgets open a task through this — App.vue owns navigation.
 provide(OPEN_TASK, (taskId: string) => navigateTo({ taskId }))
 
 // The dashboard's triage band shows the same items (AgentTriageBand reads the
-// same agents and permission items); a Zentrale holding the hub docks the queue itself.
+// same agents and permission items); a Zentrale holding the hub docks the queue
+// itself, unless the error line replaces the page and with it the hub.
 const workspace = useWorkspace()
-const pageHasHub = computed(() => activeView.value === 'zentrale' && !!workspace.page('zentrale')?.tiles.some(t => t.widget === 'hub'))
+const pageHasHub = computed(() => activeView.value === 'zentrale' && !error.value && !!workspace.page(ZENTRALE_PAGE_ID)?.tiles.some(t => t.widget === 'hub'))
 const showNeedsYouStrip = computed(() => activeView.value !== 'dashboard' && !pageHasHub.value)
 
 // Single routing rule: plan_review tasks open the plan panel, all others the generic modal.
@@ -339,7 +340,7 @@ onMounted(() => usageComposable.start())
           Error: {{ error }}
         </p>
 
-        <WorkspacePage v-else-if="activeView === 'zentrale'" page-id="zentrale" class="min-h-0 flex-1" />
+        <WorkspacePage v-else-if="activeView === 'zentrale'" :page-id="ZENTRALE_PAGE_ID" class="min-h-0 flex-1" />
 
         <DashboardView
           v-else-if="activeView === 'dashboard'"
