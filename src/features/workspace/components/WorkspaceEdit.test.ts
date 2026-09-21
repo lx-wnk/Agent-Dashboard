@@ -133,10 +133,7 @@ describe('drag and resize', () => {
     // (150, 250) is col 2, row 3 — a 2-column-wide target, below agents' minimum of 3.
     handle.dispatchEvent(pointer('pointermove', { clientX: 150, clientY: 250, pointerId: 1 }))
     await w.vm.$nextTick()
-    // validatePlacement (which drives the ghost) only checks bounds and overlap,
-    // not a widget's minimum size, so the below-minimum target here does not
-    // turn the ghost invalid — only the pointerup refusal below catches it.
-    expect(w.get('[data-testid="workspace-ghost"]').classes()).not.toContain('workspace-ghost--invalid')
+    expect(w.get('[data-testid="workspace-ghost"]').classes()).toContain('workspace-ghost--invalid')
     handle.dispatchEvent(pointer('pointerup', { clientX: 150, clientY: 250, pointerId: 1 }))
     await w.vm.$nextTick()
     expect(w.emitted('change')).toBeUndefined()

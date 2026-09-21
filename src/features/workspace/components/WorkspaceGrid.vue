@@ -55,7 +55,12 @@ function endDrag() {
     : resizeTile(props.page, d.index, d.target.colSpan, d.target.rowSpan))
 }
 
-const ghostInvalid = computed(() => !!drag.value && validatePlacement(props.page.tiles, drag.value.target, drag.value.index) !== null)
+const ghostInvalid = computed(() => {
+  const d = drag.value
+  if (!d)
+    return false
+  return (validatePlacement(props.page.tiles, d.target, d.index) ?? fitsMinimum(d.target.widget, d.target.colSpan, d.target.rowSpan)) !== null
+})
 
 function placement(t: PlacedTile): Record<string, number> {
   return { '--col': t.col, '--col-span': t.colSpan, '--row': t.row, '--row-span': t.rowSpan }
