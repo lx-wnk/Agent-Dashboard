@@ -22,6 +22,7 @@ async function request(url: string, fallback: string, init?: RequestInit): Promi
 function settle(next: number | null) {
   pid.value = next
   status.value = next === null ? 'idle' : 'running'
+  error.value = ''
 }
 
 async function refresh(): Promise<void> {
@@ -36,25 +37,52 @@ async function refresh(): Promise<void> {
   }
 }
 
-async function spawn(url: string, prompt: string): Promise<boolean> {
-  const fallback = 'Could not start a Kontor session.'
-  status.value = 'starting'
+async function sendMessage(target: number, text: string): Promise<boolean> {
+  const fallback = 'Could not reach the Kontor session.'
   error.value = ''
   try {
-    const res = await request(url, fallback, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ prompt }) })
-    settle((await res.json() as { pid: number | null }).pid)
-    return pid.value !== null
+    await request(`/api/agents/${target}/message`, fallback, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ message: text }) })
+    return true
   }
   catch (e) {
-    pid.value = null
-    status.value = 'error'
     error.value = errorMessage(e, fallback)
     return false
   }
 }
 
-const start = (text: string) => spawn(SESSION_URL, text)
-const renew = (text: string) => spawn(`${SESSION_URL}/renew`, text)
+async function spawn(url: string, prompt: string): Promise<{ pid: number | null, started: boolean } | null> {
+  const fallback = 'Could not start a Kontor session.'
+  status.value = 'starting'
+  error.value = ''
+  try {
+    const res = await request(url, fallback, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ prompt }) })
+    const json = await res.json() as { pid: number | null, started?: boolean }
+    settle(json.pid)
+    return { pid: json.pid, started: json.started ?? true }
+  }
+  catch (e) {
+    pid.value = null
+    status.value = 'error'
+    error.value = errorMessage(e, fallback)
+    return null
+  }
+}
+
+async function start(text: string): Promise<boolean> {
+  const result = await spawn(SESSION_URL, text)
+  if (result === null || result.pid === null)
+    return false
+  // started: false means another window's session already ran and won the
+  // race — this POST's prompt was not used, so it must go as a message.
+  if (!result.started)
+    return sendMessage(result.pid, text)
+  return true
+}
+
+async function renew(text: string): Promise<boolean> {
+  const result = await spawn(`${SESSION_URL}/renew`, text)
+  return result !== null && result.pid !== null
+}
 
 async function send(text: string): Promise<boolean> {
   // POST returns an already-running session unchanged and drops the prompt, so
@@ -66,16 +94,7 @@ async function send(text: string): Promise<boolean> {
   }
   if (pid.value === null)
     return start(text)
-  const fallback = 'Could not reach the Kontor session.'
-  error.value = ''
-  try {
-    await request(`/api/agents/${pid.value}/message`, fallback, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ message: text }) })
-    return true
-  }
-  catch (e) {
-    error.value = errorMessage(e, fallback)
-    return false
-  }
+  return sendMessage(pid.value, text)
 }
 
 async function end(): Promise<void> {

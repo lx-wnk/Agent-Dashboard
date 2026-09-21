@@ -8,8 +8,9 @@ let searchBody: unknown = { tasks: [], agents: [] }
 
 const send = vi.fn()
 const kontorError = ref('')
+const kontorPid = ref<number | null>(null)
 vi.mock('@/features/mission/composables/useKontorSession', () => ({
-  useKontorSession: () => ({ send: (...a: unknown[]) => send(...a), error: kontorError }),
+  useKontorSession: () => ({ send: (...a: unknown[]) => send(...a), error: kontorError, pid: kontorPid }),
 }))
 vi.mock('@/composables/useViewState', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/composables/useViewState')>()
@@ -43,6 +44,7 @@ beforeEach(() => {
   activeView.value = 'dashboard'
   send.mockReset().mockResolvedValue(true)
   kontorError.value = ''
+  kontorPid.value = null
 })
 
 afterEach(() => {
@@ -130,6 +132,25 @@ describe('spotlightSearch commands and hand-off', () => {
     await flushPromises()
     expect(document.querySelector('[data-testid="spotlight-problem"]')?.textContent).toContain('Could not start a Kontor session.')
     expect(document.querySelector('input[placeholder]')).not.toBeNull()
+    wrapper.unmount()
+  })
+
+  it('refuses a slash command when no session runs, and does not send it', async () => {
+    const wrapper = await openSpotlight('/grant Bash')
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
+    await flushPromises()
+    expect(send).not.toHaveBeenCalled()
+    expect(document.querySelector('[data-testid="spotlight-problem"]')?.textContent).toContain('running Kontor session')
+    expect(document.querySelector('input[placeholder]')).not.toBeNull()
+    wrapper.unmount()
+  })
+
+  it('sends a slash command to the running session', async () => {
+    kontorPid.value = 1234
+    const wrapper = await openSpotlight('/compact')
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
+    await flushPromises()
+    expect(send).toHaveBeenCalledWith('/compact')
     wrapper.unmount()
   })
 

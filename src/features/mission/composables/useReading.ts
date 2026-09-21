@@ -8,6 +8,8 @@ import { ACTIVE_VIEWS } from '@/composables/useViewState'
  */
 export type ReadingKind = 'navigate' | 'command' | 'ask' | 'empty'
 
+export const SLASH_COMMAND_REFUSAL = 'Slash commands need a running Kontor session. Start one, or type it in an agent’s own prompt.'
+
 export interface Reading {
   kind: ReadingKind
   /** The badge, in the user's words. */

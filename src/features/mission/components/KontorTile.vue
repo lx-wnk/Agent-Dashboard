@@ -4,7 +4,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useViewState } from '@/composables/useViewState'
 import { AgentTerminal } from '@/features/agents'
 import { useKontorSession } from '../composables/useKontorSession'
-import { readInput } from '../composables/useReading'
+import { readInput, SLASH_COMMAND_REFUSAL } from '../composables/useReading'
 
 const { pid, status, error, refresh, send, end, renew } = useKontorSession()
 const { activeView } = useViewState()
@@ -37,7 +37,7 @@ async function submit() {
     return
   }
   if (r.kind === 'command') {
-    problem.value = 'Slash commands need a running Kontor session. Start one, or type it in an agent’s own prompt.'
+    problem.value = SLASH_COMMAND_REFUSAL
     return
   }
   if (await send(text.value.trim()))

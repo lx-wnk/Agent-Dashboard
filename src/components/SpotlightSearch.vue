@@ -3,6 +3,7 @@ import type { Agent, PipelineTask } from '../types'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ACTIVE_VIEWS, useViewState } from '@/composables/useViewState'
 import { useKontorSession } from '@/features/mission/composables/useKontorSession'
+import { SLASH_COMMAND_REFUSAL } from '@/features/mission/composables/useReading'
 import AppModal from './ui/AppModal.vue'
 
 const emit = defineEmits<{
@@ -124,6 +125,10 @@ async function handOff() {
   const text = query.value.trim()
   if (!text || busy.value)
     return
+  if (text.startsWith('/') && kontor.pid.value === null) {
+    problem.value = SLASH_COMMAND_REFUSAL
+    return
+  }
   busy.value = true
   problem.value = ''
   activeView.value = 'mission'

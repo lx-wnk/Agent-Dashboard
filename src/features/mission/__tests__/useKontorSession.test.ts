@@ -137,6 +137,31 @@ describe('useKontorSession', () => {
     expect(s.status.value).toBe('idle')
   })
 
+  // POST /api/kontor-session can answer started: false when another window's
+  // session won the race; the prompt it carried must not be silently dropped.
+  it('delivers the text as a message when the start POST finds a session another window already started', async () => {
+    fetchMock
+      .mockResolvedValueOnce(reply({ pid: null }))
+      .mockResolvedValueOnce(reply({ pid: 7, started: false }))
+      .mockResolvedValueOnce(reply({}))
+    const s = useKontorSession()
+    expect(await s.send('plan phase 4')).toBe(true)
+    expect(fetchMock.mock.calls[2][0]).toBe('/api/agents/7/message')
+    expect(body(2)).toEqual({ message: 'plan phase 4' })
+    expect(s.pid.value).toBe(7)
+    expect(s.status.value).toBe('running')
+  })
+
+  it('clears a stale error once a later call succeeds', async () => {
+    fetchMock.mockResolvedValueOnce(reply({ error: 'boom' }, 500)).mockResolvedValueOnce(reply({ pid: 1234 }))
+    const s = useKontorSession()
+    await s.refresh()
+    expect(s.error.value).toBe('boom')
+    await s.refresh()
+    expect(s.error.value).toBe('')
+    expect(s.pid.value).toBe(1234)
+  })
+
   it('does not start a session when the pre-send refresh fails', async () => {
     fetchMock.mockResolvedValueOnce(reply({ error: 'boom' }, 500)).mockResolvedValue(reply({ pid: 5678 }))
     const s = useKontorSession()
