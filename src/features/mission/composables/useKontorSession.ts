@@ -1,0 +1,109 @@
+import { ref, watch } from 'vue'
+import { useAgents } from '@/features/agents'
+import { errorMessage, readErrorMessage } from '@/utils/errorMessage'
+
+export type KontorStatus = 'idle' | 'starting' | 'running' | 'error'
+
+const pid = ref<number | null>(null)
+const status = ref<KontorStatus>('idle')
+const error = ref('')
+let watchingAgents = false
+
+const SESSION_URL = '/api/kontor-session'
+const JSON_HEADERS = { 'Content-Type': 'application/json' }
+
+async function request(url: string, fallback: string, init?: RequestInit): Promise<Response> {
+  const res = await fetch(url, init)
+  if (!res.ok)
+    throw new Error(await readErrorMessage(res, fallback))
+  return res
+}
+
+function settle(next: number | null) {
+  pid.value = next
+  status.value = next === null ? 'idle' : 'running'
+}
+
+async function refresh(): Promise<void> {
+  const fallback = 'Could not read the Kontor session.'
+  try {
+    const res = await request(SESSION_URL, fallback)
+    settle((await res.json() as { pid: number | null }).pid)
+  }
+  catch (e) {
+    status.value = 'error'
+    error.value = errorMessage(e, fallback)
+  }
+}
+
+async function spawn(url: string, prompt: string): Promise<boolean> {
+  const fallback = 'Could not start a Kontor session.'
+  status.value = 'starting'
+  error.value = ''
+  try {
+    const res = await request(url, fallback, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ prompt }) })
+    settle((await res.json() as { pid: number | null }).pid)
+    return pid.value !== null
+  }
+  catch (e) {
+    pid.value = null
+    status.value = 'error'
+    error.value = errorMessage(e, fallback)
+    return false
+  }
+}
+
+const start = (text: string) => spawn(SESSION_URL, text)
+const renew = (text: string) => spawn(`${SESSION_URL}/renew`, text)
+
+async function send(text: string): Promise<boolean> {
+  // POST returns an already-running session unchanged and drops the prompt, so
+  // a session this window has not seen yet must be found first or the text is lost.
+  if (pid.value === null)
+    await refresh()
+  if (pid.value === null)
+    return start(text)
+  const fallback = 'Could not reach the Kontor session.'
+  error.value = ''
+  try {
+    await request(`/api/agents/${pid.value}/message`, fallback, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ message: text }) })
+    return true
+  }
+  catch (e) {
+    error.value = errorMessage(e, fallback)
+    return false
+  }
+}
+
+async function end(): Promise<void> {
+  const fallback = 'Could not end the Kontor session.'
+  error.value = ''
+  try {
+    await request(SESSION_URL, fallback, { method: 'DELETE' })
+    settle(null)
+  }
+  catch (e) {
+    error.value = errorMessage(e, fallback)
+  }
+}
+
+function watchAgentExit() {
+  if (watchingAgents)
+    return
+  watchingAgents = true
+  const { agents } = useAgents({ autoStart: false })
+  // Only a live-then-gone flip of the SAME pid counts: a freshly spawned or
+  // renewed pid is absent until the scanner lists it.
+  watch(
+    () => [pid.value, agents.value.some(a => a.pid === pid.value && a.status !== 'finished')] as const,
+    ([now, live], [before, wasLive]) => {
+      if (now !== null && now === before && wasLive && !live)
+        settle(null)
+    },
+  )
+}
+
+export function useKontorSession() {
+  watchAgentExit()
+  return { pid, status, error, refresh, start, send, end, renew }
+}
