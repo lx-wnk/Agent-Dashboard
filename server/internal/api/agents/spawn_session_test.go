@@ -1,16 +1,19 @@
 package agents
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/lx-wnk/kontor/server/internal/channelconfig"
 	"github.com/lx-wnk/kontor/server/internal/db/ent"
 	"github.com/lx-wnk/kontor/server/internal/services"
 )
@@ -18,6 +21,19 @@ import (
 // stubPIDExec replaces the transport with `sh -c 'echo $$'`: the pty path
 // reads the printed pid, then the watcher sees sh exit. No agent is started.
 func stubPIDExec(t *testing.T) *[]string {
+	t.Helper()
+	return stubPIDExecScript(t, "echo $$")
+}
+
+// stubPIDExecSleep is like stubPIDExec but keeps the stub process alive for
+// sleepSeconds (or until signalled), so a test can observe exit timing and
+// termination instead of an instant exit.
+func stubPIDExecSleep(t *testing.T, sleepSeconds int) *[]string {
+	t.Helper()
+	return stubPIDExecScript(t, "echo $$; exec sleep "+strconv.Itoa(sleepSeconds))
+}
+
+func stubPIDExecScript(t *testing.T, script string) *[]string {
 	t.Helper()
 	prevLook := lookTmuxPath
 	lookTmuxPath = func() string { return "" }
@@ -27,11 +43,31 @@ func stubPIDExec(t *testing.T) *[]string {
 	orig := execStart
 	execStart = func(cmd *exec.Cmd) error {
 		captured = slices.Clone(cmd.Args)
-		cmd.Path, cmd.Args, cmd.Err = sh, []string{sh, "-c", "echo $$"}, nil
+		cmd.Path, cmd.Args, cmd.Err = sh, []string{sh, "-c", script}, nil
 		return cmd.Start()
 	}
 	t.Cleanup(func() { execStart, lookTmuxPath = orig, prevLook })
 	return &captured
+}
+
+// writeStaleDiscoveryFile writes a channel-bridge discovery file in the
+// bridge's real JSON shape (channel.writeDiscovery's entry map), naming
+// channelPid as the bridge process for parentPid.
+func writeStaleDiscoveryFile(t *testing.T, home string, parentPid, channelPid int) {
+	t.Helper()
+	dir := filepath.Join(home, channelconfig.DiscoveryDir)
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+	entry := map[string]any{
+		"port":       0,
+		"channelPid": channelPid,
+		"parentPid":  parentPid,
+		"cwd":        home,
+		"token":      "stale-token",
+		"startedAt":  time.Now().UTC().Format(time.RFC3339),
+	}
+	data, err := json.Marshal(entry)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(channelconfig.DiscoveryFile(home, parentPid), data, 0o600))
 }
 
 func sessionHome(t *testing.T) string {
@@ -70,8 +106,8 @@ func TestSpawnSession_BuildsKontorArgsAndReportsExit(t *testing.T) {
 	require.True(t, containsConsecutive(args, "--allowedTools", "mcp__kontor-tasks__get_task"))
 	require.True(t, containsConsecutive(args, "mcp__kontor-tasks__get_task", "mcp__kontor-tasks__list_tasks"))
 	require.True(t, containsConsecutive(args, "--mcp-config", "/tmp/kontor.json"))
-	require.Equal(t, []string{"--strict-mcp-config", "hallo"}, args[len(args)-2:],
-		"the prompt must follow a boolean flag, never the variadic --allowedTools/--mcp-config")
+	require.Equal(t, []string{"--strict-mcp-config", "--", "hallo"}, args[len(args)-3:],
+		"the prompt must follow a boolean flag and a -- terminator, never the variadic --allowedTools/--mcp-config")
 
 	select {
 	case got := <-exited:
@@ -79,6 +115,25 @@ func TestSpawnSession_BuildsKontorArgsAndReportsExit(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("OnExit was not called after the process exited")
 	}
+}
+
+// A prompt that happens to look like a flag must still reach claude as the
+// positional prompt, not be parsed as an option — which could silently
+// override the pinned --permission-mode default.
+func TestSpawnSession_FlagShapedPromptStaysPositional(t *testing.T) {
+	home := sessionHome(t)
+	captured := stubPIDExec(t)
+	cwd := filepath.Join(home, "session")
+	require.NoError(t, os.MkdirAll(cwd, 0o700))
+
+	m := NewSpawnManager(0, 0, 0, 0, nil, services.NewSpawnPolicy(nil))
+	_, err := m.SpawnSession(t.Context(), SessionSpawnOptions{
+		Cwd: cwd, Prompt: "--dangerously-skip-permissions", Name: "Kontor", MCPConfigPath: "/tmp/k.json",
+	})
+	require.NoError(t, err)
+
+	args := *captured
+	require.Equal(t, []string{"--strict-mcp-config", "--", "--dangerously-skip-permissions"}, args[len(args)-3:])
 }
 
 func TestSpawnSession_PolicyRefusalSpawnsNothing(t *testing.T) {
@@ -122,4 +177,77 @@ func TestTerminateSession_RefusesAPidItDidNotSpawn(t *testing.T) {
 	m := NewSpawnManager(0, 0, 0, 0, nil, services.NewSpawnPolicy(nil))
 	require.Error(t, m.TerminateSession(sleeper.Process.Pid))
 	require.True(t, ProcessAlive(sleeper.Process.Pid))
+}
+
+// The channel bridge only removes its discovery file on clean shutdown, so a
+// crashed bridge can leave a stale <pid>.json naming a pid the OS has since
+// reused for an unrelated process. channelPid here (this test binary's own
+// pid) is alive but is not sleeper's child, so the file's mere existence must
+// not be enough for TerminateSession to act on it.
+func TestTerminateSession_RefusesAStalePidWithAnUnrelatedDiscoveryFile(t *testing.T) {
+	home := sessionHome(t)
+	sleeper := exec.Command("sleep", "30")
+	require.NoError(t, sleeper.Start())
+	t.Cleanup(func() { _ = sleeper.Process.Kill(); _ = sleeper.Wait() })
+
+	writeStaleDiscoveryFile(t, home, sleeper.Process.Pid, os.Getpid())
+
+	m := NewSpawnManager(0, 0, 0, 0, nil, services.NewSpawnPolicy(nil))
+	require.Error(t, m.TerminateSession(sleeper.Process.Pid))
+	require.True(t, ProcessAlive(sleeper.Process.Pid))
+}
+
+// OnExit must only fire once the process is actually gone. The stub in
+// TestSpawnSession_BuildsKontorArgsAndReportsExit exits in milliseconds, so a
+// buggy implementation that fired OnExit right after launch — without
+// waiting for exit — would also pass it. Here the stub outlives the launch
+// call by a full second, so a premature OnExit is caught red-handed: the
+// process would still be alive at the moment the callback runs.
+func TestSpawnSession_OnExitFiresOnlyAfterTheProcessIsGone(t *testing.T) {
+	home := sessionHome(t)
+	stubPIDExecSleep(t, 1)
+	cwd := filepath.Join(home, "session")
+	require.NoError(t, os.MkdirAll(cwd, 0o700))
+
+	m := NewSpawnManager(0, 0, 0, 0, nil, services.NewSpawnPolicy(nil))
+	done := make(chan bool, 1)
+	pid, err := m.SpawnSession(t.Context(), SessionSpawnOptions{
+		Cwd: cwd, Name: "Kontor", MCPConfigPath: "/tmp/k.json",
+		OnExit: func(p int) { done <- ProcessAlive(p) },
+	})
+	require.NoError(t, err)
+	require.Positive(t, pid)
+
+	select {
+	case stillAlive := <-done:
+		require.False(t, stillAlive, "OnExit fired while the process was still alive")
+	case <-time.After(10 * time.Second):
+		t.Fatal("OnExit was not called")
+	}
+}
+
+// TerminateSession must actually stop a session this manager spawned, and
+// the exit-watch goroutine must notice and fire OnExit.
+func TestTerminateSession_StopsASpawnedSession(t *testing.T) {
+	home := sessionHome(t)
+	stubPIDExecSleep(t, 30)
+	cwd := filepath.Join(home, "session")
+	require.NoError(t, os.MkdirAll(cwd, 0o700))
+
+	m := NewSpawnManager(0, 0, 0, 0, nil, services.NewSpawnPolicy(nil))
+	exited := make(chan int, 1)
+	pid, err := m.SpawnSession(t.Context(), SessionSpawnOptions{
+		Cwd: cwd, Name: "Kontor", MCPConfigPath: "/tmp/k.json",
+		OnExit: func(p int) { exited <- p },
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, m.TerminateSession(pid))
+
+	select {
+	case got := <-exited:
+		require.Equal(t, pid, got)
+	case <-time.After(10 * time.Second):
+		t.Fatal("OnExit was not called after TerminateSession")
+	}
 }

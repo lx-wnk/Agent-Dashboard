@@ -2,6 +2,7 @@ package agents
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/lx-wnk/kontor/server/internal/channelconfig"
 	"github.com/lx-wnk/kontor/server/internal/db/ent"
+	"github.com/lx-wnk/kontor/server/internal/proc"
 )
 
 // SessionSpawnOptions describe a server-owned interactive claude session.
@@ -40,6 +42,9 @@ func (m *SpawnManager) SpawnSession(ctx context.Context, opts SessionSpawnOption
 		return 0, fmt.Errorf("default spawner %q is not a claude adapter", row.Name)
 	}
 	row = withoutPermissionPosture(row)
+	if row != nil && spawnerArgsControlPermissionMode(row.Args) {
+		return 0, errors.New("agents: could not strip the spawner's permission posture")
+	}
 	req := &spawnRequest{cwd: opts.Cwd, permissionMode: "default"}
 	if row != nil && row.ModelOverride != nil {
 		req.model = *row.ModelOverride
@@ -54,7 +59,10 @@ func (m *SpawnManager) SpawnSession(ctx context.Context, opts SessionSpawnOption
 	}
 	args = append(args, "--mcp-config", opts.MCPConfigPath, "--strict-mcp-config")
 	if opts.Prompt != "" {
-		args = append(args, opts.Prompt)
+		// "--" stops claude from parsing a flag-shaped prompt (e.g. one
+		// starting with "-") as an option, which could otherwise override
+		// the pinned --permission-mode default.
+		args = append(args, "--", opts.Prompt)
 	}
 
 	pid, watch, err := m.launchInteractive(binary, args, resolveSpawnEnv(row), opts.Cwd, "")
@@ -117,15 +125,14 @@ func withoutPermissionPosture(row *ent.Spawner) *ent.Spawner {
 }
 
 // TerminateSession sends SIGTERM to a session this dashboard started: one
-// still running in this manager, or one whose channel bridge wrote a
-// discovery file (a session reattached after a restart). A bare pid could
-// by then belong to an unrelated process.
+// still running in this manager, or one whose channel bridge confirms it (a
+// session reattached after a restart). A bare pid could by then belong to an
+// unrelated process.
 func (m *SpawnManager) TerminateSession(pid int) error {
 	if pid <= 1 {
 		return fmt.Errorf("agents: refusing to signal pid %d", pid)
 	}
-	s := m.GetStatus(pid)
-	if (s == nil || s.Status != "running") && !hasDiscoveryFile(pid) {
+	if !m.OwnsLiveSession(pid) {
 		return fmt.Errorf("agents: pid %d is not a session this dashboard spawned", pid)
 	}
 	if err := syscall.Kill(-pid, syscall.SIGTERM); err == nil {
@@ -134,13 +141,47 @@ func (m *SpawnManager) TerminateSession(pid int) error {
 	return syscall.Kill(pid, syscall.SIGTERM)
 }
 
-func hasDiscoveryFile(pid int) bool {
+// OwnsLiveSession reports whether pid is both alive and a session this
+// dashboard is responsible for: one this manager itself spawned (any status —
+// a spawnStore entry survives independently of restart), or one whose channel
+// bridge is alive and really is pid's child.
+//
+// A discovery file's name alone does not prove that: the channel bridge
+// removes ~/.claude/dashboard-channel/<pid>.json only on its own clean
+// shutdown, so a crashed bridge leaves a stale file naming a pid the OS may
+// since have reused for an unrelated process — including another long-lived
+// group leader outside this dashboard's control.
+func (m *SpawnManager) OwnsLiveSession(pid int) bool {
+	if !processAlive(pid) {
+		return false
+	}
+	if m.GetStatus(pid) != nil {
+		return true
+	}
+	return bridgeConfirmsParent(pid)
+}
+
+// bridgeConfirmsParent reads pid's channel-bridge discovery file and reports
+// whether the bridge process it names is alive and its own parent is really
+// pid — the only way a discovery file confirms pid is still that bridge's
+// claude, not a stale name left behind after a crash or a pid reuse.
+func bridgeConfirmsParent(pid int) bool {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return false
 	}
-	_, err = os.Stat(channelconfig.DiscoveryFile(home, pid))
-	return err == nil
+	data, err := os.ReadFile(channelconfig.DiscoveryFile(home, pid))
+	if err != nil {
+		return false
+	}
+	var disc struct {
+		ChannelPid int `json:"channelPid"`
+	}
+	if json.Unmarshal(data, &disc) != nil || disc.ChannelPid == 0 || !processAlive(disc.ChannelPid) {
+		return false
+	}
+	ppid, err := proc.ParentPID(disc.ChannelPid)
+	return err == nil && ppid == pid
 }
 
 func ProcessAlive(pid int) bool { return processAlive(pid) }

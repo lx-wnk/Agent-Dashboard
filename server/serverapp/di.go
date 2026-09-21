@@ -1105,7 +1105,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 					return kontorSpawns.SpawnSession(ctx, agents.SessionSpawnOptions(o))
 				},
 				Terminate: kontorSpawns.TerminateSession,
-				Alive:     agents.ProcessAlive,
+				Alive:     kontorSpawns.OwnsLiveSession,
 				WaitExit:  agents.WaitForExit,
 			}
 			if err := kontorSvc.Reconcile(ctx); err != nil {
