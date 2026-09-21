@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Agent, PipelineTask } from '../types'
+import type { ActiveView } from '@/composables/useViewState'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ACTIVE_VIEWS, useViewState } from '@/composables/useViewState'
 import { useKontorSession } from '@/features/mission/composables/useKontorSession'
@@ -44,7 +45,7 @@ const KONTOR_NO_TILE = 'Kontor has no tile — add it to a page with Edit layout
 
 // The Kontor tile can be removed or swapped off any page, so hand-off has to
 // find where the reply would actually show before it navigates there.
-function kontorTargetView(): string | null {
+function kontorTargetView(): ActiveView | null {
   const zentrale = layout.value.pages.find(p => p.id === ZENTRALE_PAGE_ID)
   if (zentrale?.tiles.some(t => t.widget === 'kontor'))
     return 'zentrale'

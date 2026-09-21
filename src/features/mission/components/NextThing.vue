@@ -23,7 +23,7 @@ const problem = ref('')
 const itemKey = computed(() => {
   const n = props.next
   if (!n)
-    return null
+    return undefined
   if (n.kind === 'permission')
     return `permission:${n.request?.id ?? ''}`
   if (n.pid !== undefined)
