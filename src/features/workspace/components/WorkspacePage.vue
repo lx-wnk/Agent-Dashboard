@@ -41,10 +41,8 @@ function onChange(next: Page) {
       v-if="editing && current"
       :page="current"
       :refusal="refusal"
-      :locked="!!locked"
       @change="onChange"
       @refuse="r => (refusal = r)"
-      @reset="reset"
       @done="editing = false"
     />
     <WorkspaceGrid v-if="current" class="min-h-0 flex-1" :page="current" :editing="editing" @change="onChange" @refuse="r => (refusal = r)" />

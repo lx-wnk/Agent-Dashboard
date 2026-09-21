@@ -69,7 +69,7 @@ describe('edit mode', () => {
 
 describe('workspace edit bar', () => {
   it('adds a tile, excluding widgets already on the page', async () => {
-    const w = mount(WorkspaceEditBar, { props: { page, refusal: null, locked: false } })
+    const w = mount(WorkspaceEditBar, { props: { page, refusal: null } })
     const options = w.findAll('option').map(o => o.attributes('value')).filter(v => v)
     expect(options).not.toContain('agents')
     expect(options).not.toContain('github')

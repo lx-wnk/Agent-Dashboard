@@ -4,8 +4,8 @@ import { computed, ref } from 'vue'
 import { addTile } from '../layout'
 import { widgetIds, WIDGETS } from '../widgetRegistry'
 
-const props = defineProps<{ page: WorkspacePage, refusal: string | null, locked: boolean }>()
-const emit = defineEmits<{ change: [page: WorkspacePage], refuse: [reason: string], reset: [], done: [] }>()
+const props = defineProps<{ page: WorkspacePage, refusal: string | null }>()
+const emit = defineEmits<{ change: [page: WorkspacePage], refuse: [reason: string], done: [] }>()
 
 const choice = ref('')
 const addable = computed(() => widgetIds().filter(id => !props.page.tiles.some(t => t.widget === id)))
@@ -37,9 +37,6 @@ function add() {
     </select>
     <button type="button" data-testid="workspace-add-submit" class="rounded-md border border-line-strong px-2.5 py-1" :disabled="!choice" @click="add">
       Add
-    </button>
-    <button v-if="locked" type="button" data-testid="workspace-reset" class="rounded-md border border-line-strong px-2.5 py-1" @click="emit('reset')">
-      Reset to default
     </button>
     <button type="button" data-testid="workspace-done" class="rounded-md bg-accent px-2.5 py-1 text-accent-contrast" @click="emit('done')">
       Done
