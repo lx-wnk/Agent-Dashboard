@@ -282,4 +282,15 @@ test('a page whose code fails to load says so and keeps what needs you on screen
   const strip = page.getByTestId('needs-you')
   await expect(strip).toHaveAttribute('data-variant', 'strip')
   await expect(strip).toContainText('Which colour do you prefer?')
+  await expect(page.getByTestId('nav-new-page')).toBeVisible()
+  await expect(page.getByTestId('workspace-edit-toggle')).toHaveCount(0)
+})
+
+test('the layout cannot be edited while the error line replaces the page', async ({ page }) => {
+  await page.route('/api/agents', route => route.fulfill({ status: 500 }))
+  await page.route('/api/agents/stream', route => route.abort())
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByText('Error: HTTP 500')).toBeVisible()
+  await expect(page.getByTestId('nav-new-page')).toBeVisible()
+  await expect(page.getByTestId('workspace-edit-toggle')).toHaveCount(0)
 })
