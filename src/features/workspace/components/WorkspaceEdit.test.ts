@@ -107,6 +107,55 @@ describe('drag and resize', () => {
     expect(w.emitted('refuse')?.[0]?.[0]).toMatch(/overlap/i)
     w.unmount()
   })
+
+  it('grows a tile from its resize handle, keeping the anchor', async () => {
+    const w = mount(WorkspaceGrid, { props: { page, editing: true }, attachTo: document.body })
+    const grid = w.get('[data-testid="workspace-grid"]').element as HTMLElement
+    grid.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1190, height: 320, right: 1190, bottom: 320, x: 0, y: 0, toJSON: () => ({}) })
+    const handle = w.get('[data-testid="workspace-resize-agents"]').element
+    // (250, 250) sits in agents' bottom-right cell (col 3, row 3); (250, 340)
+    // is one row further down (col 3, row 4) — same columns, one row taller.
+    handle.dispatchEvent(pointer('pointerdown', { clientX: 250, clientY: 250, pointerId: 1, button: 0 }))
+    handle.dispatchEvent(pointer('pointermove', { clientX: 250, clientY: 340, pointerId: 1 }))
+    await w.vm.$nextTick()
+    handle.dispatchEvent(pointer('pointerup', { clientX: 250, clientY: 340, pointerId: 1 }))
+    await w.vm.$nextTick()
+    expect(w.emitted('change')?.at(-1)?.[0]).toMatchObject({ tiles: [{ widget: 'agents', col: 1, row: 1, colSpan: 3, rowSpan: 4 }, { widget: 'github' }] })
+    w.unmount()
+  })
+
+  it('refuses a resize below the widget minimum and reports why', async () => {
+    const w = mount(WorkspaceGrid, { props: { page, editing: true }, attachTo: document.body })
+    const grid = w.get('[data-testid="workspace-grid"]').element as HTMLElement
+    grid.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1190, height: 320, right: 1190, bottom: 320, x: 0, y: 0, toJSON: () => ({}) })
+    const handle = w.get('[data-testid="workspace-resize-agents"]').element
+    handle.dispatchEvent(pointer('pointerdown', { clientX: 250, clientY: 250, pointerId: 1, button: 0 }))
+    // (150, 250) is col 2, row 3 — a 2-column-wide target, below agents' minimum of 3.
+    handle.dispatchEvent(pointer('pointermove', { clientX: 150, clientY: 250, pointerId: 1 }))
+    await w.vm.$nextTick()
+    // validatePlacement (which drives the ghost) only checks bounds and overlap,
+    // not a widget's minimum size, so the below-minimum target here does not
+    // turn the ghost invalid — only the pointerup refusal below catches it.
+    expect(w.get('[data-testid="workspace-ghost"]').classes()).not.toContain('workspace-ghost--invalid')
+    handle.dispatchEvent(pointer('pointerup', { clientX: 150, clientY: 250, pointerId: 1 }))
+    await w.vm.$nextTick()
+    expect(w.emitted('change')).toBeUndefined()
+    expect(w.emitted('refuse')?.[0]?.[0]).toMatch(/needs at least 3 × 2/)
+    w.unmount()
+  })
+
+  it('emits nothing when a resize ends where it started', async () => {
+    const w = mount(WorkspaceGrid, { props: { page, editing: true }, attachTo: document.body })
+    const grid = w.get('[data-testid="workspace-grid"]').element as HTMLElement
+    grid.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1190, height: 320, right: 1190, bottom: 320, x: 0, y: 0, toJSON: () => ({}) })
+    const handle = w.get('[data-testid="workspace-resize-agents"]').element
+    handle.dispatchEvent(pointer('pointerdown', { clientX: 250, clientY: 250, pointerId: 1, button: 0 }))
+    handle.dispatchEvent(pointer('pointerup', { clientX: 250, clientY: 250, pointerId: 1 }))
+    await w.vm.$nextTick()
+    expect(w.emitted('change')).toBeUndefined()
+    expect(w.emitted('refuse')).toBeUndefined()
+    w.unmount()
+  })
 })
 
 describe('workspace edit bar', () => {
