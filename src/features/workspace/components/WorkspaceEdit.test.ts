@@ -1,6 +1,8 @@
+import type { WorkspaceLayout } from '../layout'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
-import { defineComponent, h } from 'vue'
+import { defineComponent, h, ref } from 'vue'
+import { useViewState } from '@/composables/useViewState'
 import { WIDGET_SPECS } from '../widgetSpecs'
 
 // Real panels would fetch from jsdom; the swap/add candidates are the four
@@ -14,8 +16,22 @@ vi.mock('../widgetRegistry', () => {
   }
 })
 
+const ws = {
+  layout: ref<WorkspaceLayout>({ version: 1, pages: [] }),
+  loaded: ref(true),
+  locked: ref<string | null>(null),
+  saveError: ref<string | null>(null),
+  editing: ref(true),
+  load: vi.fn(async () => {}),
+  reset: vi.fn(async () => {}),
+  save: vi.fn(async (next: WorkspaceLayout) => { ws.layout.value = next }),
+  page: (id: string) => ws.layout.value.pages.find(p => p.id === id),
+}
+vi.mock('../useWorkspace', () => ({ useWorkspace: () => ws }))
+
 const { default: WorkspaceGrid } = await import('./WorkspaceGrid.vue')
 const { default: WorkspaceEditBar } = await import('./WorkspaceEditBar.vue')
+const { default: WorkspacePage } = await import('./WorkspacePage.vue')
 
 const page = {
   id: 'zentrale',
@@ -164,6 +180,74 @@ describe('workspace edit bar', () => {
     await w.get('[data-testid="workspace-add"]').setValue('pipeline')
     await w.get('[data-testid="workspace-add-submit"]').trigger('click')
     expect(w.emitted('change')?.[0]?.[0]).toMatchObject({ tiles: [{ widget: 'agents' }, { widget: 'github' }, { widget: 'pipeline' }] })
+    w.unmount()
+  })
+})
+
+describe('page rename and delete', () => {
+  const morning = { id: 'p-morning', title: 'Morning', tiles: [] }
+
+  it('offers neither rename nor delete for the Zentrale', () => {
+    const w = mount(WorkspaceEditBar, { props: { page, refusal: null } })
+    expect(w.find('[data-testid="workspace-rename"]').exists()).toBe(false)
+    expect(w.find('[data-testid="workspace-delete-page"]').exists()).toBe(false)
+    w.unmount()
+  })
+
+  // setValue fires `change` as well, which is the browser's commit on blur or Enter.
+  it('emits the new title once the rename is committed', async () => {
+    const w = mount(WorkspaceEditBar, { props: { page: morning, refusal: null } })
+    const input = w.get('[data-testid="workspace-rename"]')
+    expect((input.element as HTMLInputElement).value).toBe('Morning')
+    await input.setValue('Dawn')
+    expect(w.emitted('rename')?.[0]).toEqual(['Dawn'])
+    w.unmount()
+  })
+
+  it('deletes only after a second, named confirmation', async () => {
+    const w = mount(WorkspaceEditBar, { props: { page: morning, refusal: null } })
+    await w.get('[data-testid="workspace-delete-page"]').trigger('click')
+    expect(w.emitted('remove')).toBeUndefined()
+    expect(w.get('[data-testid="workspace-delete-confirm"]').text()).toBe('Delete Morning and its tiles?')
+    await w.get('[data-testid="workspace-delete-cancel"]').trigger('click')
+    expect(w.find('[data-testid="workspace-delete-confirm"]').exists()).toBe(false)
+
+    await w.get('[data-testid="workspace-delete-page"]').trigger('click')
+    await w.get('[data-testid="workspace-delete-confirm"]').trigger('click')
+    expect(w.emitted('remove')).toHaveLength(1)
+    w.unmount()
+  })
+
+  function seed() {
+    ws.layout.value = { version: 1, pages: [{ id: 'zentrale', title: 'Zentrale', tiles: [] }, morning] }
+    ws.editing.value = true
+    ws.save.mockClear()
+    useViewState().activeView.value = 'page:p-morning'
+  }
+
+  it('saves a renamed page, and keeps the stored title when the name is refused', async () => {
+    seed()
+    const w = mount(WorkspacePage, { props: { pageId: 'p-morning' } })
+    const input = w.get('[data-testid="workspace-rename"]')
+    await input.setValue('Dawn')
+    expect(ws.save.mock.calls[0]![0].pages[1]).toMatchObject({ id: 'p-morning', title: 'Dawn' })
+    expect((w.get('[data-testid="workspace-rename"]').element as HTMLInputElement).value).toBe('Dawn')
+
+    await input.setValue('   ')
+    expect(ws.save).toHaveBeenCalledTimes(1)
+    expect(w.get('[data-testid="workspace-refusal"]').text()).toMatch(/1 to 80 characters/)
+    expect((w.get('[data-testid="workspace-rename"]').element as HTMLInputElement).value).toBe('Dawn')
+    w.unmount()
+  })
+
+  it('removes a deleted page and goes back to the Zentrale', async () => {
+    seed()
+    const w = mount(WorkspacePage, { props: { pageId: 'p-morning' } })
+    await w.get('[data-testid="workspace-delete-page"]').trigger('click')
+    await w.get('[data-testid="workspace-delete-confirm"]').trigger('click')
+    expect(ws.save.mock.calls[0]![0].pages.map((p: { id: string }) => p.id)).toEqual(['zentrale'])
+    expect(useViewState().activeView.value).toBe('zentrale')
+    expect(ws.editing.value).toBe(false)
     w.unmount()
   })
 })

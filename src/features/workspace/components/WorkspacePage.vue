@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import type { WorkspacePage as Page } from '../layout'
+import type { OpResult, WorkspacePage as Page, WorkspaceLayout } from '../layout'
 import { computed, onMounted, ref, watch } from 'vue'
-import { replacePage } from '../layout'
+import { useViewState } from '@/composables/useViewState'
+import { removePage, renamePage, replacePage } from '../layout'
 import { useWorkspace } from '../useWorkspace'
 import WorkspaceEditBar from './WorkspaceEditBar.vue'
 import WorkspaceGrid from './WorkspaceGrid.vue'
 
 const props = defineProps<{ pageId: string }>()
 const { layout, load, save, locked, saveError, editing, reset, page } = useWorkspace()
+const { activeView } = useViewState()
 onMounted(load)
 
 const current = computed(() => page(props.pageId))
@@ -20,9 +22,26 @@ watch(locked, (l) => {
     editing.value = false
 })
 
+function commit(r: OpResult<WorkspaceLayout>): boolean {
+  if (!r.ok) {
+    refusal.value = r.reason
+    return false
+  }
+  refusal.value = null
+  save(r.value)
+  return true
+}
+
 function onChange(next: Page) {
   refusal.value = null
   save(replacePage(layout.value, next))
+}
+
+function onRemove() {
+  if (!commit(removePage(layout.value, props.pageId)))
+    return
+  editing.value = false
+  activeView.value = 'zentrale'
 }
 </script>
 
@@ -44,6 +63,8 @@ function onChange(next: Page) {
       @change="onChange"
       @refuse="r => (refusal = r)"
       @done="editing = false"
+      @rename="title => commit(renamePage(layout, pageId, title))"
+      @remove="onRemove"
     />
     <WorkspaceGrid v-if="current" class="min-h-0 flex-1" :page="current" :editing="editing" @change="onChange" @refuse="r => (refusal = r)" />
   </div>
