@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import type { OpResult, PlacedTile, WorkspacePage } from '../layout'
-import { computed } from 'vue'
-import { fitsMinimum, moveTile, readingOrder, removeTile, resizeTile, rowsUsed, swapTile } from '../layout'
+import { computed, ref } from 'vue'
+import { cellAt } from '../gridGeometry'
+import { fitsMinimum, moveTile, readingOrder, removeTile, resizeTile, rowsUsed, swapTile, validatePlacement } from '../layout'
 import { widgetIds, WIDGETS } from '../widgetRegistry'
 
 const props = defineProps<{ page: WorkspacePage, editing: boolean }>()
@@ -11,6 +12,50 @@ const emit = defineEmits<{ change: [page: WorkspacePage], refuse: [reason: strin
 // shows; from md up every tile is placed explicitly, so DOM order stops mattering.
 const ordered = computed(() => readingOrder(props.page.tiles))
 const rows = computed(() => rowsUsed(props.page.tiles))
+
+const GAP = 12 // matches .workspace-grid gap
+const gridEl = ref<HTMLElement | null>(null)
+const drag = ref<null | { index: number, mode: 'move' | 'resize', grabCol: number, grabRow: number, target: PlacedTile }>(null)
+
+function cellOf(e: PointerEvent) {
+  return cellAt(gridEl.value!.getBoundingClientRect(), e.clientX, e.clientY, rows.value, GAP)
+}
+
+function startDrag(e: PointerEvent, index: number, mode: 'move' | 'resize') {
+  if (!props.editing || e.button !== 0 || (e.target as HTMLElement).closest('select, button:not([data-resize])'))
+    return
+  const t = props.page.tiles[index]
+  const c = cellOf(e)
+  drag.value = { index, mode, grabCol: c.col - t.col, grabRow: c.row - t.row, target: { ...t } }
+  ;(e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId)
+  e.stopPropagation()
+}
+
+function moveDrag(e: PointerEvent) {
+  const d = drag.value
+  if (!d)
+    return
+  const t = props.page.tiles[d.index]
+  const c = cellOf(e)
+  d.target = d.mode === 'move'
+    ? { ...t, col: Math.max(1, Math.min(13 - t.colSpan, c.col - d.grabCol)), row: Math.max(1, c.row - d.grabRow) }
+    : { ...t, colSpan: Math.max(1, c.col - t.col + 1), rowSpan: Math.max(1, c.row - t.row + 1) }
+}
+
+function endDrag() {
+  const d = drag.value
+  drag.value = null
+  if (!d)
+    return
+  const t = props.page.tiles[d.index]
+  if (d.target.col === t.col && d.target.row === t.row && d.target.colSpan === t.colSpan && d.target.rowSpan === t.rowSpan)
+    return
+  apply(d.mode === 'move'
+    ? moveTile(props.page, d.index, d.target.col, d.target.row)
+    : resizeTile(props.page, d.index, d.target.colSpan, d.target.rowSpan))
+}
+
+const ghostInvalid = computed(() => !!drag.value && validatePlacement(props.page.tiles, drag.value.target, drag.value.index) !== null)
 
 function placement(t: PlacedTile): Record<string, number> {
   return { '--col': t.col, '--col-span': t.colSpan, '--row': t.row, '--row-span': t.rowSpan }
@@ -61,7 +106,7 @@ function swapOptions(index: number) {
 </script>
 
 <template>
-  <div data-testid="workspace-grid" class="workspace-grid" :style="{ '--rows': rows }">
+  <div ref="gridEl" data-testid="workspace-grid" class="workspace-grid" :style="{ '--rows': rows }">
     <div
       v-for="{ tile, index } in ordered"
       :key="`${tile.widget}-${index}`"
@@ -72,6 +117,10 @@ function swapOptions(index: number) {
       :tabindex="editing ? 0 : undefined"
       :aria-label="editing ? tileAriaLabel(tile) : undefined"
       @keydown="onKey($event, index)"
+      @pointerdown="startDrag($event, index, 'move')"
+      @pointermove="moveDrag"
+      @pointerup="endDrag"
+      @pointercancel="drag = null"
     >
       <div v-if="editing" class="workspace-chrome">
         <select
@@ -101,7 +150,23 @@ function swapOptions(index: number) {
       <div v-else data-testid="workspace-unknown" class="h-full rounded-xl border border-dashed border-line p-4 text-[12px] text-fg-mute">
         {{ tile.widget }} is not available — the module that provides it may be inactive.
       </div>
+      <button
+        v-if="editing"
+        type="button"
+        data-resize
+        :data-testid="`workspace-resize-${tile.widget}`"
+        :aria-label="`Resize ${widgetTitle(tile)} (Shift+arrows)`"
+        class="workspace-resize"
+        @pointerdown="startDrag($event, index, 'resize')"
+      />
     </div>
+    <div
+      v-if="drag"
+      data-testid="workspace-ghost"
+      class="workspace-ghost"
+      :class="{ 'workspace-ghost--invalid': ghostInvalid }"
+      :style="placement(drag.target)"
+    />
   </div>
 </template>
 
@@ -111,8 +176,11 @@ function swapOptions(index: number) {
 .workspace-tile > :deep(*) { height: 100%; }
 .workspace-tile--editing { outline: 1px dashed var(--color-line-strong); outline-offset: 2px; border-radius: 12px; cursor: grab; }
 .workspace-tile--editing:focus-visible { outline: 2px solid var(--color-accent); }
-.workspace-tile--editing > :deep(:not(.workspace-chrome)) { pointer-events: none; }
+.workspace-tile--editing > :deep(:not(.workspace-chrome):not(.workspace-resize)) { pointer-events: none; }
 .workspace-chrome { position: absolute; top: 6px; right: 6px; z-index: 2; display: flex; gap: 4px; }
+.workspace-resize { position: absolute; right: 2px; bottom: 2px; z-index: 2; width: 14px; height: 14px; cursor: nwse-resize; border-right: 2px solid var(--color-accent); border-bottom: 2px solid var(--color-accent); border-radius: 0 0 8px 0; }
+.workspace-ghost { pointer-events: none; border: 2px dashed var(--color-accent); border-radius: 12px; background: color-mix(in oklch, var(--color-accent) 10%, transparent); }
+.workspace-ghost--invalid { border-color: var(--color-danger); background: color-mix(in oklch, var(--color-danger) 10%, transparent); }
 @media (min-width: 768px) {
   .workspace-grid {
     height: 100%;
@@ -120,6 +188,10 @@ function swapOptions(index: number) {
     grid-template-rows: repeat(var(--rows), minmax(56px, 1fr));
   }
   .workspace-tile {
+    grid-column: var(--col) / span var(--col-span);
+    grid-row: var(--row) / span var(--row-span);
+  }
+  .workspace-ghost {
     grid-column: var(--col) / span var(--col-span);
     grid-row: var(--row) / span var(--row-span);
   }

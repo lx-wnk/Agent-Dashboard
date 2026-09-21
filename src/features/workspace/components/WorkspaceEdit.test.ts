@@ -67,6 +67,48 @@ describe('edit mode', () => {
   })
 })
 
+describe('drag and resize', () => {
+  // jsdom's PointerEvent constructor does not carry clientX/clientY/pointerId
+  // through Vue Test Utils' trigger() init dict, so pointer events used to
+  // determine a drop cell are constructed and dispatched directly.
+  function pointer(type: string, init: { clientX: number, clientY: number, pointerId: number, button?: number }) {
+    return new PointerEvent(type, { bubbles: true, cancelable: true, ...init })
+  }
+
+  it('drops a dragged tile on the cell under the pointer', async () => {
+    const w = mount(WorkspaceGrid, { props: { page, editing: true }, attachTo: document.body })
+    const grid = w.get('[data-testid="workspace-grid"]').element as HTMLElement
+    // 12 columns, 12px gaps (matches .workspace-grid); 3 rows over a 320px grid.
+    grid.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1190, height: 320, right: 1190, bottom: 320, x: 0, y: 0, toJSON: () => ({}) })
+    const tile = w.get('[data-testid="workspace-tile-agents"]').element
+    tile.dispatchEvent(pointer('pointerdown', { clientX: 5, clientY: 5, pointerId: 1, button: 0 }))
+    tile.dispatchEvent(pointer('pointermove', { clientX: 705, clientY: 5, pointerId: 1 }))
+    await w.vm.$nextTick()
+    expect(w.find('[data-testid="workspace-ghost"]').exists()).toBe(true)
+    tile.dispatchEvent(pointer('pointerup', { clientX: 705, clientY: 5, pointerId: 1 }))
+    await w.vm.$nextTick()
+    expect(w.emitted('change')?.at(-1)?.[0]).toMatchObject({ tiles: [{ widget: 'agents', col: 8, row: 1 }, { widget: 'github' }] })
+    w.unmount()
+  })
+
+  // Refuse, never displace: the model is unchanged and the reason is said.
+  it('snaps back and reports when the drop would overlap', async () => {
+    const w = mount(WorkspaceGrid, { props: { page, editing: true }, attachTo: document.body })
+    const grid = w.get('[data-testid="workspace-grid"]').element as HTMLElement
+    grid.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1190, height: 320, right: 1190, bottom: 320, x: 0, y: 0, toJSON: () => ({}) })
+    const tile = w.get('[data-testid="workspace-tile-agents"]').element
+    tile.dispatchEvent(pointer('pointerdown', { clientX: 5, clientY: 5, pointerId: 1, button: 0 }))
+    tile.dispatchEvent(pointer('pointermove', { clientX: 405, clientY: 5, pointerId: 1 }))
+    await w.vm.$nextTick()
+    expect(w.get('[data-testid="workspace-ghost"]').classes()).toContain('workspace-ghost--invalid')
+    tile.dispatchEvent(pointer('pointerup', { clientX: 405, clientY: 5, pointerId: 1 }))
+    await w.vm.$nextTick()
+    expect(w.emitted('change')).toBeUndefined()
+    expect(w.emitted('refuse')?.[0]?.[0]).toMatch(/overlap/i)
+    w.unmount()
+  })
+})
+
 describe('workspace edit bar', () => {
   it('adds a tile, excluding widgets already on the page', async () => {
     const w = mount(WorkspaceEditBar, { props: { page, refusal: null } })
