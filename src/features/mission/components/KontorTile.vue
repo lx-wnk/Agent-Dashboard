@@ -58,7 +58,7 @@ async function renewSession() {
   <section
     data-testid="kontor-tile"
     aria-label="Kontor"
-    class="relative flex min-h-[420px] flex-col overflow-hidden rounded-xl border border-line bg-card"
+    class="relative flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-line bg-card"
   >
     <!-- Absolute, so the transcript scrolls inside the tile: the Mission column
          has no fixed height and would otherwise grow with every message. -->

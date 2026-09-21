@@ -14,6 +14,7 @@ function spec(id: string, title: string, def: [number, number], min: [number, nu
 // Spans from the Zentrale spec's widget table. Plain data on purpose: the layout
 // rules import this without pulling in a single component.
 export const WIDGET_SPECS: Record<string, WidgetSpec> = Object.fromEntries([
+  spec('kontor', 'Kontor', [6, 1], [4, 1]),
   spec('live-work', 'Live work', [3, 5], [3, 3]),
   spec('agents', 'Agents', [3, 3], [3, 2]),
   spec('pipeline', 'Pipeline', [3, 3], [3, 2]),
