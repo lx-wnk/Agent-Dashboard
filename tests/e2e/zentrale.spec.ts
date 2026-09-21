@@ -177,3 +177,55 @@ test('a pointer drag on the resize handle resizes the cost-today tile and the ne
   await page.reload({ waitUntil: 'domcontentloaded' })
   await expect(page.getByTestId('workspace-tile-cost-today')).toHaveAttribute('style', /--row-span: 4\b/)
 })
+
+// A reload reads the layout from the server exactly as a restart does: the
+// layout lives only in the settings table.
+test('a page of my own survives a reload', async ({ page }) => {
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await page.getByTestId('nav-new-page').click()
+  await page.getByTestId('nav-new-page-input').fill('Morning')
+  const created = patched(page)
+  await page.getByTestId('nav-new-page-input').press('Enter')
+  expect((await created).ok(), 'save (new page) request').toBe(true)
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Morning')
+
+  await page.getByTestId('workspace-add').selectOption('github')
+  const filled = patched(page)
+  await page.getByTestId('workspace-add-submit').click()
+  expect((await filled).ok(), 'save (add tile) request').toBe(true)
+  await page.getByTestId('workspace-done').click()
+
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.locator('[data-testid^="nav-page-"]', { hasText: 'Morning' }).click()
+  await expect(page.getByTestId('workspace-tile-github')).toBeVisible()
+})
+
+test('a page of my own is renamed and deleted in its edit mode', async ({ page, request, baseURL }) => {
+  const layout = {
+    version: 1,
+    pages: [
+      { id: 'zentrale', title: 'Zentrale', tiles: [] },
+      { id: 'p-morning', title: 'Morning', tiles: [{ widget: 'github', col: 1, row: 1, colSpan: 3, rowSpan: 3 }] },
+    ],
+  }
+  await storeLayout(request, baseURL, JSON.stringify(layout))
+  await page.addInitScript(() => localStorage.setItem('agent-active-view', 'page:p-morning'))
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Morning')
+  await page.getByTestId('workspace-edit-toggle').click()
+
+  await page.getByTestId('workspace-rename').fill('Dawn')
+  const renamed = patched(page)
+  await page.getByTestId('workspace-rename').press('Enter')
+  expect((await renamed).ok(), 'save (rename) request').toBe(true)
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Dawn')
+  await expect(page.getByTestId('nav-page-p-morning')).toContainText('Dawn')
+
+  await page.getByTestId('workspace-delete-page').click()
+  await expect(page.getByTestId('workspace-delete-confirm')).toHaveText('Delete Dawn and its tiles?')
+  const removed = patched(page)
+  await page.getByTestId('workspace-delete-confirm').click()
+  expect((await removed).ok(), 'save (delete page) request').toBe(true)
+  await expect(page.getByTestId('workspace-page-zentrale')).toBeVisible()
+  await expect(page.getByTestId('nav-page-p-morning')).toHaveCount(0)
+})
