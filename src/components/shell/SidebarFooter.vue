@@ -18,12 +18,15 @@ defineEmits<{
       v-if="canInstall"
       type="button"
       data-testid="footer-install"
-      class="flex items-center gap-2 rounded-lg px-2 min-h-[36px] text-[12px] text-fg-mute hover:text-fg hover:bg-raised transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
-      :class="expanded ? 'w-full' : 'w-full justify-center'"
+      class="flex items-center gap-3 w-full rounded-lg px-2.5 min-h-[36px] text-[12px] text-fg-mute hover:text-fg hover:bg-raised transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
       :title="!expanded ? 'Install PWA' : undefined"
       @click="$emit('install')"
     >
-      <span aria-hidden="true">⬇</span><span v-if="expanded">Install PWA</span><span v-else class="sr-only">Install PWA</span>
+      <span class="w-5 shrink-0 text-center" aria-hidden="true">⬇</span>
+      <span
+        class="whitespace-nowrap transition-opacity duration-150 motion-reduce:transition-none"
+        :class="expanded ? 'opacity-100 delay-75' : 'opacity-0 delay-0'"
+      >Install PWA</span>
     </button>
     <!-- One column in both states. Laying these three out in a row when
          expanded made the footer ~80px shorter, and the last nav group is
@@ -33,12 +36,15 @@ defineEmits<{
       <button
         type="button"
         data-testid="footer-sessions"
-        class="flex items-center gap-2 rounded-lg px-2 min-h-[36px] text-[12px] text-fg-mute hover:text-fg hover:bg-raised transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
-        :class="expanded ? 'w-full' : 'w-full justify-center'"
+        class="flex items-center gap-3 w-full rounded-lg px-2.5 min-h-[36px] text-[12px] text-fg-mute hover:text-fg hover:bg-raised transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
         :title="!expanded ? 'Sessions' : undefined"
         @click="$emit('openSessions')"
       >
-        <span aria-hidden="true">🕘</span><span v-if="expanded">Sessions</span><span v-else class="sr-only">Sessions</span>
+        <span class="w-5 shrink-0 text-center" aria-hidden="true">🕘</span>
+        <span
+          class="whitespace-nowrap transition-opacity duration-150 motion-reduce:transition-none"
+          :class="expanded ? 'opacity-100 delay-75' : 'opacity-0 delay-0'"
+        >Sessions</span>
       </button>
       <button
         type="button"
