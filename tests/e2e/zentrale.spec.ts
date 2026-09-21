@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test'
+import type { APIRequestContext, APIResponse, Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 
 // The client itself retries a 429 (useWorkspace's fetchWithRateLimitRetry), so an
@@ -9,15 +9,28 @@ function patched(page: Page) {
     resp.url().includes('/api/settings/workspace.layout') && resp.request().method() === 'PATCH' && resp.status() !== 429)
 }
 
+// Origin must match the server's own host (see 'Task API needs Origin header'
+// in .agent-context/memory). The browser under test shares the server's per-IP
+// rate limiter, so a 429 is retried — an ignored one leaves a seeded layout in
+// place for the next test.
+async function storeLayout(request: APIRequestContext, baseURL: string | undefined, value: string) {
+  let res: APIResponse | undefined
+  for (let attempt = 0; attempt < 5 && (!res || res.status() === 429); attempt++) {
+    if (res)
+      await new Promise(resolve => setTimeout(resolve, 1000))
+    res = await request.patch('/api/settings/workspace.layout', {
+      headers: { Origin: baseURL ?? 'http://localhost:13199' },
+      data: { value },
+    })
+  }
+  expect(res?.ok(), `store layout request (HTTP ${res?.status()})`).toBe(true)
+}
+
 // The stored layout is shared server-side state, not per-test-context state —
 // reset it after every test so a mutation here can never leak into the next
-// spec file or the next run of this one. Origin must match the server's own
-// host (see 'Task API needs Origin header' in .agent-context/memory).
+// spec file or the next run of this one.
 test.afterEach(async ({ request, baseURL }) => {
-  await request.patch('/api/settings/workspace.layout', {
-    headers: { Origin: baseURL ?? 'http://localhost:13199' },
-    data: { value: '' },
-  })
+  await storeLayout(request, baseURL, '')
 })
 
 test('the Zentrale is the default page with the nine widgets', async ({ page }) => {
@@ -35,11 +48,7 @@ test('a stored page view shows that page, and a page that is gone falls back to 
       { id: 'p-morning', title: 'Morning', tiles: [{ widget: 'github', col: 1, row: 1, colSpan: 3, rowSpan: 3 }] },
     ],
   }
-  const seeded = await request.patch('/api/settings/workspace.layout', {
-    headers: { Origin: baseURL ?? 'http://localhost:13199' },
-    data: { value: JSON.stringify(layout) },
-  })
-  expect(seeded.ok(), 'seed layout request').toBe(true)
+  await storeLayout(request, baseURL, JSON.stringify(layout))
 
   await page.goto('/', { waitUntil: 'domcontentloaded' })
   await page.evaluate(() => localStorage.setItem('agent-active-view', 'page:p-morning'))
@@ -53,6 +62,30 @@ test('a stored page view shows that page, and a page that is gone falls back to 
   await expect(page.getByTestId('workspace-page-zentrale')).toBeVisible()
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Zentrale')
   expect(await page.evaluate(() => localStorage.getItem('agent-active-view'))).toBe('zentrale')
+})
+
+// Only the real app shows whether pages are known before any workspace page has
+// mounted — mounting App.vue in jsdom would need every stream and poller mocked.
+test('pages are offered in the command palette on a view that holds no workspace page', async ({ page, request, baseURL }) => {
+  const layout = {
+    version: 1,
+    pages: [
+      { id: 'zentrale', title: 'Zentrale', tiles: [] },
+      { id: 'p-morning', title: 'Morning', tiles: [] },
+    ],
+  }
+  await storeLayout(request, baseURL, JSON.stringify(layout))
+
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await page.evaluate(() => localStorage.setItem('agent-active-view', 'dashboard'))
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Dashboard')
+  await expect(page.locator('[data-testid^="workspace-page-"]')).toHaveCount(0)
+
+  await page.keyboard.press('ControlOrMeta+k')
+  await page.getByPlaceholder('Search tasks and agents…').fill('Morning')
+  // The load retries a 429 up to 3 times, up to 5 s apart (useWorkspace), so the entry may land late.
+  await expect(page.getByTestId('spotlight-command-view:page:p-morning')).toContainText('Go to Morning', { timeout: 20_000 })
 })
 
 test('a moved tile stays moved after a reload', async ({ page }) => {

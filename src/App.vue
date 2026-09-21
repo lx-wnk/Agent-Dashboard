@@ -105,6 +105,8 @@ watch(loaded, (isLoaded) => {
     startAgents()
     startTasks()
     startTodayCost()
+    // Here, not only when a workspace page mounts: page titles and palette entries are needed on every view.
+    void useWorkspace().load()
     fetchOnboardingStatus().then(() => {
       if (onboardingStatus.value && !onboardingStatus.value.completed)
         showOnboardingFlow()
