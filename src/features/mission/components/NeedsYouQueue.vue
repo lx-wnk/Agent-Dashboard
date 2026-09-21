@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, inject, onMounted, ref, watch } from 'vue'
-import { OPEN_TASK } from '@/composables/openTask'
-import { usePendingPermissions } from '@/composables/usePendingPermissions'
+import { OPEN_TASK, PENDING_PERMISSIONS } from '@/composables/openTask'
 import { useAgents } from '@/features/agents'
 import { useTasks } from '@/features/pipeline'
 import { rankNextThings } from '../composables/useNextThing'
@@ -10,7 +9,12 @@ import NextThing from './NextThing.vue'
 defineProps<{ variant: 'docked' | 'strip' }>()
 
 const { tasks, refetch } = useTasks()
-const { items: pending, refresh } = usePendingPermissions(tasks)
+// App.vue provides the one usePendingPermissions(tasks) instance — a local
+// call here would open a second, out-of-sync cache.
+const pendingPermissions = inject(PENDING_PERMISSIONS)
+if (!pendingPermissions)
+  throw new Error('NeedsYouQueue requires PENDING_PERMISSIONS to be provided by App.vue')
+const { items: pending, refresh } = pendingPermissions
 // autoStart: false — App.vue owns the stream.
 const { agents } = useAgents({ autoStart: false })
 const openTask = inject(OPEN_TASK, () => {})

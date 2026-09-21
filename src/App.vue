@@ -19,7 +19,7 @@ import SpotlightSearch from './components/SpotlightSearch.vue'
 import ToastHost from './components/ToastHost.vue'
 import AppModal from './components/ui/AppModal.vue'
 import AppModalHeader from './components/ui/AppModalHeader.vue'
-import { OPEN_TASK } from './composables/openTask'
+import { OPEN_TASK, PENDING_PERMISSIONS } from './composables/openTask'
 import { useInstallPrompt } from './composables/useInstallPrompt'
 import { useOnboarding } from './composables/useOnboarding'
 import { usePendingPermissions } from './composables/usePendingPermissions'
@@ -32,7 +32,7 @@ import { useTodayCost } from './composables/useTodayCost'
 import { useUsage } from './composables/useUsage'
 import { useUser } from './composables/useUser'
 import { useViewState } from './composables/useViewState'
-import { NeedsYouQueue, useNeedsYouCount } from './features/mission'
+import { NeedsYouQueue, rankNextThings } from './features/mission'
 import MissionControlView from './features/mission/MissionControlView.vue'
 import { formatCost } from './utils/format'
 
@@ -81,16 +81,20 @@ onMounted(() => {
 
 const { agents, costTrend, filteredAgents, attentionAgents, attentionCount, pendingCapabilityDecisions, selectedAgent, isLoading, error, selectAgent, selectAgentWhenAvailable, startStream: startAgents } = useAgents({ autoStart: false })
 const { tasks, selectedTask, selectTask, startStream: startTasks } = useTasks({ autoStart: false })
-const { items: permissionItems, approve: approvePermission, deny: denyPermission, decide: decidePermission } = usePendingPermissions(tasks)
+// The one usePendingPermissions(tasks) instance — provided below so every
+// consumer (the needs-you queue, the title count) reads the same cache.
+const pendingPermissions = usePendingPermissions(tasks)
+provide(PENDING_PERMISSIONS, pendingPermissions)
+const { items: permissionItems, approve: approvePermission, deny: denyPermission, decide: decidePermission } = pendingPermissions
 const combinedAttentionCount = computed(() => attentionCount.value + permissionItems.value.length + pendingCapabilityDecisions.value.length)
 // Today's persisted spend — reuses the shared cost-summary logic so the footer
 // and Cost view agree. Distinct from totalCost (cost of agents running now).
 const { todayUsd, start: startTodayCost } = useTodayCost()
 
-const needsYou = useNeedsYouCount()
+const needsYouCount = computed(() => rankNextThings(permissionItems.value, tasks.value, agents.value).length)
 const BASE_TITLE = 'Agent Dashboard — Claude Code agent monitor'
 watchEffect(() => {
-  document.title = needsYou.value ? `(${needsYou.value}) ${BASE_TITLE}` : BASE_TITLE
+  document.title = needsYouCount.value ? `(${needsYouCount.value}) ${BASE_TITLE}` : BASE_TITLE
 })
 
 // Start data streams and fetch onboarding status only after auth is confirmed —
