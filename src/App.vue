@@ -13,6 +13,7 @@ import AppShell from './components/shell/AppShell.vue'
 import AppSidebar from './components/shell/AppSidebar.vue'
 import AppStatusBar from './components/shell/AppStatusBar.vue'
 import AppTopbar from './components/shell/AppTopbar.vue'
+import PageLoadError from './components/shell/PageLoadError.vue'
 import SkeletonCard from './components/shell/SkeletonCard.vue'
 import SpawnDialog from './components/SpawnDialog.vue'
 import SpotlightSearch from './components/SpotlightSearch.vue'
@@ -40,7 +41,15 @@ import { formatCost } from './utils/format'
 // PERF-BUNDLE1: AgentModal is only ever rendered on agent selection — split into its own chunk
 const AgentModal = defineAsyncComponent(() => import('@/features/agents/components/AgentModal.vue'))
 // F-PERF-019: top-level heavy views loaded on demand — each becomes its own chunk
-const WorkspacePage = defineAsyncComponent(() => import('@/features/workspace/components/WorkspacePage.vue'))
+// A failed chunk stays failed until a reload: defineAsyncComponent caches the rejection.
+const workspaceChunkFailed = ref(false)
+const WorkspacePage = defineAsyncComponent({
+  loader: () => import('@/features/workspace/components/WorkspacePage.vue').catch((err) => {
+    workspaceChunkFailed.value = true
+    throw err
+  }),
+  errorComponent: PageLoadError,
+})
 // Async since the Zentrale took over as the landing view: the dashboard is no
 // longer on the first-paint path, and a static import keeps its whole subtree
 // in the entry chunk, which has a size budget CI enforces.
@@ -263,7 +272,7 @@ provide(OPEN_TASK, (taskId: string) => navigateTo({ taskId }))
 
 const workspace = useWorkspace()
 const currentPageId = computed(() => activeView.value === 'zentrale' ? ZENTRALE_PAGE_ID : pageIdOf(activeView.value))
-const pageHasHub = computed(() => currentPageId.value !== null && !!workspace.page(currentPageId.value)?.tiles.some(t => t.widget === 'hub'))
+const pageHasHub = computed(() => currentPageId.value !== null && !workspaceChunkFailed.value && !!workspace.page(currentPageId.value)?.tiles.some(t => t.widget === 'hub'))
 // Before the layout has loaded a page id cannot be judged missing; loaded is a
 // source of its own because a failed load flips it without replacing layout.
 watch([activeView, workspace.layout, workspace.loaded], () => {

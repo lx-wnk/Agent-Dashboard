@@ -249,3 +249,37 @@ test('the layout cannot be edited before it has loaded', async ({ page }) => {
   await expect(page.getByTestId('workspace-edit-toggle')).toBeVisible()
   await expect(page.getByTestId('nav-new-page')).toBeVisible()
 })
+
+// A stale tab after a server upgrade asks for a page chunk the server no longer has.
+test('a page whose code fails to load says so and keeps what needs you on screen', async ({ page }) => {
+  await page.route('**/assets/WorkspacePage-*.js', route => route.abort())
+  const agent = {
+    pid: 4242,
+    sessionId: 'sess-colour',
+    provider: 'claude',
+    projectName: 'agent-dashboard',
+    projectPath: '/repo/agent-dashboard',
+    cwd: '/repo/agent-dashboard',
+    status: 'waiting',
+    working: false,
+    lastActivity: new Date().toISOString(),
+    uptime: 120,
+    tokenUsage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 },
+    costEstimate: 0,
+    lastTools: [],
+    tasks: [],
+    subagents: [],
+    pendingQuestion: { header: 'Colour', question: 'Which colour do you prefer?', multiSelect: false, options: [{ index: 1, label: 'Red' }], typeSomethingIndex: 2, chatAboutIndex: 3 },
+  }
+  await page.route('/api/agents', route => route.fulfill({ json: [agent] }))
+  await page.route('/api/agents/stream', route => route.fulfill({
+    status: 200,
+    contentType: 'text/event-stream',
+    body: `data: ${JSON.stringify({ agents: [agent] })}\n\n`,
+  }))
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByTestId('page-load-error')).toBeVisible()
+  const strip = page.getByTestId('needs-you')
+  await expect(strip).toHaveAttribute('data-variant', 'strip')
+  await expect(strip).toContainText('Which colour do you prefer?')
+})
