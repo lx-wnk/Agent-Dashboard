@@ -74,9 +74,9 @@ A new service, `kontorsession`, owns the session. Its HTTP surface:
 
 | Route | Effect |
 | --- | --- |
-| `GET /api/kontor-session` | `{ pid }` of the live session, or `null` |
+| `GET /api/kontor-session` | `{ "pid": n }` of the live session, or `{ "pid": null }` |
 | `POST /api/kontor-session` | Starts a session with `{ prompt }`; if one is already running, returns it unchanged |
-| `POST /api/kontor-session/renew` | Ends the running session, then starts one with `{ prompt }` |
+| `POST /api/kontor-session/renew` | Ends the running session, then starts one with `{ prompt }`; the prompt may be empty |
 | `DELETE /api/kontor-session` | Ends the running session; ending none is not an error |
 
 Start, renew and end are serialised by one mutex in the service, so two browser
@@ -86,6 +86,7 @@ windows cannot start two sessions.
 
 A native `claude` from the global default spawner, with:
 
+- `--permission-mode default`, replacing whatever permission flags the default spawner carries (the live default runs `auto`), so writes prompt.
 - `--append-system-prompt <briefing>`. Not `--system-prompt`, which the
   existing spawn path uses (`spawn.go:312`) and which replaces Claude Code's own
   system prompt.
