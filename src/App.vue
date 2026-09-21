@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Agent, PipelineTask } from './types'
-import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, provide, ref, watch, watchEffect } from 'vue'
 import { useAgents } from '@/features/agents/composables/useAgents'
 import BacklogForm from '@/features/pipeline/components/BacklogForm.vue'
 import { useTasks } from '@/features/pipeline/composables/useTasks'
@@ -19,6 +19,7 @@ import SpotlightSearch from './components/SpotlightSearch.vue'
 import ToastHost from './components/ToastHost.vue'
 import AppModal from './components/ui/AppModal.vue'
 import AppModalHeader from './components/ui/AppModalHeader.vue'
+import { OPEN_TASK } from './composables/openTask'
 import { useInstallPrompt } from './composables/useInstallPrompt'
 import { useOnboarding } from './composables/useOnboarding'
 import { usePendingPermissions } from './composables/usePendingPermissions'
@@ -31,6 +32,7 @@ import { useTodayCost } from './composables/useTodayCost'
 import { useUsage } from './composables/useUsage'
 import { useUser } from './composables/useUser'
 import { useViewState } from './composables/useViewState'
+import { NeedsYouQueue, useNeedsYouCount } from './features/mission'
 import MissionControlView from './features/mission/MissionControlView.vue'
 import { formatCost } from './utils/format'
 
@@ -84,6 +86,12 @@ const combinedAttentionCount = computed(() => attentionCount.value + permissionI
 // Today's persisted spend — reuses the shared cost-summary logic so the footer
 // and Cost view agree. Distinct from totalCost (cost of agents running now).
 const { todayUsd, start: startTodayCost } = useTodayCost()
+
+const needsYou = useNeedsYouCount()
+const BASE_TITLE = 'Agent Dashboard — Claude Code agent monitor'
+watchEffect(() => {
+  document.title = needsYou.value ? `(${needsYou.value}) ${BASE_TITLE}` : BASE_TITLE
+})
 
 // Start data streams and fetch onboarding status only after auth is confirmed —
 // avoids 401 flood while login page is shown (onboarding status is behind the
@@ -243,6 +251,13 @@ function navigateTo(target: { agent?: Agent, taskId?: string }) {
   })
 }
 
+// Widgets outside the mission view open a task through this — App.vue owns navigation.
+provide(OPEN_TASK, (taskId: string) => navigateTo({ taskId }))
+
+// The dashboard's triage band shows the same items (AgentTriageBand reads the
+// same agents and permission items); the mission view docks the queue itself.
+const showNeedsYouStrip = computed(() => activeView.value !== 'dashboard' && activeView.value !== 'mission')
+
 // Single routing rule: plan_review tasks open the plan panel, all others the generic modal.
 function openTask(t: PipelineTask) {
   if (t.currentStage === 'plan_review') {
@@ -300,6 +315,7 @@ onMounted(() => usageComposable.start())
       </template>
 
       <div class="p-5 flex flex-col min-h-full">
+        <NeedsYouQueue v-if="showNeedsYouStrip" variant="strip" class="mb-3" />
         <div v-if="isLoading && activeView === 'dashboard'" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
           <SkeletonCard v-for="n in 6" :key="n" />
         </div>
@@ -307,10 +323,7 @@ onMounted(() => usageComposable.start())
           Error: {{ error }}
         </p>
 
-        <MissionControlView
-          v-else-if="activeView === 'mission'"
-          @open-task="(taskId: string) => navigateTo({ taskId })"
-        />
+        <MissionControlView v-else-if="activeView === 'mission'" />
         <CockpitView v-else-if="activeView === 'cockpit'" />
 
         <DashboardView

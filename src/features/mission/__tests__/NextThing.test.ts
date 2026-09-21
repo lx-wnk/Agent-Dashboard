@@ -10,8 +10,8 @@ const stubs = {
   ConfirmCard: { name: 'ConfirmCard', props: ['detectedConfirm'], template: '<div data-testid="stub-confirm" />' },
 }
 
-function mountNext(next: NextThingItem | null, remaining = 0) {
-  return mount(NextThing, { props: { next, remaining }, global: { stubs } })
+function mountNext(next: NextThingItem | null) {
+  return mount(NextThing, { props: { next }, global: { stubs } })
 }
 
 const permission: NextThingItem = {

@@ -10,7 +10,7 @@ import { resolvePermissionRequest } from '@/features/pipeline'
 import { sendQuestionAnswer } from '@/utils/answerQuestion'
 import { errorMessage } from '@/utils/errorMessage'
 
-const props = defineProps<{ next: NextThing | null, remaining: number }>()
+const props = defineProps<{ next: NextThing | null }>()
 const emit = defineEmits<{ resolved: [], open: [taskId: string] }>()
 
 const busy = ref<PermissionDecision | null>(null)
@@ -68,9 +68,6 @@ async function answer(intent: AnswerIntent) {
     <div class="flex items-center gap-3">
       <span class="text-[11px] font-mono tracking-widest text-accent">NEXT</span>
       <span class="h-px flex-grow bg-line" />
-      <span v-if="remaining > 0" data-testid="mission-remaining" class="text-[12px] text-fg-mute">
-        {{ remaining }} more after this
-      </span>
     </div>
 
     <p data-testid="mission-why" class="text-[13px] text-fg-mute">
