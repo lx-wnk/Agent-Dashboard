@@ -11,7 +11,7 @@ const session = {
   end: vi.fn(),
   renew: vi.fn(),
 }
-const activeView = ref('mission')
+const activeView = ref('zentrale')
 const agents = ref<Array<{ pid: number }>>([])
 
 vi.mock('../composables/useKontorSession', () => ({ useKontorSession: () => session }))
@@ -45,7 +45,7 @@ beforeEach(() => {
     fn.mockReset()
   session.send.mockResolvedValue(true)
   session.renew.mockResolvedValue(true)
-  activeView.value = 'mission'
+  activeView.value = 'zentrale'
   agents.value = []
 })
 

@@ -134,7 +134,7 @@ async function handOff() {
   }
   busy.value = true
   problem.value = ''
-  activeView.value = 'mission'
+  activeView.value = 'zentrale'
   if (await kontor.send(text))
     closeDialog()
   else

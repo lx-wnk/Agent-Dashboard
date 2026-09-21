@@ -12,8 +12,7 @@ export interface NavItemConfig {
 export const NAV_GROUPS: NavGroup[] = ['Monitor', 'Build', 'Insights']
 
 export const NAV_ITEMS: NavItemConfig[] = [
-  { view: 'mission', label: 'Mission', icon: '◎', group: 'Monitor' },
-  { view: 'cockpit', label: 'Cockpit', icon: '◈', group: 'Monitor' },
+  { view: 'zentrale', label: 'Zentrale', icon: '◎', group: 'Monitor' },
   { view: 'dashboard', label: 'Dashboard', icon: '▦', group: 'Monitor' },
   { view: 'pipeline', label: 'Pipeline', icon: '▤', group: 'Build' },
   { view: 'schedules', label: 'Schedules', icon: '⏱', group: 'Build' },

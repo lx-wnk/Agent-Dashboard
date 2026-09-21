@@ -21,12 +21,9 @@ describe('navConfig', () => {
     }
   })
 
-  // Mission is the entry point: it answers "what now", which is the question
-  // asked on arrival. Cockpit stays second, as the fuller overview.
-  it('mission is the first Monitor item and has a title', () => {
-    expect(NAV_ITEMS[0].view).toBe('mission')
-    expect(viewTitle('mission')).toBe('Mission')
-    expect(viewTitle('cockpit')).toBe('Cockpit')
+  it('the Zentrale is the first Monitor item and has a title', () => {
+    expect(NAV_ITEMS[0].view).toBe('zentrale')
+    expect(viewTitle('zentrale')).toBe('Zentrale')
   })
 
   it('groups are Monitor, Build and Insights', () => {

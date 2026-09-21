@@ -33,14 +33,14 @@ import { useUsage } from './composables/useUsage'
 import { useUser } from './composables/useUser'
 import { useViewState } from './composables/useViewState'
 import { NeedsYouQueue, rankNextThings } from './features/mission'
-import MissionControlView from './features/mission/MissionControlView.vue'
+import { useWorkspace } from './features/workspace'
 import { formatCost } from './utils/format'
 
 // PERF-BUNDLE1: AgentModal is only ever rendered on agent selection — split into its own chunk
 const AgentModal = defineAsyncComponent(() => import('@/features/agents/components/AgentModal.vue'))
 // F-PERF-019: top-level heavy views loaded on demand — each becomes its own chunk
-const CockpitView = defineAsyncComponent(() => import('@/features/cockpit/components/CockpitView.vue'))
-// Async since the cockpit took over as the landing view: the dashboard is no
+const WorkspacePage = defineAsyncComponent(() => import('@/features/workspace/components/WorkspacePage.vue'))
+// Async since the Zentrale took over as the landing view: the dashboard is no
 // longer on the first-paint path, and a static import keeps its whole subtree
 // in the entry chunk, which has a size budget CI enforces.
 const DashboardView = defineAsyncComponent(() => import('@/features/cockpit/components/DashboardView.vue'))
@@ -259,8 +259,10 @@ function navigateTo(target: { agent?: Agent, taskId?: string }) {
 provide(OPEN_TASK, (taskId: string) => navigateTo({ taskId }))
 
 // The dashboard's triage band shows the same items (AgentTriageBand reads the
-// same agents and permission items); the mission view docks the queue itself.
-const showNeedsYouStrip = computed(() => activeView.value !== 'dashboard' && activeView.value !== 'mission')
+// same agents and permission items); a Zentrale holding the hub docks the queue itself.
+const workspace = useWorkspace()
+const pageHasHub = computed(() => activeView.value === 'zentrale' && !!workspace.page('zentrale')?.tiles.some(t => t.widget === 'hub'))
+const showNeedsYouStrip = computed(() => activeView.value !== 'dashboard' && !pageHasHub.value)
 
 // Single routing rule: plan_review tasks open the plan panel, all others the generic modal.
 function openTask(t: PipelineTask) {
@@ -307,18 +309,28 @@ onMounted(() => usageComposable.start())
               + New Task
             </button>
             <button
-              v-else-if="activeView === 'dashboard' || activeView === 'cockpit'"
+              v-else-if="activeView === 'dashboard' || activeView === 'zentrale'"
               type="button"
               class="bg-accent text-white rounded-lg px-3 py-1.5 text-[13px] font-semibold hover:brightness-110 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card"
               @click="showSpawnDialog = true"
             >
               + New Agent
             </button>
+            <button
+              v-if="activeView === 'zentrale' && !workspace.locked.value"
+              type="button"
+              data-testid="workspace-edit-toggle"
+              :aria-pressed="workspace.editing.value"
+              class="h-8 rounded-md border border-line-strong px-3 text-[12.5px] text-fg-soft"
+              @click="workspace.editing.value = !workspace.editing.value"
+            >
+              {{ workspace.editing.value ? 'Done' : 'Edit layout' }}
+            </button>
           </template>
         </AppTopbar>
       </template>
 
-      <div class="p-5 flex flex-col min-h-full">
+      <div class="p-5 flex flex-col min-h-full" :class="{ 'h-full': activeView === 'zentrale' }">
         <NeedsYouQueue v-if="showNeedsYouStrip" variant="strip" class="mb-3" />
         <div v-if="isLoading && activeView === 'dashboard'" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
           <SkeletonCard v-for="n in 6" :key="n" />
@@ -327,8 +339,7 @@ onMounted(() => usageComposable.start())
           Error: {{ error }}
         </p>
 
-        <MissionControlView v-else-if="activeView === 'mission'" />
-        <CockpitView v-else-if="activeView === 'cockpit'" />
+        <WorkspacePage v-else-if="activeView === 'zentrale'" page-id="zentrale" class="min-h-0 flex-1" />
 
         <DashboardView
           v-else-if="activeView === 'dashboard'"

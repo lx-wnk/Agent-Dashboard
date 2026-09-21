@@ -113,13 +113,13 @@ describe('spotlightSearch commands and hand-off', () => {
   })
 
   // Text that matched nothing goes to the Kontor session, never to the backlog.
-  it('hands free text that matched nothing to Kontor and switches to mission', async () => {
+  it('hands free text that matched nothing to Kontor and switches to the Zentrale', async () => {
     const wrapper = await openSpotlight('plan phase 4 of the dashboard')
     expect(document.querySelector('[data-testid="spotlight-kontor"]')?.textContent).toContain('Kontor')
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
     await flushPromises()
     expect(send).toHaveBeenCalledWith('plan phase 4 of the dashboard')
-    expect(activeView.value).toBe('mission')
+    expect(activeView.value).toBe('zentrale')
     expect(document.querySelector('input[placeholder]')).toBeNull()
     wrapper.unmount()
   })

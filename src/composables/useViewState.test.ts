@@ -21,10 +21,10 @@ describe('useViewState', () => {
     localStorage.clear()
   })
 
-  it('defaults to cockpit/cards with no stored state', async () => {
+  it('defaults to zentrale/cards with no stored state', async () => {
     const { useViewState } = await freshModule()
     const { activeView, dashboardLayout } = useViewState()
-    expect(activeView.value).toBe('cockpit')
+    expect(activeView.value).toBe('zentrale')
     expect(dashboardLayout.value).toBe('cards')
   })
 
@@ -59,10 +59,19 @@ describe('useViewState', () => {
     expect(localStorage.getItem('agent-dashboard-layout')).toBe('list')
   })
 
-  it('ignores an unknown stored activeView and falls back to cockpit', async () => {
+  it('ignores an unknown stored activeView and falls back to zentrale', async () => {
     localStorage.setItem('agent-active-view', 'kanban')
     const { useViewState } = await freshModule()
-    expect(useViewState().activeView.value).toBe('cockpit')
+    expect(useViewState().activeView.value).toBe('zentrale')
+  })
+
+  // The two views folded into the Zentrale. Someone whose last view was one of
+  // them must land on the Zentrale, not on the invalid-value fallback.
+  it.each(['mission', 'cockpit'])('reads a stored %s view as zentrale', async (old) => {
+    localStorage.setItem('agent-active-view', old)
+    const { useViewState } = await freshModule()
+    expect(useViewState().activeView.value).toBe('zentrale')
+    expect(localStorage.getItem('agent-active-view')).toBe('zentrale')
   })
 })
 

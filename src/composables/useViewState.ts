@@ -2,12 +2,15 @@ import type { AgentGroup, AgentSort } from '../utils/agentGroup'
 import { ref, watch } from 'vue'
 import { AGENT_GROUP_OPTIONS, AGENT_SORT_OPTIONS, resolveGroup } from '../utils/agentGroup'
 
-export type ActiveView = 'mission' | 'cockpit' | 'dashboard' | 'workflows' | 'pipeline' | 'cost' | 'schedules' | 'eval'
+export type ActiveView = 'zentrale' | 'dashboard' | 'workflows' | 'pipeline' | 'cost' | 'schedules' | 'eval'
 export type DashboardLayout = 'cards' | 'list'
 
 // Exported: the command palette derives one navigation command per view, so
 // a view added here shows up there without a second list to keep in step.
-export const ACTIVE_VIEWS: ActiveView[] = ['mission', 'cockpit', 'dashboard', 'workflows', 'pipeline', 'cost', 'schedules', 'eval']
+export const ACTIVE_VIEWS: ActiveView[] = ['zentrale', 'dashboard', 'workflows', 'pipeline', 'cost', 'schedules', 'eval']
+
+// Views folded into the Zentrale; a stored one reads as the Zentrale.
+const FOLDED_INTO_ZENTRALE = new Set(['mission', 'cockpit'])
 const AGENT_SORT_VALUES: AgentSort[] = AGENT_SORT_OPTIONS.map(o => o.value)
 const AGENT_GROUP_VALUES: AgentGroup[] = AGENT_GROUP_OPTIONS.map(o => o.value)
 
@@ -20,14 +23,19 @@ function readInitial(): { view: ActiveView, layout: DashboardLayout } {
   let view: ActiveView
   let layout: DashboardLayout = storedLayout === 'list' ? 'list' : 'cards'
 
+  if (stored && FOLDED_INTO_ZENTRALE.has(stored)) {
+    ls?.setItem('agent-active-view', 'zentrale')
+    return { view: 'zentrale', layout }
+  }
+
   if (stored && ACTIVE_VIEWS.includes(stored as ActiveView)) {
     view = stored as ActiveView
   }
   else {
-    view = 'cockpit'
+    view = 'zentrale'
     if (stored) {
       // stored value is no longer valid — overwrite to stop the guard firing every load
-      ls?.setItem('agent-active-view', 'cockpit')
+      ls?.setItem('agent-active-view', 'zentrale')
     }
 
     if (!stored && legacy) {
