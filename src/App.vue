@@ -19,6 +19,7 @@ import SpotlightSearch from './components/SpotlightSearch.vue'
 import ToastHost from './components/ToastHost.vue'
 import AppModal from './components/ui/AppModal.vue'
 import AppModalHeader from './components/ui/AppModalHeader.vue'
+import { needsYouPlacement } from './composables/needsYouPlacement'
 import { OPEN_TASK, PENDING_PERMISSIONS } from './composables/openTask'
 import { useInstallPrompt } from './composables/useInstallPrompt'
 import { useOnboarding } from './composables/useOnboarding'
@@ -260,19 +261,16 @@ function navigateTo(target: { agent?: Agent, taskId?: string }) {
 // Widgets open a task through this — App.vue owns navigation.
 provide(OPEN_TASK, (taskId: string) => navigateTo({ taskId }))
 
-// The dashboard's triage band shows the same items (AgentTriageBand reads the
-// same agents and permission items); a workspace page holding the hub docks the
-// queue itself, unless the error line replaces the page and with it the hub.
 const workspace = useWorkspace()
 const currentPageId = computed(() => activeView.value === 'zentrale' ? ZENTRALE_PAGE_ID : pageIdOf(activeView.value))
-const pageHasHub = computed(() => currentPageId.value !== null && !error.value && !!workspace.page(currentPageId.value)?.tiles.some(t => t.widget === 'hub'))
+const pageHasHub = computed(() => currentPageId.value !== null && !!workspace.page(currentPageId.value)?.tiles.some(t => t.widget === 'hub'))
 // Before the layout has loaded a page id cannot be judged missing; loaded is a
 // source of its own because a failed load flips it without replacing layout.
 watch([activeView, workspace.layout, workspace.loaded], () => {
   if (workspace.loaded.value)
     activeView.value = resolveView(activeView.value, workspace.layout.value.pages.map(p => p.id))
 }, { immediate: true })
-const showNeedsYouStrip = computed(() => activeView.value !== 'dashboard' && !pageHasHub.value)
+const needsYou = computed(() => needsYouPlacement({ view: activeView.value, pageHasHub: pageHasHub.value, error: !!error.value }))
 
 // Single routing rule: plan_review tasks open the plan panel, all others the generic modal.
 function openTask(t: PipelineTask) {
@@ -341,7 +339,7 @@ onMounted(() => usageComposable.start())
       </template>
 
       <div class="p-5 flex flex-col min-h-full" :class="{ 'h-full': currentPageId !== null }">
-        <NeedsYouQueue v-if="showNeedsYouStrip" variant="strip" class="mb-3" />
+        <NeedsYouQueue v-if="needsYou.strip" variant="strip" class="mb-3" />
         <div v-if="isLoading && activeView === 'dashboard'" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
           <SkeletonCard v-for="n in 6" :key="n" />
         </div>
