@@ -1,5 +1,6 @@
+import { mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { nextTick, ref } from 'vue'
+import { defineComponent, nextTick, ref } from 'vue'
 
 const agents = ref<Array<{ pid: number, status: string }>>([])
 vi.mock('@/features/agents', () => ({ useAgents: () => ({ agents }) }))
@@ -111,5 +112,38 @@ describe('useKontorSession', () => {
     await nextTick()
     expect(s.pid.value).toBeNull()
     expect(s.status.value).toBe('idle')
+  })
+
+  // The exit watcher must outlive whichever component's setup() happened to
+  // call useKontorSession() first, or every later view loses exit detection.
+  it('keeps noticing the agent exit after the first mounting component unmounts', async () => {
+    fetchMock.mockResolvedValueOnce(reply({ pid: 1234 }))
+    const TinyComponent = defineComponent({
+      setup() {
+        useKontorSession()
+        return () => null
+      },
+    })
+    const wrapper = mount(TinyComponent)
+    const s = useKontorSession()
+    await s.refresh()
+    wrapper.unmount()
+
+    agents.value = [{ pid: 1234, status: 'active' }]
+    await nextTick()
+    agents.value = [{ pid: 1234, status: 'finished' }]
+    await nextTick()
+    expect(s.pid.value).toBeNull()
+    expect(s.status.value).toBe('idle')
+  })
+
+  it('does not start a session when the pre-send refresh fails', async () => {
+    fetchMock.mockResolvedValueOnce(reply({ error: 'boom' }, 500)).mockResolvedValue(reply({ pid: 5678 }))
+    const s = useKontorSession()
+    expect(await s.send('hi')).toBe(false)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(s.status.value).toBe('error')
+    expect(s.error.value).toBe('boom')
+    expect(s.pid.value).toBeNull()
   })
 })

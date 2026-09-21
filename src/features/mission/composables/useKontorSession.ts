@@ -1,4 +1,4 @@
-import { ref, watch } from 'vue'
+import { effectScope, ref, watch } from 'vue'
 import { useAgents } from '@/features/agents'
 import { errorMessage, readErrorMessage } from '@/utils/errorMessage'
 
@@ -7,7 +7,7 @@ export type KontorStatus = 'idle' | 'starting' | 'running' | 'error'
 const pid = ref<number | null>(null)
 const status = ref<KontorStatus>('idle')
 const error = ref('')
-let watchingAgents = false
+let agentWatchScope: ReturnType<typeof effectScope> | null = null
 
 const SESSION_URL = '/api/kontor-session'
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
@@ -59,8 +59,11 @@ const renew = (text: string) => spawn(`${SESSION_URL}/renew`, text)
 async function send(text: string): Promise<boolean> {
   // POST returns an already-running session unchanged and drops the prompt, so
   // a session this window has not seen yet must be found first or the text is lost.
-  if (pid.value === null)
+  if (pid.value === null) {
     await refresh()
+    if (status.value === 'error')
+      return false
+  }
   if (pid.value === null)
     return start(text)
   const fallback = 'Could not reach the Kontor session.'
@@ -88,19 +91,24 @@ async function end(): Promise<void> {
 }
 
 function watchAgentExit() {
-  if (watchingAgents)
+  // Detached so the watch outlives whichever component's setup() happens to
+  // call useKontorSession() first — an ordinary watch would be torn down
+  // with that component, leaving every later caller with no exit detection.
+  if (agentWatchScope)
     return
-  watchingAgents = true
-  const { agents } = useAgents({ autoStart: false })
-  // Only a live-then-gone flip of the SAME pid counts: a freshly spawned or
-  // renewed pid is absent until the scanner lists it.
-  watch(
-    () => [pid.value, agents.value.some(a => a.pid === pid.value && a.status !== 'finished')] as const,
-    ([now, live], [before, wasLive]) => {
-      if (now !== null && now === before && wasLive && !live)
-        settle(null)
-    },
-  )
+  agentWatchScope = effectScope(true)
+  agentWatchScope.run(() => {
+    const { agents } = useAgents({ autoStart: false })
+    // Only a live-then-gone flip of the SAME pid counts: a freshly spawned or
+    // renewed pid is absent until the scanner lists it.
+    watch(
+      () => [pid.value, agents.value.some(a => a.pid === pid.value && a.status !== 'finished')] as const,
+      ([now, live], [before, wasLive]) => {
+        if (now !== null && now === before && wasLive && !live)
+          settle(null)
+      },
+    )
+  })
 }
 
 export function useKontorSession() {
