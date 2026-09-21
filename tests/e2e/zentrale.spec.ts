@@ -1,4 +1,13 @@
+import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
+
+// The client itself retries a 429 (useWorkspace's fetchWithRateLimitRetry), so an
+// in-between 429 is not a save's outcome — skip it and wait for the response that
+// actually settles the request.
+function patched(page: Page) {
+  return page.waitForResponse(resp =>
+    resp.url().includes('/api/settings/workspace.layout') && resp.request().method() === 'PATCH' && resp.status() !== 429)
+}
 
 // The stored layout is shared server-side state, not per-test-context state —
 // reset it after every test so a mutation here can never leak into the next
@@ -26,15 +35,10 @@ test('a moved tile stays moved after a reload', async ({ page }) => {
   // `write`, chained one save after the other), so reloading right after can
   // race an in-flight PATCH and revert to the still-unsaved value (observed
   // flaky) — wait for each save in turn before the next input or the reload.
-  // The client itself retries a 429 (useWorkspace's fetchWithRateLimitRetry), so
-  // an in-between 429 is not the save's outcome — skip it and wait for the
-  // response that actually settles the request.
-  const patched = () => page.waitForResponse(resp =>
-    resp.url().includes('/api/settings/workspace.layout') && resp.request().method() === 'PATCH' && resp.status() !== 429)
-  const firstSaved = patched()
+  const firstSaved = patched(page)
   await page.keyboard.press('Shift+ArrowUp') // 3×3 → 3×2 frees row 12
   expect((await firstSaved).ok(), 'first save (resize) request').toBe(true)
-  const secondSaved = patched()
+  const secondSaved = patched(page)
   await page.keyboard.press('ArrowDown')
   expect((await secondSaved).ok(), 'second save (move) request').toBe(true)
   await page.getByTestId('workspace-edit-toggle').click()
@@ -91,8 +95,7 @@ test('a pointer drag on the resize handle resizes the cost-today tile and the ne
   // request lands reverts to the still-unsaved server value (observed flaky:
   // the ghost proves the drag itself always lands correctly, but the reload
   // assertion below does not). Arm the wait before the drop that triggers it.
-  const saved = page.waitForResponse(resp =>
-    resp.url().includes('/api/settings/workspace.layout') && resp.request().method() === 'PATCH')
+  const saved = patched(page)
 
   await page.mouse.move(x, startY)
   await page.mouse.down()
