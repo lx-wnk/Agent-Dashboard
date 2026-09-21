@@ -76,9 +76,9 @@ test('pages are offered in the command palette on a view that holds no workspace
   }
   await storeLayout(request, baseURL, JSON.stringify(layout))
 
+  // One boot, straight into the Dashboard: a second boot's burst drains the shared per-IP rate limiter.
+  await page.addInitScript(() => localStorage.setItem('agent-active-view', 'dashboard'))
   await page.goto('/', { waitUntil: 'domcontentloaded' })
-  await page.evaluate(() => localStorage.setItem('agent-active-view', 'dashboard'))
-  await page.reload({ waitUntil: 'domcontentloaded' })
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Dashboard')
   await expect(page.locator('[data-testid^="workspace-page-"]')).toHaveCount(0)
 
