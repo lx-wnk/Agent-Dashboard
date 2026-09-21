@@ -16,15 +16,17 @@ const rows = computed(() => rowsUsed(props.page.tiles))
 const GAP = 12 // matches .workspace-grid gap
 const gridEl = ref<HTMLElement | null>(null)
 const drag = ref<null | { index: number, mode: 'move' | 'resize', grabCol: number, grabRow: number, target: PlacedTile }>(null)
+let gridRect: DOMRect
 
 function cellOf(e: PointerEvent) {
-  return cellAt(gridEl.value!.getBoundingClientRect(), e.clientX, e.clientY, rows.value, GAP)
+  return cellAt(gridRect, e.clientX, e.clientY, rows.value, GAP)
 }
 
 function startDrag(e: PointerEvent, index: number, mode: 'move' | 'resize') {
   if (!props.editing || e.button !== 0 || (e.target as HTMLElement).closest('select, button:not([data-resize])'))
     return
   const t = props.page.tiles[index]
+  gridRect = gridEl.value!.getBoundingClientRect()
   const c = cellOf(e)
   drag.value = { index, mode, grabCol: c.col - t.col, grabRow: c.row - t.row, target: { ...t } }
   ;(e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId)
@@ -84,7 +86,7 @@ function apply(r: OpResult<WorkspacePage>) {
 const MOVES: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }
 
 function onKey(e: KeyboardEvent, index: number) {
-  if (!props.editing)
+  if (!props.editing || e.target !== e.currentTarget)
     return
   const t = props.page.tiles[index]
   if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -114,7 +116,7 @@ function swapOptions(index: number) {
   <div ref="gridEl" data-testid="workspace-grid" class="workspace-grid" :style="{ '--rows': rows }">
     <div
       v-for="{ tile, index } in ordered"
-      :key="`${tile.widget}-${index}`"
+      :key="tile.widget"
       :data-testid="`workspace-tile-${tile.widget}`"
       class="workspace-tile"
       :class="{ 'workspace-tile--editing': editing }"
@@ -178,7 +180,7 @@ function swapOptions(index: number) {
 <style scoped>
 .workspace-grid { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
 .workspace-tile { position: relative; min-width: 0; min-height: 0; }
-.workspace-tile > :deep(*) { height: 100%; }
+.workspace-tile > :deep(:not(.workspace-chrome):not(.workspace-resize)) { height: 100%; }
 .workspace-tile--editing { outline: 1px dashed var(--color-line-strong); outline-offset: 2px; border-radius: 12px; cursor: grab; }
 .workspace-tile--editing:focus-visible { outline: 2px solid var(--color-accent); }
 .workspace-tile--editing > :deep(:not(.workspace-chrome):not(.workspace-resize)) { pointer-events: none; }

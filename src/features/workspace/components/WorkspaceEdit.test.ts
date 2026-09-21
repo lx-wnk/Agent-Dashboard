@@ -77,6 +77,16 @@ describe('edit mode', () => {
     w.unmount()
   })
 
+  it('leaves keys pressed on a tile\'s own controls to those controls', async () => {
+    const w = mount(WorkspaceGrid, { props: { page, editing: true } })
+    for (const key of ['ArrowDown', 'Backspace']) {
+      await w.get('[data-testid="workspace-swap-agents"]').trigger('keydown', { key })
+      await w.get('[data-testid="workspace-resize-agents"]').trigger('keydown', { key })
+    }
+    expect(w.emitted('change')).toBeUndefined()
+    w.unmount()
+  })
+
   it('shows no chrome and ignores keys outside edit mode', async () => {
     const w = mount(WorkspaceGrid, { props: { page, editing: false } })
     expect(w.find('[data-testid="workspace-remove-agents"]').exists()).toBe(false)
@@ -98,15 +108,18 @@ describe('drag and resize', () => {
     const w = mount(WorkspaceGrid, { props: { page, editing: true }, attachTo: document.body })
     const grid = w.get('[data-testid="workspace-grid"]').element as HTMLElement
     // 12 columns, 12px gaps (matches .workspace-grid); 3 rows over a 320px grid.
-    grid.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1190, height: 320, right: 1190, bottom: 320, x: 0, y: 0, toJSON: () => ({}) })
+    const rect = vi.fn(() => ({ left: 0, top: 0, width: 1190, height: 320, right: 1190, bottom: 320, x: 0, y: 0, toJSON: () => ({}) }))
+    grid.getBoundingClientRect = rect
     const tile = w.get('[data-testid="workspace-tile-agents"]').element
     tile.dispatchEvent(pointer('pointerdown', { clientX: 5, clientY: 5, pointerId: 1, button: 0 }))
+    tile.dispatchEvent(pointer('pointermove', { clientX: 605, clientY: 5, pointerId: 1 }))
     tile.dispatchEvent(pointer('pointermove', { clientX: 705, clientY: 5, pointerId: 1 }))
     await w.vm.$nextTick()
     expect(w.find('[data-testid="workspace-ghost"]').exists()).toBe(true)
     tile.dispatchEvent(pointer('pointerup', { clientX: 705, clientY: 5, pointerId: 1 }))
     await w.vm.$nextTick()
     expect(w.emitted('change')?.at(-1)?.[0]).toMatchObject({ tiles: [{ widget: 'agents', col: 8, row: 1 }, { widget: 'github' }] })
+    expect(rect).toHaveBeenCalledTimes(1)
     w.unmount()
   })
 
