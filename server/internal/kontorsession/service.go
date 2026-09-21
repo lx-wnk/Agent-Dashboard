@@ -53,7 +53,14 @@ type Service struct {
 func (s *Service) Current(ctx context.Context) (int, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.current(ctx)
+	pid, ok, err := s.current(ctx)
+	if err != nil || !ok || s.Alive(pid) {
+		return pid, ok, err
+	}
+	if err := s.end(ctx, "process gone"); err != nil {
+		return 0, false, err
+	}
+	return 0, false, nil
 }
 
 func (s *Service) current(ctx context.Context) (int, bool, error) {
@@ -127,6 +134,13 @@ func (s *Service) Reconcile(ctx context.Context) error {
 func (s *Service) start(ctx context.Context, prompt string) (int, error) {
 	if err := os.MkdirAll(s.Dir, 0o700); err != nil {
 		return 0, fmt.Errorf("kontorsession: session dir: %w", err)
+	}
+	// A symlinked Dir would make the removal below follow it and delete the
+	// target's .claude tree instead of the session's own.
+	if fi, err := os.Lstat(s.Dir); err != nil {
+		return 0, fmt.Errorf("kontorsession: session dir: %w", err)
+	} else if fi.Mode()&os.ModeSymlink != 0 {
+		return 0, fmt.Errorf("kontorsession: session dir %s is a symlink", s.Dir)
 	}
 	// A prior session's "don't ask again" answers, written by Claude Code to
 	// <Dir>/.claude/settings.local.json, must not silently apply to this one.

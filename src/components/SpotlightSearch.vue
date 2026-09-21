@@ -126,8 +126,11 @@ async function handOff() {
   if (!text || busy.value)
     return
   if (text.startsWith('/') && kontor.pid.value === null) {
-    problem.value = SLASH_COMMAND_REFUSAL
-    return
+    await kontor.refresh()
+    if (kontor.pid.value === null) {
+      problem.value = SLASH_COMMAND_REFUSAL
+      return
+    }
   }
   busy.value = true
   problem.value = ''

@@ -49,6 +49,8 @@ it, a briefing, and a place in the UI.
 - An idle timeout.
 - Registering the tile as a composable-workspace widget. The component is built
   so that it can be registered later without changes.
+- The first start in a new session dir shows Claude Code's one-time
+  folder-trust dialog (default "No, exit"); the operator confirms it once.
 
 ## Behaviour
 
@@ -143,7 +145,7 @@ audits the reason. Its callers:
 | Trigger | Caller |
 | --- | --- |
 | The operator presses End or New | `DELETE` / `renew` |
-| The process exits while the server runs | The exit watcher started with the process (`spawn.go` `pollExitWatch`) |
+| The process exits while the server runs | The pty host's exit watch plus `WaitForExit` in `SpawnSession` (`spawn_session.go`) |
 | The server restarts while the process runs | Reconcile at boot re-arms the exit watcher for the recorded pid |
 | The process died while the server was down | Reconcile at boot finds the pid dead and calls `end` |
 

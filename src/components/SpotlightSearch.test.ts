@@ -7,10 +7,11 @@ const activeView = ref('dashboard')
 let searchBody: unknown = { tasks: [], agents: [] }
 
 const send = vi.fn()
+const refresh = vi.fn(async () => {})
 const kontorError = ref('')
 const kontorPid = ref<number | null>(null)
 vi.mock('@/features/mission/composables/useKontorSession', () => ({
-  useKontorSession: () => ({ send: (...a: unknown[]) => send(...a), error: kontorError, pid: kontorPid }),
+  useKontorSession: () => ({ send: (...a: unknown[]) => send(...a), refresh: () => refresh(), error: kontorError, pid: kontorPid }),
 }))
 vi.mock('@/composables/useViewState', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/composables/useViewState')>()
@@ -43,6 +44,7 @@ beforeEach(() => {
   searchBody = { tasks: [], agents: [] }
   activeView.value = 'dashboard'
   send.mockReset().mockResolvedValue(true)
+  refresh.mockReset().mockImplementation(async () => {})
   kontorError.value = ''
   kontorPid.value = null
 })
@@ -142,6 +144,19 @@ describe('spotlightSearch commands and hand-off', () => {
     expect(send).not.toHaveBeenCalled()
     expect(document.querySelector('[data-testid="spotlight-problem"]')?.textContent).toContain('running Kontor session')
     expect(document.querySelector('input[placeholder]')).not.toBeNull()
+    wrapper.unmount()
+  })
+
+  it('finds a session that started before this page load and sends the slash command', async () => {
+    refresh.mockImplementation(async () => {
+      kontorPid.value = 4321
+    })
+    const wrapper = await openSpotlight('/compact')
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
+    await flushPromises()
+    expect(refresh).toHaveBeenCalled()
+    expect(send).toHaveBeenCalledWith('/compact')
+    expect(document.querySelector('[data-testid="spotlight-problem"]')).toBeNull()
     wrapper.unmount()
   })
 

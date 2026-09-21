@@ -178,6 +178,24 @@ func TestStart_RemovesStaleLocalSettingsBeforeSpawning(t *testing.T) {
 	require.ErrorIs(t, statErr, os.ErrNotExist)
 }
 
+func TestStart_RefusesASymlinkedDir(t *testing.T) {
+	s, _, _ := newService(t)
+	target := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(target, ".claude"), 0o700))
+	marker := filepath.Join(target, ".claude", "marker")
+	require.NoError(t, os.WriteFile(marker, []byte("keep"), 0o600))
+
+	link := filepath.Join(t.TempDir(), "session")
+	require.NoError(t, os.Symlink(target, link))
+	s.Dir = link
+
+	_, _, err := s.Start(t.Context(), "a")
+	require.Error(t, err)
+
+	_, statErr := os.Stat(marker)
+	require.NoError(t, statErr)
+}
+
 func TestRenew_EndsBeforeItStarts(t *testing.T) {
 	s, f, _ := newService(t)
 	first, _, err := s.Start(t.Context(), "a")
@@ -215,6 +233,23 @@ func TestExit_SurvivesATransientLookupError(t *testing.T) {
 
 	s.Keys.Keys = &flakyOnce{ApiKeyRepo: keys}
 	f.spawns[0].OnExit(pid)
+
+	k, err := keys.ActiveKontorSession(t.Context())
+	require.NoError(t, err)
+	require.Nil(t, k)
+}
+
+func TestCurrent_DeadPidEndsTheSessionAndReportsNone(t *testing.T) {
+	s, f, keys := newService(t)
+	pid, _, err := s.Start(t.Context(), "a")
+	require.NoError(t, err)
+
+	f.alive[pid] = false
+
+	got, ok, err := s.Current(t.Context())
+	require.NoError(t, err)
+	require.False(t, ok)
+	require.Zero(t, got)
 
 	k, err := keys.ActiveKontorSession(t.Context())
 	require.NoError(t, err)
@@ -288,6 +323,7 @@ func TestReconcile_EndsAnActiveKeyNeverAttached(t *testing.T) {
 	s, f, keys := newService(t)
 	_, err := s.Keys.Issue(t.Context()) // simulates a crash between Issue and Attach
 	require.NoError(t, err)
+	f.alive[0] = true // isolates the pid==0 branch from the dead-pid branch below it
 
 	restarted := &kontorsession.Service{
 		Keys: s.Keys, Dir: s.Dir, ConfigPath: s.ConfigPath,
