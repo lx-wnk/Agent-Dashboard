@@ -88,4 +88,52 @@ describe('kontorWidget', () => {
     innerHeightSpy.mockRestore()
     w.unmount()
   })
+
+  it('re-places on window resize while open, capped to 64% of the new height', async () => {
+    const w = mount(KontorWidget, { attachTo: document.body })
+    const cellEl = w.get('[data-testid="kontor-collapsed"]').element as HTMLElement
+    const rect = { top: 300, bottom: 340, left: 10, right: 390, width: 380, height: 40, x: 10, y: 300, toJSON: () => {} } as DOMRect
+    vi.spyOn(cellEl, 'getBoundingClientRect').mockReturnValue(rect)
+    const innerHeightSpy = vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(800)
+    const raf: { cb: FrameRequestCallback | null } = { cb: null }
+    const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+      raf.cb = cb
+      return 0
+    })
+
+    await w.get('[data-testid="kontor-collapsed"]').trigger('click')
+    raf.cb?.(0)
+    await nextTick()
+    const overlay = document.querySelector('[data-testid="kontor-expanded"]') as HTMLElement
+    expect(overlay.style.height).toBe('484px')
+
+    innerHeightSpy.mockReturnValue(400)
+    window.dispatchEvent(new Event('resize'))
+    await nextTick()
+    expect(overlay.style.height).toBe('256px')
+
+    rafSpy.mockRestore()
+    innerHeightSpy.mockRestore()
+    w.unmount()
+  })
+
+  it('does nothing on window resize once collapsed', async () => {
+    const w = mount(KontorWidget, { attachTo: document.body })
+    const cellEl = w.get('[data-testid="kontor-collapsed"]').element as HTMLElement
+    const rect = { top: 300, bottom: 340, left: 10, right: 390, width: 380, height: 40, x: 10, y: 300, toJSON: () => {} } as DOMRect
+    const getRectSpy = vi.spyOn(cellEl, 'getBoundingClientRect').mockReturnValue(rect)
+    const innerHeightSpy = vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(800)
+
+    await w.get('[data-testid="kontor-collapsed"]').trigger('click')
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await nextTick()
+    getRectSpy.mockClear()
+
+    window.dispatchEvent(new Event('resize'))
+    await nextTick()
+    expect(getRectSpy).not.toHaveBeenCalled()
+
+    innerHeightSpy.mockRestore()
+    w.unmount()
+  })
 })

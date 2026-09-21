@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onKeyStroke } from '@vueuse/core'
+import { onKeyStroke, useEventListener } from '@vueuse/core'
 import { computed, nextTick, onUnmounted, ref } from 'vue'
 import { useAgents } from '@/features/agents'
 import { useKontorSession } from '../composables/useKontorSession'
@@ -33,11 +33,11 @@ function cancelPendingFrame() {
 
 // Grows out of its own cell towards the larger free side, up to 64% of the
 // window, as an overlay: the grid underneath does not re-flow.
-function place() {
+function place(heightOverride?: number) {
   const r = cell.value!.getBoundingClientRect()
   const vh = window.innerHeight
   const up = r.top > vh - r.bottom
-  const height = Math.min(vh * 0.64, (up ? r.bottom : vh - r.top) - 16)
+  const height = heightOverride ?? Math.min(vh * 0.64, (up ? r.bottom : vh - r.top) - 16)
   box.value = {
     left: `${r.left}px`,
     width: `${r.width}px`,
@@ -46,26 +46,19 @@ function place() {
   }
 }
 
-// Opens at the collapsed cell's own rect, then animates the height to
-// place()'s target on the next frame — the growth reads as one continuous
-// zoom out of the same object, not a screen switch.
+// First frame: the cell's own height. Next frame: place()'s target height.
 function grow() {
   cancelPendingFrame()
-  const r = cell.value!.getBoundingClientRect()
-  const vh = window.innerHeight
-  const up = r.top > vh - r.bottom
-  box.value = {
-    left: `${r.left}px`,
-    width: `${r.width}px`,
-    height: `${r.height}px`,
-    ...(up ? { bottom: `${vh - r.bottom}px` } : { top: `${r.top}px` }),
-  }
+  place(cell.value!.getBoundingClientRect().height)
   open.value = true
   frameId = requestAnimationFrame(() => {
     frameId = null
     place()
   })
 }
+
+useEventListener(computed(() => open.value ? window : null), 'resize', () => place())
+useEventListener(computed(() => open.value ? window : null), 'scroll', () => place(), { capture: true })
 
 // A pending frame from an open still in flight must not run place() against
 // a cell that collapse or unmount already moved past.
