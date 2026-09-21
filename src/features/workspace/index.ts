@@ -1,3 +1,4 @@
+export { default as WorkspacePage } from './components/WorkspacePage.vue'
 export * from './gridGeometry'
 export * from './layout'
 export * from './useWorkspace'
