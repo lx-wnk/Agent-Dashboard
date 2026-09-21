@@ -54,4 +54,20 @@ describe('useWorkspace', () => {
     await ws.save(DEFAULT_LAYOUT)
     expect(fetch).toHaveBeenCalledTimes(1)
   })
+
+  it('locks editing when the settings endpoint returns a non-ok response', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('', { status: 500 }))
+    const ws = await fresh()
+    await ws.load()
+    expect(ws.layout.value).toEqual(DEFAULT_LAYOUT)
+    expect(ws.locked.value).toMatch(/could not be loaded/i)
+  })
+
+  it('locks editing when the settings endpoint rejects (network error)', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(new Error('network error'))
+    const ws = await fresh()
+    await ws.load()
+    expect(ws.layout.value).toEqual(DEFAULT_LAYOUT)
+    expect(ws.locked.value).toMatch(/could not be loaded/i)
+  })
 })

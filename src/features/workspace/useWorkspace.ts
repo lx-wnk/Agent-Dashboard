@@ -27,7 +27,7 @@ async function load(): Promise<void> {
         : null
     }
     catch {
-      locked.value = 'The saved layout could not be loaded, so the built-in one is shown. Editing is locked until it loads.'
+      locked.value = 'The saved layout could not be loaded, so the built-in one is shown. Editing is locked; reload the page to try again.'
     }
     finally {
       loaded.value = true
