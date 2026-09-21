@@ -1,12 +1,15 @@
 package agents
 
 import (
+	"bufio"
 	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -50,10 +53,11 @@ func stubPIDExecScript(t *testing.T, script string) *[]string {
 	return &captured
 }
 
-// writeStaleDiscoveryFile writes a channel-bridge discovery file in the
-// bridge's real JSON shape (channel.writeDiscovery's entry map), naming
-// channelPid as the bridge process for parentPid.
-func writeStaleDiscoveryFile(t *testing.T, home string, parentPid, channelPid int) {
+// writeBridgeDiscoveryFile writes a channel-bridge discovery file in the bridge's
+// real JSON shape (channel.writeDiscovery's entry map), naming channelPid as
+// the bridge process for parentPid. Used both for a genuinely live bridge and
+// (by the caller choosing an unrelated channelPid) for a stale one.
+func writeBridgeDiscoveryFile(t *testing.T, home string, parentPid, channelPid int) {
 	t.Helper()
 	dir := filepath.Join(home, channelconfig.DiscoveryDir)
 	require.NoError(t, os.MkdirAll(dir, 0o700))
@@ -190,11 +194,39 @@ func TestTerminateSession_RefusesAStalePidWithAnUnrelatedDiscoveryFile(t *testin
 	require.NoError(t, sleeper.Start())
 	t.Cleanup(func() { _ = sleeper.Process.Kill(); _ = sleeper.Wait() })
 
-	writeStaleDiscoveryFile(t, home, sleeper.Process.Pid, os.Getpid())
+	writeBridgeDiscoveryFile(t, home, sleeper.Process.Pid, os.Getpid())
 
 	m := NewSpawnManager(0, 0, 0, 0, nil, services.NewSpawnPolicy(nil))
 	require.Error(t, m.TerminateSession(sleeper.Process.Pid))
 	require.True(t, ProcessAlive(sleeper.Process.Pid))
+}
+
+// Every other TerminateSession/OwnsLiveSession test exercises the refuse
+// path; if bridgeConfirmsParent's pid comparison were wrong (or it read the
+// wrong JSON key) the whole suite would stay green while boot Reconcile
+// quietly ended every live, reattached Kontor session. This is the one test
+// that requires OwnsLiveSession to say yes: a fresh manager (nothing in
+// spawnStore) is handed a real parent/child pair — sh backgrounds sleep and
+// waits on it — and a discovery file naming sleep as sh's channel bridge.
+func TestOwnsLiveSession_AcceptsAGenuinelyReattachedSession(t *testing.T) {
+	home := sessionHome(t)
+
+	sh := exec.Command("sh", "-c", "sleep 30 & echo $!; wait")
+	stdout, err := sh.StdoutPipe()
+	require.NoError(t, err)
+	require.NoError(t, sh.Start())
+	t.Cleanup(func() { _ = sh.Process.Kill(); _ = sh.Wait() })
+
+	line, err := bufio.NewReader(stdout).ReadString('\n')
+	require.NoError(t, err)
+	sleepPid, err := strconv.Atoi(strings.TrimSpace(line))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = syscall.Kill(sleepPid, syscall.SIGKILL) })
+
+	writeBridgeDiscoveryFile(t, home, sh.Process.Pid, sleepPid)
+
+	m := NewSpawnManager(0, 0, 0, 0, nil, services.NewSpawnPolicy(nil))
+	require.True(t, m.OwnsLiveSession(sh.Process.Pid))
 }
 
 // OnExit must only fire once the process is actually gone. The stub in
@@ -241,6 +273,7 @@ func TestTerminateSession_StopsASpawnedSession(t *testing.T) {
 		OnExit: func(p int) { exited <- p },
 	})
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = syscall.Kill(-pid, syscall.SIGKILL) })
 
 	require.NoError(t, m.TerminateSession(pid))
 

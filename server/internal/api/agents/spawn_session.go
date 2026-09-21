@@ -143,8 +143,9 @@ func (m *SpawnManager) TerminateSession(pid int) error {
 
 // OwnsLiveSession reports whether pid is both alive and a session this
 // dashboard is responsible for: one this manager itself spawned (any status —
-// a spawnStore entry survives independently of restart), or one whose channel
-// bridge is alive and really is pid's child.
+// pollExitWatch marks a tmux-backed session "exited" once spawnStoreMaxAge
+// (1h) is reached even if it is still running, so status alone cannot decide
+// ownership), or one whose channel bridge is alive and really is pid's child.
 //
 // A discovery file's name alone does not prove that: the channel bridge
 // removes ~/.claude/dashboard-channel/<pid>.json only on its own clean
