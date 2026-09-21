@@ -83,10 +83,12 @@ async function write(next: WorkspaceLayout): Promise<void> {
   return saving
 }
 
-async function save(next: WorkspaceLayout): Promise<void> {
-  if (locked.value)
-    return
-  return write(next)
+// Resolves once the write is queued, not once it lands; saveError reports the outcome.
+async function save(next: WorkspaceLayout): Promise<boolean> {
+  if (locked.value || !loaded.value)
+    return false
+  void write(next)
+  return true
 }
 
 async function reset(): Promise<void> {

@@ -327,7 +327,7 @@ onMounted(() => usageComposable.start())
               + New Agent
             </button>
             <button
-              v-if="currentPageId !== null && !workspace.locked.value"
+              v-if="currentPageId !== null && workspace.loaded.value && !workspace.locked.value"
               type="button"
               data-testid="workspace-edit-toggle"
               :aria-pressed="workspace.editing.value"

@@ -1,5 +1,5 @@
 import type { WorkspaceLayout } from '../../features/workspace'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick, ref } from 'vue'
 
@@ -22,7 +22,10 @@ function workspaceStub(pages: WorkspaceLayout['pages']) {
     loaded: ref(true),
     locked: ref<string | null>(null),
     editing: ref(false),
-    save: vi.fn(async (next: WorkspaceLayout) => { ws.layout.value = next }),
+    save: vi.fn(async (next: WorkspaceLayout) => {
+      ws.layout.value = next
+      return true
+    }),
   }
 }
 
@@ -282,6 +285,7 @@ describe('appSidebar', () => {
     expect(document.activeElement).toBe(input.element)
     await input.setValue('Evening')
     await input.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
 
     const saved = ws.save.mock.calls[0]![0]
     expect(saved.pages).toHaveLength(3)
@@ -306,6 +310,20 @@ describe('appSidebar', () => {
     expect(w.find('[data-testid="nav-new-page-input"]').exists()).toBe(false)
     expect(ws.save).not.toHaveBeenCalled()
     w.unmount()
+  })
+
+  it('neither opens nor edits a page the store refused to save', async () => {
+    const { AppSidebar, useViewState } = await load()
+    ws.save.mockResolvedValueOnce(false)
+    const w = mount(AppSidebar, { props })
+    await w.get('[data-testid="nav-new-page"]').trigger('click')
+    await w.get('[data-testid="nav-new-page-input"]').setValue('Evening')
+    await w.get('[data-testid="nav-new-page-input"]').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(ws.save).toHaveBeenCalledTimes(1)
+    expect(useViewState().activeView.value).toBe('zentrale')
+    expect(ws.editing.value).toBe(false)
+    expect(w.find('[data-testid="nav-new-page-input"]').exists()).toBe(true)
   })
 
   // Refuse, never displace: the input stays open and says why.

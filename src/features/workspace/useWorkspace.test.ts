@@ -38,21 +38,39 @@ describe('useWorkspace', () => {
     const ws = await fresh()
     await ws.load()
     const next = { ...DEFAULT_LAYOUT, pages: [{ ...DEFAULT_LAYOUT.pages[0], tiles: [] }] }
-    await ws.save(next)
+    expect(await ws.save(next)).toBe(true)
+    await vi.waitFor(() => expect(ws.saveError.value).toMatch(/not saved/i))
     expect(fetch).toHaveBeenLastCalledWith('/api/settings/workspace.layout', expect.objectContaining({
       method: 'PATCH',
       body: JSON.stringify({ value: serializeLayout(next) }),
     }))
     expect(ws.layout.value).toEqual(next)
-    expect(ws.saveError.value).toMatch(/not saved/i)
   })
 
   it('refuses to save while locked', async () => {
     const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(settingsResponse('{broken'))
     const ws = await fresh()
     await ws.load()
-    await ws.save(DEFAULT_LAYOUT)
+    expect(await ws.save(DEFAULT_LAYOUT)).toBe(false)
     expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
+  // An edit on the built-in layout before the stored one arrives would write over the stored one.
+  it('refuses to save before the stored layout has loaded', async () => {
+    let answer!: (res: Response) => void
+    const pending = new Promise<Response>((resolve) => {
+      answer = resolve
+    })
+    const fetch = vi.spyOn(globalThis, 'fetch').mockReturnValueOnce(pending)
+    const ws = await fresh()
+    const loading = ws.load()
+    const next = { ...DEFAULT_LAYOUT, pages: [{ ...DEFAULT_LAYOUT.pages[0], tiles: [] }] }
+    expect(await ws.save(next)).toBe(false)
+    expect(ws.layout.value).toEqual(DEFAULT_LAYOUT)
+    answer(settingsResponse(''))
+    await loading
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(fetch).not.toHaveBeenCalledWith('/api/settings/workspace.layout', expect.anything())
   })
 
   it('locks editing when the settings endpoint returns a non-ok response', async () => {
@@ -117,10 +135,9 @@ describe('useWorkspace', () => {
     const ws = await fresh()
     await ws.load()
     const next = { ...DEFAULT_LAYOUT, pages: [{ ...DEFAULT_LAYOUT.pages[0], tiles: [] }] }
-    const savePromise = ws.save(next)
+    expect(await ws.save(next)).toBe(true)
     await vi.advanceTimersByTimeAsync(1000)
-    await savePromise
-    expect(fetch).toHaveBeenCalledTimes(3)
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(3))
     expect(ws.saveError.value).toBeNull()
     vi.useRealTimers()
   })
@@ -132,11 +149,10 @@ describe('useWorkspace', () => {
       .mockResolvedValue(new Response('', { status: 429 }))
     const ws = await fresh()
     await ws.load()
-    const savePromise = ws.save(DEFAULT_LAYOUT)
+    expect(await ws.save(DEFAULT_LAYOUT)).toBe(true)
     await vi.advanceTimersByTimeAsync(3000)
-    await savePromise
+    await vi.waitFor(() => expect(ws.saveError.value).toMatch(/not saved/i))
     expect(fetch).toHaveBeenCalledTimes(5)
-    expect(ws.saveError.value).toMatch(/not saved/i)
     vi.useRealTimers()
   })
 })

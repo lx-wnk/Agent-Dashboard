@@ -1,5 +1,5 @@
 import type { WorkspaceLayout } from '../layout'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import { defineComponent, h, ref } from 'vue'
 import { useViewState } from '@/composables/useViewState'
@@ -24,7 +24,10 @@ const ws = {
   editing: ref(true),
   load: vi.fn(async () => {}),
   reset: vi.fn(async () => {}),
-  save: vi.fn(async (next: WorkspaceLayout) => { ws.layout.value = next }),
+  save: vi.fn(async (next: WorkspaceLayout) => {
+    ws.layout.value = next
+    return true
+  }),
   page: (id: string) => ws.layout.value.pages.find(p => p.id === id),
 }
 vi.mock('../useWorkspace', () => ({ useWorkspace: () => ws }))
@@ -245,9 +248,23 @@ describe('page rename and delete', () => {
     const w = mount(WorkspacePage, { props: { pageId: 'p-morning' } })
     await w.get('[data-testid="workspace-delete-page"]').trigger('click')
     await w.get('[data-testid="workspace-delete-confirm"]').trigger('click')
+    await flushPromises()
     expect(ws.save.mock.calls[0]![0].pages.map((p: { id: string }) => p.id)).toEqual(['zentrale'])
     expect(useViewState().activeView.value).toBe('zentrale')
     expect(ws.editing.value).toBe(false)
+    w.unmount()
+  })
+
+  it('stays on the page when the store refuses the delete', async () => {
+    seed()
+    ws.save.mockResolvedValueOnce(false)
+    const w = mount(WorkspacePage, { props: { pageId: 'p-morning' } })
+    await w.get('[data-testid="workspace-delete-page"]').trigger('click')
+    await w.get('[data-testid="workspace-delete-confirm"]').trigger('click')
+    await flushPromises()
+    expect(ws.save).toHaveBeenCalledTimes(1)
+    expect(useViewState().activeView.value).toBe('page:p-morning')
+    expect(ws.editing.value).toBe(true)
     w.unmount()
   })
 })

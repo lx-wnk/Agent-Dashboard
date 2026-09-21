@@ -73,7 +73,7 @@ async function cancelNewPage(): Promise<void> {
   newPageSlot.value?.querySelector('button')?.focus()
 }
 
-function createPage(event: KeyboardEvent): void {
+async function createPage(event: KeyboardEvent): Promise<void> {
   const input = event.target as HTMLInputElement
   if (!input.value.trim()) {
     void cancelNewPage()
@@ -85,7 +85,8 @@ function createPage(event: KeyboardEvent): void {
     input.reportValidity()
     return
   }
-  void workspace.save(r.value.layout)
+  if (!await workspace.save(r.value.layout))
+    return
   workspace.editing.value = true
   selectView(`page:${r.value.pageId}`)
   // Blur before the input unmounts: a removed input fires no focusout, which would hold the nav open.

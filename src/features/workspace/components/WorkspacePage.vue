@@ -22,14 +22,13 @@ watch(locked, (l) => {
     editing.value = false
 })
 
-function commit(r: OpResult<WorkspaceLayout>): boolean {
+async function commit(r: OpResult<WorkspaceLayout>): Promise<boolean> {
   if (!r.ok) {
     refusal.value = r.reason
     return false
   }
   refusal.value = null
-  save(r.value)
-  return true
+  return save(r.value)
 }
 
 function onChange(next: Page) {
@@ -37,8 +36,8 @@ function onChange(next: Page) {
   save(replacePage(layout.value, next))
 }
 
-function onRemove() {
-  if (!commit(removePage(layout.value, props.pageId)))
+async function onRemove() {
+  if (!await commit(removePage(layout.value, props.pageId)))
     return
   editing.value = false
   activeView.value = 'zentrale'
