@@ -38,9 +38,9 @@ test('Mission input starts a Kontor session instead of creating a task', async (
   await expect(page.getByTestId('kontor-expanded')).toBeVisible()
   await expect(page.getByTestId('kontor-state')).toHaveText('No session')
 
-  const input = page.getByTestId('mission-input')
+  const input = page.getByTestId('kontor-input')
   await input.fill('Plan phase 4 of the dashboard')
-  await expect(page.getByTestId('mission-reading-label')).toHaveText('START KONTOR')
+  await expect(page.getByTestId('kontor-reading-label')).toHaveText('START KONTOR')
   await input.press('Enter')
 
   await expect(page.getByTestId('kontor-state')).toHaveText('Running')

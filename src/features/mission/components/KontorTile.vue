@@ -123,7 +123,7 @@ async function renewSession() {
       </div>
 
       <div class="flex flex-col gap-2">
-        <label for="mission-input" class="text-[12.5px] text-fg-mute">
+        <label for="kontor-input" class="text-[12.5px] text-fg-mute">
           Or ask for anything — tasks, this interface, the system itself
         </label>
 
@@ -131,9 +131,9 @@ async function renewSession() {
           <div class="flex items-center gap-2.5 px-3.5 h-11">
             <span aria-hidden="true" class="font-mono text-[13px] text-accent">›</span>
             <input
-              id="mission-input"
+              id="kontor-input"
               v-model="text"
-              data-testid="mission-input"
+              data-testid="kontor-input"
               type="text"
               placeholder="Ask Kontor, or go to pipeline"
               class="flex-grow bg-transparent text-[14.5px] text-fg outline-none"
@@ -141,7 +141,7 @@ async function renewSession() {
             >
             <button
               type="button"
-              data-testid="mission-input-submit"
+              data-testid="kontor-input-submit"
               :disabled="reading.kind === 'empty' || busy"
               class="h-7 rounded-md border border-line-strong px-2.5 text-[12px] text-fg-soft disabled:opacity-50"
               @click="submit"
@@ -152,11 +152,11 @@ async function renewSession() {
 
           <div
             v-if="reading.kind !== 'empty'"
-            data-testid="mission-reading"
+            data-testid="kontor-reading"
             class="border-t border-line px-3.5 py-2.5 flex items-center gap-2.5"
           >
             <span
-              data-testid="mission-reading-label"
+              data-testid="kontor-reading-label"
               class="font-mono text-[10px] rounded px-1.5 py-0.5 border border-line-strong text-fg-soft shrink-0"
             >{{ reading.label }}</span>
             <!--
@@ -164,11 +164,11 @@ async function renewSession() {
             layer; without this, textContent read "GO TOSwitches to…".
           -->
             <span class="sr-only">: </span>
-            <span data-testid="mission-reading-will" class="text-[12.5px] text-fg-mute leading-snug">{{ reading.will }}</span>
+            <span data-testid="kontor-reading-will" class="text-[12.5px] text-fg-mute leading-snug">{{ reading.will }}</span>
           </div>
         </div>
 
-        <p v-if="problem || error" data-testid="mission-input-problem" role="alert" class="text-[12.5px] text-warning-text">
+        <p v-if="problem || error" data-testid="kontor-input-problem" role="alert" class="text-[12.5px] text-warning-text">
           {{ problem || error }}
         </p>
         <p v-else class="text-[12px] text-fg-faint">
