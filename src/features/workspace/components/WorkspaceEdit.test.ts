@@ -1,6 +1,7 @@
 import type { WorkspaceLayout } from '../layout'
+import type { WorkspaceLock } from '../useWorkspace'
 import { flushPromises, mount } from '@vue/test-utils'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent, h, ref } from 'vue'
 import { useViewState } from '@/composables/useViewState'
 import { WIDGET_SPECS } from '../widgetSpecs'
@@ -19,11 +20,12 @@ vi.mock('../widgetRegistry', () => {
 const ws = {
   layout: ref<WorkspaceLayout>({ version: 1, pages: [] }),
   loaded: ref(true),
-  locked: ref<string | null>(null),
+  locked: ref<WorkspaceLock | null>(null),
   saveError: ref<string | null>(null),
   editing: ref(true),
   load: vi.fn(async () => {}),
   reset: vi.fn(async () => {}),
+  retry: vi.fn(async () => {}),
   save: vi.fn(async (next: WorkspaceLayout) => {
     ws.layout.value = next
     return true
@@ -278,6 +280,55 @@ describe('page rename and delete', () => {
     expect(ws.save).toHaveBeenCalledTimes(1)
     expect(useViewState().activeView.value).toBe('page:p-morning')
     expect(ws.editing.value).toBe(true)
+    w.unmount()
+  })
+})
+
+describe('a locked or loading layout', () => {
+  const zentrale = { version: 1 as const, pages: [page] }
+
+  afterEach(() => {
+    ws.locked.value = null
+    ws.loaded.value = true
+  })
+
+  // Only an unreadable value may be replaced wholesale; a failed request says nothing about what is stored.
+  it('offers Retry, not Reset, when the layout could not be loaded', async () => {
+    ws.layout.value = zentrale
+    ws.locked.value = { kind: 'unloaded', message: 'The saved layout could not be loaded, so editing is locked until it loads.' }
+    const w = mount(WorkspacePage, { props: { pageId: 'zentrale' } })
+    expect(w.find('[data-testid="workspace-reset"]').exists()).toBe(false)
+    await w.get('[data-testid="workspace-retry"]').trigger('click')
+    expect(ws.retry).toHaveBeenCalledTimes(1)
+    w.unmount()
+  })
+
+  it('offers Reset, not Retry, when the stored layout is unreadable', () => {
+    ws.layout.value = zentrale
+    ws.locked.value = { kind: 'unreadable', message: 'The saved layout could not be read.' }
+    const w = mount(WorkspacePage, { props: { pageId: 'zentrale' } })
+    expect(w.find('[data-testid="workspace-retry"]').exists()).toBe(false)
+    expect(w.get('[data-testid="workspace-locked"]').text()).toContain('could not be read')
+    expect(w.find('[data-testid="workspace-reset"]').exists()).toBe(true)
+    w.unmount()
+  })
+
+  it('leaves edit mode when the layout locks', async () => {
+    ws.layout.value = zentrale
+    ws.editing.value = true
+    const w = mount(WorkspacePage, { props: { pageId: 'zentrale' } })
+    ws.locked.value = { kind: 'unloaded', message: 'locked' }
+    await w.vm.$nextTick()
+    expect(ws.editing.value).toBe(false)
+    w.unmount()
+  })
+
+  // Tiles mounted on the built-in layout would fetch, then remount under the stored one.
+  it('shows no tiles before the stored layout has loaded', () => {
+    ws.layout.value = zentrale
+    ws.loaded.value = false
+    const w = mount(WorkspacePage, { props: { pageId: 'zentrale' } })
+    expect(w.find('[data-testid="workspace-grid"]').exists()).toBe(false)
     w.unmount()
   })
 })

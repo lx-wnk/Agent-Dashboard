@@ -1,9 +1,29 @@
+import type { MockInstance } from 'vitest'
+import type { WorkspaceLayout } from './layout'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_LAYOUT, serializeLayout } from './layout'
 
 function settingsResponse(value: string) {
   return new Response(JSON.stringify([{ key: 'workspace.layout', value }]), { status: 200 })
 }
+
+function deferred() {
+  let resolve!: (res: Response) => void
+  const promise = new Promise<Response>((r) => {
+    resolve = r
+  })
+  return { promise, resolve }
+}
+
+function withoutFirst(n: number): WorkspaceLayout {
+  return { ...DEFAULT_LAYOUT, pages: [{ ...DEFAULT_LAYOUT.pages[0], tiles: DEFAULT_LAYOUT.pages[0].tiles.slice(n) }] }
+}
+
+function patchedValues(fetch: MockInstance<typeof globalThis.fetch>): string[] {
+  return fetch.mock.calls.filter(([, init]) => init?.method === 'PATCH').map(([, init]) => JSON.parse(init!.body as string).value)
+}
+
+const settle = () => new Promise(resolve => setTimeout(resolve, 0))
 
 async function fresh() {
   vi.resetModules()
@@ -28,7 +48,7 @@ describe('useWorkspace', () => {
     const ws = await fresh()
     await ws.load()
     expect(ws.layout.value).toEqual(DEFAULT_LAYOUT)
-    expect(ws.locked.value).toMatch(/could not be read/i)
+    expect(ws.locked.value).toMatchObject({ kind: 'unreadable', message: expect.stringMatching(/could not be read/i) })
   })
 
   it('saves with a PATCH and keeps the change on screen when the save fails', async () => {
@@ -78,7 +98,7 @@ describe('useWorkspace', () => {
     const ws = await fresh()
     await ws.load()
     expect(ws.layout.value).toEqual(DEFAULT_LAYOUT)
-    expect(ws.locked.value).toMatch(/could not be loaded/i)
+    expect(ws.locked.value).toMatchObject({ kind: 'unloaded', message: expect.stringMatching(/could not be loaded/i) })
   })
 
   it('locks editing when the settings endpoint rejects (network error)', async () => {
@@ -86,7 +106,7 @@ describe('useWorkspace', () => {
     const ws = await fresh()
     await ws.load()
     expect(ws.layout.value).toEqual(DEFAULT_LAYOUT)
-    expect(ws.locked.value).toMatch(/could not be loaded/i)
+    expect(ws.locked.value).toMatchObject({ kind: 'unloaded', message: expect.stringMatching(/could not be loaded/i) })
   })
 
   it('retries a 429 with Retry-After and shows the stored layout once it succeeds', async () => {
@@ -114,7 +134,7 @@ describe('useWorkspace', () => {
     await loadPromise
     expect(fetch).toHaveBeenCalledTimes(4)
     expect(ws.layout.value).toEqual(DEFAULT_LAYOUT)
-    expect(ws.locked.value).toMatch(/could not be loaded/i)
+    expect(ws.locked.value).toMatchObject({ kind: 'unloaded', message: expect.stringMatching(/could not be loaded/i) })
     vi.useRealTimers()
   })
 
@@ -123,7 +143,7 @@ describe('useWorkspace', () => {
     const ws = await fresh()
     await ws.load()
     expect(fetch).toHaveBeenCalledTimes(1)
-    expect(ws.locked.value).toMatch(/could not be loaded/i)
+    expect(ws.locked.value).toMatchObject({ kind: 'unloaded', message: expect.stringMatching(/could not be loaded/i) })
   })
 
   it('retries a 429 save and clears saveError once it succeeds', async () => {
@@ -154,5 +174,92 @@ describe('useWorkspace', () => {
     await vi.waitFor(() => expect(ws.saveError.value).toMatch(/not saved/i))
     expect(fetch).toHaveBeenCalledTimes(5)
     vi.useRealTimers()
+  })
+
+  it('retries a failed load and unlocks once the stored layout arrives', async () => {
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('', { status: 500 }))
+      .mockResolvedValueOnce(settingsResponse(serializeLayout(withoutFirst(1))))
+    const ws = await fresh()
+    await ws.load()
+    expect(ws.locked.value?.kind).toBe('unloaded')
+    await ws.retry()
+    expect(ws.locked.value).toBeNull()
+    expect(ws.layout.value).toEqual(withoutFirst(1))
+  })
+
+  it('reset clears the lock and writes the built-in layout', async () => {
+    const fetch = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(settingsResponse('{broken'))
+      .mockResolvedValueOnce(new Response('', { status: 200 }))
+    const ws = await fresh()
+    await ws.load()
+    await ws.reset()
+    expect(ws.locked.value).toBeNull()
+    expect(patchedValues(fetch)).toEqual([serializeLayout(DEFAULT_LAYOUT)])
+  })
+
+  // Each edit is its own save; sending every one would spend the shared per-IP rate limit.
+  it('sends one write at a time and collapses the edits made meanwhile into the latest', async () => {
+    const first = deferred()
+    const fetch = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(settingsResponse(''))
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValue(new Response('', { status: 200 }))
+    const ws = await fresh()
+    await ws.load()
+    for (const n of [1, 2, 3])
+      expect(await ws.save(withoutFirst(n))).toBe(true)
+    first.resolve(new Response('', { status: 200 }))
+    await vi.waitFor(() => expect(patchedValues(fetch)).toHaveLength(2))
+    await settle()
+    expect(patchedValues(fetch)).toEqual([serializeLayout(withoutFirst(1)), serializeLayout(withoutFirst(3))])
+  })
+
+  it('clears the save error once a later write lands', async () => {
+    const first = deferred()
+    const fetch = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(settingsResponse(''))
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValueOnce(new Response('', { status: 200 }))
+    const ws = await fresh()
+    await ws.load()
+    await ws.save(withoutFirst(1))
+    await ws.save(withoutFirst(2))
+    first.resolve(new Response('{"error":"bad request"}', { status: 400 }))
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(3))
+    await settle()
+    expect(ws.saveError.value).toBeNull()
+  })
+
+  // Window events reach every module instance earlier tests imported, so these
+  // stay last and answer every request instead of queueing one-shot responses.
+  it('reads the layout again when the window regains focus or becomes visible', async () => {
+    let stored = ''
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => settingsResponse(stored))
+    const ws = await fresh()
+    await ws.load()
+    stored = serializeLayout(withoutFirst(1))
+    window.dispatchEvent(new Event('focus'))
+    expect(await ws.save(withoutFirst(4))).toBe(false)
+    await vi.waitFor(() => expect(ws.layout.value).toEqual(withoutFirst(1)))
+    stored = serializeLayout(withoutFirst(2))
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
+    document.dispatchEvent(new Event('visibilitychange'))
+    await vi.waitFor(() => expect(ws.layout.value).toEqual(withoutFirst(2)))
+  })
+
+  it('does not read the layout again while a write is pending', async () => {
+    const pending = deferred()
+    let stored = ''
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => init?.method === 'PATCH' ? pending.promise : settingsResponse(stored))
+    const ws = await fresh()
+    await ws.load()
+    expect(await ws.save(withoutFirst(1))).toBe(true)
+    stored = serializeLayout(withoutFirst(2))
+    window.dispatchEvent(new Event('focus'))
+    await settle()
+    expect(ws.layout.value).toEqual(withoutFirst(1))
+    pending.resolve(new Response('', { status: 200 }))
   })
 })
