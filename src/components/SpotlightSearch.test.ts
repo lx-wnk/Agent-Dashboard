@@ -194,4 +194,38 @@ describe('spotlightSearch commands and hand-off', () => {
     expect(send).not.toHaveBeenCalled()
     wrapper.unmount()
   })
+
+  // The reply has to land somewhere visible, so hand-off finds the Kontor tile
+  // before it navigates rather than always jumping to the Zentrale.
+  it('navigates to an own page when the Zentrale has no Kontor tile but an own page does', async () => {
+    const { layout } = useWorkspace()
+    layout.value = {
+      version: 1,
+      pages: [
+        { id: 'zentrale', title: 'Zentrale', tiles: [] },
+        { id: 'p-a', title: 'Morning', tiles: [{ widget: 'kontor', col: 1, row: 1, colSpan: 3, rowSpan: 1 }] },
+      ],
+    }
+    const wrapper = await openSpotlight('plan phase 4')
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
+    await flushPromises()
+    expect(send).toHaveBeenCalledWith('plan phase 4')
+    expect(activeView.value).toBe('page:p-a')
+    wrapper.unmount()
+    layout.value = DEFAULT_LAYOUT
+  })
+
+  it('stays put and reports the missing tile when no page has a Kontor tile', async () => {
+    const { layout } = useWorkspace()
+    layout.value = { version: 1, pages: [{ id: 'zentrale', title: 'Zentrale', tiles: [] }] }
+    activeView.value = 'pipeline'
+    const wrapper = await openSpotlight('plan phase 4')
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
+    await flushPromises()
+    expect(send).not.toHaveBeenCalled()
+    expect(activeView.value).toBe('pipeline')
+    expect(document.querySelector('[data-testid="spotlight-problem"]')?.textContent).toContain('Kontor has no tile')
+    wrapper.unmount()
+    layout.value = DEFAULT_LAYOUT
+  })
 })

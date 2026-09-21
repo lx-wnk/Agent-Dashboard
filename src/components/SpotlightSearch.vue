@@ -40,6 +40,18 @@ const commands = computed<Command[]>(() => [
 const busy = ref(false)
 const problem = ref('')
 
+const KONTOR_NO_TILE = 'Kontor has no tile — add it to a page with Edit layout.'
+
+// The Kontor tile can be removed or swapped off any page, so hand-off has to
+// find where the reply would actually show before it navigates there.
+function kontorTargetView(): string | null {
+  const zentrale = layout.value.pages.find(p => p.id === ZENTRALE_PAGE_ID)
+  if (zentrale?.tiles.some(t => t.widget === 'kontor'))
+    return 'zentrale'
+  const ownPage = layout.value.pages.find(p => p.id !== ZENTRALE_PAGE_ID && p.tiles.some(t => t.widget === 'kontor'))
+  return ownPage ? `page:${ownPage.id}` : null
+}
+
 const open = ref(false)
 const query = ref('')
 const inputRef = ref<HTMLInputElement | null>(null)
@@ -132,6 +144,11 @@ async function handOff() {
   const text = query.value.trim()
   if (!text || busy.value)
     return
+  const targetView = kontorTargetView()
+  if (!targetView) {
+    problem.value = KONTOR_NO_TILE
+    return
+  }
   if (text.startsWith('/') && kontor.pid.value === null) {
     await kontor.refresh()
     if (kontor.pid.value === null) {
@@ -141,7 +158,7 @@ async function handOff() {
   }
   busy.value = true
   problem.value = ''
-  activeView.value = 'zentrale'
+  activeView.value = targetView
   if (await kontor.send(text))
     closeDialog()
   else
