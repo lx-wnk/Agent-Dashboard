@@ -72,4 +72,15 @@ describe('hubWidget', () => {
     expect(rows[1].text()).toContain('Worker Queue')
     w.unmount()
   })
+
+  // At the hub's 6x6 minimum a tall question can outgrow the tile — the whole
+  // card scrolls instead of clipping the queue's action buttons (M6).
+  it('lets the whole card scroll instead of clipping the docked queue', () => {
+    const w = mount(HubWidget)
+    expect(w.get('[data-testid="hub"]').classes()).toContain('overflow-y-auto')
+    expect(w.get('[data-testid="hub"]').classes()).not.toContain('overflow-hidden')
+    expect(w.get('[data-testid="stub-queue"]').classes()).toContain('shrink-0')
+    expect(w.get('[data-testid="hub-list"]').classes()).not.toContain('overflow-y-auto')
+    w.unmount()
+  })
 })

@@ -21,9 +21,9 @@ const rows = computed(() =>
 </script>
 
 <template>
-  <section data-testid="hub" aria-label="Zentrale" class="flex h-full min-h-0 flex-col gap-4 overflow-hidden rounded-xl border border-line bg-card p-4">
-    <NeedsYouQueue variant="docked" />
-    <ul data-testid="hub-list" class="min-h-0 flex-1 overflow-y-auto">
+  <section data-testid="hub" aria-label="Zentrale" class="flex h-full min-h-0 flex-col gap-4 overflow-y-auto rounded-xl border border-line bg-card p-4">
+    <NeedsYouQueue variant="docked" class="shrink-0" />
+    <ul data-testid="hub-list">
       <li v-for="{ a, state } in rows" :key="a.pid" data-testid="hub-agent" class="flex items-center justify-between gap-3 border-b border-line py-1.5 text-[12.5px]">
         <span class="truncate text-fg">{{ friendlyProjectName(a.projectName) }}</span>
         <span :class="state === 'working' || state === 'active' ? 'text-success-text' : 'text-fg-mute'">{{ state }}</span>
