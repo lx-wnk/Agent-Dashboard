@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 
@@ -32,19 +33,21 @@ type SpawnOptions struct {
 }
 
 // Service owns the one Kontor session. The active kontor_session key is the
-// session record; mu serialises every transition.
+// session record; mu serialises every transition. ConfigPath is fixed rather
+// than remembered per spawn, so end() can find and remove the MCP config even
+// after a restart, when no in-memory state survived.
 type Service struct {
 	Keys       mcp.KontorSessionKeyIssuer
 	Audit      repo.AuditEventRepo
 	TaskAPIURL string
 	Dir        string
+	ConfigPath string
 	Spawn      func(context.Context, SpawnOptions) (int, error)
 	Terminate  func(pid int) error
 	Alive      func(pid int) bool
 	WaitExit   func(pid int)
 
-	mu      sync.Mutex
-	cfgPath string // lost on restart; SweepOrphanedConfigs removes it then
+	mu sync.Mutex
 }
 
 func (s *Service) Current(ctx context.Context) (int, bool, error) {
@@ -108,13 +111,17 @@ func (s *Service) start(ctx context.Context, prompt string) (int, error) {
 	if err := os.MkdirAll(s.Dir, 0o700); err != nil {
 		return 0, fmt.Errorf("kontorsession: session dir: %w", err)
 	}
+	// A client disconnect can cancel ctx after Spawn already started the
+	// process; the cleanup writes below must still land, so they run on a
+	// context detached from that cancellation.
+	cleanupCtx := context.WithoutCancel(ctx)
 	token, err := s.Keys.Issue(ctx)
 	if err != nil {
 		return 0, err
 	}
 	cfg, err := s.writeConfig(token)
 	if err != nil {
-		return 0, errors.Join(err, s.Keys.Revoke(ctx))
+		return 0, errors.Join(err, s.Keys.Revoke(cleanupCtx))
 	}
 	pid, err := s.Spawn(ctx, SpawnOptions{
 		Cwd: s.Dir, Prompt: prompt, AppendSystemPrompt: briefing, Name: "Kontor",
@@ -127,16 +134,17 @@ func (s *Service) start(ctx context.Context, prompt string) (int, error) {
 		}
 	}
 	if err != nil {
-		_ = os.Remove(cfg)
-		return 0, errors.Join(err, s.Keys.Revoke(ctx))
+		s.removeConfig()
+		return 0, errors.Join(err, s.Keys.Revoke(cleanupCtx))
 	}
-	s.cfgPath = cfg
 	s.audit(ctx, "kontor_session.start", pid, "")
 	return pid, nil
 }
 
 // end is the single exit path: stop the process, revoke the key, remove the
-// config, audit. Ending no session is not an error.
+// config, audit. Ending no session is not an error. The revoke runs on a
+// context detached from ctx's cancellation for the same reason start's
+// cleanup does — a caller disconnecting must not leave the key active.
 func (s *Service) end(ctx context.Context, reason string) error {
 	pid, ok, err := s.Keys.Current(ctx)
 	if err != nil {
@@ -148,26 +156,32 @@ func (s *Service) end(ctx context.Context, reason string) error {
 		}
 	}
 	if ok {
-		if err := s.Keys.Revoke(ctx); err != nil {
+		if err := s.Keys.Revoke(context.WithoutCancel(ctx)); err != nil {
 			return err
 		}
 		s.audit(ctx, "kontor_session.end", pid, reason)
 	}
-	if s.cfgPath != "" {
-		_ = os.Remove(s.cfgPath)
-		s.cfgPath = ""
-	}
+	s.removeConfig()
 	return nil
 }
 
 // exited fires from the watcher of every session ever started, so it ends
-// only the session still recorded for that pid — never a renewed one.
+// only the session still recorded for that pid — never a renewed one. The
+// lookup gets one retry: a transient DB error at the moment the process
+// exits must not strand the record on a dead pid forever.
 func (s *Service) exited(pid int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	ctx := context.Background()
 	cur, ok, err := s.current(ctx)
+	if err != nil {
+		slog.Warn("kontorsession: lookup after exit failed, retrying once", "pid", pid, "err", err)
+		cur, ok, err = s.current(ctx)
+	}
 	if err != nil || !ok || cur != pid {
+		if err != nil {
+			slog.Warn("kontorsession: lookup after exit failed twice, giving up", "pid", pid, "err", err)
+		}
 		return
 	}
 	if err := s.end(ctx, "process exited"); err != nil {
@@ -175,6 +189,12 @@ func (s *Service) exited(pid int) {
 	}
 }
 
+// writeConfig writes the MCP config to the service's fixed ConfigPath, so
+// end() can find and remove it even after a restart. channelconfig has no
+// write-to-path helper, so this builds the config through WriteTempConfig —
+// the single definition of the config shape — and copies its bytes into
+// place. A copy, not a rename: the temp directory and ConfigPath's directory
+// are not guaranteed to share a filesystem.
 func (s *Service) writeConfig(token string) (string, error) {
 	self, err := channelconfig.SelfBinaryPath()
 	if err != nil {
@@ -184,7 +204,31 @@ func (s *Service) writeConfig(token string) (string, error) {
 	if err != nil {
 		slog.Warn("kontorsession: user MCP servers unreadable, starting without them", "err", err)
 	}
-	return channelconfig.WriteTempConfig(self, &channelconfig.TaskAPI{URL: s.TaskAPIURL, Token: token}, servers)
+	tmp, err := channelconfig.WriteTempConfig(self, &channelconfig.TaskAPI{URL: s.TaskAPIURL, Token: token}, servers)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = os.Remove(tmp) }()
+	data, err := os.ReadFile(tmp)
+	if err != nil {
+		return "", fmt.Errorf("kontorsession: read temp config: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(s.ConfigPath), 0o700); err != nil {
+		return "", fmt.Errorf("kontorsession: config dir: %w", err)
+	}
+	if err := os.WriteFile(s.ConfigPath, data, 0o600); err != nil {
+		return "", fmt.Errorf("kontorsession: write config: %w", err)
+	}
+	return s.ConfigPath, nil
+}
+
+func (s *Service) removeConfig() {
+	if s.ConfigPath == "" {
+		return
+	}
+	if err := os.Remove(s.ConfigPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		slog.Warn("kontorsession: remove config failed", "path", s.ConfigPath, "err", err)
+	}
 }
 
 func (s *Service) audit(ctx context.Context, action string, pid int, reason string) {

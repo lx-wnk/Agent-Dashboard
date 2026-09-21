@@ -1101,6 +1101,8 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 				Audit:      auditEventRepo,
 				TaskAPIURL: fmt.Sprintf("http://127.0.0.1:%d", cfg.Port) + mcppkg.EndpointPath,
 				Dir:        sessionDir,
+				// Outside the session cwd so claude never auto-loads it as a project .mcp.json.
+				ConfigPath: filepath.Join(cacheDir, "kontor", "session-mcp.json"),
 				Spawn: func(ctx context.Context, o kontorsession.SpawnOptions) (int, error) {
 					return kontorSpawns.SpawnSession(ctx, agents.SessionSpawnOptions(o))
 				},
