@@ -78,8 +78,8 @@ func (h *ChannelStageOutputHandler) Post(w http.ResponseWriter, r *http.Request)
 			return
 		}
 	case repo.ApiKeyKindUser, "":
-		// operator's own credential; "" is the pre-migration default (see
-		// ent/schema/api_key.go), equivalent to ApiKeyKindUser.
+		// operator's own credential; Create normalises "" to user, tolerated
+		// here for rows written outside the repo.
 	default:
 		writeJSONError(w, http.StatusForbidden, "key not issued for this stage run")
 		return
