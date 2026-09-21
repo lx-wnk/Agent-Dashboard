@@ -88,7 +88,7 @@ function createPage(event: KeyboardEvent): void {
   void workspace.save(r.value.layout)
   workspace.editing.value = true
   selectView(`page:${r.value.pageId}`)
-  // Blur first: a removed input fires no focusout, which would hold the nav open.
+  // Blur before the input unmounts: a removed input fires no focusout, which would hold the nav open.
   input.blur()
 }
 </script>
