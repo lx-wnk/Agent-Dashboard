@@ -229,3 +229,23 @@ test('a page of my own is renamed and deleted in its edit mode', async ({ page, 
   await expect(page.getByTestId('workspace-page-zentrale')).toBeVisible()
   await expect(page.getByTestId('nav-page-p-morning')).toHaveCount(0)
 })
+
+// An edit on the built-in layout before the stored one arrives would save over it.
+test('the layout cannot be edited before it has loaded', async ({ page }) => {
+  let release!: () => void
+  const held = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  await page.route('**/api/settings', async (route) => {
+    await held
+    await route.continue()
+  })
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByTestId('workspace-page-zentrale')).toBeVisible()
+  await expect(page.getByTestId('workspace-edit-toggle')).toHaveCount(0)
+  await expect(page.getByTestId('nav-new-page')).toHaveCount(0)
+
+  release()
+  await expect(page.getByTestId('workspace-edit-toggle')).toBeVisible()
+  await expect(page.getByTestId('nav-new-page')).toBeVisible()
+})
