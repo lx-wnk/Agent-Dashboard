@@ -10,7 +10,7 @@ describe('widget registry', () => {
   })
 
   it('carries the cockpit panels, live work and today\'s cost', () => {
-    for (const id of ['agents', 'pipeline', 'routines', 'memory', 'github', 'live-work', 'cost-today', 'kontor'])
+    for (const id of ['agents', 'pipeline', 'routines', 'memory', 'github', 'live-work', 'cost-today', 'kontor', 'hub'])
       expect(widgetIds()).toContain(id)
   })
 

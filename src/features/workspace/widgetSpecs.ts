@@ -15,6 +15,7 @@ function spec(id: string, title: string, def: [number, number], min: [number, nu
 // rules import this without pulling in a single component.
 export const WIDGET_SPECS: Record<string, WidgetSpec> = Object.fromEntries([
   spec('kontor', 'Kontor', [6, 1], [4, 1]),
+  spec('hub', 'Zentrale', [6, 11], [6, 6]),
   spec('live-work', 'Live work', [3, 5], [3, 3]),
   spec('agents', 'Agents', [3, 3], [3, 2]),
   spec('pipeline', 'Pipeline', [3, 3], [3, 2]),
