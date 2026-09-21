@@ -57,13 +57,13 @@ describe('missionInput', () => {
     const wrapper = mount(MissionInput)
     await typeInto(wrapper, 'build a real diff view')
 
-    expect(wrapper.get('[data-testid="mission-reading-label"]').text()).toBe('CAPTURE')
-    expect(wrapper.get('[data-testid="mission-reading"]').text()).toContain('Nothing runs yet')
+    expect(wrapper.get('[data-testid="mission-reading-label"]').text()).toBe('START KONTOR')
+    expect(wrapper.get('[data-testid="mission-reading"]').text()).toContain('first prompt')
 
     // The badge and the sentence must stay apart in the TEXT layer, not only
     // on screen: flex gap separates them visually, so copying the line or
-    // reading textContent gave "CAPTUREBecomes a backlog item…".
-    expect(wrapper.get('[data-testid="mission-reading"]').text()).toMatch(/CAPTURE:\s\S/)
+    // reading textContent gave "START KONTORStarts a Kontor session…".
+    expect(wrapper.get('[data-testid="mission-reading"]').text()).toMatch(/START KONTOR:\s\S/)
 
     await wrapper.get('[data-testid="mission-input-submit"]').trigger('click')
     await flushPromises()
