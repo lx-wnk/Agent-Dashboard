@@ -148,7 +148,8 @@ export function validateLayout(value: unknown): string | null {
       return `Page ${p.id} appears twice.`
     seen.add(p.id)
     const title = typeof p.title === 'string' ? p.title.trim() : ''
-    if (title.length === 0 || title.length > MAX_TITLE)
+    const titleLength = [...title].length
+    if (titleLength === 0 || titleLength > MAX_TITLE)
       return `Page ${p.id} needs a title of 1 to ${MAX_TITLE} characters.`
     if (!Array.isArray(p.tiles) || p.tiles.length > MAX_TILES)
       return `Page ${p.id} holds at most ${MAX_TILES} tiles.`
@@ -191,7 +192,8 @@ export function replacePage(layout: WorkspaceLayout, page: WorkspacePage): Works
 
 function cleanTitle(title: string): OpResult<string> {
   const trimmed = title.trim()
-  return trimmed.length === 0 || trimmed.length > MAX_TITLE
+  const length = [...trimmed].length
+  return length === 0 || length > MAX_TITLE
     ? fail(`A page title has 1 to ${MAX_TITLE} characters.`)
     : ok(trimmed)
 }

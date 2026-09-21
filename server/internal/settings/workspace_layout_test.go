@@ -42,8 +42,21 @@ func TestWorkspaceLayout_Validation(t *testing.T) {
 		"duplicate page":   strings.Replace(zentraleOnly, `]}]}`, `]},{"id":"zentrale","title":"Again","tiles":[]}]}`, 1),
 		"empty title":      strings.Replace(zentraleOnly, `"title":"Zentrale"`, `"title":"  "`, 1),
 		"uppercase pageid": strings.Replace(zentraleOnly, `]}]}`, `]},{"id":"Morning","title":"M","tiles":[]}]}`, 1),
+		"title too long":   strings.Replace(zentraleOnly, `"title":"Zentrale"`, `"title":"`+strings.Repeat("a", 81)+`"`, 1),
 	}
 	for name, raw := range bad {
 		require.Error(t, d.Validate(raw), name)
 	}
+}
+
+// Title length counts Unicode code points (utf8.RuneCountInString), matching
+// src/features/workspace/layout.ts's [...title].length. Counting UTF-16 units
+// on the client instead would let a PATCH here store a title the browser then
+// refuses to read, locking editing.
+func TestWorkspaceLayout_TitleCountsCodePoints(t *testing.T) {
+	d, _ := Lookup("workspace.layout")
+
+	emojiTitle := strings.Repeat("\U0001F600", 41)
+	withEmojiTitle := strings.Replace(zentraleOnly, `"title":"Zentrale"`, `"title":"`+emojiTitle+`"`, 1)
+	require.NoError(t, d.Validate(withEmojiTitle))
 }

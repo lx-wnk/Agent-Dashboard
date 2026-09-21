@@ -150,6 +150,15 @@ describe('parsing', () => {
     expect(validateLayout({ version: 1, pages: [page(), page()] })).toMatch(/twice/i)
     expect(validateLayout({ version: 1, pages: [page(), { id: 'Bad Id', title: 'B', tiles: [] }] })).toMatch(/id/i)
   })
+
+  // Title length counts code points, matching server/internal/settings/workspace_layout.go
+  // (utf8.RuneCountInString). Counting UTF-16 units instead would let the server accept a
+  // title above U+FFFF (each 2 units) that the client then refuses to read.
+  it('counts a title by code points, not UTF-16 units', () => {
+    const emojiTitle = '😀'.repeat(41)
+    expect(validateLayout({ version: 1, pages: [{ ...page(), title: emojiTitle }] })).toBeNull()
+    expect(validateLayout({ version: 1, pages: [{ ...page(), title: 'a'.repeat(81) }] })).toMatch(/title/i)
+  })
 })
 
 describe('pages', () => {
@@ -162,5 +171,10 @@ describe('pages', () => {
   it('refuses an empty title and never removes the Zentrale', () => {
     expect(addPage(DEFAULT_LAYOUT, '   ').ok).toBe(false)
     expect(removePage(DEFAULT_LAYOUT, 'zentrale').ok).toBe(false)
+  })
+
+  it('counts an added page\'s title by code points, not UTF-16 units', () => {
+    expect(addPage(DEFAULT_LAYOUT, '😀'.repeat(41), 'p-test').ok).toBe(true)
+    expect(addPage(DEFAULT_LAYOUT, 'a'.repeat(81), 'p-test').ok).toBe(false)
   })
 })
