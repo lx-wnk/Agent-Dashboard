@@ -107,4 +107,36 @@ describe('useWorkspace', () => {
     expect(fetch).toHaveBeenCalledTimes(1)
     expect(ws.locked.value).toMatch(/could not be loaded/i)
   })
+
+  it('retries a 429 save and clears saveError once it succeeds', async () => {
+    vi.useFakeTimers()
+    const fetch = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(settingsResponse(''))
+      .mockResolvedValueOnce(new Response('', { status: 429, headers: { 'Retry-After': '1' } }))
+      .mockResolvedValueOnce(new Response('', { status: 200 }))
+    const ws = await fresh()
+    await ws.load()
+    const next = { ...DEFAULT_LAYOUT, pages: [{ ...DEFAULT_LAYOUT.pages[0], tiles: [] }] }
+    const savePromise = ws.save(next)
+    await vi.advanceTimersByTimeAsync(1000)
+    await savePromise
+    expect(fetch).toHaveBeenCalledTimes(3)
+    expect(ws.saveError.value).toBeNull()
+    vi.useRealTimers()
+  })
+
+  it('reports a save failure after a 4th consecutive 429', async () => {
+    vi.useFakeTimers()
+    const fetch = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(settingsResponse(''))
+      .mockResolvedValue(new Response('', { status: 429 }))
+    const ws = await fresh()
+    await ws.load()
+    const savePromise = ws.save(DEFAULT_LAYOUT)
+    await vi.advanceTimersByTimeAsync(3000)
+    await savePromise
+    expect(fetch).toHaveBeenCalledTimes(5)
+    expect(ws.saveError.value).toMatch(/not saved/i)
+    vi.useRealTimers()
+  })
 })

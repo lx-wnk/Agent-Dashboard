@@ -29,12 +29,13 @@ function sleep(ms: number): Promise<void> {
 
 // The dashboard's own boot burst can exhaust the shared per-IP rate limiter
 // (server/internal/api/middleware.go); a 429 here is transient load, not a
-// real failure, so it gets a few retries before the workspace locks.
-async function fetchSettings(): Promise<Response> {
-  let res = await fetch('/api/settings')
+// real failure, so both the load and the save get a few retries before
+// reporting failure.
+async function fetchWithRateLimitRetry(input: string, init?: RequestInit): Promise<Response> {
+  let res = await fetch(input, init)
   for (let attempt = 0; attempt < MAX_429_RETRIES && res.status === 429; attempt++) {
     await sleep(retryDelayMs(res))
-    res = await fetch('/api/settings')
+    res = await fetch(input, init)
   }
   return res
 }
@@ -42,7 +43,7 @@ async function fetchSettings(): Promise<Response> {
 async function load(): Promise<void> {
   loading ??= (async () => {
     try {
-      const res = await fetchSettings()
+      const res = await fetchWithRateLimitRetry('/api/settings')
       if (!res.ok)
         throw new Error(`HTTP ${res.status}`)
       const items = await res.json() as Array<{ key: string, value: string }>
@@ -67,7 +68,7 @@ async function write(next: WorkspaceLayout): Promise<void> {
   saveError.value = null
   saving = saving.then(async () => {
     try {
-      const res = await fetch(`/api/settings/${SETTING}`, {
+      const res = await fetchWithRateLimitRetry(`/api/settings/${SETTING}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ value: serializeLayout(next) }),
