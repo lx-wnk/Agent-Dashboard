@@ -31,7 +31,7 @@ import { toast } from './composables/useToast'
 import { useTodayCost } from './composables/useTodayCost'
 import { useUsage } from './composables/useUsage'
 import { useUser } from './composables/useUser'
-import { useViewState } from './composables/useViewState'
+import { pageIdOf, resolveView, useViewState } from './composables/useViewState'
 import { NeedsYouQueue, rankNextThings } from './features/mission'
 import { useWorkspace, ZENTRALE_PAGE_ID } from './features/workspace'
 import { formatCost } from './utils/format'
@@ -259,10 +259,17 @@ function navigateTo(target: { agent?: Agent, taskId?: string }) {
 provide(OPEN_TASK, (taskId: string) => navigateTo({ taskId }))
 
 // The dashboard's triage band shows the same items (AgentTriageBand reads the
-// same agents and permission items); a Zentrale holding the hub docks the queue
-// itself, unless the error line replaces the page and with it the hub.
+// same agents and permission items); a workspace page holding the hub docks the
+// queue itself, unless the error line replaces the page and with it the hub.
 const workspace = useWorkspace()
-const pageHasHub = computed(() => activeView.value === 'zentrale' && !error.value && !!workspace.page(ZENTRALE_PAGE_ID)?.tiles.some(t => t.widget === 'hub'))
+const currentPageId = computed(() => activeView.value === 'zentrale' ? ZENTRALE_PAGE_ID : pageIdOf(activeView.value))
+const pageHasHub = computed(() => currentPageId.value !== null && !error.value && !!workspace.page(currentPageId.value)?.tiles.some(t => t.widget === 'hub'))
+// Before the layout has loaded a page id cannot be judged missing; loaded is a
+// source of its own because a failed load flips it without replacing layout.
+watch([activeView, workspace.layout, workspace.loaded], () => {
+  if (workspace.loaded.value)
+    activeView.value = resolveView(activeView.value, workspace.layout.value.pages.map(p => p.id))
+}, { immediate: true })
 const showNeedsYouStrip = computed(() => activeView.value !== 'dashboard' && !pageHasHub.value)
 
 // Single routing rule: plan_review tasks open the plan panel, all others the generic modal.
@@ -318,7 +325,7 @@ onMounted(() => usageComposable.start())
               + New Agent
             </button>
             <button
-              v-if="activeView === 'zentrale' && !workspace.locked.value"
+              v-if="currentPageId !== null && !workspace.locked.value"
               type="button"
               data-testid="workspace-edit-toggle"
               :aria-pressed="workspace.editing.value"
@@ -331,7 +338,7 @@ onMounted(() => usageComposable.start())
         </AppTopbar>
       </template>
 
-      <div class="p-5 flex flex-col min-h-full" :class="{ 'h-full': activeView === 'zentrale' }">
+      <div class="p-5 flex flex-col min-h-full" :class="{ 'h-full': currentPageId !== null }">
         <NeedsYouQueue v-if="showNeedsYouStrip" variant="strip" class="mb-3" />
         <div v-if="isLoading && activeView === 'dashboard'" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
           <SkeletonCard v-for="n in 6" :key="n" />
@@ -340,7 +347,7 @@ onMounted(() => usageComposable.start())
           Error: {{ error }}
         </p>
 
-        <WorkspacePage v-else-if="activeView === 'zentrale'" :page-id="ZENTRALE_PAGE_ID" class="min-h-0 flex-1" />
+        <WorkspacePage v-else-if="currentPageId !== null" :key="currentPageId" :page-id="currentPageId" class="min-h-0 flex-1" />
 
         <DashboardView
           v-else-if="activeView === 'dashboard'"

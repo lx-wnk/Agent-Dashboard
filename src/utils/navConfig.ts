@@ -1,9 +1,10 @@
-import type { ActiveView } from '../composables/useViewState'
+import type { ActiveView, CoreView } from '../composables/useViewState'
+import { pageIdOf } from '../composables/useViewState'
 
 export type NavGroup = 'Monitor' | 'Build' | 'Insights'
 
 export interface NavItemConfig {
-  view: ActiveView
+  view: CoreView
   label: string
   icon: string
   group: NavGroup
@@ -21,6 +22,9 @@ export const NAV_ITEMS: NavItemConfig[] = [
   { view: 'eval', label: 'Eval', icon: '⬡', group: 'Insights' },
 ]
 
-export function viewTitle(view: ActiveView): string {
+export function viewTitle(view: ActiveView, pages: ReadonlyArray<{ id: string, title: string }> = []): string {
+  const id = pageIdOf(view)
+  if (id !== null)
+    return pages.find(p => p.id === id)?.title ?? ''
   return NAV_ITEMS.find(i => i.view === view)?.label ?? 'Dashboard'
 }

@@ -44,4 +44,10 @@ describe('navConfig', () => {
     expect(viewTitle('dashboard')).toBe('Dashboard')
     expect(viewTitle('cost')).toBe('Cost')
   })
+
+  it('viewTitle returns a page\'s own title, and no core title for an unknown page', () => {
+    const pages = [{ id: 'zentrale', title: 'Zentrale' }, { id: 'p-a', title: 'Morning' }]
+    expect(viewTitle('page:p-a', pages)).toBe('Morning')
+    expect(viewTitle('page:p-gone', pages)).toBe('')
+  })
 })

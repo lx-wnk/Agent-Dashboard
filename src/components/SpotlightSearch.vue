@@ -4,6 +4,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ACTIVE_VIEWS, useViewState } from '@/composables/useViewState'
 import { useKontorSession } from '@/features/mission/composables/useKontorSession'
 import { SLASH_COMMAND_REFUSAL } from '@/features/mission/composables/useReading'
+import { useWorkspace, ZENTRALE_PAGE_ID } from '@/features/workspace'
 import AppModal from './ui/AppModal.vue'
 
 const emit = defineEmits<{
@@ -13,6 +14,7 @@ const emit = defineEmits<{
 
 const { activeView } = useViewState()
 const kontor = useKontorSession()
+const { layout } = useWorkspace()
 
 interface Command {
   id: string
@@ -22,13 +24,18 @@ interface Command {
 
 // Derived from ACTIVE_VIEWS so a view added there shows up here without a
 // second list to keep in step.
-const commands = computed<Command[]>(() =>
-  ACTIVE_VIEWS.map(view => ({
+const commands = computed<Command[]>(() => [
+  ...ACTIVE_VIEWS.map(view => ({
     id: `view:${view}`,
     label: `Go to ${view}`,
     run: () => { activeView.value = view },
   })),
-)
+  ...layout.value.pages.filter(p => p.id !== ZENTRALE_PAGE_ID).map(p => ({
+    id: `view:page:${p.id}`,
+    label: `Go to ${p.title}`,
+    run: () => { activeView.value = `page:${p.id}` },
+  })),
+])
 
 const busy = ref(false)
 const problem = ref('')

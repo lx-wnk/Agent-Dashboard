@@ -27,6 +27,34 @@ test('the Zentrale is the default page with the nine widgets', async ({ page }) 
     await expect(page.getByTestId(`workspace-tile-${id}`)).toBeVisible()
 })
 
+test('a stored page view shows that page, and a page that is gone falls back to the Zentrale', async ({ page, request, baseURL }) => {
+  const layout = {
+    version: 1,
+    pages: [
+      { id: 'zentrale', title: 'Zentrale', tiles: [] },
+      { id: 'p-morning', title: 'Morning', tiles: [{ widget: 'github', col: 1, row: 1, colSpan: 3, rowSpan: 3 }] },
+    ],
+  }
+  const seeded = await request.patch('/api/settings/workspace.layout', {
+    headers: { Origin: baseURL ?? 'http://localhost:13199' },
+    data: { value: JSON.stringify(layout) },
+  })
+  expect(seeded.ok(), 'seed layout request').toBe(true)
+
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await page.evaluate(() => localStorage.setItem('agent-active-view', 'page:p-morning'))
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Morning')
+  await expect(page.getByTestId('workspace-tile-github')).toBeVisible()
+  await expect(page.getByTestId('workspace-edit-toggle')).toBeVisible()
+
+  await page.evaluate(() => localStorage.setItem('agent-active-view', 'page:p-gone'))
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await expect(page.getByTestId('workspace-page-zentrale')).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Zentrale')
+  expect(await page.evaluate(() => localStorage.getItem('agent-active-view'))).toBe('zentrale')
+})
+
 test('a moved tile stays moved after a reload', async ({ page }) => {
   await page.goto('/', { waitUntil: 'domcontentloaded' })
   await page.getByTestId('workspace-edit-toggle').click()

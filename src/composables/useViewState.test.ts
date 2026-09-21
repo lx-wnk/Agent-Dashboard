@@ -59,6 +59,19 @@ describe('useViewState', () => {
     expect(localStorage.getItem('agent-dashboard-layout')).toBe('list')
   })
 
+  it('keeps a stored page view and recognises core views', async () => {
+    localStorage.setItem('agent-active-view', 'page:p-abc')
+    const { useViewState, isCoreView, pageIdOf, resolveView } = await freshModule()
+    expect(useViewState().activeView.value).toBe('page:p-abc')
+    expect(isCoreView('zentrale')).toBe(true)
+    expect(isCoreView('page:p-abc')).toBe(false)
+    expect(pageIdOf('page:p-abc')).toBe('p-abc')
+    expect(pageIdOf('zentrale')).toBeNull()
+    // A page that no longer exists falls back instead of blanking the screen.
+    expect(resolveView('page:p-gone', ['zentrale'])).toBe('zentrale')
+    expect(resolveView('page:p-abc', ['zentrale', 'p-abc'])).toBe('page:p-abc')
+  })
+
   it('ignores an unknown stored activeView and falls back to zentrale', async () => {
     localStorage.setItem('agent-active-view', 'kanban')
     const { useViewState } = await freshModule()
