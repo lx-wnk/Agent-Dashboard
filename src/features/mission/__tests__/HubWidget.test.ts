@@ -4,76 +4,34 @@ import { ref } from 'vue'
 
 const agents = ref([
   {
-    pid: 100,
-    status: 'waiting',
-    projectName: 'dashboard-app',
-    working: false,
-    sessionId: 's1',
-    provider: 'anthropic',
-    projectPath: '/path/1',
-    cwd: '/path/1',
-    entrypoint: 'cli',
-    uptime: 0,
-    lastActivity: '2026-01-01T00:00:00Z',
-    lastTools: [],
-    tasks: [],
-    subagents: [],
-    tokenUsage: { input: 0, output: 0, cacheCreation: 0, cacheRead: 0 },
-    costEstimate: 0,
-    cacheCreationCostEstimate: 0,
-    cacheReadCostEstimate: 0,
-    healthScore: 0,
-    conversationTurns: 0,
-    toolCounts: {},
-    channelAvailable: false,
-  },
-  {
     pid: 101,
-    status: 'active',
+    status: 'active' as const,
     projectName: 'kontor-hub',
     working: true,
-    sessionId: 's2',
-    provider: 'anthropic',
-    projectPath: '/path/2',
-    cwd: '/path/2',
-    entrypoint: 'cli',
-    uptime: 0,
-    lastActivity: '2026-01-01T00:00:00Z',
-    lastTools: [],
-    tasks: [],
-    subagents: [],
-    tokenUsage: { input: 0, output: 0, cacheCreation: 0, cacheRead: 0 },
-    costEstimate: 0,
-    cacheCreationCostEstimate: 0,
-    cacheReadCostEstimate: 0,
-    healthScore: 0,
-    conversationTurns: 0,
-    toolCounts: {},
-    channelAvailable: false,
+  },
+  {
+    pid: 100,
+    status: 'active' as const,
+    projectName: 'dashboard-app',
+    working: false,
   },
   {
     pid: 102,
-    status: 'idle',
+    status: 'waiting' as const,
     projectName: 'web-app',
     working: false,
-    sessionId: 's3',
-    provider: 'anthropic',
-    projectPath: '/path/3',
-    cwd: '/path/3',
-    entrypoint: 'cli',
-    uptime: 0,
-    lastActivity: '2026-01-01T00:00:00Z',
-    lastTools: [],
-    tasks: [],
-    subagents: [],
-    tokenUsage: { input: 0, output: 0, cacheCreation: 0, cacheRead: 0 },
-    costEstimate: 0,
-    cacheCreationCostEstimate: 0,
-    cacheReadCostEstimate: 0,
-    healthScore: 0,
-    conversationTurns: 0,
-    toolCounts: {},
-    channelAvailable: false,
+  },
+  {
+    pid: 103,
+    status: 'idle' as const,
+    projectName: 'api-server',
+    working: false,
+  },
+  {
+    pid: 104,
+    status: 'waiting' as const,
+    projectName: 'worker-queue',
+    working: true,
   },
 ])
 
@@ -90,13 +48,28 @@ vi.mock('../components/NeedsYouQueue.vue', () => ({
 const { default: HubWidget } = await import('../components/HubWidget.vue')
 
 describe('hubWidget', () => {
-  it('docks the queue and lists agents, waiting first', () => {
+  it('docks the queue and lists agents working first, then by status order', () => {
     const w = mount(HubWidget)
     expect(w.get('[data-testid="stub-queue"]').text()).toBe('docked')
     const rows = w.findAll('[data-testid="hub-agent"]').map(r => r.text())
-    expect(rows[0]).toContain('waiting')
+    // working first: pid 101 (active + working) and pid 104 (waiting + working)
+    // then active: pid 100
+    // then waiting: pid 102
+    // then idle: pid 103
+    expect(rows[0]).toContain('working')
     expect(rows[1]).toContain('working')
-    expect(rows[2]).toContain('idle')
+    expect(rows[2]).toContain('active')
+    expect(rows[3]).toContain('waiting')
+    expect(rows[4]).toContain('idle')
+    w.unmount()
+  })
+
+  it('displays a waiting agent with working=true as "working"', () => {
+    const w = mount(HubWidget)
+    // pid 104 has status: waiting, working: true, should display as "working"
+    const rows = w.findAll('[data-testid="hub-agent"]')
+    expect(rows[1].text()).toContain('working')
+    expect(rows[1].text()).toContain('Worker Queue')
     w.unmount()
   })
 })
