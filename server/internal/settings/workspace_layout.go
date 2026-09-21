@@ -2,7 +2,9 @@ package settings
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"regexp"
 	"strings"
 	"unicode/utf8"
@@ -18,6 +20,9 @@ const (
 	workspaceMaxRow   = 500
 	workspaceMaxTitle = 80
 	workspaceZentrale = "zentrale"
+	// The legitimate maximum is ~600 KB (50 pages x 100 tiles); this caps the
+	// raw value before it is decoded.
+	workspaceMaxRawBytes = 1 << 20
 )
 
 var (
@@ -48,11 +53,17 @@ func validWorkspaceLayout(raw string) error {
 	if raw == "" {
 		return nil
 	}
+	if len(raw) > workspaceMaxRawBytes {
+		return fmt.Errorf("workspace.layout: value exceeds %d bytes", workspaceMaxRawBytes)
+	}
 	var l workspaceLayout
 	dec := json.NewDecoder(strings.NewReader(raw))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&l); err != nil {
 		return fmt.Errorf("workspace.layout: not a layout: %w", err)
+	}
+	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
+		return fmt.Errorf("workspace.layout: trailing data after the layout")
 	}
 	if l.Version != 1 {
 		return fmt.Errorf("workspace.layout: version must be 1")
@@ -83,14 +94,17 @@ func validWorkspacePage(p workspacePage, seen map[string]bool) error {
 	if n := utf8.RuneCountInString(strings.TrimSpace(p.Title)); n == 0 || n > workspaceMaxTitle {
 		return fmt.Errorf("page %s: title needs 1 to %d characters", p.ID, workspaceMaxTitle)
 	}
-	if len(p.Tiles) > workspaceMaxTiles {
-		return fmt.Errorf("page %s: at most %d tiles", p.ID, workspaceMaxTiles)
+	if p.Tiles == nil || len(p.Tiles) > workspaceMaxTiles {
+		return fmt.Errorf("page %s: holds at most %d tiles", p.ID, workspaceMaxTiles)
 	}
 	for i, t := range p.Tiles {
 		if err := validWorkspaceTile(t); err != nil {
 			return fmt.Errorf("page %s tile %d: %w", p.ID, i, err)
 		}
 		for j := range i {
+			if p.Tiles[j].Widget == t.Widget {
+				return fmt.Errorf("page %s places %s twice", p.ID, t.Widget)
+			}
 			if workspaceTilesOverlap(t, p.Tiles[j]) {
 				return fmt.Errorf("page %s: tile %d overlaps tile %d", p.ID, i, j)
 			}
@@ -105,9 +119,9 @@ func validWorkspaceTile(t workspaceTile) error {
 		return fmt.Errorf("widget id %q is not valid", t.Widget)
 	case t.ColSpan < 1 || t.RowSpan < 1:
 		return fmt.Errorf("spans must be at least 1")
-	case t.Col < 1 || t.Col+t.ColSpan-1 > workspaceColumns:
+	case t.Col < 1 || t.Col > workspaceColumns || t.ColSpan > workspaceColumns-t.Col+1:
 		return fmt.Errorf("must stay within %d columns", workspaceColumns)
-	case t.Row < 1 || t.Row+t.RowSpan-1 > workspaceMaxRow:
+	case t.Row < 1 || t.Row > workspaceMaxRow || t.RowSpan > workspaceMaxRow-t.Row+1:
 		return fmt.Errorf("rows must lie between 1 and %d", workspaceMaxRow)
 	}
 	return nil

@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -43,10 +44,39 @@ func TestWorkspaceLayout_Validation(t *testing.T) {
 		"empty title":      strings.Replace(zentraleOnly, `"title":"Zentrale"`, `"title":"  "`, 1),
 		"uppercase pageid": strings.Replace(zentraleOnly, `]}]}`, `]},{"id":"Morning","title":"M","tiles":[]}]}`, 1),
 		"title too long":   strings.Replace(zentraleOnly, `"title":"Zentrale"`, `"title":"`+strings.Repeat("a", 81)+`"`, 1),
+		"0 pages":          `{"version":1,"pages":[]}`,
+		"51 pages":         rawWithPages(51),
+		"101 tiles":        rawWithTiles(101),
+		"row ends at 501":  strings.Replace(zentraleOnly, `"col":4,"row":1,"colSpan":6,"rowSpan":2`, `"col":4,"row":500,"colSpan":6,"rowSpan":2`, 1),
+		"colSpan overflow": strings.Replace(zentraleOnly, `"colSpan":6`, `"colSpan":9223372036854775807`, 1),
+		"trailing garbage": zentraleOnly + " garbage",
+		// Leading whitespace keeps this valid JSON: only the size cap, not a
+		// parse error, must reject it.
+		"over 1 MiB":       strings.Repeat(" ", workspaceMaxRawBytes) + zentraleOnly,
+		"duplicate widget": strings.Replace(zentraleOnly, `"widget":"obsidian__recent"`, `"widget":"agents"`, 1),
+		"tiles null":       `{"version":1,"pages":[{"id":"zentrale","title":"Zentrale","tiles":null}]}`,
 	}
 	for name, raw := range bad {
 		require.Error(t, d.Validate(raw), name)
 	}
+}
+
+func rawWithPages(n int) string {
+	pages := make([]string, n)
+	pages[0] = `{"id":"zentrale","title":"Zentrale","tiles":[]}`
+	for i := 1; i < n; i++ {
+		pages[i] = fmt.Sprintf(`{"id":"p%d","title":"P","tiles":[]}`, i)
+	}
+	return `{"version":1,"pages":[` + strings.Join(pages, ",") + `]}`
+}
+
+func rawWithTiles(n int) string {
+	tile := `{"widget":"agents","col":1,"row":1,"colSpan":1,"rowSpan":1}`
+	tiles := make([]string, n)
+	for i := range tiles {
+		tiles[i] = tile
+	}
+	return `{"version":1,"pages":[{"id":"zentrale","title":"Zentrale","tiles":[` + strings.Join(tiles, ",") + `]}]}`
 }
 
 // Title length counts Unicode code points (utf8.RuneCountInString), matching
