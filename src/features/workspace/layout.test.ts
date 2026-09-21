@@ -151,6 +151,10 @@ describe('parsing', () => {
     expect(validateLayout({ version: 1, pages: [page(), { id: 'Bad Id', title: 'B', tiles: [] }] })).toMatch(/id/i)
   })
 
+  it('refuses the same widget twice on one page', () => {
+    expect(validateLayout({ version: 1, pages: [page(tile('agents', 1, 1), tile('agents', 4, 1))] })).toBe('Page zentrale places agents twice.')
+  })
+
   // Title length counts code points, matching server/internal/settings/workspace_layout.go
   // (utf8.RuneCountInString). Counting UTF-16 units instead would let the server accept a
   // title above U+FFFF (each 2 units) that the client then refuses to read.

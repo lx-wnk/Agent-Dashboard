@@ -157,6 +157,8 @@ export function validateLayout(value: unknown): string | null {
     for (const tile of p.tiles) {
       if (!isRecord(tile) || typeof tile.widget !== 'string' || !WIDGET_ID_PATTERN.test(tile.widget))
         return `Page ${p.id} has a tile without a valid widget id.`
+      if (placed.some(o => o.widget === tile.widget))
+        return `Page ${p.id} places ${tile.widget} twice.`
       const reason = validatePlacement(placed, tile as unknown as PlacedTile)
       if (reason)
         return `Page ${p.id}: ${reason}`
