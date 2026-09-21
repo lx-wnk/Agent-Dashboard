@@ -6,6 +6,7 @@ vi.mock('../widgetRegistry', () => ({
   WIDGETS: {
     agents: { id: 'agents', title: 'Agents', component: defineComponent({ render: () => h('p', 'agents body') }) },
   },
+  widgetIds: () => ['agents'],
 }))
 
 const { default: WorkspaceGrid } = await import('./WorkspaceGrid.vue')
