@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onKeyStroke } from '@vueuse/core'
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, onUnmounted, ref } from 'vue'
 import { useAgents } from '@/features/agents'
 import { useKontorSession } from '../composables/useKontorSession'
 import KontorTile from './KontorTile.vue'
@@ -22,6 +22,14 @@ const last = computed(() => agent.value?.lastOutput ?? (agent.value ? '' : 'Star
 const cell = ref<HTMLElement | null>(null)
 const open = ref(false)
 const box = ref<Record<string, string>>({})
+let frameId: number | null = null
+
+function cancelPendingFrame() {
+  if (frameId !== null) {
+    cancelAnimationFrame(frameId)
+    frameId = null
+  }
+}
 
 // Grows out of its own cell towards the larger free side, up to 64% of the
 // window, as an overlay: the grid underneath does not re-flow.
@@ -38,12 +46,33 @@ function place() {
   }
 }
 
+// Opens at the collapsed cell's own rect, then animates the height to
+// place()'s target on the next frame — the growth reads as one continuous
+// zoom out of the same object, not a screen switch.
 function grow() {
-  place()
+  cancelPendingFrame()
+  const r = cell.value!.getBoundingClientRect()
+  const vh = window.innerHeight
+  const up = r.top > vh - r.bottom
+  box.value = {
+    left: `${r.left}px`,
+    width: `${r.width}px`,
+    height: `${r.height}px`,
+    ...(up ? { bottom: `${vh - r.bottom}px` } : { top: `${r.top}px` }),
+  }
   open.value = true
+  frameId = requestAnimationFrame(() => {
+    frameId = null
+    place()
+  })
 }
 
+// A pending frame from an open still in flight must not run place() against
+// a cell that collapse or unmount already moved past.
+onUnmounted(cancelPendingFrame)
+
 async function collapse() {
+  cancelPendingFrame()
   open.value = false
   await nextTick()
   cell.value?.focus()
@@ -86,13 +115,11 @@ onKeyStroke('Escape', () => {
   </div>
 
   <Teleport to="body">
-    <Transition enter-from-class="opacity-0 translate-y-2" leave-to-class="opacity-0 translate-y-2" enter-active-class="transition duration-200 motion-reduce:transition-none" leave-active-class="transition duration-150 motion-reduce:transition-none">
-      <div v-if="open" data-testid="kontor-expanded" class="fixed z-40 flex flex-col overflow-hidden rounded-xl border border-accent bg-card shadow-2xl" :style="box">
-        <button type="button" data-testid="kontor-collapse" aria-label="Collapse Kontor (Esc)" class="absolute right-2 top-2 z-10 rounded border border-line-strong px-1.5 text-[12px] text-fg-mute" @click="collapse">
-          ▾
-        </button>
-        <KontorTile class="h-full min-h-0 flex-1" />
-      </div>
-    </Transition>
+    <div v-if="open" data-testid="kontor-expanded" class="fixed z-40 flex flex-col overflow-hidden rounded-xl border border-accent bg-card shadow-2xl transition-[height] duration-200 ease motion-reduce:transition-none" :style="box">
+      <button type="button" data-testid="kontor-collapse" aria-label="Collapse Kontor (Esc)" class="absolute right-2 top-2 z-10 rounded border border-line-strong px-1.5 text-[12px] text-fg-mute" @click="collapse">
+        ▾
+      </button>
+      <KontorTile class="h-full min-h-0 flex-1" />
+    </div>
   </Teleport>
 </template>

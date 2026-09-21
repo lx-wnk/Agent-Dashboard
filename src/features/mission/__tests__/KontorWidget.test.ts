@@ -53,4 +53,39 @@ describe('kontorWidget', () => {
     input.remove()
     w.unmount()
   })
+
+  it('leaves a second "/" alone while already open', async () => {
+    const w = mount(KontorWidget, { attachTo: document.body })
+    await w.get('[data-testid="kontor-collapsed"]').trigger('click')
+    const event = new KeyboardEvent('keydown', { key: '/', cancelable: true })
+    window.dispatchEvent(event)
+    await nextTick()
+    expect(event.defaultPrevented).toBe(false)
+    w.unmount()
+  })
+
+  it('opens at the collapsed cell size, then grows the height on the next frame', async () => {
+    const w = mount(KontorWidget, { attachTo: document.body })
+    const cellEl = w.get('[data-testid="kontor-collapsed"]').element as HTMLElement
+    const rect = { top: 300, bottom: 340, left: 10, right: 390, width: 380, height: 40, x: 10, y: 300, toJSON: () => {} } as DOMRect
+    vi.spyOn(cellEl, 'getBoundingClientRect').mockReturnValue(rect)
+    const innerHeightSpy = vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(800)
+    const raf: { cb: FrameRequestCallback | null } = { cb: null }
+    const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+      raf.cb = cb
+      return 0
+    })
+
+    await w.get('[data-testid="kontor-collapsed"]').trigger('click')
+    const overlay = document.querySelector('[data-testid="kontor-expanded"]') as HTMLElement
+    expect(overlay.style.height).toBe('40px')
+
+    raf.cb?.(0)
+    await nextTick()
+    expect(overlay.style.height).toBe('484px')
+
+    rafSpy.mockRestore()
+    innerHeightSpy.mockRestore()
+    w.unmount()
+  })
 })
