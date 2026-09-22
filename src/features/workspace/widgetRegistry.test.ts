@@ -1,5 +1,16 @@
-import { describe, expect, it } from 'vitest'
-import { isWidgetId, WIDGET_IDS, WIDGET_SPECS, widgetIds, WIDGETS } from './index'
+import { flushPromises, mount } from '@vue/test-utils'
+import { describe, expect, it, vi } from 'vitest'
+import { defineComponent, h } from 'vue'
+
+// hub is a genuine failing chunk here (the real @/features/hub is not mocked),
+// so this doubles as the "hub loader failed" precondition App.vue's pageHasHub reads.
+vi.mock('@/features/hub', () => ({
+  get HubWidget(): never {
+    throw new Error('chunk 404')
+  },
+}))
+
+const { isWidgetId, WIDGET_IDS, WIDGET_SPECS, widgetIds, WIDGETS, failedWidgets } = await import('./index')
 
 describe('widget registry', () => {
   // Both sides are read: a spec without a component, or a component without a
@@ -23,6 +34,16 @@ describe('widget registry', () => {
       expect(w.minRowSpan).toBeGreaterThanOrEqual(1)
       expect(w.minRowSpan).toBeLessThanOrEqual(w.defaultRowSpan)
     }
+  })
+
+  it('renders the shared page-load error in a tile whose chunk fails, and records the widget as failed', async () => {
+    expect(failedWidgets.has('hub')).toBe(false)
+    const host = defineComponent({ render: () => h(WIDGETS.hub.component) })
+    const w = mount(host)
+    await flushPromises()
+    await flushPromises()
+    expect(w.find('[data-testid="page-load-error"]').exists()).toBe(true)
+    expect(failedWidgets.has('hub')).toBe(true)
   })
 })
 

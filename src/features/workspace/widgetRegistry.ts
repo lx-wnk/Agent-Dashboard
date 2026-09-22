@@ -1,6 +1,7 @@
 import type { Component } from 'vue'
 import type { WidgetId, WidgetSpec } from './widgetSpecs'
-import { defineAsyncComponent } from 'vue'
+import { defineAsyncComponent, reactive } from 'vue'
+import PageLoadError from '@/components/shell/PageLoadError.vue'
 import { WIDGET_IDS, WIDGET_SPECS } from './widgetSpecs'
 
 export type WidgetDef = WidgetSpec & { component: Component }
@@ -19,8 +20,23 @@ const LOADERS: Record<WidgetId, () => Promise<Component>> = {
   'cost-today': () => import('@/features/analytics').then(m => m.CostTodayWidget),
 }
 
+// Read by App.vue's pageHasHub: a chunk that 404s (e.g. the server was rebuilt
+// while a tab stayed open) must not leave the needs-you strip hidden behind a
+// hub tile that never rendered.
+export const failedWidgets: Set<WidgetId> = reactive(new Set<WidgetId>())
+
+function widgetComponent(id: WidgetId): Component {
+  return defineAsyncComponent({
+    loader: () => LOADERS[id]().catch((err) => {
+      failedWidgets.add(id)
+      throw err
+    }),
+    errorComponent: PageLoadError,
+  })
+}
+
 export const WIDGETS: Record<WidgetId, WidgetDef> = Object.fromEntries(
-  WIDGET_IDS.map(id => [id, { ...WIDGET_SPECS[id], component: defineAsyncComponent(LOADERS[id]) }]),
+  WIDGET_IDS.map(id => [id, { ...WIDGET_SPECS[id], component: widgetComponent(id) }]),
 ) as Record<WidgetId, WidgetDef>
 
 export function widgetIds(): WidgetId[] {
