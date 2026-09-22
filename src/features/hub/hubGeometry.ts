@@ -11,6 +11,8 @@ export const SECTOR_FLOOR_DEG = 24
 export const AGENT_FLOOR_PX = 116
 export const AGENT_WAITING_FLOOR_PX = 88
 export const AGENT_SPACING_PX = 112
+export const AGENT_STAGE_MARGIN_PX = 72
+export const SECTOR_LABEL_AGENT_CLEARANCE_PX = 40
 export const RING_LABEL_GAP_PX = 16
 export const RING_LABEL_AGENT_CLEARANCE_PX = 12
 const AGENT_WORLD_MIN = 82
@@ -108,12 +110,21 @@ export function agentAngles(count: number, sector: Sector): number[] {
   return Array.from({ length: count }, (_, i) => sector.start + (sector.end - sector.start) * (i + 1) / (count + 1))
 }
 
-// World radius that keeps the agent its floor away from the core on screen; the floor widens with the agent count.
-export function agentRadius(scale: number, waiting: boolean, count = 0): number {
-  const floorPx = Math.max(AGENT_FLOOR_PX, count * AGENT_SPACING_PX / (2 * Math.PI))
+// On-screen agent ring: widens with the agent count, capped by the stage; the floor wins over the cap.
+export function agentRingPx(count: number, stagePx = Infinity): number {
+  const grownPx = count * AGENT_SPACING_PX / (2 * Math.PI)
+  return Math.max(AGENT_FLOOR_PX, Math.min(grownPx, stagePx / 2 - AGENT_STAGE_MARGIN_PX))
+}
+
+// World radius that puts the agent on its on-screen ring; a waiting agent sits the floor gap further in.
+export function agentRadius(scale: number, waiting: boolean, ringPx = AGENT_FLOOR_PX): number {
   return waiting
-    ? Math.max(AGENT_WAITING_WORLD_MIN, (floorPx - (AGENT_FLOOR_PX - AGENT_WAITING_FLOOR_PX)) / scale)
-    : Math.max(AGENT_WORLD_MIN, floorPx / scale)
+    ? Math.max(AGENT_WAITING_WORLD_MIN, (ringPx - (AGENT_FLOOR_PX - AGENT_WAITING_FLOOR_PX)) / scale)
+    : Math.max(AGENT_WORLD_MIN, ringPx / scale)
+}
+
+export function sectorLabelRadius(scale: number, agentRingPx: number): number {
+  return Math.max(SECTOR_LABEL_RADIUS, (agentRingPx + SECTOR_LABEL_AGENT_CLEARANCE_PX) / scale)
 }
 
 export function visibleRingLabels(scale: number, agentRingPx: number): typeof RINGS {

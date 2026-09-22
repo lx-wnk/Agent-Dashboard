@@ -6,7 +6,7 @@ import { NEEDS_YOU, OPEN_SETTINGS, OPEN_TASK, PENDING_PERMISSIONS } from '@/comp
 import { useSidebar } from '@/composables/useSidebar'
 import { useViewState } from '@/composables/useViewState'
 import { DEFAULT_LAYOUT, useWorkspace } from '@/features/workspace'
-import { AGENT_SPACING_PX } from '../hubGeometry'
+import { AGENT_SPACING_PX, AGENT_STAGE_MARGIN_PX } from '../hubGeometry'
 
 const agents = ref([
   { pid: 101, status: 'active', projectName: 'kontor-hub', working: true },
@@ -136,9 +136,22 @@ describe('hubWidget', () => {
     w.unmount()
   })
 
+  it('caps the agent ring by the stage so a crowd stays inside it', async () => {
+    agents.value = Array.from({ length: 40 }, (_, i) => ({ pid: 200 + i, status: 'idle', projectName: `project-${i}`, working: false })) as unknown as Agent[]
+    const w = await mountHub()
+    expect(distanceFromCore(w, 200)).toBeCloseTo(1090 / 2 - AGENT_STAGE_MARGIN_PX)
+    w.unmount()
+  })
+
+  it('draws no sector names without notes, where every sector is one agent\'s project', async () => {
+    const w = await mountHub()
+    expect(w.findAll('[data-testid^="hub-sector-"]')).toHaveLength(0)
+    w.unmount()
+  })
+
   it('keeps a minimum height while tiles stack in one column, and fills its tile from md up', async () => {
     const w = await mountHub()
-    expect(w.get('[data-testid="hub"]').classes()).toEqual(expect.arrayContaining(['min-h-[26rem]', 'md:min-h-0']))
+    expect(w.get('[data-testid="hub"]').classes()).toEqual(expect.arrayContaining(['min-h-[34rem]', 'md:min-h-0']))
     w.unmount()
   })
 

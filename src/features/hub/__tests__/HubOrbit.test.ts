@@ -11,10 +11,12 @@ function agent(pid: number, projectName: string): Agent {
   return { pid, projectName, status: 'active', working: false } as Agent
 }
 
-function mountOrbit(level: HubLevel) {
+function mountOrbit(level: HubLevel, { showSectorNames = true, agentRingPx = 116 } = {}) {
   return mount(HubOrbit, {
     props: {
       cam: { k: 1, tx: 500, ty: 500 },
+      agentRingPx,
+      showSectorNames,
       sectors,
       agents: [
         { agent: agent(1, 'kontor-hub'), x: 82, y: 0, state: 'working', needsOperator: false },
@@ -66,6 +68,20 @@ describe('hubOrbit', () => {
   it('leaves out ring labels inside the agent ring and ones that would crowd the last drawn label', () => {
     const w = mountOrbit(0)
     expect(w.findAll('[data-testid="hub-ring-label"]').map(l => l.text())).toEqual(['week', 'month', 'year'])
+    w.unmount()
+  })
+
+  it('draws no sector names in agent-only mode, where each agent label already names its sector', () => {
+    const w = mountOrbit(0, { showSectorNames: false })
+    expect(w.findAll('[data-testid^="hub-sector-"]')).toHaveLength(0)
+    expect(w.findAll('[data-testid^="hub-agent-"]')).toHaveLength(2)
+    w.unmount()
+  })
+
+  it('pushes sector names outside the agent ring', () => {
+    const w = mountOrbit(0, { agentRingPx: 400 })
+    const [, x, y] = /translate\(([-\d.]+)px, ([-\d.]+)px/.exec(w.get('[data-testid="hub-sector-0"]').attributes('style')!)!
+    expect(Math.hypot(Number(x) - 500, Number(y) - 500)).toBeCloseTo(440)
     w.unmount()
   })
 

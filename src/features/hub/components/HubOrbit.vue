@@ -7,7 +7,7 @@ import { computed } from 'vue'
 import { friendlyProjectName } from '@/utils/friendlyProjectName'
 import { statusLabel } from '@/utils/statusColors'
 import { toScreen } from '../hubCamera'
-import { agentRadius, polar, radiusForAge, SECTOR_LABEL_RADIUS, sectorMid, visibleRingLabels } from '../hubGeometry'
+import { polar, radiusForAge, sectorLabelRadius, sectorMid, visibleRingLabels } from '../hubGeometry'
 
 const props = defineProps<{
   cam: Camera
@@ -18,16 +18,16 @@ const props = defineProps<{
   waiting: number
   needsYou: number
   coreTitle: string
+  agentRingPx: number
+  showSectorNames: boolean
 }>()
 
 defineEmits<{ core: [], agent: [agent: Agent], sector: [sector: Sector] }>()
 
 const RING_LABEL_DEG = -128
 
-const ringLabels = computed(() => {
-  const k = props.cam.k
-  return visibleRingLabels(k, agentRadius(k, false, props.agents.length) * k)
-})
+const ringLabels = computed(() => visibleRingLabels(props.cam.k, props.agentRingPx))
+const sectorNameRadius = computed(() => sectorLabelRadius(props.cam.k, props.agentRingPx))
 
 const DOT_CLASS: Record<AgentDisplayStatus, string> = {
   working: 'bg-info-dot',
@@ -91,18 +91,20 @@ function atPolar(radius: number, deg: number) {
     </button>
 
     <template v-if="level < 2">
-      <button
-        v-for="(sector, i) in sectors"
-        :key="sector.key"
-        type="button"
-        :data-testid="`hub-sector-${i}`"
-        class="pointer-events-auto -translate-1/2 cursor-pointer whitespace-nowrap rounded px-1.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-widest hover:bg-fg/5"
-        :class="level === 1 && 'opacity-55'"
-        :style="{ ...atPolar(SECTOR_LABEL_RADIUS, sectorMid(sector)), color: `var(--sector-${i % 8})` }"
-        @click="$emit('sector', sector)"
-      >
-        {{ sector.label }}<small class="ml-1 font-normal normal-case tracking-normal text-fg-mute">{{ sector.weight }}</small>
-      </button>
+      <template v-if="showSectorNames">
+        <button
+          v-for="(sector, i) in sectors"
+          :key="sector.key"
+          type="button"
+          :data-testid="`hub-sector-${i}`"
+          class="pointer-events-auto -translate-1/2 cursor-pointer whitespace-nowrap rounded px-1.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-widest hover:bg-fg/5"
+          :class="level === 1 && 'opacity-55'"
+          :style="{ ...atPolar(sectorNameRadius, sectorMid(sector)), color: `var(--sector-${i % 8})` }"
+          @click="$emit('sector', sector)"
+        >
+          {{ sector.label }}<small class="ml-1 font-normal normal-case tracking-normal text-fg-mute">{{ sector.weight }}</small>
+        </button>
+      </template>
       <span
         v-for="ring in ringLabels"
         :key="ring.label"

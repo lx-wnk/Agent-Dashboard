@@ -15,7 +15,7 @@ import { NAV_ITEMS } from '@/utils/navConfig'
 import { agentDisplayStatus } from '@/utils/statusColors'
 import { useHubCamera } from '../composables/useHubCamera'
 import { LEVEL_TARGETS } from '../hubCamera'
-import { agentAngles, agentRadius, planSectors, polar, radiusForAge, RINGS, sectorMid, wedgePath } from '../hubGeometry'
+import { agentAngles, agentRadius, agentRingPx, planSectors, polar, radiusForAge, RINGS, sectorMid, wedgePath } from '../hubGeometry'
 import { launchersFor } from '../hubLaunchers'
 import HubAgentCard from './HubAgentCard.vue'
 import HubControls from './HubControls.vue'
@@ -57,18 +57,19 @@ function blocksOnOperator(agent: Agent): boolean {
 }
 
 const live = computed(() => agents.value.filter(a => a.status !== 'finished').sort((a, b) => a.pid - b.pid))
-const plan = computed(() => planSectors([], live.value.map(a => a.projectName)))
+const notePaths: readonly string[] = []
+const plan = computed(() => planSectors(notePaths, live.value.map(a => a.projectName)))
+const ringPx = computed(() => agentRingPx(live.value.length, Math.min(size.value.width, size.value.height)))
 
 const placed = computed(() => {
   const k = cam.value.k
   const { sectors, sectorOfProject } = plan.value
-  const count = live.value.length
   return sectors.flatMap((sector) => {
     const members = live.value.filter(a => sectorOfProject.get(a.projectName) === sector.key)
     const angles = agentAngles(members.length, sector)
     return members.map((agent, i) => {
       const needsOperator = blocksOnOperator(agent)
-      const [x, y] = polar(agentRadius(k, needsOperator, count), angles[i])
+      const [x, y] = polar(agentRadius(k, needsOperator, ringPx.value), angles[i])
       return { agent, x, y, state: agentDisplayStatus(agent), needsOperator }
     })
   })
@@ -204,7 +205,7 @@ function launchFromList(launcher: Launcher) {
     ref="hub"
     data-testid="hub"
     aria-label="Zentrale"
-    class="relative h-full min-h-[26rem] overflow-hidden rounded-xl border border-line bg-card md:min-h-0"
+    class="relative h-full min-h-[34rem] overflow-hidden rounded-xl border border-line bg-card md:min-h-0"
     @keydown.escape="onEscape"
   >
     <div
@@ -249,6 +250,8 @@ function launchFromList(launcher: Launcher) {
         :waiting="waiting"
         :needs-you="needsYou.length"
         :core-title="coreTitle"
+        :agent-ring-px="agentRadius(cam.k, false, ringPx) * cam.k"
+        :show-sector-names="notePaths.length > 0"
         @core="openKontor"
         @agent="flyToAgent"
         @sector="sector => flyTo(...polar(SECTOR_FLY_RADIUS, sectorMid(sector)), SECTOR_FLY_REL)"

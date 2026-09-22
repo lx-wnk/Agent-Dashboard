@@ -335,7 +335,7 @@ test('below md the stacked tiles keep their content height and the hub stays vis
   await page.setViewportSize({ width: 700, height: 900 })
   await page.goto('/')
   await expect(page.getByTestId('hub-stage')).toBeVisible()
-  expect((await page.getByTestId('hub').boundingBox())!.height).toBeGreaterThanOrEqual(416)
+  expect((await page.getByTestId('hub').boundingBox())!.height).toBeGreaterThanOrEqual(544)
   const tiles = await page.locator('[data-testid^="workspace-tile-"]').evaluateAll(els => els
     .map(el => ({ widget: el.getAttribute('data-testid'), top: el.getBoundingClientRect().top, contentBottom: el.firstElementChild!.getBoundingClientRect().bottom }))
     .sort((a, b) => a.top - b.top))

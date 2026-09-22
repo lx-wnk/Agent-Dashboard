@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest'
 import {
   AGENT_FLOOR_PX,
   AGENT_SPACING_PX,
+  AGENT_STAGE_MARGIN_PX,
   AGENT_WAITING_FLOOR_PX,
   agentAngles,
   agentRadius,
+  agentRingPx,
   buildSectors,
   hash01,
   MAX_AGE_DAYS,
@@ -16,7 +18,10 @@ import {
   radiusForAge,
   RINGS,
   SECTOR_FLOOR_DEG,
+  SECTOR_LABEL_AGENT_CLEARANCE_PX,
+  SECTOR_LABEL_RADIUS,
   sectorKeyFor,
+  sectorLabelRadius,
   visibleRingLabels,
 } from './hubGeometry'
 
@@ -102,15 +107,39 @@ describe('agents', () => {
     }
   })
   it('widens the on-screen ring with the number of agents so neighbours get room, never below the floor', () => {
+    for (const count of [0, 1, 6, 11, 40])
+      expect(agentRingPx(count)).toBeCloseTo(Math.max(AGENT_FLOOR_PX, count * AGENT_SPACING_PX / (2 * Math.PI)))
+    expect(agentRingPx(11)).toBeGreaterThan(agentRingPx(4))
+    expect(agentRingPx(0)).toBe(AGENT_FLOOR_PX)
+  })
+  it('caps the ring growth by the stage, but the floor wins over the cap', () => {
+    expect(agentRingPx(40, 600)).toBeCloseTo(600 / 2 - AGENT_STAGE_MARGIN_PX)
+    expect(agentRingPx(11, 600)).toBeCloseTo(11 * AGENT_SPACING_PX / (2 * Math.PI))
+    expect(agentRingPx(40, 200)).toBe(AGENT_FLOOR_PX)
+    expect(agentRingPx(40, 0)).toBe(AGENT_FLOOR_PX)
+  })
+  it('places agents on the given ring, a waiting agent the floor gap further in', () => {
     const k = 0.6
-    for (const count of [0, 1, 6, 11, 40]) {
-      const ring = Math.max(AGENT_FLOOR_PX, count * AGENT_SPACING_PX / (2 * Math.PI))
-      expect(agentRadius(k, false, count) * k).toBeCloseTo(ring)
-      expect(agentRadius(k, true, count) * k).toBeCloseTo(ring - (AGENT_FLOOR_PX - AGENT_WAITING_FLOOR_PX))
-      expect(agentRadius(k, true, count) * k).toBeGreaterThanOrEqual(AGENT_WAITING_FLOOR_PX - 1e-9)
+    for (const ring of [AGENT_FLOOR_PX, 196, 300]) {
+      expect(agentRadius(k, false, ring) * k).toBeCloseTo(ring)
+      expect(agentRadius(k, true, ring) * k).toBeCloseTo(ring - (AGENT_FLOOR_PX - AGENT_WAITING_FLOOR_PX))
     }
-    expect(agentRadius(k, false, 11)).toBeGreaterThan(agentRadius(k, false, 4))
-    expect(agentRadius(k, false, 0)).toBe(agentRadius(k, false))
+    expect(agentRadius(k, true, AGENT_FLOOR_PX) * k).toBeCloseTo(AGENT_WAITING_FLOOR_PX)
+    expect(agentRadius(k, false, AGENT_FLOOR_PX)).toBe(agentRadius(k, false))
+  })
+})
+
+describe('sectorLabelRadius', () => {
+  it('keeps sector names at their world radius while that clears the agent ring', () => {
+    expect(sectorLabelRadius(3, AGENT_FLOOR_PX)).toBe(SECTOR_LABEL_RADIUS)
+  })
+  it('pushes sector names out to clear the agent ring on screen', () => {
+    const k = 0.57
+    expect(sectorLabelRadius(k, 196) * k).toBeCloseTo(196 + SECTOR_LABEL_AGENT_CLEARANCE_PX)
+    for (const [scale, ring] of [[0.3, 116], [0.57, 196], [1, 116], [2, 300]]) {
+      expect(sectorLabelRadius(scale, ring) * scale).toBeGreaterThanOrEqual(ring + SECTOR_LABEL_AGENT_CLEARANCE_PX - 1e-9)
+      expect(sectorLabelRadius(scale, ring)).toBeGreaterThanOrEqual(SECTOR_LABEL_RADIUS)
+    }
   })
 })
 
