@@ -225,8 +225,6 @@ func TestIndex_ConcurrentRunsAreSerialized(t *testing.T) {
 	assert.Len(t, entries, 1, "two overlapping runs must leave exactly one pointer, not a duplicate")
 }
 
-// graphVault fakes the two JsonLogic searches and /open/ of the Local REST
-// API and records every request it saw as "METHOD path".
 type graphVault struct {
 	*httptest.Server
 	mu     sync.Mutex

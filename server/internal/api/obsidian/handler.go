@@ -1,6 +1,4 @@
-// Package obsidian implements the HTTP surface of the Obsidian vault: an
-// on-demand indexing pass, the vault's note graph, and opening a note in
-// Obsidian.
+// Package obsidian implements the HTTP surface of the Obsidian vault.
 package obsidian
 
 import (
@@ -22,10 +20,7 @@ import (
 	"github.com/lx-wnk/kontor/server/internal/memory"
 )
 
-// Handler serves POST /api/obsidian/index (the manual trigger for
-// obsidianapp.IndexNotes), GET /api/obsidian/graph (the note graph under
-// VaultRoot, cached) and POST /api/obsidian/open (shows a graph-listed note
-// in Obsidian).
+// Handler serves the Obsidian HTTP routes registered by Mount.
 type Handler struct {
 	client  *obsidianapp.Client
 	mem     repo.MemoryRepo

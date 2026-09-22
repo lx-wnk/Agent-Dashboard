@@ -29,7 +29,7 @@ func (c *graphCache) get(ctx context.Context, build graphBuilder) (obsidianapp.G
 	return c.rebuild(ctx, build, true)
 }
 
-// refresh builds a new graph even when a fresh one is cached, joining a rebuild already running.
+// refresh joins a rebuild already running, rather than starting a second one.
 func (c *graphCache) refresh(ctx context.Context, build graphBuilder) (obsidianapp.Graph, error) {
 	return c.rebuild(ctx, build, false)
 }
@@ -46,8 +46,10 @@ func (c *graphCache) cached() (obsidianapp.Graph, bool) {
 func (c *graphCache) rebuild(ctx context.Context, build graphBuilder, reuseFresh bool) (obsidianapp.Graph, error) {
 	v, err, _ := c.group.Do("graph", func() (any, error) {
 		// A rebuild that finished after this caller's cache check has already stored a fresh graph.
-		if g, ok := c.cached(); reuseFresh && ok {
-			return g, nil
+		if reuseFresh {
+			if g, ok := c.cached(); ok {
+				return g, nil
+			}
 		}
 		// Shared by every waiter, so one caller hanging up must not cancel it.
 		g, err := build(context.WithoutCancel(ctx))

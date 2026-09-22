@@ -20,8 +20,6 @@ const (
 	linksSearchAnswer = `[{"filename":"root/a.md","result":["root/b.md","other/x.md","root/missing.md","root/a.md"]},{"filename":"other/x.md","result":["root/a.md"]},{"filename":"root/b.md","result":"not-a-list"}]`
 )
 
-// newGraphVault fakes the Local REST API's JsonLogic search and /open routes
-// and returns a function reporting every request it saw as "METHOD path".
 func newGraphVault(t *testing.T, searchStatus int) (*obsidian.Client, func() []string) {
 	t.Helper()
 	var mu sync.Mutex

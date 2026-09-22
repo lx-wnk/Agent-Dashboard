@@ -417,12 +417,15 @@ persists.
 `memory.Gate.Authorize(memory.read, "", global)` before the vault is
 contacted, through the same no-`Asker` gate the index trigger uses, so a
 missing grant is a `403`, never a held request. Only a refusal
-(`ErrDenied`/`ErrAskRequired`) is a `403`; a gate that cannot answer — the
-grant lookup failed — is a `500` with a generic body, so a database hiccup is
-never reported as "not granted". The graph is built from two
-JsonLogic searches (`Client.Graph`, `server/internal/apps/obsidian/graph.go`):
-each note's modification time and its resolved outgoing links — **no note
-body is read**. Both searches are vault-wide upstream, so every note and every
+(`ErrDenied`/`ErrAskRequired`) is a `403`; a failed grant lookup answers
+`500` with a generic body instead, never `403` — the gate fails closed
+elsewhere (an unknown capability denies, `memory/authorize.go` ~101-103),
+but a grant lookup it cannot complete is a server error, not a refusal. The
+graph is built from two JsonLogic searches (`Client.Graph`,
+`server/internal/apps/obsidian/graph.go`): each note's modification time and
+its resolved outgoing links — **no note body is requested or returned** (the
+REST plugin may read note content to evaluate the JsonLogic query, but
+neither search asks for it back). Both searches are vault-wide upstream, so every note and every
 link target is confined to `obsidian.vaultRoot` (`pathUnderRoot`) before it is
 returned; a note outside the root, and a link to or from one, never appears.
 The graph is cached for 60 seconds and rebuilt once for all concurrent
