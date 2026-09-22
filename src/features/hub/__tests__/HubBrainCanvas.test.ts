@@ -1,0 +1,125 @@
+import type { HubNote } from '../composables/useObsidianGraph'
+import { mount } from '@vue/test-utils'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { nextTick } from 'vue'
+import HubBrainCanvas from '../components/HubBrainCanvas.vue'
+
+interface Call { name: string, args: unknown[] }
+
+const DAY_MS = 86_400_000
+const FRAME_MS = 16
+let calls: Call[]
+
+// Records every method call; property writes (fillStyle, globalAlpha, …) are kept as plain values.
+function recordingContext(): CanvasRenderingContext2D {
+  const state: Record<string | symbol, unknown> = {}
+  return new Proxy(state, {
+    get: (_, key) => key in state ? state[key] : (...args: unknown[]) => calls.push({ name: String(key), args }),
+    set: (_, key, value) => {
+      state[key] = value
+      return true
+    },
+  }) as unknown as CanvasRenderingContext2D
+}
+
+const named = (name: string) => calls.filter(c => c.name === name)
+const texts = () => named('fillText').map(c => c.args[0])
+
+function note(index: number, title: string, ageDays = 30): HubNote {
+  return { index, path: `n/${title}.md`, title, mtimeMs: Date.now() - ageDays * DAY_MS, links: [], backlinks: [] }
+}
+
+const NOTES = [note(0, 'Alpha'), note(1, 'Beta'), note(2, 'Gamma')]
+
+function mountBrain(props: Partial<InstanceType<typeof HubBrainCanvas>['$props']> = {}) {
+  return mount(HubBrainCanvas, {
+    props: {
+      cam: { k: 1, tx: 0, ty: 0 },
+      size: { width: 400, height: 300 },
+      level: 0,
+      points: [[50, 50], [200, 100], [300, 200]],
+      colours: [0, 1, 2],
+      notes: NOTES,
+      links: [],
+      hubNotes: new Set<number>(),
+      selected: null,
+      ...props,
+    },
+  })
+}
+
+async function nextFrame() {
+  await vi.advanceTimersByTimeAsync(FRAME_MS)
+}
+
+beforeEach(() => {
+  calls = []
+  vi.useFakeTimers()
+  vi.spyOn(globalThis, 'requestAnimationFrame')
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(recordingContext as never)
+})
+
+afterEach(() => {
+  vi.useRealTimers()
+  vi.restoreAllMocks()
+})
+
+describe('hubBrainCanvas', () => {
+  it('draws one dot per note and no labels at the overview level', async () => {
+    const w = mountBrain()
+    await nextFrame()
+    expect(named('arc')).toHaveLength(3)
+    expect(named('fillText')).toHaveLength(0)
+    expect(w.get('canvas').attributes('aria-hidden')).toBe('true')
+  })
+
+  it('labels only the hub notes at the topics level and the labels cullLabels keeps at the notes level', async () => {
+    const w = mountBrain({ level: 1, points: [[100, 100], [102, 100], [300, 100]], hubNotes: new Set([0]) })
+    await nextFrame()
+    expect(texts()).toEqual(['Alpha'])
+
+    calls = []
+    await w.setProps({ level: 2 })
+    await nextFrame()
+    expect(texts()).toEqual(['Alpha', 'Gamma'])
+  })
+
+  it('skips notes outside the viewport', async () => {
+    mountBrain({ level: 2, points: [[50, 50], [5000, 50], [50, -500]] })
+    await nextFrame()
+    expect(named('arc')).toHaveLength(1)
+    expect(texts()).toEqual(['Alpha'])
+  })
+
+  it('rings a note touched today and the selected note from the topics level up', async () => {
+    const notes = [note(0, 'Alpha', 0), note(1, 'Beta'), note(2, 'Gamma')]
+    mountBrain({ level: 1, notes, selected: 2 })
+    await nextFrame()
+    expect(named('arc')).toHaveLength(5)
+  })
+
+  it('coalesces camera changes into one redraw per frame', async () => {
+    const w = mountBrain()
+    await nextFrame()
+    calls = []
+    vi.mocked(requestAnimationFrame).mockClear()
+
+    await w.setProps({ cam: { k: 1, tx: 5, ty: 0 } })
+    await w.setProps({ cam: { k: 1, tx: 10, ty: 0 } })
+    await w.setProps({ cam: { k: 1.2, tx: 10, ty: 0 } })
+    expect(requestAnimationFrame).toHaveBeenCalledOnce()
+    await nextFrame()
+    expect(named('clearRect')).toHaveLength(1)
+  })
+
+  it('redraws when the theme class on the document changes', async () => {
+    mountBrain()
+    await nextFrame()
+    calls = []
+    document.documentElement.classList.add('dark')
+    await nextTick()
+    await nextFrame()
+    document.documentElement.classList.remove('dark')
+    expect(named('clearRect')).toHaveLength(1)
+  })
+})
