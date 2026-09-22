@@ -76,6 +76,17 @@ describe('useProjects', () => {
     wrapper.unmount()
   })
 
+  it('retries a rate-limited load instead of leaving the list empty', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 429, headers: new Headers({ 'Retry-After': '0' }) })
+      .mockResolvedValue({ ok: true, status: 200, json: () => Promise.resolve([makeProject('p1', 'alpha')]) }))
+    const { result, wrapper } = withSetup(() => useProjectsMod.useProjects())
+
+    await vi.waitFor(() => expect(result.projects.value).toHaveLength(1))
+    expect(result.error.value).toBeNull()
+    wrapper.unmount()
+  })
+
   it('opens an EventSource on /api/projects/stream', async () => {
     const { wrapper } = withSetup(() => useProjectsMod.useProjects())
     await nextTick()
