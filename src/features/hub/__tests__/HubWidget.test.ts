@@ -13,6 +13,7 @@ import { fitScale } from '../hubCamera'
 import { agentDotBox, agentLabelBox, boxesOverlap, sectorLabelBox } from '../hubCanvas'
 import * as hubGeometry from '../hubGeometry'
 import { AGENT_SPACING_PX, AGENT_STAGE_MARGIN_PX, DAY_MS, notePoint, planSectors } from '../hubGeometry'
+import { labelSize, stubLabelMeasurement } from './labelMeasurement'
 
 const NOTE_AGE_DAYS = 30
 const graph = {
@@ -82,6 +83,7 @@ beforeEach(() => {
   useViewState().activeView.value = 'zentrale'
   // jsdom has no canvas; the brain layer only needs a context that accepts every call.
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(new Proxy({}, { get: () => () => {}, set: () => true }) as never)
+  stubLabelMeasurement()
 })
 
 afterEach(() => {
@@ -116,10 +118,26 @@ async function mountHub() {
   return w
 }
 
-// The core sits at the centre of the 1090×1130 stage; at fit one world unit is one pixel.
-function distanceFromCore(w: Awaited<ReturnType<typeof mountHub>>, pid: number): number {
+type Hub = Awaited<ReturnType<typeof mountHub>>
+
+function label(w: Hub, pid: number) {
+  return w.get(`[data-testid="hub-agent-${pid}"]`).get('[data-testid="hub-label"]')
+}
+
+// A culled label is `invisible` (visibility: hidden), which keeps the box HubOrbit measures.
+function labelHidden(w: Hub, pid: number): boolean {
+  return label(w, pid).classes().includes('invisible')
+}
+
+function screenOf(w: Hub, pid: number): { sx: number, sy: number } {
   const [, x, y] = /translate\(([-\d.]+)px, ([-\d.]+)px/.exec(w.get(`[data-testid="hub-agent-${pid}"]`).attributes('style')!)!
-  return Math.hypot(Number(x) - 545, Number(y) - 565)
+  return { sx: Number(x), sy: Number(y) }
+}
+
+// The core sits at the centre of the 1090×1130 stage; at fit one world unit is one pixel.
+function distanceFromCore(w: Hub, pid: number): number {
+  const { sx, sy } = screenOf(w, pid)
+  return Math.hypot(sx - 545, sy - 565)
 }
 
 function scale(w: Awaited<ReturnType<typeof mountHub>>): number {
@@ -230,18 +248,16 @@ describe('hubWidget', () => {
     const pids = [301, 302, 303, 304]
     for (const pid of pids) expect(() => w.get(`[data-testid="hub-agent-${pid}"] span`)).not.toThrow()
 
-    const labelHidden = (pid: number) => w.get(`[data-testid="hub-agent-${pid}"]`).get('[data-testid="hub-label-name"]').element.parentElement!.className.includes('hidden')
-    expect(labelHidden(303)).toBe(false)
-    expect(pids.some(labelHidden)).toBe(true)
+    expect(labelHidden(w, 303)).toBe(false)
+    expect(pids.some(pid => labelHidden(w, pid))).toBe(true)
     w.unmount()
   })
 
-  // Defect 1 (found by the coordinator's real-vault measurement): friendlyProjectName alone
-  // under-estimates a label's box, because the rendered label also shows the status word. Four
-  // agents share one project (a sector wide enough that bare-name boxes would all fit); three filler
-  // agents with distinct projects fill out the rest of the circle. RED before the width fix (the
-  // `text` line in HubWidget.vue reverted to `friendlyProjectName(p.agent.projectName)` alone): all
-  // four labels render, bare boxes clearing each other where the real ones do not.
+  // Defect 1 (found by the coordinator's real-vault measurement): a label's box was taken from the
+  // project name alone, while the rendered label also shows the status word. Four agents share one
+  // project; three fillers with distinct projects fill out the rest of the circle. The test proves
+  // its own fixture: the bare-name boxes at these positions all clear each other, so a cull can only
+  // come from measuring what is really rendered.
   it('culls a label whose bare name would clear its neighbour but whose name+status does not (defect 1)', async () => {
     agents.value = [
       { pid: 300, status: 'idle', projectName: 'target', working: false },
@@ -253,13 +269,14 @@ describe('hubWidget', () => {
       { pid: 312, status: 'idle', projectName: 'filler-c', working: false },
     ] as unknown as Agent[]
     const w = await mountHub()
-    const labelHidden = (pid: number) => w.get(`[data-testid="hub-agent-${pid}"]`).get('[data-testid="hub-label-name"]').element.parentElement!.className.includes('hidden')
-    // pid 303 is idle like pid 300 but placed after it, so it is the one the greedy pass drops once
-    // the status word widens the boxes.
-    expect(labelHidden(303)).toBe(true)
-    expect(labelHidden(300)).toBe(false)
-    expect(labelHidden(301)).toBe(false)
-    expect(labelHidden(302)).toBe(false)
+
+    const shared = [300, 301, 302, 303]
+    const bareBoxes = shared.map(pid => agentLabelBox({ index: pid, ...screenOf(w, pid), text: 'Target', priority: 0 }, labelSize('Target')))
+    const bareClear = bareBoxes.every((a, i) => bareBoxes.every((b, j) => i === j || !boxesOverlap(a, b)))
+    expect(bareClear, 'bare-name boxes clear each other at these positions').toBe(true)
+
+    expect(shared.filter(pid => labelHidden(w, pid)).length).toBeGreaterThan(0)
+    expect(labelHidden(w, 302)).toBe(false) // needs-operator always keeps its label
     w.unmount()
   })
 
@@ -281,34 +298,25 @@ describe('hubWidget', () => {
     const w = await mountHub()
 
     const pids = Array.from({ length: 25 }, (_, i) => 500 + i)
-    const posOf = (pid: number) => {
-      const [, x, y] = /translate\(([-\d.]+)px, ([-\d.]+)px/.exec(w.get(`[data-testid="hub-agent-${pid}"]`).attributes('style')!)!
-      return [Number(x), Number(y)] as const
-    }
-    const dots = pids.map(pid => ({ pid, xy: posOf(pid) }))
-    const shown = pids.filter((pid) => {
-      const el = w.get(`[data-testid="hub-agent-${pid}"]`).get('[data-testid="hub-label-name"]').element.parentElement!
-      return !el.className.includes('hidden')
-    })
+    const dots = pids.map(pid => ({ pid, ...screenOf(w, pid) }))
+    const shown = pids.filter(pid => !labelHidden(w, pid))
     expect(shown.length).toBeGreaterThan(0)
     expect(shown.length).toBeLessThan(pids.length) // the crowd really is being culled, not just rendered whole
 
+    // Both boxes are rebuilt from the key the DOM carries, so they are the ones the culler used.
     const sectorBoxes = w.findAll('[data-testid^="hub-sector-"]').map((s) => {
       const [, x, y] = /translate\(([-\d.]+)px, ([-\d.]+)px/.exec(s.attributes('style')!)!
-      // Real rendered text is "<Label><weight>" with no separator; strip the trailing digits back off.
-      const label = s.text().replace(/\d+$/, '')
-      return sectorLabelBox(Number(x), Number(y), label, 0)
+      return sectorLabelBox(Number(x), Number(y), labelSize(s.attributes('data-label-key')!))
     })
+    expect(sectorBoxes.length).toBeGreaterThan(0)
 
     for (const pid of shown) {
-      const [sx, sy] = posOf(pid)
-      const text = w.get(`[data-testid="hub-agent-${pid}"]`).get('[data-testid="hub-label-name"]').element.parentElement!.textContent ?? ''
-      const box = agentLabelBox({ index: pid, sx, sy, text, priority: 0 })
+      const key = label(w, pid).attributes('data-label-key')!
+      const box = agentLabelBox({ index: pid, ...screenOf(w, pid), text: key, priority: 0 }, labelSize(key))
       for (const other of dots) {
         if (other.pid === pid)
           continue
-        const overlap = boxesOverlap(box, agentDotBox(...other.xy))
-        expect(overlap).toBe(false)
+        expect(boxesOverlap(box, agentDotBox(other.sx, other.sy))).toBe(false)
       }
       for (const sectorBox of sectorBoxes)
         expect(boxesOverlap(box, sectorBox)).toBe(false)

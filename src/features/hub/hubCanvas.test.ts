@@ -1,6 +1,10 @@
 import type { HubNote } from './composables/useObsidianGraph'
+import type { LabelCandidate } from './hubCanvas'
 import { describe, expect, it } from 'vitest'
-import { agentDotBox, agentLabelBox, agentPriority, cullLabels, hitNote, hubNoteSet, isToday, notePriority, sectorLabelBox } from './hubCanvas'
+import { labelSize } from './__tests__/labelMeasurement'
+import { agentDotBox, agentLabelBox, agentLabelKey, agentPriority, boxesOverlap, cullLabels, hitNote, hubNoteSet, isToday, notePriority, sectorLabelBox, sectorLabelKey } from './hubCanvas'
+
+const measured = (c: LabelCandidate) => agentLabelBox(c, labelSize(c.text))
 
 describe('notePriority', () => {
   it('orders hub > touched > fresh > links', () => {
@@ -35,8 +39,27 @@ describe('cullLabels', () => {
     const kept = cullLabels([
       { index: 0, sx: 100, sy: 100, text: 'a', priority: 10 },
       { index: 1, sx: 100, sy: 500, text: 'b', priority: 20 },
-    ], agentLabelBox)
+    ], measured)
     expect(kept).toEqual(new Set([0, 1]))
+  })
+
+  it('culls from the measured width where a character-count estimate would have kept both', () => {
+    const text = 'Kontor Hub Working'
+    const estimated = text.length * 6.3 + 24 // the estimate this unit replaced
+    const apart = estimated + 10 // clear under the estimate, overlapping once really measured
+    const kept = cullLabels([
+      { index: 1, sx: 0, sy: 0, text, priority: 1 },
+      { index: 2, sx: apart, sy: 0, text, priority: 0 },
+    ], c => agentLabelBox(c, { w: estimated + 40, h: 16 }))
+    expect(kept).toEqual(new Set([1]))
+  })
+
+  it('draws a label whose size is not measured yet and lets it block nothing', () => {
+    const unmeasured = { index: 1, sx: 100, sy: 100, text: 'Kontor Hub Working', priority: 10 }
+    const neighbour = { index: 2, sx: 104, sy: 100, text: 'Web App Idle', priority: 0 }
+    const boxOf = (c: LabelCandidate) => c.index === 1 ? agentLabelBox(c) : measured(c)
+    expect(cullLabels([unmeasured, neighbour], boxOf)).toEqual(new Set([1, 2]))
+    expect(cullLabels([unmeasured], boxOf, [{ box: agentDotBox(100, 112) }])).toEqual(new Set([1]))
   })
 })
 
@@ -51,10 +74,17 @@ describe('agentPriority', () => {
 })
 
 describe('agentLabelBox', () => {
-  it('centres the box under the dot', () => {
-    const box = agentLabelBox({ index: 0, sx: 100, sy: 100, text: 'Kontor Hub', priority: 0 })
+  it('centres the measured box under the dot', () => {
+    const box = agentLabelBox({ index: 0, sx: 100, sy: 100, text: 'Kontor Hub', priority: 0 }, { w: 80, h: 16 })
     expect(box.x + box.w / 2).toBeCloseTo(100)
     expect(box.y).toBeGreaterThan(100)
+    expect(box.w).toBe(80)
+    expect(box.h).toBe(16)
+  })
+
+  it('has no box at all while its size is unmeasured', () => {
+    const box = agentLabelBox({ index: 0, sx: 100, sy: 100, text: 'Kontor Hub', priority: 0 })
+    expect(boxesOverlap(box, agentDotBox(100, 112))).toBe(false)
   })
 })
 
@@ -64,7 +94,7 @@ describe('cullLabels with agent boxes', () => {
       { index: 1, sx: 100, sy: 100, text: 'Kontor Hub', priority: 0 },
       { index: 2, sx: 106, sy: 100, text: 'Web App', priority: 2 },
       { index: 3, sx: 112, sy: 100, text: 'Api Server', priority: 1 },
-    ], agentLabelBox)
+    ], measured)
     expect(kept).toEqual(new Set([2]))
   })
 
@@ -73,35 +103,28 @@ describe('cullLabels with agent boxes', () => {
       { index: 1, sx: 100, sy: 100, text: 'A', priority: agentPriority(true, false) },
       { index: 2, sx: 101, sy: 100, text: 'B', priority: agentPriority(false, true) },
       { index: 3, sx: 102, sy: 100, text: 'C', priority: agentPriority(false, false) },
-    ], agentLabelBox)
+    ], measured)
     expect(kept).toEqual(new Set([1]))
   })
 
   it('culls a label that would land on another agent\'s dot (defect 2)', () => {
     // Agent 2's dot sits right where agent 1's label would be drawn.
-    const dotBox = agentDotBox(100, agentLabelBox({ index: 1, sx: 100, sy: 100, text: 'Kontor Hub', priority: 0 }).y + 8)
-    const kept = cullLabels(
-      [{ index: 1, sx: 100, sy: 100, text: 'Kontor Hub', priority: 0 }],
-      agentLabelBox,
-      [{ box: dotBox, ownerIndex: 2 }],
-    )
+    const candidate = { index: 1, sx: 100, sy: 100, text: 'Kontor Hub', priority: 0 }
+    const dotBox = agentDotBox(100, measured(candidate).y + 8)
+    const kept = cullLabels([candidate], measured, [{ box: dotBox, ownerIndex: 2 }])
     expect(kept).toEqual(new Set())
   })
 
   it('never blocks a label with its own dot', () => {
     const candidate = { index: 1, sx: 100, sy: 100, text: 'Kontor Hub', priority: 0 }
     const ownDot = agentDotBox(candidate.sx, candidate.sy + 15) // close enough to the label to collide if not excluded
-    const kept = cullLabels([candidate], agentLabelBox, [{ box: ownDot, ownerIndex: 1 }])
+    const kept = cullLabels([candidate], measured, [{ box: ownDot, ownerIndex: 1 }])
     expect(kept).toEqual(new Set([1]))
   })
 
   it('culls a label that would land on a sector name (defect 3)', () => {
-    const sector = sectorLabelBox(100, 116, 'Other', 4)
-    const kept = cullLabels(
-      [{ index: 1, sx: 100, sy: 100, text: 'Kontor Hub', priority: 0 }],
-      agentLabelBox,
-      [{ box: sector }],
-    )
+    const sector = sectorLabelBox(100, 116, labelSize(sectorLabelKey('Other', 4)))
+    const kept = cullLabels([{ index: 1, sx: 100, sy: 100, text: 'Kontor Hub', priority: 0 }], measured, [{ box: sector }])
     expect(kept).toEqual(new Set())
   })
 })
@@ -114,12 +137,21 @@ describe('agentDotBox', () => {
 })
 
 describe('sectorLabelBox', () => {
-  it('centres on the screen point and widens with the label and its weight badge', () => {
-    const short = sectorLabelBox(100, 100, 'X', 1)
-    const long = sectorLabelBox(100, 100, 'Agent Dashboard', 12)
-    expect(short.x + short.w / 2).toBeCloseTo(100)
-    expect(short.y + short.h / 2).toBeCloseTo(100)
-    expect(long.w).toBeGreaterThan(short.w)
+  it('centres the measured box on the screen point', () => {
+    const box = sectorLabelBox(100, 100, { w: 84, h: 18 })
+    expect(box.x + box.w / 2).toBeCloseTo(100)
+    expect(box.y + box.h / 2).toBeCloseTo(100)
+    expect(box).toEqual({ x: 58, y: 91, w: 84, h: 18 })
+  })
+})
+
+describe('label keys', () => {
+  it('carries the status word an agent label renders next to its name', () => {
+    expect(agentLabelKey('kontor-hub', 'working')).toBe('Kontor Hub Working')
+  })
+
+  it('carries the weight badge a sector name renders', () => {
+    expect(sectorLabelKey('Other', 4)).toBe('Other 4')
   })
 })
 

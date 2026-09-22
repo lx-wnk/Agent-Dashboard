@@ -1,9 +1,12 @@
 import type { HubLevel } from '../hubCamera'
+import type { LabelSize } from '../hubCanvas'
 import type { Agent } from '@/types'
-import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
+import { beforeEach, describe, expect, it } from 'vitest'
 import HubOrbit from '../components/HubOrbit.vue'
+import { agentLabelKey, sectorLabelKey } from '../hubCanvas'
 import { buildSectors } from '../hubGeometry'
+import { labelSize, stubLabelMeasurement } from './labelMeasurement'
 
 const sectors = buildSectors([{ key: 'kontor-hub', label: 'kontor-hub', weight: 1 }, { key: 'web-app', label: 'web-app', weight: 1 }])
 
@@ -32,6 +35,12 @@ function mountOrbit(level: HubLevel, { showSectorNames = true, agentRingPx = 116
     },
   })
 }
+
+let measureSpy: ReturnType<typeof stubLabelMeasurement>
+
+beforeEach(() => {
+  measureSpy = stubLabelMeasurement()
+})
 
 describe('hubOrbit', () => {
   it('draws the core, one button per agent and one per sector at the overview level', async () => {
@@ -104,17 +113,60 @@ describe('hubOrbit', () => {
     w.unmount()
   })
 
-  it('hides a culled label but keeps its dot, revealed again on hover/focus via CSS', () => {
+  // `invisible` (visibility: hidden), not `hidden` (display: none): a display:none box measures 0×0,
+  // and feeding that back into the culler would make the culled set oscillate.
+  it('hides a culled label without dropping its box, and keeps it out of the a11y tree', () => {
     const w = mountOrbit(0, { labelledAgents: new Set([2]) })
     const button1 = w.get('[data-testid="hub-agent-1"]')
-    const label1 = button1.get('[data-testid="hub-label-name"]').element.parentElement!
-    expect(label1.className).toContain('hidden')
-    expect(label1.className).toContain('group-hover:flex')
-    expect(label1.className).toContain('group-focus-visible:flex')
+    const label1 = button1.get('[data-testid="hub-label"]')
+    expect(label1.classes()).toEqual(expect.arrayContaining(['invisible', 'group-hover:visible', 'group-focus-visible:visible']))
+    expect(label1.classes()).not.toContain('hidden')
+    expect(label1.element.getBoundingClientRect().width).toBeGreaterThan(0)
     expect(button1.findAll('span')[0].classes()).toContain('rounded-full')
+    // The button's aria-label is the only place the name and status reach a screen reader.
+    expect(button1.attributes('aria-label')).toBe('Kontor Hub, Working')
+    expect(label1.attributes('aria-label')).toBeUndefined()
 
-    const label2 = w.get('[data-testid="hub-agent-2"]').get('[data-testid="hub-label-name"]').element.parentElement!
-    expect(label2.className).not.toContain('hidden')
+    expect(w.get('[data-testid="hub-agent-2"]').get('[data-testid="hub-label"]').classes()).not.toContain('invisible')
+    w.unmount()
+  })
+
+  it('keeps a culled label out of the button\'s hit box by taking it out of flow', () => {
+    const w = mountOrbit(0, { labelledAgents: new Set([2]) })
+    expect(w.get('[data-testid="hub-agent-1"]').get('[data-testid="hub-label"]').classes()).toContain('absolute')
+    w.unmount()
+  })
+
+  // Siblings without a z-index stack in DOM order, so the agent layer must come last to take the
+  // pointer over a sector name it overlaps.
+  it('draws the agents after the sector names so the legend cannot intercept a dot', () => {
+    const w = mountOrbit(0)
+    const ids = w.findAll('[data-testid^="hub-sector-"], [data-testid^="hub-agent-"]').map(e => e.attributes('data-testid'))
+    expect(ids).toEqual(['hub-sector-0', 'hub-sector-1', 'hub-agent-1', 'hub-agent-2'])
+    w.unmount()
+  })
+
+  it('measures every label once, and not again as the camera moves', async () => {
+    const w = mountOrbit(0)
+    await flushPromises()
+    const keys = [
+      agentLabelKey('kontor-hub', 'working'),
+      agentLabelKey('web-app', 'waiting'),
+      sectorLabelKey('kontor-hub', 1),
+      sectorLabelKey('web-app', 1),
+    ]
+    const sizes = w.emitted('measure')!.at(-1)![0] as ReadonlyMap<string, LabelSize>
+    expect([...sizes.keys()].sort()).toEqual([...keys].sort())
+    expect(sizes.get(keys[0])).toEqual(labelSize(keys[0]))
+
+    const measured = measureSpy.mock.calls.length
+    expect(measured).toBe(keys.length)
+    for (const tx of [520, 540, 560]) {
+      await w.setProps({ cam: { k: 1, tx, ty: 500 } })
+      await flushPromises()
+    }
+    expect(measureSpy.mock.calls.length).toBe(measured)
+    expect(w.emitted('measure')).toHaveLength(1)
     w.unmount()
   })
 

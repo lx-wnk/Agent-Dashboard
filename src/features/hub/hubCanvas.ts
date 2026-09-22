@@ -1,10 +1,19 @@
 import type { HubNote } from './composables/useObsidianGraph'
 import type { Camera } from './hubCamera'
+import type { AgentDisplayStatus } from '@/utils/statusColors'
+import { friendlyProjectName } from '@/utils/friendlyProjectName'
+import { statusLabel } from '@/utils/statusColors'
 import { toScreen } from './hubCamera'
 
 export interface LabelCandidate { index: number, sx: number, sy: number, text: string, priority: number }
 
 export interface LabelBox { x: number, y: number, w: number, h: number }
+
+// What a rendered label measures on screen. HubOrbit measures it from the DOM once per distinct
+// text; the size depends on the text and the font only, never on the camera.
+export interface LabelSize { w: number, h: number }
+
+const UNMEASURED: LabelSize = { w: 0, h: 0 }
 
 // A note's label sits to the right of its point (HubBrainCanvas.vue's drawLabels offset).
 function noteLabelBox(c: LabelCandidate): LabelBox {
@@ -12,6 +21,9 @@ function noteLabelBox(c: LabelCandidate): LabelBox {
 }
 
 export function boxesOverlap(a: LabelBox, b: LabelBox): boolean {
+  // An empty box is an unmeasured label: it covers nothing, so it collides with nothing.
+  if (a.w <= 0 || a.h <= 0 || b.w <= 0 || b.h <= 0)
+    return false
   return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y
 }
 
@@ -40,15 +52,25 @@ export function cullLabels(candidates: LabelCandidate[], boxOf: (c: LabelCandida
   return kept
 }
 
-// An agent's label sits centred under its dot (HubOrbit.vue's button layout) and renders the name
-// plus its status word side by side, separated by a gap — c.text is expected to carry both, joined
-// by a space, so the estimate isn't 25-45px narrower than the real `flex gap-1 px-1.5` box.
-export function agentLabelBox(c: LabelCandidate): LabelBox {
-  const w = c.text.length * 6.3 + 24
-  return { x: c.sx - w / 2, y: c.sy + 20, w, h: 16 }
+// The key a label's measurement is cached under: the text HubOrbit renders, name and status word
+// side by side. Both HubOrbit (measuring) and HubWidget (culling) name a label through this.
+export function agentLabelKey(projectName: string, state: AgentDisplayStatus): string {
+  return `${friendlyProjectName(projectName)} ${statusLabel(state)}`
+}
+
+// A sector name reads "<label><weight badge>"; its key spaces the two apart.
+export function sectorLabelKey(label: string, weight: number): string {
+  return `${label} ${weight}`
 }
 
 const AGENT_DOT_PX = 18 // HubOrbit.vue's `size-[18px]` dot, centred on the agent's screen point.
+// The label hangs under the dot: half the dot plus HubOrbit.vue's `mt-[3px]`.
+const AGENT_LABEL_TOP_PX = AGENT_DOT_PX / 2 + 3
+
+// An agent's label sits centred under its dot (HubOrbit.vue's absolute layout).
+export function agentLabelBox(c: LabelCandidate, size: LabelSize = UNMEASURED): LabelBox {
+  return { x: c.sx - size.w / 2, y: c.sy + AGENT_LABEL_TOP_PX, w: size.w, h: size.h }
+}
 
 // An agent's own dot: an obstacle a neighbour's label must not cover, or that agent's dot becomes
 // invisible (its label sits on a `bg-card/85` background) and unclickable underneath it.
@@ -57,12 +79,10 @@ export function agentDotBox(sx: number, sy: number): LabelBox {
   return { x: sx - r, y: sy - r, w: AGENT_DOT_PX, h: AGENT_DOT_PX }
 }
 
-// A sector name centres on its point (HubOrbit.vue's `-translate-1/2`), reads UPPERCASE with wide
-// tracking and carries a note-count badge — all three widen it past a plain label's estimate. It is
-// the map's legend and is never culled itself, only ever an obstacle for an agent label.
-export function sectorLabelBox(sx: number, sy: number, label: string, weight: number): LabelBox {
-  const w = (label.length + String(weight).length + 1) * 7.6 + 12
-  return { x: sx - w / 2, y: sy - 9, w, h: 18 }
+// A sector name centres on its point (HubOrbit.vue's `-translate-1/2`). It is the map's legend and
+// is never culled itself, only ever an obstacle for an agent label.
+export function sectorLabelBox(sx: number, sy: number, size: LabelSize = UNMEASURED): LabelBox {
+  return { x: sx - size.w / 2, y: sy - size.h / 2, w: size.w, h: size.h }
 }
 
 // needs-the-operator outranks working, which outranks everything else (Ruling R23).

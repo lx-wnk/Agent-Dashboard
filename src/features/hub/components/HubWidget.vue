@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import type { HubLevel } from '../hubCamera'
+import type { LabelSize } from '../hubCanvas'
 import type { Launcher } from '../hubLaunchers'
 import type { WidgetId } from '@/features/workspace'
 import type { Agent } from '@/types'
 import { useEventListener } from '@vueuse/core'
-import { computed, inject, onMounted, ref, watch } from 'vue'
+import { computed, inject, onMounted, ref, shallowRef, watch } from 'vue'
 import { NEEDS_YOU, OPEN_SETTINGS } from '@/composables/openTask'
 import { useSidebar } from '@/composables/useSidebar'
 import { pageView, useViewState } from '@/composables/useViewState'
@@ -12,15 +13,14 @@ import { useAgents } from '@/features/agents'
 import { NeedsYouQueue, useKontorAgent, useKontorSession } from '@/features/mission'
 import { HUB_WIDGET, pageWithWidget, useWorkspace, ZENTRALE_PAGE_ID } from '@/features/workspace'
 import { attentionFor } from '@/utils/attention'
-import { friendlyProjectName } from '@/utils/friendlyProjectName'
 import { isTypingTarget } from '@/utils/isTypingTarget'
 import { NAV_ITEMS } from '@/utils/navConfig'
-import { agentDisplayStatus, statusLabel } from '@/utils/statusColors'
+import { agentDisplayStatus } from '@/utils/statusColors'
 import { useHubCamera } from '../composables/useHubCamera'
 import { hubFocusRequest } from '../composables/useHubFocus'
 import { useObsidianGraph } from '../composables/useObsidianGraph'
 import { launchersDocked, LEVEL_TARGETS, toScreen } from '../hubCamera'
-import { agentDotBox, agentLabelBox, agentPriority, cullLabels, hitNote, hubNoteSet, sectorLabelBox } from '../hubCanvas'
+import { agentDotBox, agentLabelBox, agentLabelKey, agentPriority, cullLabels, hitNote, hubNoteSet, sectorLabelBox, sectorLabelKey } from '../hubCanvas'
 import { agentAngles, agentRadius, agentRingPx, agentSectorRingPx, DAY_MS, notePoint, planSectors, polar, radiusForAge, RINGS, SECTOR_PALETTE_SIZE, sectorLabelRadius, sectorMid, wedgePath } from '../hubGeometry'
 import { GRAPH_NOTICES } from '../hubGraphNotices'
 import { launchersFor } from '../hubLaunchers'
@@ -151,6 +151,10 @@ const placed = computed(() => {
 
 const showSectorNames = computed(() => vaultNotes.value.length > 0)
 
+// Measured by HubOrbit from the rendered DOM, keyed by label text; a text not in here yet has no
+// box, so its label is drawn for the one tick before its size arrives.
+const labelSizes = shallowRef<ReadonlyMap<string, LabelSize>>(new Map())
+
 // Greedy label culling (Ruling R23): the stagger only separates dots, a crowded sector still needs
 // a subset of labels drawn. A culled label stays reachable via hover/focus (HubOrbit.vue's CSS) and
 // the agent's full aria-label; the list view (L) is unaffected since it reads `placed`, not this set.
@@ -160,13 +164,13 @@ const showSectorNames = computed(() => vaultNotes.value.length > 0)
 // drawn (HubOrbit.vue only shows them below level 2 and with showSectorNames), every sector name —
 // the map's legend, which never yields to an agent label.
 const labelledAgents = computed(() => {
+  const sizes = labelSizes.value
   const placedScreen = placed.value.map(p => ({ p, screen: toScreen(cam.value, p.x, p.y) }))
   const candidates = placedScreen.map(({ p, screen: [sx, sy] }) => ({
     index: p.agent.pid,
     sx,
     sy,
-    // friendlyProjectName alone under-sizes the box: the rendered label also shows the status word.
-    text: `${friendlyProjectName(p.agent.projectName)} ${statusLabel(p.state)}`,
+    text: agentLabelKey(p.agent.projectName, p.state),
     priority: agentPriority(p.needsOperator, p.state === 'working'),
   }))
   const dotObstacles = placedScreen.map(({ p, screen: [sx, sy] }) => ({ box: agentDotBox(sx, sy), ownerIndex: p.agent.pid }))
@@ -174,10 +178,10 @@ const labelledAgents = computed(() => {
     ? plan.value.sectors.map((sector) => {
         const [wx, wy] = polar(sectorLabelRadius(cam.value.k, ringOnScreenPx.value), sectorMid(sector))
         const [sx, sy] = toScreen(cam.value, wx, wy)
-        return { box: sectorLabelBox(sx, sy, sector.label, sector.weight) }
+        return { box: sectorLabelBox(sx, sy, sizes.get(sectorLabelKey(sector.label, sector.weight))) }
       })
     : []
-  return cullLabels(candidates, agentLabelBox, [...dotObstacles, ...sectorObstacles])
+  return cullLabels(candidates, c => agentLabelBox(c, sizes.get(c.text)), [...dotObstacles, ...sectorObstacles])
 })
 
 const running = computed(() => placed.value.filter(p => p.state === 'working' || p.state === 'active').length)
@@ -407,6 +411,7 @@ watch(hubFocusRequest, (target) => {
         @core="openKontor"
         @agent="flyToAgent"
         @sector="sector => flyTo(...polar(SECTOR_FLY_RADIUS, sectorMid(sector)), SECTOR_FLY_REL)"
+        @measure="sizes => labelSizes = sizes"
       />
       <HubLaunchers :launchers="launchers" :cam="cam" :docked="docked" @launch="launch" />
       <HubControls

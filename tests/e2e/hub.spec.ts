@@ -18,8 +18,73 @@ function fakeGraph(): GraphResponse {
   return { configured: true, notes, links }
 }
 
+const AGENT_COUNT = 9
+
+// A crowd in one project: enough labels to force a cull, and enough dots to land some of them under
+// the sector names the legend draws just outside the agent ring.
+function fakeAgents() {
+  return Array.from({ length: AGENT_COUNT }, (_, i) => ({
+    pid: 6000 + i,
+    sessionId: `sess-${i}`,
+    provider: 'claude',
+    projectName: 'Work',
+    projectPath: '/repo/work',
+    cwd: '/repo/work',
+    status: i % 3 === 0 ? 'active' : 'idle',
+    working: i % 3 === 0,
+    lastActivity: new Date().toISOString(),
+    uptime: 120,
+    tokenUsage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 },
+    costEstimate: 0,
+    lastTools: [],
+    tasks: [],
+    subagents: [],
+  }))
+}
+
 test.afterEach(async ({ request, baseURL }) => {
   await storeLayout(request, baseURL, '')
+})
+
+// jsdom lays out nothing, so which element actually takes the pointer over a dot — the agent above
+// or the sector name it overlaps — can only be settled in a real browser.
+test('every agent dot takes the pointer, and hovering a culled agent reveals its label', async ({ page }) => {
+  const agents = fakeAgents()
+  await page.route('**/api/obsidian/graph', route => route.fulfill({ json: fakeGraph() }))
+  await page.route('/api/agents', route => route.fulfill({ json: agents }))
+  await page.route('/api/agents/stream', route => route.fulfill({
+    status: 200,
+    contentType: 'text/event-stream',
+    body: `data: ${JSON.stringify({ agents })}\n\n`,
+  }))
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByTestId(`hub-agent-${agents[0].pid}`)).toBeVisible()
+  await expect(page.locator('[data-testid^="hub-sector-"]').first()).toBeVisible()
+
+  const map = await page.evaluate(() => {
+    const blocked: string[] = []
+    const culled: string[] = []
+    for (const button of document.querySelectorAll<HTMLElement>('[data-testid^="hub-agent-"]')) {
+      const box = button.getBoundingClientRect()
+      const over = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)
+      const by = over?.closest('[data-testid]')?.getAttribute('data-testid') ?? over?.tagName ?? 'nothing'
+      const takesPointer = button.contains(over)
+      // Only the map's own layers count here: the launcher rail, the minimap and the controls are
+      // chrome drawn over the map on purpose.
+      if (!takesPointer && /^hub-(?:sector|agent)-/.test(by))
+        blocked.push(`${button.dataset.testid} blocked by ${by}`)
+      if (takesPointer && getComputedStyle(button.querySelector('[data-testid="hub-label"]')!).visibility === 'hidden')
+        culled.push(button.dataset.testid!)
+    }
+    return { blocked, culled }
+  })
+  expect(map.blocked, 'agent dots the map layer covers').toEqual([])
+  expect(map.culled.length, 'the crowd is culled, so some labels are hidden').toBeGreaterThan(0)
+
+  const label = page.getByTestId(map.culled[0]).getByTestId('hub-label')
+  await expect(label).toBeHidden()
+  await page.getByTestId(map.culled[0]).hover()
+  await expect(label).toBeVisible()
 })
 
 test('+ reaches the notes level within eight presses and 0 returns to the overview', async ({ page }) => {
