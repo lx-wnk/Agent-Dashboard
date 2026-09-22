@@ -56,11 +56,12 @@ describe('hubList', () => {
     w.unmount()
   })
 
-  it('says the vault read was denied, with the server message in the title, and offers no settings button', () => {
+  it('says the vault read was denied, with the server message visible and in the title, and offers no settings button', () => {
     const w = mountList(vi.fn(), 'denied', 'memory.read denied')
     const notice = w.get('[data-testid="hub-list-note-notice"]')
-    expect(notice.text()).toBe('Memory reads are not granted, so your notes stay hidden.')
+    expect(notice.text()).toBe('Memory reads are not granted, so your notes stay hidden. memory.read denied')
     expect(notice.attributes('title')).toBe('memory.read denied')
+    expect(w.get('[data-testid="hub-list-note-notice-detail"]').text()).toBe('memory.read denied')
     expect(w.findAll('button').find(b => b.text() === 'Open settings')).toBeUndefined()
     w.unmount()
   })

@@ -359,6 +359,7 @@ watch(hubFocusRequest, (target) => {
         :waiting="waiting"
         :needs-you="needsYou.length"
         :core-title="coreTitle"
+        :core-disabled="!kontorPage"
         :agent-ring-px="ringOnScreenPx"
         :show-sector-names="vaultNotes.length > 0"
         @core="openKontor"
@@ -391,23 +392,28 @@ watch(hubFocusRequest, (target) => {
         class="pointer-events-auto min-h-0 w-full overflow-y-auto rounded-[10px] border bg-card/95 px-2.5 py-2 shadow-lg"
         :class="needsYou.length > 0 ? 'border-warning-line' : 'border-line'"
       />
-      <p
+      <div
         v-if="graphNotice"
         data-hub-layer
         data-testid="hub-graph-notice"
         :title="graphStatus === 'denied' ? graphMessage : undefined"
-        class="pointer-events-auto flex shrink-0 items-center gap-2 rounded-lg border border-line bg-card/95 px-2.5 py-1.5 text-[12px] text-fg-mute shadow"
+        class="pointer-events-auto flex shrink-0 flex-col gap-0.5 rounded-lg border border-line bg-card/95 px-2.5 py-1.5 text-[12px] text-fg-mute shadow"
       >
-        {{ graphNotice }}
-        <button
-          v-if="graphStatus === 'unconfigured'"
-          type="button"
-          class="cursor-pointer text-accent underline-offset-2 hover:underline"
-          @click="openSettings()"
-        >
-          Open settings
-        </button>
-      </p>
+        <p class="flex items-center gap-2">
+          {{ graphNotice }}
+          <button
+            v-if="graphStatus === 'unconfigured'"
+            type="button"
+            class="cursor-pointer text-accent underline-offset-2 hover:underline"
+            @click="openSettings()"
+          >
+            Open settings
+          </button>
+        </p>
+        <p v-if="graphStatus === 'denied'" data-testid="hub-graph-notice-detail" class="text-[11px] text-fg-faint">
+          {{ graphMessage }}
+        </p>
+      </div>
     </div>
     <HubList
       v-if="listOpen"

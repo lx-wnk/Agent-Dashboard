@@ -11,7 +11,7 @@ function agent(pid: number, projectName: string): Agent {
   return { pid, projectName, status: 'active', working: false } as Agent
 }
 
-function mountOrbit(level: HubLevel, { showSectorNames = true, agentRingPx = 116 } = {}) {
+function mountOrbit(level: HubLevel, { showSectorNames = true, agentRingPx = 116, coreDisabled = false } = {}) {
   return mount(HubOrbit, {
     props: {
       cam: { k: 1, tx: 500, ty: 500 },
@@ -27,6 +27,7 @@ function mountOrbit(level: HubLevel, { showSectorNames = true, agentRingPx = 116
       waiting: 1,
       needsYou: 2,
       coreTitle: 'Open Kontor (idle)',
+      coreDisabled,
     },
   })
 }
@@ -46,6 +47,16 @@ describe('hubOrbit', () => {
     await core.trigger('click')
     expect(w.emitted('core')).toHaveLength(1)
     w.unmount()
+  })
+
+  it('marks the core aria-disabled when no page holds the Kontor tile', () => {
+    const w = mountOrbit(0, { coreDisabled: true })
+    expect(w.get('[data-testid="hub-core"]').attributes('aria-disabled')).toBe('true')
+    w.unmount()
+
+    const enabled = mountOrbit(0, { coreDisabled: false })
+    expect(enabled.get('[data-testid="hub-core"]').attributes('aria-disabled')).toBe('false')
+    enabled.unmount()
   })
 
   it('emits the clicked agent and sector', async () => {

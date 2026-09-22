@@ -20,6 +20,7 @@ describe('hubMinimap', () => {
   it('draws one wedge per sector and one dot per agent in the overview map', () => {
     const w = mountMap()
     expect(w.get('svg').attributes('aria-label')).toBe('Overview map')
+    expect(w.get('svg').attributes('aria-hidden')).toBe('true')
     expect(w.get('svg').attributes('viewBox')).toBe('-540 -540 1080 1080')
     expect(w.get('svg').attributes('data-hub-layer')).toBeDefined()
     expect(w.findAll('path')).toHaveLength(2)

@@ -49,7 +49,6 @@ const capability: NextThingItem = {
   projectName: '',
   stage: '',
   decision: { id: 'd1', capability: 'net.fetch', value: 'api.github.com', context: 'routine:nightly', reason: 'not granted', requestedAt: '2026-09-22T10:00:00Z' } as never,
-  title: 'net.fetch(api.github.com)',
   why: 'A run is paused until you allow or deny this capability.',
 }
 
@@ -122,10 +121,10 @@ describe('nextThing', () => {
     }
     const w = mountNext(truncated)
     const valueMark = w.get('[data-testid="mission-capability-value-elided"]')
-    expect(valueMark.text()).toBe('…')
+    expect(valueMark.text()).toBe('… (12 characters cut off)')
     expect(valueMark.attributes('title')).toBe('12 characters cut off')
     const contextMark = w.get('[data-testid="mission-capability-context-elided"]')
-    expect(contextMark.text()).toBe('…')
+    expect(contextMark.text()).toBe('… (3 characters cut off)')
     expect(contextMark.attributes('title')).toBe('3 characters cut off')
     w.unmount()
   })

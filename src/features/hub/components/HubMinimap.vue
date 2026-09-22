@@ -46,6 +46,7 @@ function onClick(e: MouseEvent) {
     data-hub-layer
     :viewBox="`${-HALF} ${-HALF} ${2 * HALF} ${2 * HALF}`"
     aria-label="Overview map"
+    aria-hidden="true"
     class="absolute bottom-2.5 right-2.5 z-[2] size-[108px] cursor-crosshair rounded-lg border border-line-strong bg-card/90"
     @click="onClick"
   >

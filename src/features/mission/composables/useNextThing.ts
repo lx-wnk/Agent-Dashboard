@@ -31,7 +31,7 @@ export interface NextThing {
   /** The decision to allow or deny, for the capability kind. */
   decision?: PendingCapabilityDecision
   /** What the centre puts in its headline. */
-  title: string
+  title?: string
   /** Why this one is first, shown verbatim — never a rank number. */
   why: string
 }
@@ -101,7 +101,6 @@ export function rankNextThings(items: PermissionItem[], tasks: PipelineTask[], a
       projectName: '',
       stage: '',
       decision,
-      title: decision.value ? `${decision.capability}(${decision.value})` : decision.capability,
       why: WHY.capability,
     })
   }

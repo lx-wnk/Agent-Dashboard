@@ -114,7 +114,7 @@ describe('rankNextThings', () => {
     const planTask = task('t-plan', { currentStage: 'plan_review' })
     const ranked = rankNextThings([], [planTask], [], [decision])
     expect(ranked.map(n => n.kind)).toEqual(['capability', 'plan'])
-    expect(ranked[0]).toMatchObject({ kind: 'capability', decision, title: 'net.fetch(api.github.com)', why: WHY.capability })
+    expect(ranked[0]).toMatchObject({ kind: 'capability', decision, why: WHY.capability })
   })
 
   // Pushed newest-first, several capability items must still serve the

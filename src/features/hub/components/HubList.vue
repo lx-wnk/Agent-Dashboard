@@ -81,17 +81,22 @@ const ROW = 'flex w-full cursor-pointer items-center justify-between gap-3 round
     <h3 :class="HEADING">
       Recently touched
     </h3>
-    <p
+    <div
       v-if="noteNotice"
       data-testid="hub-list-note-notice"
       :title="graphStatus === 'denied' ? graphMessage : undefined"
-      class="flex items-center gap-2 px-2 text-[13px] text-fg-mute"
+      class="flex flex-col gap-0.5 px-2 text-[13px] text-fg-mute"
     >
-      {{ noteNotice }}
-      <button v-if="graphStatus === 'unconfigured'" type="button" class="cursor-pointer text-accent underline-offset-2 hover:underline" @click="openSettings()">
-        Open settings
-      </button>
-    </p>
+      <p class="flex items-center gap-2">
+        {{ noteNotice }}
+        <button v-if="graphStatus === 'unconfigured'" type="button" class="cursor-pointer text-accent underline-offset-2 hover:underline" @click="openSettings()">
+          Open settings
+        </button>
+      </p>
+      <p v-if="graphStatus === 'denied'" data-testid="hub-list-note-notice-detail" class="text-[11px] text-fg-faint">
+        {{ graphMessage }}
+      </p>
+    </div>
     <button
       v-for="note in notes"
       :key="note.path"

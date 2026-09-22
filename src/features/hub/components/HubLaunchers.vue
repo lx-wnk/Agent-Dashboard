@@ -16,12 +16,12 @@ const DOCK_STEP = 46
 
 // Eased only across a dock switch: a standing transition would trail every pan and zoom frame.
 const easing = ref(false)
-const { start: stopEasing } = useTimeoutFn(() => {
+const { start: scheduleEasingOff } = useTimeoutFn(() => {
   easing.value = false
 }, 420, { immediate: false })
 watch(() => props.docked, () => {
   easing.value = true
-  stopEasing()
+  scheduleEasingOff()
 })
 
 function at(i: number) {

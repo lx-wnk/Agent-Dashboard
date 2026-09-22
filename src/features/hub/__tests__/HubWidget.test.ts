@@ -520,12 +520,14 @@ describe('hubWidget', () => {
     graph.message.value = 'memory.read denied'
     const w = await mountHub()
     const notice = w.get('[data-testid="hub-graph-notice"]')
-    expect(notice.text()).toBe('Memory reads are not granted, so your notes stay hidden.')
+    expect(notice.text()).toBe('Memory reads are not granted, so your notes stay hidden. memory.read denied')
     expect(notice.attributes('title')).toBe('memory.read denied')
+    expect(w.get('[data-testid="hub-graph-notice-detail"]').text()).toBe('memory.read denied')
 
     graph.status.value = 'failed'
     await flushPromises()
     expect(w.get('[data-testid="hub-graph-notice"]').text()).toBe('Your notes could not be loaded; retrying when you come back to this window.')
+    expect(w.find('[data-testid="hub-graph-notice-detail"]').exists()).toBe(false)
 
     graph.status.value = 'loading'
     await flushPromises()

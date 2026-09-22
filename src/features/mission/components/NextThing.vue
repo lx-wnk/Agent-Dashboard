@@ -149,7 +149,7 @@ async function answer(intent: AnswerIntent) {
             v-if="next.decision?.contextElided"
             data-testid="mission-capability-context-elided"
             :title="elidedTitle(next.decision.contextElided)"
-          >…</span></template>
+          >…<span class="sr-only"> ({{ elidedTitle(next.decision.contextElided) }})</span></span></template>
           <template v-else>{{ [next.projectName || next.taskTitle, next.stage].filter(Boolean).join(' · ') }}</template>
         </span>
       </div>
@@ -163,7 +163,7 @@ async function answer(intent: AnswerIntent) {
             v-if="next.decision.valueElided"
             data-testid="mission-capability-value-elided"
             :title="elidedTitle(next.decision.valueElided)"
-          >…</span>)</span>
+          >…<span class="sr-only"> ({{ elidedTitle(next.decision.valueElided) }})</span></span>)</span>
         </template>
         <template v-else>
           {{ next.title }}
