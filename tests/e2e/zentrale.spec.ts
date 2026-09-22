@@ -1,14 +1,5 @@
-import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
-import { storeLayout } from './helpers'
-
-// The client itself retries a 429 (useWorkspace's fetchWithRateLimitRetry), so an
-// in-between 429 is not a save's outcome — skip it and wait for the response that
-// actually settles the request.
-function patched(page: Page) {
-  return page.waitForResponse(resp =>
-    resp.url().includes('/api/settings/workspace.layout') && resp.request().method() === 'PATCH' && resp.status() !== 429)
-}
+import { waitForLayoutPatch as patched, storeLayout } from './helpers'
 
 // The stored layout is shared server-side state, not per-test-context state —
 // reset it after every test so a mutation here can never leak into the next
@@ -248,6 +239,11 @@ test('a page of my own is renamed and deleted in its edit mode', async ({ page, 
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Dawn')
   await expect(page.getByTestId('nav-page-p-morning')).toContainText('Dawn')
 
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Dawn')
+  await expect(page.getByTestId('nav-page-p-morning')).toContainText('Dawn')
+  await page.getByTestId('workspace-edit-toggle').click()
+
   await page.getByTestId('workspace-delete-page').click()
   await expect(page.getByTestId('workspace-delete-confirm')).toHaveText('Delete Dawn and its tiles?')
   const removed = patched(page)
@@ -258,6 +254,10 @@ test('a page of my own is renamed and deleted in its edit mode', async ({ page, 
   // Focus landed on the Zentrale nav item, not pulled back to #main-content by
   // App.vue's navigation watcher once the delete's activeView change reaches it.
   await expect(page.getByTestId('nav-item-zentrale')).toBeFocused()
+
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await expect(page.getByTestId('workspace-page-zentrale')).toBeVisible()
+  await expect(page.getByTestId('nav-page-p-morning')).toHaveCount(0)
 })
 
 // An edit on the built-in layout before the stored one arrives would save over it.

@@ -10,8 +10,7 @@ import { isWidgetId } from '../widgetSpecs'
 const props = defineProps<{ page: WorkspacePage, editing: boolean }>()
 const emit = defineEmits<{ change: [page: WorkspacePage], refuse: [reason: string] }>()
 
-// DOM order is reading order, which is what the single-column layout below md
-// shows; from md up every tile is placed explicitly, so DOM order stops mattering.
+// DOM order is reading order — what the single-column layout below md shows and what a screen reader announces; from md up tiles are placed explicitly, so it stops mattering.
 const ordered = computed(() => readingOrder(props.page.tiles))
 const rows = computed(() => rowsUsed(props.page.tiles))
 

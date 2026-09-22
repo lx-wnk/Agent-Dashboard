@@ -42,6 +42,17 @@ export async function storeLayout(request: APIRequestContext, baseURL: string | 
   expect(res?.ok(), `store layout request (HTTP ${res?.status()})`).toBe(true)
 }
 
+/**
+ * Waits for the PATCH of workspace.layout that actually settles a save. The
+ * client itself retries a 429 (useWorkspace's fetchWithRateLimitRetry), so an
+ * in-between 429 is not the save's outcome — skip it and wait for the
+ * response that is.
+ */
+export function waitForLayoutPatch(page: Page) {
+  return page.waitForResponse(resp =>
+    resp.url().includes('/api/settings/workspace.layout') && resp.request().method() === 'PATCH' && resp.status() !== 429)
+}
+
 /** Stubs a GET endpoint to return a fixed JSON body. */
 export async function stubJson(page: Page, path: string, body: unknown, status = 200): Promise<void> {
   // Match the exact path with an optional query string, so callers can pass the
