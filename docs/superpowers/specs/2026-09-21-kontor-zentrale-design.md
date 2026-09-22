@@ -318,7 +318,7 @@ This order replaces the base spec's slice table.
 
 1. *Open in Obsidian* needs the vault's name for an `obsidian://open` link. Derive
    it from the REST API or add a setting? **Answered:** neither — the REST API's
-   own `POST /open/{filename}` (`server/internal/apps/obsidian/client.go:467-473`)
+   own `POST /open/{filename}` (`OpenNote` in `server/internal/apps/obsidian/client.go`)
    opens a note by its vault-relative path alone; no vault name is needed.
 2. Which folder depth makes a good sector for a vault whose top level is one large
    private folder (5,371 of 5,691 notes sit under `Privat/`)? The rule above keeps
