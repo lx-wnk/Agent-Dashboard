@@ -28,6 +28,7 @@ const needsYou = inject(NEEDS_YOU)
 if (!needsYou)
   throw new Error('HubWidget requires NEEDS_YOU from App.vue')
 
+const hub = ref<HTMLElement | null>(null)
 const stage = ref<HTMLElement | null>(null)
 const { cam, size, rel, level, docked, dragging, zoomBy, panBy, flyTo, fit, centreWorld } = useHubCamera(stage)
 const { agents } = useAgents({ autoStart: false })
@@ -112,19 +113,15 @@ function toggleList() {
   listOpen.value = !listOpen.value
 }
 
-watch(listOpen, (open) => {
-  if (!open)
+// Post-flush: a closed layer that held focus has unmounted by now and dropped focus to <body>.
+watch([listOpen, cardPid], () => {
+  if (!hub.value?.contains(document.activeElement))
     stage.value?.focus()
-})
-
-function closeCard() {
-  cardPid.value = null
-  stage.value?.focus()
-}
+}, { flush: 'post' })
 
 function escape() {
   if (cardAgent.value)
-    closeCard()
+    cardPid.value = null
   else if (listOpen.value)
     toggleList()
   else
@@ -152,7 +149,6 @@ const KEY_ACTIONS: Record<string, () => void> = {
   'F': toggleWide,
   'l': toggleList,
   'L': toggleList,
-  'Escape': escape,
 }
 
 function isTyping(target: HTMLElement): boolean {
@@ -160,11 +156,12 @@ function isTyping(target: HTMLElement): boolean {
 }
 
 // Shift stays allowed: '+' needs it on most layouts.
+function ignored(e: KeyboardEvent): boolean {
+  return e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target as HTMLElement)
+}
+
 function onKey(e: KeyboardEvent) {
-  if (e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target as HTMLElement))
-    return
-  // The Kontor overlay sits above the hub and collapses on this same Escape from its window listener.
-  if (e.key === 'Escape' && overlayOpen.value)
+  if (ignored(e))
     return
   const slot = SLOT_KEY.test(e.key) ? launchers.value[Number(e.key) - 1] : undefined
   const action = KEY_ACTIONS[e.key] ?? (slot && (() => launch(slot)))
@@ -172,6 +169,15 @@ function onKey(e: KeyboardEvent) {
     return
   e.preventDefault()
   action()
+}
+
+// On the hub root so Escape from the list and card reaches it too; the Kontor overlay above
+// the hub collapses on this same Escape from its window listener.
+function onEscape(e: KeyboardEvent) {
+  if (ignored(e) || overlayOpen.value)
+    return
+  e.preventDefault()
+  escape()
 }
 
 function flyToAgent(agent: Agent) {
@@ -193,7 +199,13 @@ function launchFromList(launcher: Launcher) {
 </script>
 
 <template>
-  <section data-testid="hub" aria-label="Zentrale" class="relative h-full min-h-0 overflow-hidden rounded-xl border border-line bg-card">
+  <section
+    ref="hub"
+    data-testid="hub"
+    aria-label="Zentrale"
+    class="relative h-full min-h-0 overflow-hidden rounded-xl border border-line bg-card"
+    @keydown.escape="onEscape"
+  >
     <div
       ref="stage"
       data-testid="hub-stage"
@@ -274,6 +286,6 @@ function launchFromList(launcher: Launcher) {
       @launch="launchFromList"
       @close="listOpen = false"
     />
-    <HubAgentCard v-if="cardAgent" :agent="cardAgent" @close="closeCard" />
+    <HubAgentCard v-if="cardAgent" :agent="cardAgent" @close="cardPid = null" />
   </section>
 </template>

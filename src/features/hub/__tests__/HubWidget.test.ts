@@ -95,6 +95,16 @@ async function press(w: Awaited<ReturnType<typeof mountHub>>, key: string) {
   await w.get('[data-testid="hub-stage"]').trigger('keydown', { key })
 }
 
+// A real key lands on whatever holds focus and bubbles from there.
+async function pressFocused(key: string): Promise<KeyboardEvent> {
+  const e = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })
+  document.activeElement!.dispatchEvent(e)
+  await flushPromises()
+  return e
+}
+
+const LIST = '[role="dialog"][aria-label="Zentrale as a list"]'
+
 describe('hubWidget', () => {
   it('draws the stage at the overview level with one button per live agent and the docked queue', async () => {
     const w = await mountHub()
@@ -185,35 +195,48 @@ describe('hubWidget', () => {
     w.unmount()
   })
 
-  it('closes the list on Escape before it fits', async () => {
+  it('closes the focused list on Escape before it fits', async () => {
     const w = await mountHub()
     await press(w, '+')
     await press(w, 'L')
-    await press(w, 'Escape')
+    expect(w.get(LIST).element.contains(document.activeElement)).toBe(true)
+    await pressFocused('Escape')
+    expect(w.find(LIST).exists()).toBe(false)
     expect(scale(w)).toBeCloseTo(1.4)
-    await press(w, 'Escape')
+    await pressFocused('Escape')
     expect(scale(w)).toBeCloseTo(1)
     w.unmount()
   })
 
-  it('flies to an agent picked in the orbit and opens its card; Escape closes the card, then the list, then fits', async () => {
+  it('flies to an agent picked in the orbit and opens its card; Escape from the focused list closes the card, then the list, then fits', async () => {
     const w = await mountHub()
     const stage = w.get('[data-testid="hub-stage"]').element
     await w.get('[data-testid="hub-agent-101"]').trigger('click')
     expect(scale(w)).toBeCloseTo(3)
     expect(w.get('[role="dialog"][aria-label="Kontor Hub"]').text()).toContain('Working')
     await press(w, 'L')
-    expect(w.find('[role="dialog"][aria-label="Zentrale as a list"]').exists()).toBe(true)
-    expect(document.activeElement).toBe(w.get('[aria-label="Zentrale as a list"] button').element)
-    await press(w, 'Escape')
+    expect(document.activeElement).toBe(w.get(`${LIST} button`).element)
+    await pressFocused('Escape')
     expect(w.find('[aria-label="Kontor Hub"]').exists()).toBe(false)
-    expect(w.find('[aria-label="Zentrale as a list"]').exists()).toBe(true)
-    await press(w, 'Escape')
-    expect(w.find('[aria-label="Zentrale as a list"]').exists()).toBe(false)
+    expect(w.find(LIST).exists()).toBe(true)
+    await pressFocused('Escape')
+    expect(w.find(LIST).exists()).toBe(false)
     expect(document.activeElement).toBe(stage)
     expect(scale(w)).toBeCloseTo(3)
-    await press(w, 'Escape')
+    await pressFocused('Escape')
     expect(scale(w)).toBeCloseTo(1)
+    w.unmount()
+  })
+
+  it('closes the card on Escape pressed inside it and hands focus back to the stage', async () => {
+    const w = await mountHub()
+    await w.get('[data-testid="hub-agent-101"]').trigger('click')
+    const open = w.findAll('[aria-label="Kontor Hub"] button').find(b => b.text() === 'Open session')!
+    ;(open.element as HTMLElement).focus()
+    await pressFocused('Escape')
+    expect(w.find('[aria-label="Kontor Hub"]').exists()).toBe(false)
+    expect(document.activeElement).toBe(w.get('[data-testid="hub-stage"]').element)
+    expect(scale(w)).toBeCloseTo(3)
     w.unmount()
   })
 
@@ -238,18 +261,19 @@ describe('hubWidget', () => {
     w.unmount()
   })
 
-  it('leaves Escape to the open Kontor overlay above it', async () => {
+  it('leaves Escape from the focused list to the open Kontor overlay above it', async () => {
     const w = await mountHub()
     await press(w, '+')
     await press(w, 'L')
     overlayOpen.value = true
-    const escape = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
-    w.get('[data-testid="hub-stage"]').element.dispatchEvent(escape)
+    const escape = await pressFocused('Escape')
     expect(escape.defaultPrevented).toBe(false)
+    expect(w.find(LIST).exists()).toBe(true)
     overlayOpen.value = false
-    await press(w, 'Escape')
+    await pressFocused('Escape')
+    expect(w.find(LIST).exists()).toBe(false)
     expect(scale(w)).toBeCloseTo(1.4)
-    await press(w, 'Escape')
+    await pressFocused('Escape')
     expect(scale(w)).toBeCloseTo(1)
     w.unmount()
   })

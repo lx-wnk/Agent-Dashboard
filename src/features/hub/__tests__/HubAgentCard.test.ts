@@ -27,10 +27,9 @@ describe('hubAgentCard', () => {
     expect(selectAgent).toHaveBeenCalledWith(agent)
   })
 
-  it('closes from its button and on Escape', async () => {
+  it('closes from its button', async () => {
     const w = mount(HubAgentCard, { props: { agent } })
     await w.get('button[aria-label="Close card"]').trigger('click')
-    await w.get('[role="dialog"]').trigger('keydown', { key: 'Escape' })
-    expect(w.emitted('close')).toHaveLength(2)
+    expect(w.emitted('close')).toHaveLength(1)
   })
 })

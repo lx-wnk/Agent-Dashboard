@@ -65,11 +65,10 @@ describe('hubList', () => {
     w.unmount()
   })
 
-  it('closes from its button and on Escape', async () => {
+  it('closes from its button', async () => {
     const w = mountList()
     await w.get('button[aria-label="Close list"]').trigger('click')
-    await w.get('[role="dialog"]').trigger('keydown', { key: 'Escape' })
-    expect(w.emitted('close')).toHaveLength(2)
+    expect(w.emitted('close')).toHaveLength(1)
     w.unmount()
   })
 })

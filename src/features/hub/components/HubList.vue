@@ -39,7 +39,6 @@ const ROW = 'flex w-full cursor-pointer items-center justify-between gap-3 round
     role="dialog"
     aria-label="Zentrale as a list"
     class="absolute inset-x-[50px] bottom-[50px] top-[60px] z-20 overflow-auto rounded-[10px] border border-line-strong bg-card px-3.5 py-2.5 shadow-lg"
-    @keydown.escape.stop="emit('close')"
   >
     <div class="flex items-center justify-between gap-3">
       <span class="text-[12px] text-fg-mute">Zentrale as a list — the same content, for keyboard and screen readers</span>

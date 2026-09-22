@@ -21,7 +21,6 @@ const state = computed(() => agentDisplayStatus(props.agent))
     role="dialog"
     :aria-label="name"
     class="absolute right-[50px] top-[92px] z-30 w-[270px] rounded-[10px] border border-line-strong bg-card px-3 py-2.5 shadow-lg"
-    @keydown.escape.stop="emit('close')"
   >
     <button type="button" aria-label="Close card" class="absolute right-2 top-1.5 cursor-pointer text-fg-mute hover:text-fg" @click="emit('close')">
       ✕
