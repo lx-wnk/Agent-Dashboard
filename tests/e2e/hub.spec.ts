@@ -7,9 +7,7 @@ const NOTE_COUNT = 300
 const LINK_COUNT = 30
 const TWO_YEARS_MS = 2 * 365 * 24 * 60 * 60 * 1000
 
-// 300 notes over three top-level folders (the hub's sectors), mtimes spread
-// linearly over two years so freshness rings and the notes level have
-// something to draw, plus a few dozen links between them.
+// 300 notes across 3 folders with mtimes spread over two years, so freshness rings and the notes level have data to draw.
 function fakeGraph(): GraphResponse {
   const now = Date.now()
   const notes: GraphResponse['notes'] = Array.from({ length: NOTE_COUNT }, (_, i) => [
@@ -48,14 +46,13 @@ test('L lists the agents and recently touched notes, and Escape dismisses the no
   const list = page.getByRole('dialog', { name: 'Zentrale as a list' })
   await stage.press('l')
   await expect(list).toBeVisible()
-  await expect(list.getByText('Agents')).toBeVisible()
-  await expect(list.getByText('Recently touched')).toBeVisible()
+  await expect(list.getByRole('heading', { name: 'Agents', exact: true })).toBeVisible()
+  await expect(list.getByRole('heading', { name: 'Recently touched', exact: true })).toBeVisible()
 
   const firstNote = list.getByTestId('hub-list-note').first()
-  const title = (await firstNote.locator('span').first().textContent())?.trim()
+  const title = (await firstNote.getAttribute('aria-label'))?.split(',')[0].trim()
   await firstNote.click()
-  // Picking a note closes the list itself (HubWidget's pickNoteFromList), so
-  // the card is checked on its own note-card dialog, keyed by the note's title.
+  // Picking a note closes the list, so the card is checked as its own dialog.
   const card = page.getByRole('dialog', { name: title!, exact: true })
   await expect(card).toBeVisible()
 
@@ -90,8 +87,7 @@ test('F widens the hub tile to the page width and back', async ({ page }) => {
   await expect.poll(async () => (await hub.boundingBox())!.width).toBeLessThan(gridWidth * 0.95)
 })
 
-// M6: the queue that docks into the hub's top edge must stay inside the hub's
-// box even at the widget's minimum size (6×6) and a small viewport.
+// The docked needs-you queue must stay inside the hub's box at its minimum size (6×6) on a small viewport.
 test('the docked needs-you queue stays inside a 6×6 hub at 1280×700', async ({ page, request, baseURL }) => {
   await storeLayout(request, baseURL, JSON.stringify({
     version: 1,
