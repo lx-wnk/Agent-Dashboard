@@ -24,7 +24,7 @@ function mountOrbit(level: HubLevel) {
       running: 3,
       waiting: 1,
       needsYou: 2,
-      kontorState: 'idle',
+      coreTitle: 'Open Kontor (idle)',
     },
   })
 }

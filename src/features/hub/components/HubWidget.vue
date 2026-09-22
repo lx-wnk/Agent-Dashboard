@@ -1,13 +1,24 @@
 <script setup lang="ts">
+import type { HubLevel } from '../hubCamera'
+import type { Launcher } from '../hubLaunchers'
+import type { WidgetId } from '@/features/workspace'
 import type { Agent } from '@/types'
 import { computed, inject, ref } from 'vue'
 import { NEEDS_YOU } from '@/composables/openTask'
+import { useSidebar } from '@/composables/useSidebar'
+import { useViewState } from '@/composables/useViewState'
 import { useAgents } from '@/features/agents'
 import { NeedsYouQueue, useKontorAgent, useKontorSession } from '@/features/mission'
+import { pageView, pageWithWidget, useWorkspace, ZENTRALE_PAGE_ID } from '@/features/workspace'
 import { attentionFor } from '@/utils/attention'
+import { NAV_ITEMS } from '@/utils/navConfig'
 import { agentDisplayStatus } from '@/utils/statusColors'
 import { useHubCamera } from '../composables/useHubCamera'
+import { LEVEL_TARGETS } from '../hubCamera'
 import { agentAngles, agentRadius, planSectors, polar, radiusForAge, RINGS, sectorMid, WEDGE_INNER, WEDGE_OUTER } from '../hubGeometry'
+import { launchersFor } from '../hubLaunchers'
+import HubControls from './HubControls.vue'
+import HubLaunchers from './HubLaunchers.vue'
 import HubOrbit from './HubOrbit.vue'
 
 const needsYou = inject(NEEDS_YOU)
@@ -15,14 +26,23 @@ if (!needsYou)
   throw new Error('HubWidget requires NEEDS_YOU from App.vue')
 
 const stage = ref<HTMLElement | null>(null)
-const { cam, level, dragging, flyTo } = useHubCamera(stage)
+const { cam, level, docked, dragging, zoomBy, panBy, flyTo, fit, centreWorld } = useHubCamera(stage)
 const { agents } = useAgents({ autoStart: false })
 const { ask } = useKontorSession()
 const kontorAgent = useKontorAgent()
+const { activeView } = useViewState()
+const { layout, wide } = useWorkspace()
+const { requestNewPage } = useSidebar()
+const listOpen = ref(false)
 
 const SECTOR_FLY_RADIUS = 260
 const SECTOR_FLY_REL = 2.6
 const AGENT_FLY_REL = 3
+const ZOOM_STEP = 1.4
+const PAN_STEP_PX = 60
+const SLOT_KEY = /^\d$/
+const HUB_WIDGET: WidgetId = 'hub'
+const KONTOR_WIDGET: WidgetId = 'kontor'
 
 // Only the blocking kinds: needsAttention() is also true for every non-working agent ('yourTurn').
 function blocksOnOperator(agent: Agent): boolean {
@@ -50,6 +70,78 @@ const placed = computed(() => {
 const running = computed(() => placed.value.filter(p => p.state === 'working' || p.state === 'active').length)
 const waiting = computed(() => placed.value.filter(p => p.needsOperator).length)
 const kontorState = computed(() => kontorAgent.value ? agentDisplayStatus(kontorAgent.value) : 'off')
+const kontorPage = computed(() => pageWithWidget(layout.value, KONTOR_WIDGET))
+const coreTitle = computed(() => kontorPage.value ? `Open Kontor (${kontorState.value})` : 'Add the Kontor tile to a page to open it here')
+
+const launchers = computed(() => launchersFor(NAV_ITEMS, layout.value.pages.filter(p => p.id !== ZENTRALE_PAGE_ID), activeView.value))
+
+function openKontor() {
+  if (!kontorPage.value)
+    return
+  const current = layout.value.pages.find(p => pageView(p.id) === activeView.value)
+  if (!current?.tiles.some(t => t.widget === KONTOR_WIDGET))
+    activeView.value = pageView(kontorPage.value.id)
+  ask()
+}
+
+function launch(launcher: Launcher) {
+  if (launcher.kind === 'new-page')
+    requestNewPage()
+  else if (launcher.kind === 'more')
+    listOpen.value = true
+  else if (launcher.view)
+    activeView.value = launcher.view
+  else
+    throw new Error(`Launcher ${launcher.id} has no view`)
+}
+
+function toggleWide() {
+  wide.value = wide.value === HUB_WIDGET ? null : HUB_WIDGET
+}
+
+function toggleList() {
+  listOpen.value = !listOpen.value
+}
+
+function flyToLevel(target: HubLevel) {
+  const [x, y] = target === 0 ? [0, 0] : centreWorld()
+  flyTo(x, y, LEVEL_TARGETS[target])
+}
+
+const zoomIn = () => zoomBy(ZOOM_STEP)
+const zoomOut = () => zoomBy(1 / ZOOM_STEP)
+
+const KEY_ACTIONS: Record<string, () => void> = {
+  'ArrowLeft': () => panBy(PAN_STEP_PX, 0),
+  'ArrowRight': () => panBy(-PAN_STEP_PX, 0),
+  'ArrowUp': () => panBy(0, PAN_STEP_PX),
+  'ArrowDown': () => panBy(0, -PAN_STEP_PX),
+  '+': zoomIn,
+  '=': zoomIn,
+  '-': zoomOut,
+  '0': fit,
+  'f': toggleWide,
+  'F': toggleWide,
+  'l': toggleList,
+  'L': toggleList,
+  'Escape': () => listOpen.value ? toggleList() : fit(),
+}
+
+function isTyping(target: HTMLElement): boolean {
+  return target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable
+}
+
+// Shift stays allowed: '+' needs it on most layouts.
+function onKey(e: KeyboardEvent) {
+  if (e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target as HTMLElement))
+    return
+  const slot = SLOT_KEY.test(e.key) ? launchers.value[Number(e.key) - 1] : undefined
+  const action = KEY_ACTIONS[e.key] ?? (slot && (() => launch(slot)))
+  if (!action)
+    return
+  e.preventDefault()
+  action()
+}
 
 function arcTo(radius: number, deg: number, sweep: 0 | 1): string {
   const [x, y] = polar(radius, deg)
@@ -84,6 +176,7 @@ function flyToAgent(agent: Agent) {
       class="absolute inset-0 touch-none overflow-hidden outline-none focus-visible:ring-2 focus-visible:ring-accent"
       :class="dragging ? 'cursor-grabbing' : 'cursor-grab'"
       style="background: var(--hub-bg)"
+      @keydown="onKey"
     >
       <svg class="pointer-events-none absolute inset-0 size-full" aria-hidden="true">
         <g :transform="`translate(${cam.tx},${cam.ty}) scale(${cam.k})`">
@@ -113,10 +206,21 @@ function flyToAgent(agent: Agent) {
         :running="running"
         :waiting="waiting"
         :needs-you="needsYou.length"
-        :kontor-state="kontorState"
-        @core="ask()"
+        :core-title="coreTitle"
+        @core="openKontor"
         @agent="flyToAgent"
         @sector="sector => flyTo(...polar(SECTOR_FLY_RADIUS, sectorMid(sector)), SECTOR_FLY_REL)"
+      />
+      <HubLaunchers :launchers="launchers" :cam="cam" :docked="docked" @launch="launch" />
+      <HubControls
+        :level="level"
+        :wide="wide === HUB_WIDGET"
+        @zoom-in="zoomIn"
+        @zoom-out="zoomOut"
+        @fit="fit"
+        @wide="toggleWide"
+        @list="toggleList"
+        @level="flyToLevel"
       />
     </div>
     <NeedsYouQueue

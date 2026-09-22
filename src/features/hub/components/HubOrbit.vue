@@ -16,7 +16,7 @@ const props = defineProps<{
   running: number
   waiting: number
   needsYou: number
-  kontorState: string
+  coreTitle: string
 }>()
 
 defineEmits<{ core: [], agent: [agent: Agent], sector: [sector: Sector] }>()
@@ -46,7 +46,7 @@ function atPolar(radius: number, deg: number) {
     <button
       type="button"
       data-testid="hub-core"
-      :title="`Open Kontor (${kontorState})`"
+      :title="coreTitle"
       class="pointer-events-auto flex size-20 -translate-1/2 cursor-pointer flex-col items-center justify-center rounded-full border border-accent bg-card shadow-[0_0_40px_color-mix(in_oklch,var(--accent)_18%,transparent)]"
       :style="at(0, 0)"
       @click="$emit('core')"

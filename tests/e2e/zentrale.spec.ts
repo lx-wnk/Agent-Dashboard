@@ -294,3 +294,20 @@ test('the layout cannot be edited while the error line replaces the page', async
   await expect(page.getByTestId('nav-new-page')).toBeVisible()
   await expect(page.getByTestId('workspace-edit-toggle')).toHaveCount(0)
 })
+
+test('the hub widens on F, opens the sidebar New page input from its launcher and fires a launcher by digit', async ({ page }) => {
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  const stage = page.getByTestId('hub-stage')
+  const widen = stage.getByRole('button', { name: 'Widen' })
+
+  await stage.press('f')
+  await expect(widen).toHaveAttribute('aria-pressed', 'true')
+  await stage.press('f')
+  await expect(widen).toHaveAttribute('aria-pressed', 'false')
+
+  await page.getByTestId('hub-launcher-new-page').click()
+  await expect(page.getByTestId('nav-new-page-input')).toBeFocused()
+
+  await stage.press('1')
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('agent-active-view'))).toBe('dashboard')
+})
