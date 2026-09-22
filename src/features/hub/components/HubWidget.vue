@@ -10,7 +10,7 @@ import { useSidebar } from '@/composables/useSidebar'
 import { useViewState } from '@/composables/useViewState'
 import { useAgents } from '@/features/agents'
 import { NeedsYouQueue, useKontorAgent, useKontorSession } from '@/features/mission'
-import { pageView, pageWithWidget, useWorkspace, ZENTRALE_PAGE_ID } from '@/features/workspace'
+import { HUB_WIDGET, pageView, pageWithWidget, useWorkspace, ZENTRALE_PAGE_ID } from '@/features/workspace'
 import { attentionFor } from '@/utils/attention'
 import { isTypingTarget } from '@/utils/isTypingTarget'
 import { NAV_ITEMS } from '@/utils/navConfig'
@@ -63,7 +63,6 @@ const MINIMAP_FLY_MIN_REL = 2
 const ZOOM_STEP = 1.4
 const PAN_STEP_PX = 60
 const SLOT_KEY = /^\d$/
-const HUB_WIDGET: WidgetId = 'hub'
 const KONTOR_WIDGET: WidgetId = 'kontor'
 
 // Only the blocking kinds: needsAttention() is also true for every non-working agent ('yourTurn').

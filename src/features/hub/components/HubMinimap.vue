@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import type { Camera } from '../hubCamera'
 import type { Sector } from '../hubGeometry'
-import type { AgentDisplayStatus } from '@/utils/statusColors'
+import type { AgentDisplayStatus, ChipTone } from '@/utils/statusColors'
 import { computed } from 'vue'
+import { agentStatusTone } from '@/utils/statusColors'
 import { SECTOR_PALETTE_SIZE, wedgePath } from '../hubGeometry'
 
 const props = defineProps<{
@@ -17,12 +18,16 @@ const emit = defineEmits<{ fly: [wx: number, wy: number] }>()
 const HALF = 540
 const AGENT_DOT_R = 16
 
-const DOT_FILL: Record<AgentDisplayStatus, string> = {
-  working: 'fill-info-dot',
-  active: 'fill-success-dot',
-  waiting: 'fill-warning-dot',
-  idle: 'fill-fg-faint',
-  finished: 'fill-fg-faint',
+// Tailwind needs the full literal class name, so the tone still maps to a fixed string per component.
+const TONE_DOT_FILL: Partial<Record<ChipTone, string>> = {
+  success: 'fill-success-dot',
+  info: 'fill-info-dot',
+  warning: 'fill-warning-dot',
+  neutral: 'fill-fg-faint',
+}
+
+function fillClass(state: AgentDisplayStatus): string {
+  return TONE_DOT_FILL[agentStatusTone(state)] ?? 'fill-fg-faint'
 }
 
 const viewport = computed(() => {
@@ -51,7 +56,7 @@ function onClick(e: MouseEvent) {
       fill-opacity="0.12"
       :style="{ fill: `var(--sector-${i % SECTOR_PALETTE_SIZE})` }"
     />
-    <circle v-for="(agent, i) in agents" :key="i" :cx="agent.x" :cy="agent.y" :r="AGENT_DOT_R" :class="DOT_FILL[agent.state]" />
+    <circle v-for="(agent, i) in agents" :key="i" :cx="agent.x" :cy="agent.y" :r="AGENT_DOT_R" :class="fillClass(agent.state)" />
     <rect v-bind="viewport" stroke-width="6" class="fill-accent/10 stroke-accent" />
   </svg>
 </template>

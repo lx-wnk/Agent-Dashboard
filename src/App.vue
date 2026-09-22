@@ -34,7 +34,7 @@ import { useUsage } from './composables/useUsage'
 import { useUser } from './composables/useUser'
 import { pageIdOf, resolveView, useViewState } from './composables/useViewState'
 import { NeedsYouQueue, rankNextThings } from './features/mission'
-import { useWorkspace, watchExternalChanges, ZENTRALE_PAGE_ID } from './features/workspace'
+import { HUB_WIDGET, useWorkspace, watchExternalChanges, ZENTRALE_PAGE_ID } from './features/workspace'
 import { formatCost } from './utils/format'
 import { isTypingTarget } from './utils/isTypingTarget'
 
@@ -309,7 +309,7 @@ provide(OPEN_SETTINGS, () => {
 })
 
 const currentPageId = computed(() => activeView.value === 'zentrale' ? ZENTRALE_PAGE_ID : pageIdOf(activeView.value))
-const pageHasHub = computed(() => currentPageId.value !== null && !workspaceChunkFailed.value && !!workspace.page(currentPageId.value)?.tiles.some(t => t.widget === 'hub'))
+const pageHasHub = computed(() => currentPageId.value !== null && !workspaceChunkFailed.value && !!workspace.page(currentPageId.value)?.tiles.some(t => t.widget === HUB_WIDGET))
 // Before the layout has loaded a page id cannot be judged missing; loaded is a
 // source of its own because a failed load flips it without replacing layout.
 watch([activeView, workspace.layout, workspace.loaded], () => {

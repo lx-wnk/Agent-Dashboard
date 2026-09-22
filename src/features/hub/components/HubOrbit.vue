@@ -2,10 +2,10 @@
 import type { Camera, HubLevel } from '../hubCamera'
 import type { Sector } from '../hubGeometry'
 import type { Agent } from '@/types'
-import type { AgentDisplayStatus } from '@/utils/statusColors'
+import type { AgentDisplayStatus, ChipTone } from '@/utils/statusColors'
 import { computed } from 'vue'
 import { friendlyProjectName } from '@/utils/friendlyProjectName'
-import { statusLabel } from '@/utils/statusColors'
+import { agentStatusTone, statusLabel } from '@/utils/statusColors'
 import { toScreen } from '../hubCamera'
 import { polar, radiusForAge, SECTOR_PALETTE_SIZE, sectorLabelRadius, sectorMid, visibleRingLabels } from '../hubGeometry'
 
@@ -29,12 +29,16 @@ const RING_LABEL_DEG = -128
 const ringLabels = computed(() => visibleRingLabels(props.cam.k, props.agentRingPx))
 const sectorNameRadius = computed(() => sectorLabelRadius(props.cam.k, props.agentRingPx))
 
-const DOT_CLASS: Record<AgentDisplayStatus, string> = {
-  working: 'bg-info-dot',
-  active: 'bg-success-dot',
-  waiting: 'bg-warning-dot',
-  idle: 'bg-fg-faint',
-  finished: 'bg-fg-faint',
+// Tailwind needs the full literal class name, so the tone still maps to a fixed string per component.
+const TONE_DOT_CLASS: Partial<Record<ChipTone, string>> = {
+  success: 'bg-success-dot',
+  info: 'bg-info-dot',
+  warning: 'bg-warning-dot',
+  neutral: 'bg-fg-faint',
+}
+
+function dotClass(state: AgentDisplayStatus): string {
+  return TONE_DOT_CLASS[agentStatusTone(state)] ?? 'bg-fg-faint'
 }
 
 function at(x: number, y: number) {
@@ -79,7 +83,7 @@ function atPolar(radius: number, deg: number) {
     >
       <span
         class="size-[18px] rounded-full border-[3px] border-app"
-        :class="[DOT_CLASS[state], needsOperator && 'outline-2 outline-warning motion-safe:animate-pulse']"
+        :class="[dotClass(state), needsOperator && 'outline-2 outline-warning motion-safe:animate-pulse']"
       />
       <span
         class="flex gap-1 whitespace-nowrap rounded-md border bg-card/85 px-1.5 text-[10.5px] text-fg"
