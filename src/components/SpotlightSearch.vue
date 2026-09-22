@@ -5,7 +5,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ACTIVE_VIEWS, useViewState } from '@/composables/useViewState'
 import { useKontorSession } from '@/features/mission/composables/useKontorSession'
 import { SLASH_COMMAND_REFUSAL } from '@/features/mission/composables/useReading'
-import { useWorkspace, ZENTRALE_PAGE_ID } from '@/features/workspace'
+import { pageView, pageWithWidget, useWorkspace, ZENTRALE_PAGE_ID } from '@/features/workspace'
 import AppModal from './ui/AppModal.vue'
 
 const emit = defineEmits<{
@@ -46,11 +46,8 @@ const KONTOR_NO_TILE = 'Kontor has no tile — add it to a page with Edit layout
 // The Kontor tile can be removed or swapped off any page, so hand-off has to
 // find where the reply would actually show before it navigates there.
 function kontorTargetView(): ActiveView | null {
-  const zentrale = layout.value.pages.find(p => p.id === ZENTRALE_PAGE_ID)
-  if (zentrale?.tiles.some(t => t.widget === 'kontor'))
-    return 'zentrale'
-  const ownPage = layout.value.pages.find(p => p.id !== ZENTRALE_PAGE_ID && p.tiles.some(t => t.widget === 'kontor'))
-  return ownPage ? `page:${ownPage.id}` : null
+  const page = pageWithWidget(layout.value, 'kontor')
+  return page ? pageView(page.id) : null
 }
 
 const open = ref(false)

@@ -53,6 +53,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals()
   document.body.innerHTML = ''
+  useWorkspace().layout.value = DEFAULT_LAYOUT
 })
 
 describe('spotlightSearch', () => {
@@ -124,7 +125,6 @@ describe('spotlightSearch commands and hand-off', () => {
     await flushPromises()
     expect(activeView.value).toBe('page:p-a')
     wrapper.unmount()
-    layout.value = DEFAULT_LAYOUT
   })
 
   // Text that matched nothing goes to the Kontor session, never to the backlog.
@@ -212,7 +212,6 @@ describe('spotlightSearch commands and hand-off', () => {
     expect(send).toHaveBeenCalledWith('plan phase 4')
     expect(activeView.value).toBe('page:p-a')
     wrapper.unmount()
-    layout.value = DEFAULT_LAYOUT
   })
 
   it('stays put and reports the missing tile when no page has a Kontor tile', async () => {
@@ -226,6 +225,5 @@ describe('spotlightSearch commands and hand-off', () => {
     expect(activeView.value).toBe('pipeline')
     expect(document.querySelector('[data-testid="spotlight-problem"]')?.textContent).toContain('Kontor has no tile')
     wrapper.unmount()
-    layout.value = DEFAULT_LAYOUT
   })
 })

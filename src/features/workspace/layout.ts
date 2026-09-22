@@ -1,4 +1,5 @@
 import type { WidgetSpec } from './widgetSpecs'
+import type { ActiveView } from '@/composables/useViewState'
 import { isWidgetId, WIDGET_SPECS } from './widgetSpecs'
 
 // Tiles are persisted layout data (see validateLayout below): the widget id
@@ -28,8 +29,18 @@ function t(widget: string, col: number, row: number, colSpan: number, rowSpan: n
   return { widget, col, row, colSpan, rowSpan }
 }
 
-// The spec's default Zentrale, 12 × 12.
-export const DEFAULT_LAYOUT: WorkspaceLayout = {
+function deepFreeze<T>(value: T): T {
+  if (Array.isArray(value))
+    value.forEach(deepFreeze)
+  else if (value !== null && typeof value === 'object')
+    Object.values(value as object).forEach(deepFreeze)
+  Object.freeze(value)
+  return value
+}
+
+// The spec's default Zentrale, 12 × 12. Frozen so a caller can never mutate the
+// shared default in place — every change has to go through a copy.
+export const DEFAULT_LAYOUT: WorkspaceLayout = deepFreeze({
   version: 1,
   pages: [{
     id: ZENTRALE_PAGE_ID,
@@ -46,7 +57,7 @@ export const DEFAULT_LAYOUT: WorkspaceLayout = {
       t('cost-today', 10, 10, 3, 3),
     ],
   }],
-}
+})
 
 const ok = <T>(value: T): OpResult<T> => ({ ok: true, value })
 const fail = <T>(reason: string): OpResult<T> => ({ ok: false, reason })
@@ -100,6 +111,8 @@ export function swapTile(page: WorkspacePage, index: number, widget: string): Op
 }
 
 export function removeTile(page: WorkspacePage, index: number): WorkspacePage {
+  if (index < 0 || index >= page.tiles.length)
+    throw new RangeError(`no tile at index ${index}`)
   return { ...page, tiles: page.tiles.filter((_, i) => i !== index) }
 }
 
@@ -227,4 +240,40 @@ export function removePage(layout: WorkspaceLayout, id: string): OpResult<Worksp
   if (id === ZENTRALE_PAGE_ID)
     return fail('The Zentrale cannot be removed.')
   return ok({ ...layout, pages: layout.pages.filter(p => p.id !== id) })
+}
+
+// The Zentrale wins ties: a widget also placed on an own page still hands off there.
+export function pageWithWidget(layout: WorkspaceLayout, widget: string): WorkspacePage | null {
+  const zentrale = layout.pages.find(p => p.id === ZENTRALE_PAGE_ID)
+  if (zentrale?.tiles.some(t => t.widget === widget))
+    return zentrale
+  return layout.pages.find(p => p.id !== ZENTRALE_PAGE_ID && p.tiles.some(t => t.widget === widget)) ?? null
+}
+
+export function pageView(id: string): ActiveView {
+  return id === ZENTRALE_PAGE_ID ? 'zentrale' : `page:${id}`
+}
+
+function rowsOverlap(a: PlacedTile, b: PlacedTile): boolean {
+  return a.row <= b.row + b.rowSpan - 1 && b.row <= a.row + a.rowSpan - 1
+}
+
+// A wide widget spans the whole page over its own rows; tiles sharing those rows give way for this window only.
+export function widenedTiles(tiles: readonly PlacedTile[], widget: string): PlacedTile[] {
+  const target = tiles.find(t => t.widget === widget)
+  if (!target)
+    return [...tiles]
+  const first = target.col
+  const last = target.col + target.colSpan - 1
+  const inBand = (t: PlacedTile) => t.col >= first && t.col + t.colSpan - 1 <= last
+  const stretched: PlacedTile[] = []
+  for (const { tile } of readingOrder([...tiles])) {
+    if (!inBand(tile))
+      continue
+    const wide = { ...tile, col: 1, colSpan: GRID_COLUMNS }
+    if (!stretched.some(s => rowsOverlap(s, wide)))
+      stretched.push(wide)
+  }
+  const kept = tiles.filter(t => !inBand(t) && !stretched.some(s => rowsOverlap(s, t)))
+  return [...stretched, ...kept]
 }

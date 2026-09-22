@@ -1,4 +1,4 @@
-import type { PlacedTile, WorkspacePage } from './layout'
+import type { PlacedTile, WorkspaceLayout, WorkspacePage } from './layout'
 import { describe, expect, it } from 'vitest'
 import {
   addPage,
@@ -7,6 +7,7 @@ import {
   firstFreeSpot,
   fitsMinimum,
   moveTile,
+  pageWithWidget,
   parseLayout,
   readingOrder,
   removePage,
@@ -17,6 +18,7 @@ import {
   swapTile,
   validateLayout,
   validatePlacement,
+  widenedTiles,
 } from './layout'
 
 function tile(widget: string, col: number, row: number, colSpan = 3, rowSpan = 2): PlacedTile {
@@ -104,6 +106,10 @@ describe('tile operations', () => {
     expect(removeTile(page(tile('agents', 1, 1), tile('github', 4, 1)), 0).tiles).toEqual([tile('github', 4, 1)])
   })
 
+  it('throws on an index outside the page', () => {
+    expect(() => removeTile(page(tile('agents', 1, 1)), 99)).toThrow(RangeError)
+  })
+
   it('finds a free spot even on a full row', () => {
     expect(firstFreeSpot([tile('agents', 1, 1, 12, 1)], 3, 1)).toEqual({ col: 1, row: 2 })
   })
@@ -125,6 +131,50 @@ describe('the built-in layout', () => {
     expect(DEFAULT_LAYOUT.pages[0].tiles.map(t => t.widget).sort()).toEqual(
       ['agents', 'cost-today', 'github', 'hub', 'kontor', 'live-work', 'memory', 'pipeline', 'routines'],
     )
+  })
+
+  it('is frozen down to its tiles', () => {
+    expect(Object.isFrozen(DEFAULT_LAYOUT)).toBe(true)
+    expect(Object.isFrozen(DEFAULT_LAYOUT.pages[0].tiles[0])).toBe(true)
+  })
+})
+
+describe('pageWithWidget', () => {
+  it('prefers the zentrale page, then own pages in order, else null', () => {
+    const l: WorkspaceLayout = {
+      version: 1,
+      pages: [
+        { id: 'zentrale', title: 'Zentrale', tiles: [tile('hub', 1, 1, 6, 6)] },
+        { id: 'a', title: 'A', tiles: [tile('kontor', 1, 1, 6, 1)] },
+        { id: 'b', title: 'B', tiles: [tile('kontor', 1, 1, 6, 1)] },
+      ],
+    }
+    expect(pageWithWidget(l, 'hub')?.id).toBe('zentrale')
+    expect(pageWithWidget(l, 'kontor')?.id).toBe('a')
+    expect(pageWithWidget(l, 'github')).toBeNull()
+  })
+})
+
+describe('widenedTiles', () => {
+  it('stretches the target and the tiles inside its column band, hides tiles sharing their rows', () => {
+    const out = widenedTiles(DEFAULT_LAYOUT.pages[0].tiles, 'hub')
+    expect(out.map(x => x.widget).sort()).toEqual(['hub', 'kontor'])
+    expect(out.every(x => x.col === 1 && x.colSpan === 12)).toBe(true)
+  })
+
+  it('keeps tiles whose rows are free', () => {
+    const tiles = [tile('hub', 4, 1, 6, 6), tile('github', 1, 8, 3, 2)]
+    expect(widenedTiles(tiles, 'hub')).toEqual([tile('hub', 1, 1, 12, 6), tile('github', 1, 8, 3, 2)])
+  })
+
+  it('keeps only the first of two band tiles that would overlap once stretched', () => {
+    const tiles = [tile('hub', 4, 1, 6, 6), tile('kontor', 4, 7, 3, 1), tile('memory', 7, 7, 3, 1)]
+    expect(widenedTiles(tiles, 'hub').map(x => x.widget)).toEqual(['hub', 'kontor'])
+  })
+
+  it('returns the tiles unchanged when the widget is not on the page', () => {
+    const tiles = [tile('github', 1, 1, 3, 2)]
+    expect(widenedTiles(tiles, 'hub')).toEqual(tiles)
   })
 })
 
