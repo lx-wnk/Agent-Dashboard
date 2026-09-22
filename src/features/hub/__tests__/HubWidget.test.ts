@@ -238,10 +238,10 @@ describe('hubWidget', () => {
 
   // Defect 1 (found by the coordinator's real-vault measurement): friendlyProjectName alone
   // under-estimates a label's box, because the rendered label also shows the status word. Four
-  // agents share one project (a sector wide enough that bare-name boxes would all fit); six filler
+  // agents share one project (a sector wide enough that bare-name boxes would all fit); three filler
   // agents with distinct projects fill out the rest of the circle. RED before the width fix (the
   // `text` line in HubWidget.vue reverted to `friendlyProjectName(p.agent.projectName)` alone): all
-  // four labels render, including a real, verified collision between pid 300's and pid 301's boxes.
+  // four labels render, bare boxes clearing each other where the real ones do not.
   it('culls a label whose bare name would clear its neighbour but whose name+status does not (defect 1)', async () => {
     agents.value = [
       { pid: 300, status: 'idle', projectName: 'target', working: false },
@@ -251,18 +251,15 @@ describe('hubWidget', () => {
       { pid: 310, status: 'idle', projectName: 'filler-a', working: false },
       { pid: 311, status: 'idle', projectName: 'filler-b', working: false },
       { pid: 312, status: 'idle', projectName: 'filler-c', working: false },
-      { pid: 313, status: 'idle', projectName: 'filler-d', working: false },
-      { pid: 314, status: 'idle', projectName: 'filler-e', working: false },
-      { pid: 315, status: 'idle', projectName: 'filler-f', working: false },
     ] as unknown as Agent[]
     const w = await mountHub()
     const labelHidden = (pid: number) => w.get(`[data-testid="hub-agent-${pid}"]`).get('[data-testid="hub-label-name"]').element.parentElement!.className.includes('hidden')
-    // pid 300 is the lowest-priority (idle, not needsOperator) of the four and loses to pid 301's
-    // wider, higher-priority box once the status word is counted.
-    expect(labelHidden(300)).toBe(true)
+    // pid 303 is idle like pid 300 but placed after it, so it is the one the greedy pass drops once
+    // the status word widens the boxes.
+    expect(labelHidden(303)).toBe(true)
+    expect(labelHidden(300)).toBe(false)
     expect(labelHidden(301)).toBe(false)
     expect(labelHidden(302)).toBe(false)
-    expect(labelHidden(303)).toBe(false)
     w.unmount()
   })
 

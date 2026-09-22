@@ -142,7 +142,7 @@ const placed = computed(() => {
     const angles = agentAngles(members.length, sector)
     return members.map((agent, i) => {
       const needsOperator = blocksOnOperator(agent)
-      const ring = agentSectorRingPx(ringPx.value, i, stagePx.value)
+      const ring = agentSectorRingPx(ringPx.value, i, members.length, stagePx.value)
       const [x, y] = polar(agentRadius(k, needsOperator, ring), angles[i])
       return { agent, x, y, state: agentDisplayStatus(agent), needsOperator }
     })

@@ -24,6 +24,7 @@ import {
   SECTOR_LABEL_RADIUS,
   sectorKeyFor,
   sectorLabelRadius,
+  sectorTiers,
   visibleRingLabels,
 } from './hubGeometry'
 
@@ -76,6 +77,62 @@ describe('buildSectors', () => {
   })
   it('returns nothing for no input', () => {
     expect(buildSectors([])).toEqual([])
+  })
+})
+
+describe('buildSectors with agents', () => {
+  // The real vault: six folders and a catch-all, twelve agents, seven of them in the catch-all.
+  const vault = [
+    { key: 'a', label: 'a', weight: 1200, agents: 1 },
+    { key: 'b', label: 'b', weight: 900, agents: 1 },
+    { key: 'c', label: 'c', weight: 700, agents: 1 },
+    { key: 'd', label: 'd', weight: 400, agents: 1 },
+    { key: 'e', label: 'e', weight: 300, agents: 1 },
+    { key: 'quiet', label: 'quiet', weight: 1, agents: 0 },
+    { key: 'other', label: 'Other', weight: 1, agents: 7 },
+  ]
+  const AGENT_LABEL_PX = 110
+  const heavy = [
+    { key: 'privat', label: 'Privat', weight: 5371 },
+    { key: 'cm', label: 'claude-memory', weight: 306 },
+    { key: 'x', label: 'x', weight: 1 },
+    { key: 'y', label: 'y', weight: 2 },
+  ]
+
+  it('gives a sector of one note and seven agents the arc those seven labels need', () => {
+    const sectors = buildSectors(vault)
+    const crowded = sectors.find(s => s.key === 'other')!
+    const quiet = sectors.find(s => s.key === 'quiet')!
+    expect(span(crowded)).toBeGreaterThan(3 * span(quiet))
+    // Same-tier neighbours sit `tiers` angular steps apart on the base ring; that gap carries the label.
+    const gapDeg = sectorTiers(7) * span(crowded) / (7 + 1)
+    const gapPx = gapDeg * Math.PI / 180 * agentRingPx(12)
+    expect(gapPx).toBeGreaterThanOrEqual(AGENT_LABEL_PX)
+  })
+
+  it('still spends the whole circle once a sector claims room for its agents', () => {
+    expect(buildSectors(vault).reduce((sum, s) => sum + span(s), 0)).toBeCloseTo(360)
+  })
+
+  it('leaves a thousands-of-notes folder with no agents the arc the note weighting gives it', () => {
+    const privat = buildSectors(heavy).find(s => s.key === 'privat')!
+    const free = 360 - 2 * SECTOR_FLOOR_DEG
+    expect(span(privat)).toBeCloseTo(free * Math.sqrt(5371) / (Math.sqrt(5371) + Math.sqrt(306)), 6)
+  })
+
+  it('keeps that folder the widest sector when a tiny sibling fills with agents', () => {
+    const sectors = buildSectors(heavy.map(s => s.key === 'x' ? { ...s, agents: 7 } : s))
+    expect([...sectors].sort((a, b) => span(b) - span(a))[0].key).toBe('privat')
+  })
+
+  it('leaves the common case — three agents over six well-populated folders — where the notes put it', () => {
+    const folders = [1200, 900, 800, 700, 400, 300].map((weight, i) => ({ key: `f${i}`, label: `f${i}`, weight }))
+    const withAgents = buildSectors(folders.map((f, i) => i < 3 ? { ...f, agents: 1 } : f))
+    const notesOnly = buildSectors(folders)
+    for (let i = 0; i < folders.length; i++) {
+      expect(span(withAgents[i])).toBeCloseTo(span(notesOnly[i]), 1)
+      expect(span(withAgents[i])).toBeGreaterThan(SECTOR_FLOOR_DEG)
+    }
   })
 })
 
@@ -136,25 +193,41 @@ describe('agents', () => {
 
 describe('agentSectorRingPx', () => {
   it('leaves the first agent in a sector on the base ring', () => {
-    expect(agentSectorRingPx(196, 0)).toBe(196)
-    expect(agentSectorRingPx(196, 2)).toBe(196)
+    expect(agentSectorRingPx(196, 0, 2)).toBe(196)
+    expect(agentSectorRingPx(196, 2, 2)).toBe(196)
   })
   it('staggers the second agent sharing a sector out onto a different radius', () => {
-    expect(agentSectorRingPx(196, 1)).toBe(196 + AGENT_SECTOR_STAGGER_PX)
-    expect(agentSectorRingPx(196, 1)).not.toBe(agentSectorRingPx(196, 0))
-    expect(agentSectorRingPx(196, 3)).toBe(agentSectorRingPx(196, 1))
+    expect(agentSectorRingPx(196, 1, 2)).toBe(196 + AGENT_SECTOR_STAGGER_PX)
+    expect(agentSectorRingPx(196, 1, 2)).not.toBe(agentSectorRingPx(196, 0, 2))
+    expect(agentSectorRingPx(196, 3, 2)).toBe(agentSectorRingPx(196, 1, 2))
+  })
+  it('spreads seven agents sharing a sector over more than two radii', () => {
+    const rings = Array.from({ length: 7 }, (_, i) => agentSectorRingPx(196, i, 7))
+    expect(new Set(rings).size).toBeGreaterThan(2)
+    expect(sectorTiers(7)).toBeGreaterThan(sectorTiers(2))
+  })
+  it('keeps every one of those seven on the stage and clear of the core', () => {
+    const stagePx = 900
+    const cap = stagePx / 2 - AGENT_STAGE_MARGIN_PX
+    const base = agentRingPx(12, stagePx)
+    for (let i = 0; i < 7; i++) {
+      const ring = agentSectorRingPx(base, i, 7, stagePx)
+      expect(ring).toBeGreaterThanOrEqual(AGENT_FLOOR_PX)
+      expect(ring).toBeLessThanOrEqual(cap)
+      expect(agentRadius(1, true, ring)).toBeGreaterThanOrEqual(AGENT_WAITING_FLOOR_PX)
+    }
   })
   it('never staggers below the on-screen floor, at any base ring or index', () => {
     for (const ring of [0, AGENT_FLOOR_PX, 60]) {
       for (const i of [0, 1, 2, 3])
-        expect(agentSectorRingPx(ring, i)).toBeGreaterThanOrEqual(AGENT_FLOOR_PX)
+        expect(agentSectorRingPx(ring, i, 7)).toBeGreaterThanOrEqual(AGENT_FLOOR_PX)
     }
   })
   it('never staggers past the stage cap', () => {
     const stagePx = 600
     const cap = stagePx / 2 - AGENT_STAGE_MARGIN_PX
-    expect(agentSectorRingPx(cap, 1, stagePx)).toBe(cap)
-    expect(agentSectorRingPx(cap - 1, 1, stagePx)).toBeLessThanOrEqual(cap)
+    expect(agentSectorRingPx(cap, 1, 2, stagePx)).toBe(cap)
+    expect(agentSectorRingPx(cap - 1, 1, 7, stagePx)).toBeLessThanOrEqual(cap)
   })
 })
 
@@ -225,5 +298,9 @@ describe('planSectors', () => {
   })
   it('adds no Other sector when every agent has one', () => {
     expect(planSectors(['kontor/a.md'], ['kontor']).sectors.map(s => s.key)).toEqual(['kontor'])
+  })
+  it('counts one agent per repeated project name, so a crowded sector outgrows a quiet one', () => {
+    const p = planSectors(['Privat/a.md'], Array.from({ length: 7 }).fill('shop') as string[])
+    expect(span(p.sectors.find(s => s.key === OTHER_SECTOR_KEY)!)).toBeGreaterThan(span(p.sectors.find(s => s.key === 'Privat')!))
   })
 })
