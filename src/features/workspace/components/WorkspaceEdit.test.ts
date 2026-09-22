@@ -237,6 +237,19 @@ describe('page rename and delete', () => {
     w.unmount()
   })
 
+  // The page and this bar unmount once the delete lands, taking focus with them.
+  it('focuses the Zentrale nav item before the delete removes the page', async () => {
+    const zentraleNav = document.createElement('button')
+    zentraleNav.setAttribute('data-testid', 'nav-item-zentrale')
+    document.body.appendChild(zentraleNav)
+    const w = mount(WorkspaceEditBar, { props: { page: morning, refusal: null } })
+    await w.get('[data-testid="workspace-delete-page"]').trigger('click')
+    await w.get('[data-testid="workspace-delete-confirm"]').trigger('click')
+    expect(document.activeElement).toBe(zentraleNav)
+    zentraleNav.remove()
+    w.unmount()
+  })
+
   function seed() {
     ws.layout.value = { version: 1, pages: [{ id: 'zentrale', title: 'Zentrale', tiles: [] }, morning] }
     ws.editing.value = true

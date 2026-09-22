@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import type { ActiveView } from '../../composables/useViewState'
+import type { ActiveView, CoreView } from '../../composables/useViewState'
 import { computed, nextTick, ref, watch } from 'vue'
 import { addPage, useWorkspace, ZENTRALE_PAGE_ID } from '@/features/workspace'
 import { useSidebar } from '../../composables/useSidebar'
 import { useViewState } from '../../composables/useViewState'
 import { NAV_GROUPS, NAV_ITEMS } from '../../utils/navConfig'
+import NavGroupCaption from './NavGroupCaption.vue'
 import NavItem from './NavItem.vue'
 import SidebarFooter from './SidebarFooter.vue'
 
@@ -34,7 +35,7 @@ const ownPages = computed(() => workspace.layout.value.pages.filter(p => p.id !=
 const creatingPage = ref(false)
 const newPageSlot = ref<HTMLElement | null>(null)
 
-function badgeFor(view: ActiveView): number | null {
+function badgeFor(view: CoreView): number | null {
   if (view === 'dashboard')
     return props.attentionCount > 0 ? props.attentionCount : props.agentCount
   if (view === 'pipeline')
@@ -42,7 +43,7 @@ function badgeFor(view: ActiveView): number | null {
   return null
 }
 
-function badgeDanger(view: ActiveView): boolean {
+function badgeDanger(view: CoreView): boolean {
   return view === 'dashboard' && props.attentionCount > 0
 }
 
@@ -91,8 +92,11 @@ async function createPage(event: KeyboardEvent): Promise<void> {
     return
   workspace.editing.value = true
   selectView(`page:${r.value.pageId}`)
+  creatingPage.value = false
   // Blur before the input unmounts: a removed input fires no focusout, which would hold the nav open.
   input.blur()
+  await nextTick()
+  document.querySelector<HTMLElement>(`[data-testid="nav-page-${r.value.pageId}"]`)?.focus()
 }
 </script>
 
@@ -155,29 +159,11 @@ async function createPage(event: KeyboardEvent): Promise<void> {
                render only when expanded, so hovering inserted three rows and
                pushed every nav item down by a different amount per group —
                you aimed at an icon and clicked whatever slid under the cursor. -->
-          <div
-            data-testid="nav-group-slot"
-            class="relative h-7 shrink-0 overflow-hidden"
-          >
-            <span
-              class="absolute inset-0 flex items-center px-2 text-[9px] uppercase tracking-wider text-fg-faint font-bold whitespace-nowrap transition-opacity duration-150 motion-reduce:transition-none"
-              :class="expanded ? 'opacity-100 delay-75' : 'opacity-0 delay-0'"
-            >
-              {{ g.group }}
-            </span>
-            <span
-              v-if="gi > 0"
-              aria-hidden="true"
-              data-testid="nav-group-divider"
-              class="absolute inset-0 flex items-center justify-center transition-opacity duration-150 motion-reduce:transition-none"
-              :class="expanded ? 'opacity-0 delay-0' : 'opacity-100 delay-75'"
-            >
-              <span class="h-px w-6 bg-line" />
-            </span>
-          </div>
+          <NavGroupCaption :label="g.group" :show-divider="gi > 0" :expanded="expanded" />
           <NavItem
             v-for="item in g.items"
             :key="item.view"
+            :data-testid="`nav-item-${item.view}`"
             :icon="item.icon"
             :label="item.label"
             :active="activeView === item.view"
@@ -196,22 +182,7 @@ async function createPage(event: KeyboardEvent): Promise<void> {
         </div>
 
         <div class="flex flex-col gap-0.5" data-testid="nav-pages">
-          <div data-testid="nav-group-slot" class="relative h-7 shrink-0 overflow-hidden">
-            <span
-              class="absolute inset-0 flex items-center px-2 text-[9px] uppercase tracking-wider text-fg-faint font-bold whitespace-nowrap transition-opacity duration-150 motion-reduce:transition-none"
-              :class="expanded ? 'opacity-100 delay-75' : 'opacity-0 delay-0'"
-            >
-              Pages
-            </span>
-            <span
-              aria-hidden="true"
-              data-testid="nav-group-divider"
-              class="absolute inset-0 flex items-center justify-center transition-opacity duration-150 motion-reduce:transition-none"
-              :class="expanded ? 'opacity-0 delay-0' : 'opacity-100 delay-75'"
-            >
-              <span class="h-px w-6 bg-line" />
-            </span>
-          </div>
+          <NavGroupCaption label="Pages" :show-divider="true" :expanded="expanded" />
           <NavItem
             v-for="p in ownPages"
             :key="p.id"
@@ -222,10 +193,8 @@ async function createPage(event: KeyboardEvent): Promise<void> {
             :expanded="expanded"
             @select="selectView(`page:${p.id}`)"
           />
-          <!-- The input takes the button's place in the same box, so no row moves.
-               It only opens from a click or key on the button, i.e. while expanded. -->
+          <!-- The input takes the button's place in the same box, so no row moves. -->
           <div
-            v-if="workspace.loaded.value && !workspace.locked.value"
             ref="newPageSlot"
             data-testid="nav-new-page-slot"
             class="h-10 shrink-0"
@@ -250,6 +219,7 @@ async function createPage(event: KeyboardEvent): Promise<void> {
               label="New page"
               :active="false"
               :expanded="expanded"
+              :disabled="!workspace.loaded.value || !!workspace.locked.value"
               @select="startNewPage"
             />
           </div>

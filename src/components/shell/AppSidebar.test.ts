@@ -296,6 +296,31 @@ describe('appSidebar', () => {
     w.unmount()
   })
 
+  // Without attachTo the tree is detached, so focus()/blur() are no-ops and fire no
+  // events — the input's own @blur handler cannot be what closes it here, isolating
+  // the explicit close.
+  it('closes the input explicitly after a successful save, not merely via blur', async () => {
+    const { AppSidebar } = await load()
+    const w = mount(AppSidebar, { props })
+    await w.get('[data-testid="nav-new-page"]').trigger('click')
+    await w.get('[data-testid="nav-new-page-input"]').setValue('Evening')
+    await w.get('[data-testid="nav-new-page-input"]').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(w.find('[data-testid="nav-new-page-input"]').exists()).toBe(false)
+  })
+
+  it('focuses the new page\'s nav item after creating it', async () => {
+    const { AppSidebar } = await load()
+    const w = mount(AppSidebar, { props, attachTo: document.body })
+    await w.get('[data-testid="nav-new-page"]').trigger('click')
+    await w.get('[data-testid="nav-new-page-input"]').setValue('Evening')
+    await w.get('[data-testid="nav-new-page-input"]').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    const newId = ws.save.mock.calls[0]![0].pages[2]!.id
+    expect(document.activeElement).toBe(w.get(`[data-testid="nav-page-${newId}"]`).element)
+    w.unmount()
+  })
+
   it('opens the new page input when a new page is requested from elsewhere', async () => {
     const { AppSidebar, useSidebar } = await load()
     const w = mount(AppSidebar, { props, attachTo: document.body })
@@ -344,6 +369,7 @@ describe('appSidebar', () => {
     await input.setValue('x'.repeat(81))
     await input.trigger('keydown', { key: 'Enter' })
     expect(ws.save).not.toHaveBeenCalled()
+    expect(w.find('[data-testid="nav-new-page-input"]').exists()).toBe(true)
     expect((input.element as HTMLInputElement).validationMessage).toMatch(/1 to 80 characters/)
   })
 
@@ -359,14 +385,25 @@ describe('appSidebar', () => {
   })
 
   // Adding onto the built-in layout before the stored one arrives would save over it.
-  it('offers no new page until the layout has loaded, nor while it is locked', async () => {
+  // The button stays in the DOM (disabled) rather than disappearing, so the Insights
+  // group below it never shifts once the layout finishes loading.
+  it('disables the new-page button until the layout has loaded, and while it is locked', async () => {
     const { AppSidebar } = await load()
     ws.loaded.value = false
     const w = mount(AppSidebar, { props })
-    expect(w.find('[data-testid="nav-new-page"]').exists()).toBe(false)
+    expect(w.get('[data-testid="nav-new-page"]').attributes('disabled')).toBeDefined()
     ws.loaded.value = true
+    await nextTick()
+    expect(w.get('[data-testid="nav-new-page"]').attributes('disabled')).toBeUndefined()
     ws.locked.value = 'unreadable'
     await nextTick()
-    expect(w.find('[data-testid="nav-new-page"]').exists()).toBe(false)
+    expect(w.get('[data-testid="nav-new-page"]').attributes('disabled')).toBeDefined()
+  })
+
+  it('renders the new-page slot from first paint, so the Insights group never shifts once loaded', async () => {
+    const { AppSidebar } = await load()
+    ws.loaded.value = false
+    const w = mount(AppSidebar, { props })
+    expect(w.find('[data-testid="nav-new-page-slot"]').exists()).toBe(true)
   })
 })

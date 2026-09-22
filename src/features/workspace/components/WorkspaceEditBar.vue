@@ -29,6 +29,13 @@ function rename(event: Event) {
   // A refused title reverts here; an accepted one re-renders with the stored title.
   input.value = props.page.title
 }
+
+function remove() {
+  // The page and this bar unmount once the delete lands, taking focus with them —
+  // move it to the Zentrale nav item first, before that happens.
+  document.querySelector<HTMLElement>('[data-testid="nav-item-zentrale"]')?.focus()
+  emit('remove')
+}
 </script>
 
 <template>
@@ -53,7 +60,7 @@ function rename(event: Event) {
     </button>
     <template v-if="ownPage">
       <template v-if="confirmingDelete">
-        <button type="button" data-testid="workspace-delete-confirm" class="rounded-md bg-danger-soft px-2.5 py-1 text-danger-text" @click="emit('remove')">
+        <button type="button" data-testid="workspace-delete-confirm" class="rounded-md bg-danger-soft px-2.5 py-1 text-danger-text" @click="remove">
           Delete {{ page.title }} and its tiles?
         </button>
         <button type="button" data-testid="workspace-delete-cancel" class="rounded-md border border-line-strong px-2.5 py-1" @click="confirmingDelete = false">

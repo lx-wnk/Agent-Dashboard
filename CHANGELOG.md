@@ -34,6 +34,16 @@ Preparing the first public release.
   it.** Its capturing scroll listener ran `getBoundingClientRect` on every
   scroll underneath it, including the session transcript's own scrolling; it
   now skips scrolls the overlay itself contains.
+- **A page created or deleted from the sidebar keeps focus, and the Insights
+  group stops shifting as pages load in.** Creating a page dropped focus to
+  `<body>`; it now lands on the new page's own nav item. Deleting one did the
+  same when the edit bar's second confirmation removed it from under the
+  pointer; it now lands on the Zentrale nav item first. The `+ New page` slot
+  used to mount only once the layout had loaded, so the bottom-anchored
+  Insights group visibly jumped the moment it appeared; the slot — and its
+  button, disabled until then — now renders from first paint. The Pages
+  group's caption also duplicated the core groups' caption markup; both now
+  render through one shared `NavGroupCaption`.
 
 ### Changed
 
