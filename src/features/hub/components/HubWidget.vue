@@ -20,7 +20,7 @@ import { hubFocusRequest } from '../composables/useHubFocus'
 import { useObsidianGraph } from '../composables/useObsidianGraph'
 import { launchersDocked, LEVEL_TARGETS } from '../hubCamera'
 import { hitNote, hubNoteSet } from '../hubCanvas'
-import { agentAngles, agentRadius, agentRingPx, DAY_MS, notePoint, planSectors, polar, radiusForAge, RINGS, SECTOR_PALETTE_SIZE, sectorMid, wedgePath } from '../hubGeometry'
+import { agentAngles, agentRadius, agentRingPx, agentSectorRingPx, DAY_MS, notePoint, planSectors, polar, radiusForAge, RINGS, SECTOR_PALETTE_SIZE, sectorMid, wedgePath } from '../hubGeometry'
 import { GRAPH_NOTICES } from '../hubGraphNotices'
 import { launchersFor } from '../hubLaunchers'
 import HubAgentCard from './HubAgentCard.vue'
@@ -128,7 +128,8 @@ function tapNote(sx: number, sy: number) {
 
 onMounted(() => refreshGraph())
 useEventListener(window, 'focus', () => refreshGraph())
-const ringPx = computed(() => agentRingPx(live.value.length, Math.min(size.value.width, size.value.height)))
+const stagePx = computed(() => Math.min(size.value.width, size.value.height))
+const ringPx = computed(() => agentRingPx(live.value.length, stagePx.value))
 const ringOnScreenPx = computed(() => agentRadius(cam.value.k, false, ringPx.value) * cam.value.k)
 const docked = computed(() => launchersDocked(rel.value, cam.value.k, ringOnScreenPx.value))
 
@@ -140,7 +141,8 @@ const placed = computed(() => {
     const angles = agentAngles(members.length, sector)
     return members.map((agent, i) => {
       const needsOperator = blocksOnOperator(agent)
-      const [x, y] = polar(agentRadius(k, needsOperator, ringPx.value), angles[i])
+      const ring = agentSectorRingPx(ringPx.value, i, stagePx.value)
+      const [x, y] = polar(agentRadius(k, needsOperator, ring), angles[i])
       return { agent, x, y, state: agentDisplayStatus(agent), needsOperator }
     })
   })

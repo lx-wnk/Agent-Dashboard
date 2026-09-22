@@ -16,6 +16,7 @@ export const AGENT_FLOOR_PX = 116
 export const AGENT_WAITING_FLOOR_PX = 88
 export const AGENT_SPACING_PX = 112
 export const AGENT_STAGE_MARGIN_PX = 90
+export const AGENT_SECTOR_STAGGER_PX = 40
 export const SECTOR_LABEL_AGENT_CLEARANCE_PX = 40
 export const RING_LABEL_GAP_PX = 16
 export const RING_LABEL_AGENT_CLEARANCE_PX = 12
@@ -118,6 +119,13 @@ export function agentAngles(count: number, sector: Sector): number[] {
 export function agentRingPx(count: number, stagePx = Infinity): number {
   const grownPx = count * AGENT_SPACING_PX / (2 * Math.PI)
   return Math.max(AGENT_FLOOR_PX, Math.min(grownPx, stagePx / 2 - AGENT_STAGE_MARGIN_PX))
+}
+
+// Same-sector agents share one base ring; odd sector-local indices step out by the stagger so a narrow
+// sector (near SECTOR_FLOOR_DEG) doesn't stack neighbouring labels on top of each other.
+export function agentSectorRingPx(baseRingPx: number, indexInSector: number, stagePx = Infinity): number {
+  const staggered = baseRingPx + (indexInSector % 2 ? AGENT_SECTOR_STAGGER_PX : 0)
+  return Math.max(AGENT_FLOOR_PX, Math.min(staggered, stagePx / 2 - AGENT_STAGE_MARGIN_PX))
 }
 
 // World radius that puts the agent on its on-screen ring; a waiting agent sits the floor gap further in.
