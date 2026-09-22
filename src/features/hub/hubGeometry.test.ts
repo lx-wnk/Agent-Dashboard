@@ -118,6 +118,9 @@ describe('agents', () => {
     expect(agentRingPx(40, 200)).toBe(AGENT_FLOOR_PX)
     expect(agentRingPx(40, 0)).toBe(AGENT_FLOOR_PX)
   })
+  it('pulls eleven agents in on the 544 px stacked stage so side labels clear the dock and controls columns', () => {
+    expect(agentRingPx(11, 544)).toBe(182)
+  })
   it('places agents on the given ring, a waiting agent the floor gap further in', () => {
     const k = 0.6
     for (const ring of [AGENT_FLOOR_PX, 196, 300]) {
