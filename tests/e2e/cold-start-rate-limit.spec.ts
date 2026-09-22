@@ -7,6 +7,10 @@ import { expect, test } from '@playwright/test'
  * once is the ordinary case — the desktop shell and a browser tab — and it must
  * not throttle the app's own boot.
  */
+// Burst over rate of IPRateLimiterConfig (server/internal/api/middleware.go): after
+// this much idle time the shared bucket is full, whatever the specs before this one spent.
+const BUCKET_REFILL_MS = (120 / 10) * 1000
+
 async function loadAndCollectThrottles(page: Page): Promise<string[]> {
   const throttled: string[] = []
   page.on('response', (response) => {
@@ -20,6 +24,7 @@ async function loadAndCollectThrottles(page: Page): Promise<string[]> {
 
 test.describe('a cold start does not rate-limit itself', () => {
   test('two clients opening at once are never throttled', async ({ browser }) => {
+    await new Promise(resolve => setTimeout(resolve, BUCKET_REFILL_MS))
     const [one, two] = await Promise.all([browser.newContext(), browser.newContext()])
     const [pageOne, pageTwo] = await Promise.all([one.newPage(), two.newPage()])
 
