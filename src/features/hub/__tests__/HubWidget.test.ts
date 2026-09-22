@@ -10,6 +10,7 @@ import { DEFAULT_LAYOUT, useWorkspace } from '@/features/workspace'
 import HubBrainCanvas from '../components/HubBrainCanvas.vue'
 import { hubFocusRequest } from '../composables/useHubFocus'
 import { fitScale } from '../hubCamera'
+import * as hubGeometry from '../hubGeometry'
 import { AGENT_SPACING_PX, AGENT_STAGE_MARGIN_PX, DAY_MS, notePoint, planSectors } from '../hubGeometry'
 
 const NOTE_AGE_DAYS = 30
@@ -371,6 +372,32 @@ describe('hubWidget', () => {
     graph.notes.value = [vaultNote(0, 'alpha/one.md'), vaultNote(1, 'beta/two.md')]
     await flushPromises()
     expect(w.find('[role="dialog"][aria-label="beta/two.md"]').exists()).toBe(false)
+    w.unmount()
+  })
+
+  it('does not recompute the sector plan when an SSE tick only changes an agent status', async () => {
+    const w = await mountHub()
+    const spy = vi.spyOn(hubGeometry, 'planSectors')
+    agents.value = agents.value.map(a => a.pid === 101 ? { ...a, status: 'idle', working: false } : a)
+    await flushPromises()
+    expect(spy).not.toHaveBeenCalled()
+    spy.mockRestore()
+    w.unmount()
+  })
+
+  it('keeps the notes and an open note card when a refetch fails', async () => {
+    graph.status.value = 'ready'
+    graph.notes.value = [vaultNote(0, 'alpha/one.md'), vaultNote(1, 'beta/two.md')]
+    const w = await mountHub()
+    await press(w, 'L')
+    await w.findAll('[data-testid="hub-list-note"]')[0].trigger('click')
+    expect(w.find('[role="dialog"][aria-label="alpha/one.md"]').exists()).toBe(true)
+
+    graph.status.value = 'failed'
+    graph.message.value = 'network error'
+    await flushPromises()
+
+    expect(w.find('[role="dialog"][aria-label="alpha/one.md"]').exists()).toBe(true)
     w.unmount()
   })
 

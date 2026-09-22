@@ -142,13 +142,16 @@ export function visibleRingLabels(scale: number, agentRingPx: number): typeof RI
   })
 }
 
-export function sectorKeyFor(path: string, projects: readonly string[]): { key: string, label: string } {
+function sectorKeyForSet(path: string, wanted: ReadonlySet<string>): { key: string, label: string } {
   const folders = path.split('/').slice(0, -1)
-  const wanted = new Set(projects.map(p => p.toLowerCase()))
   const hit = folders.findIndex(f => wanted.has(f.toLowerCase()))
   if (hit >= 0)
     return { key: folders.slice(0, hit + 1).join('/'), label: folders[hit] }
   return folders.length ? { key: folders[0], label: folders[0] } : { key: '', label: 'Notes' }
+}
+
+export function sectorKeyFor(path: string, projects: readonly string[]): { key: string, label: string } {
+  return sectorKeyForSet(path, new Set(projects.map(p => p.toLowerCase())))
 }
 
 export interface SectorPlan { sectors: Sector[], sectorOfNote: Map<string, string>, sectorOfProject: Map<string, string> }
@@ -161,9 +164,10 @@ export function planSectors(notePaths: readonly string[], projects: readonly str
     for (const p of distinct) sectorOfProject.set(p, p)
     return { sectors: buildSectors(distinct.map(p => ({ key: p, label: p, weight: 1 }))), sectorOfNote, sectorOfProject }
   }
+  const wanted = new Set(distinct.map(p => p.toLowerCase()))
   const inputs = new Map<string, SectorInput>()
   for (const path of notePaths) {
-    const { key, label } = sectorKeyFor(path, distinct)
+    const { key, label } = sectorKeyForSet(path, wanted)
     sectorOfNote.set(path, key)
     const input = inputs.get(key)
     if (input)

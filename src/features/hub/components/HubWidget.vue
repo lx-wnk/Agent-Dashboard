@@ -72,9 +72,14 @@ function blocksOnOperator(agent: Agent): boolean {
 }
 
 const live = computed(() => agents.value.filter(a => a.status !== 'finished').sort((a, b) => a.pid - b.pid))
-// A refetch passes through 'loading'; keeping the last notes stops the brain from blanking and the agents from jumping.
-const vaultNotes = computed(() => graphStatus.value === 'ready' || graphStatus.value === 'loading' ? notes.value : [])
-const plan = computed(() => planSectors(vaultNotes.value.map(n => n.path), live.value.map(a => a.projectName)))
+// Equal joined names return the same array reference, so a tick that only changes an agent's status does not retrigger planSectors.
+const liveProjectNames = computed<string[]>((previous) => {
+  const names = live.value.map(a => a.projectName)
+  return previous && names.join('\n') === previous.join('\n') ? previous : names
+})
+// A refetch passes through 'loading'; a failed refetch keeps the last good notes too, so the brain and an open note card don't blank.
+const vaultNotes = computed(() => graphStatus.value === 'ready' || graphStatus.value === 'loading' || graphStatus.value === 'failed' ? notes.value : [])
+const plan = computed(() => planSectors(vaultNotes.value.map(n => n.path), liveProjectNames.value))
 const graphNotice = computed(() => GRAPH_NOTICES[graphStatus.value])
 
 const brain = computed(() => {
