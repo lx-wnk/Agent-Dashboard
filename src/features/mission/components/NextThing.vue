@@ -99,7 +99,7 @@ async function answer(intent: AnswerIntent) {
 </script>
 
 <template>
-  <div v-if="next" data-testid="mission-next" class="flex flex-col gap-4">
+  <div v-if="next && next.kind !== 'capability'" data-testid="mission-next" class="flex flex-col gap-4">
     <div class="flex items-center gap-3">
       <span class="text-[11px] font-mono tracking-widest text-accent">NEXT</span>
       <span class="h-px flex-grow bg-line" />
@@ -177,7 +177,7 @@ async function answer(intent: AnswerIntent) {
     </div>
   </div>
 
-  <p v-else data-testid="mission-calm" class="flex items-center gap-2 text-[12.5px] text-fg-faint">
+  <p v-else-if="!next" data-testid="mission-calm" class="flex items-center gap-2 text-[12.5px] text-fg-faint">
     <span aria-hidden="true" class="h-1.5 w-1.5 rounded-full bg-success" />
     Nothing needs you — agents interrupt here if they get stuck.
   </p>

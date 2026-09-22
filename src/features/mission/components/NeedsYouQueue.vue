@@ -1,30 +1,25 @@
 <script setup lang="ts">
 import type { NextKind } from '../composables/useNextThing'
-import { computed, inject, onMounted, ref, watch } from 'vue'
-import { OPEN_TASK, PENDING_PERMISSIONS } from '@/composables/openTask'
-import { useAgents } from '@/features/agents'
-import { useTasks } from '@/features/pipeline'
-import { rankNextThings } from '../composables/useNextThing'
+import { computed, inject, ref, watch } from 'vue'
+import { NEEDS_YOU, OPEN_TASK, PENDING_PERMISSIONS } from '@/composables/openTask'
 import NextThing from './NextThing.vue'
 
 const props = defineProps<{ variant: 'docked' | 'strip', kinds?: NextKind[] }>()
 
-const { tasks, refetch } = useTasks()
+// App.vue ranks once per tick and provides the list, and owns navigation —
+// both are provided by App for every place a queue renders.
+const needsYou = inject(NEEDS_YOU)
+const openTask = inject(OPEN_TASK)
+if (!needsYou || !openTask)
+  throw new Error('NeedsYouQueue requires NEEDS_YOU and OPEN_TASK from App.vue')
 // App.vue provides the one usePendingPermissions(tasks) instance — a local
 // call here would open a second, out-of-sync cache.
 const pendingPermissions = inject(PENDING_PERMISSIONS)
 if (!pendingPermissions)
   throw new Error('NeedsYouQueue requires PENDING_PERMISSIONS to be provided by App.vue')
-const { items: pending, refresh } = pendingPermissions
-// autoStart: false — App.vue owns the stream.
-const { agents } = useAgents({ autoStart: false })
-const openTask = inject(OPEN_TASK, () => {})
-onMounted(refetch)
+const { refresh } = pendingPermissions
 
-const ranked = computed(() => {
-  const all = rankNextThings(pending.value, tasks.value, agents.value)
-  return props.kinds ? all.filter(t => props.kinds!.includes(t.kind)) : all
-})
+const ranked = computed(() => props.kinds ? needsYou.value.filter(t => props.kinds!.includes(t.kind)) : needsYou.value)
 const index = ref(0)
 watch(() => ranked.value.length, (n) => {
   if (index.value >= n)

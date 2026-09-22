@@ -20,7 +20,7 @@ import ToastHost from './components/ToastHost.vue'
 import AppModal from './components/ui/AppModal.vue'
 import AppModalHeader from './components/ui/AppModalHeader.vue'
 import { needsYouPlacement } from './composables/needsYouPlacement'
-import { OPEN_TASK, PENDING_PERMISSIONS } from './composables/openTask'
+import { NEEDS_YOU, OPEN_TASK, PENDING_PERMISSIONS } from './composables/openTask'
 import { useInstallPrompt } from './composables/useInstallPrompt'
 import { useOnboarding } from './composables/useOnboarding'
 import { usePendingPermissions } from './composables/usePendingPermissions'
@@ -103,7 +103,11 @@ const combinedAttentionCount = computed(() => attentionCount.value + permissionI
 // and Cost view agree. Distinct from totalCost (cost of agents running now).
 const { todayUsd, start: startTodayCost } = useTodayCost()
 
-const needsYouCount = computed(() => rankNextThings(permissionItems.value, tasks.value, agents.value).length)
+// Ranked once per tick and provided — every queue and the hub core read this
+// same list instead of each re-ranking on every SSE tick.
+const needsYou = computed(() => rankNextThings(permissionItems.value, tasks.value, agents.value, pendingCapabilityDecisions.value))
+provide(NEEDS_YOU, needsYou)
+const needsYouCount = computed(() => needsYou.value.length)
 const BASE_TITLE = document.title
 watchEffect(() => {
   document.title = needsYouCount.value ? `(${needsYouCount.value}) ${BASE_TITLE}` : BASE_TITLE
@@ -281,7 +285,7 @@ watch([activeView, workspace.layout, workspace.loaded], () => {
   if (workspace.loaded.value)
     activeView.value = resolveView(activeView.value, workspace.layout.value.pages.map(p => p.id))
 }, { immediate: true })
-const needsYou = computed(() => needsYouPlacement({ view: activeView.value, pageHasHub: pageHasHub.value, error: !!error.value }))
+const needsYouPlace = computed(() => needsYouPlacement({ view: activeView.value, pageHasHub: pageHasHub.value, error: !!error.value }))
 
 // Single routing rule: plan_review tasks open the plan panel, all others the generic modal.
 function openTask(t: PipelineTask) {
@@ -350,7 +354,7 @@ onMounted(() => usageComposable.start())
       </template>
 
       <div class="p-5 flex flex-col min-h-full" :class="{ 'h-full': currentPageId !== null }">
-        <NeedsYouQueue v-if="needsYou.strip" variant="strip" :kinds="needsYou.kinds" class="mb-3" />
+        <NeedsYouQueue v-if="needsYouPlace.strip" variant="strip" :kinds="needsYouPlace.kinds" class="mb-3" />
         <div v-if="isLoading && activeView === 'dashboard'" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
           <SkeletonCard v-for="n in 6" :key="n" />
         </div>

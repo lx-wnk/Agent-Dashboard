@@ -1,8 +1,8 @@
 import type { NextThing } from '../composables/useNextThing'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
-import { nextTick, ref } from 'vue'
-import { OPEN_TASK, PENDING_PERMISSIONS } from '@/composables/openTask'
+import { computed, nextTick, ref } from 'vue'
+import { NEEDS_YOU, OPEN_TASK, PENDING_PERMISSIONS } from '@/composables/openTask'
 
 const items = ref<NextThing[]>([
   { kind: 'permission', taskId: 't1', taskTitle: 'First', projectName: 'Dashboard', stage: 'implementation', title: 'First', why: 'w' },
@@ -10,12 +10,6 @@ const items = ref<NextThing[]>([
   { kind: 'permission', taskId: 't3', taskTitle: 'Third', projectName: 'Dashboard', stage: 'implementation', title: 'Third', why: 'w' },
 ])
 
-vi.mock('@/features/agents', () => ({ useAgents: () => ({ agents: ref([]) }) }))
-vi.mock('@/features/pipeline', () => ({ useTasks: () => ({ tasks: ref([]), refetch: vi.fn() }) }))
-vi.mock('../composables/useNextThing', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../composables/useNextThing')>()
-  return { ...actual, rankNextThings: () => items.value }
-})
 vi.mock('../components/NextThing.vue', () => ({
   default: {
     props: ['next'],
@@ -38,6 +32,7 @@ function mountQueue(variant: 'docked' | 'strip', overrides: { openTask?: (taskId
     props: { variant, kinds: overrides.kinds },
     global: {
       provide: {
+        [NEEDS_YOU]: computed(() => items.value),
         [PENDING_PERMISSIONS]: { items: ref([]), refresh: overrides.refresh ?? vi.fn() },
         [OPEN_TASK]: overrides.openTask ?? vi.fn(),
       },
