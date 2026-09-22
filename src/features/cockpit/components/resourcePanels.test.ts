@@ -9,8 +9,12 @@ const graph = {
   recentNotes: (count: number) => [...graph.notes.value].sort((a, b) => b.mtimeMs - a.mtimeMs).slice(0, count),
   refresh: vi.fn(async () => {}),
 }
-const focusInHub = vi.fn()
-vi.mock('@/features/hub', () => ({ useObsidianGraph: () => graph, focusInHub }))
+const focusInHub = vi.fn(() => true)
+vi.mock('@/features/hub', () => ({
+  useObsidianGraph: () => graph,
+  focusInHub,
+  NO_HUB_PAGE_MESSAGE: 'No page shows the Zentrale hub; add the hub tile to a page.',
+}))
 
 const { default: MemoryPanel } = await import('./MemoryPanel.vue')
 const { default: RoutinesPanel } = await import('./RoutinesPanel.vue')

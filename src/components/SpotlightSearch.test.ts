@@ -2,8 +2,13 @@ import type { GraphStatus, HubNote } from '@/features/hub/composables/useObsidia
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ref, shallowRef } from 'vue'
+import { toast } from '@/composables/useToast'
 import { DEFAULT_LAYOUT, useWorkspace } from '@/features/workspace'
 import SpotlightSearch from './SpotlightSearch.vue'
+
+vi.mock('@/composables/useToast', () => ({
+  toast: { info: vi.fn(), error: vi.fn(), success: vi.fn() },
+}))
 
 const activeView = ref('dashboard')
 let searchBody: unknown = { tasks: [], agents: [] }
@@ -23,10 +28,11 @@ vi.mock('@/composables/useViewState', async (importOriginal) => {
 const graphStatus = ref<GraphStatus>('idle')
 const graphNotes = shallowRef<HubNote[]>([])
 const recentNotesSpy = vi.fn((count: number) => [...graphNotes.value].sort((a, b) => b.mtimeMs - a.mtimeMs).slice(0, count))
-const focusInHub = vi.fn()
+const focusInHub = vi.fn((_target: unknown) => true)
 vi.mock('@/features/hub', () => ({
   useObsidianGraph: () => ({ status: graphStatus, notes: graphNotes, recentNotes: (c: number) => recentNotesSpy(c) }),
   focusInHub: (t: unknown) => focusInHub(t),
+  NO_HUB_PAGE_MESSAGE: 'No page shows the Zentrale hub; add the hub tile to a page.',
 }))
 
 const mockFetch = vi.fn(async () => ({
@@ -62,6 +68,7 @@ beforeEach(() => {
   graphNotes.value = []
   recentNotesSpy.mockClear()
   focusInHub.mockClear()
+  vi.mocked(toast.info).mockClear()
 })
 
 afterEach(() => {
@@ -272,6 +279,16 @@ describe('spotlightSearch notes', () => {
   it('caps the notes fed to the matcher at the 2,000 most recent', async () => {
     const wrapper = await openSpotlight('one')
     expect(recentNotesSpy).toHaveBeenCalledWith(2000)
+    wrapper.unmount()
+  })
+
+  it('toasts when no page shows the hub, instead of failing silently', async () => {
+    focusInHub.mockReturnValueOnce(false)
+    const wrapper = await openSpotlight('one')
+    const option = document.querySelector('[data-testid="spotlight-note:alpha/One.md"]')
+    ;(option as HTMLElement).click()
+    await flushPromises()
+    expect(toast.info).toHaveBeenCalledWith('No page shows the Zentrale hub; add the hub tile to a page.')
     wrapper.unmount()
   })
 })

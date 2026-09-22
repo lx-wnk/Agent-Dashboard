@@ -2,8 +2,9 @@
 import type { Agent, PipelineTask } from '../types'
 import type { ActiveView } from '@/composables/useViewState'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { toast } from '@/composables/useToast'
 import { ACTIVE_VIEWS, useViewState } from '@/composables/useViewState'
-import { focusInHub, useObsidianGraph } from '@/features/hub'
+import { focusInHub, NO_HUB_PAGE_MESSAGE, useObsidianGraph } from '@/features/hub'
 import { useKontorSession } from '@/features/mission/composables/useKontorSession'
 import { SLASH_COMMAND_REFUSAL } from '@/features/mission/composables/useReading'
 import { pageView, pageWithWidget, useWorkspace, ZENTRALE_PAGE_ID } from '@/features/workspace'
@@ -159,14 +160,19 @@ async function search(q: string) {
 }
 
 function activate(result: FlatResult) {
-  if (result.type === 'task')
+  if (result.type === 'task') {
     emit('navigateTask', result.item)
-  else if (result.type === 'agent')
+  }
+  else if (result.type === 'agent') {
     emit('navigateAgent', result.item)
-  else if (result.type === 'note')
-    focusInHub({ kind: 'note', path: result.item.path })
-  else
+  }
+  else if (result.type === 'note') {
+    if (!focusInHub({ kind: 'note', path: result.item.path }))
+      toast.info(NO_HUB_PAGE_MESSAGE)
+  }
+  else {
     result.item.run()
+  }
   closeDialog()
 }
 

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import type { PanelState } from '../panelState'
 import { computed, onMounted } from 'vue'
-import { focusInHub, useObsidianGraph } from '@/features/hub'
+import { toast } from '@/composables/useToast'
+import { focusInHub, NO_HUB_PAGE_MESSAGE, useObsidianGraph } from '@/features/hub'
 import { useResources } from '@/features/settings'
 import { formatRelativeThenDate } from '@/utils/format'
 import CockpitPanel from './CockpitPanel.vue'
@@ -32,6 +33,11 @@ function touched(mtimeMs: number): string {
   return formatRelativeThenDate(new Date(mtimeMs).toISOString())
 }
 
+function openNote(path: string) {
+  if (!focusInHub({ kind: 'note', path }))
+    toast.info(NO_HUB_PAGE_MESSAGE)
+}
+
 // The 60s rule makes this free whenever the hub already fetched.
 onMounted(() => refreshGraph())
 </script>
@@ -60,7 +66,7 @@ onMounted(() => refreshGraph())
             type="button"
             data-testid="cockpit-memory-recent-note"
             class="flex w-full cursor-pointer items-center justify-between gap-2 rounded-md px-1.5 py-1 text-left text-[12px] text-fg hover:bg-raised"
-            @click="focusInHub({ kind: 'note', path: note.path })"
+            @click="openNote(note.path)"
           >
             <span class="truncate">{{ note.title }}</span>
             <span class="shrink-0 text-fg-mute">{{ touched(note.mtimeMs) }}</span>

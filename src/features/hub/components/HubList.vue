@@ -9,7 +9,7 @@ import { OPEN_SETTINGS } from '@/composables/openTask'
 import { formatRelativeThenDate } from '@/utils/format'
 import { friendlyProjectName } from '@/utils/friendlyProjectName'
 import { agentStatusTone, statusLabel } from '@/utils/statusColors'
-import { GRAPH_NOTICES } from '../hubGraphNotices'
+import { LIST_GRAPH_NOTICES } from '../hubGraphNotices'
 
 const props = defineProps<{
   agents: ReadonlyArray<{ agent: Agent, state: AgentDisplayStatus }>
@@ -32,15 +32,10 @@ function touched(mtimeMs: number): string {
   return formatRelativeThenDate(new Date(mtimeMs).toISOString())
 }
 
-// unconfigured keeps its own wording (list-specific); denied and failed reuse the hub notice's.
 const noteNotice = computed<string | null>(() => {
-  if (props.graphStatus === 'unconfigured')
-    return 'Connect Obsidian to see recently touched notes.'
-  if (props.graphStatus === 'denied' || props.graphStatus === 'failed')
-    return GRAPH_NOTICES[props.graphStatus]!
-  if (props.graphStatus === 'ready' && props.notes.length === 0)
-    return 'No notes yet.'
-  return null
+  if (props.graphStatus === 'ready' && props.notes.length > 0)
+    return null
+  return LIST_GRAPH_NOTICES[props.graphStatus] ?? null
 })
 
 const HEADING = 'mb-1 mt-3 text-[11px] font-semibold uppercase tracking-wider text-fg-mute'
