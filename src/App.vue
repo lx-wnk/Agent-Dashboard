@@ -83,6 +83,7 @@ const { canInstall, promptInstall } = useInstallPrompt()
 const { theme, toggleTheme } = useTheme()
 
 const { activeView, dashboardLayout } = useViewState()
+const workspace = useWorkspace()
 const { handleShortcut: handleSidebarShortcut } = useSidebar()
 const { resolveAgent, approveAll } = usePermissionResolve()
 
@@ -130,9 +131,17 @@ watch(loaded, (isLoaded) => {
   }
 }, { immediate: true })
 
-// Move focus to main content on view change for keyboard/screen-reader users
+// Move focus to main content on view change for keyboard/screen-reader users;
+// a wide tile is per window, so it doesn't survive navigating to another page either.
 watch(activeView, () => {
+  workspace.wide.value = null
   nextTick(() => document.getElementById('main-content')?.focus())
+})
+
+// A wide tile would hide most of the page's tiles from the editor.
+watch(() => workspace.editing.value, (e) => {
+  if (e)
+    workspace.wide.value = null
 })
 
 const live = computed(() => !error.value)
@@ -276,7 +285,6 @@ function navigateTo(target: { agent?: Agent, taskId?: string }) {
 // Widgets open a task through this — App.vue owns navigation.
 provide(OPEN_TASK, (taskId: string) => navigateTo({ taskId }))
 
-const workspace = useWorkspace()
 const currentPageId = computed(() => activeView.value === 'zentrale' ? ZENTRALE_PAGE_ID : pageIdOf(activeView.value))
 const pageHasHub = computed(() => currentPageId.value !== null && !workspaceChunkFailed.value && !!workspace.page(currentPageId.value)?.tiles.some(t => t.widget === 'hub'))
 // Before the layout has loaded a page id cannot be judged missing; loaded is a

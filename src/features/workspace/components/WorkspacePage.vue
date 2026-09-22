@@ -2,18 +2,24 @@
 import type { OpResult, WorkspacePage as Page, WorkspaceLayout } from '../layout'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useViewState } from '@/composables/useViewState'
-import { removePage, renamePage, replacePage } from '../layout'
+import { removePage, renamePage, replacePage, widenedTiles } from '../layout'
 import { useWorkspace } from '../useWorkspace'
 import WorkspaceEditBar from './WorkspaceEditBar.vue'
 import WorkspaceGrid from './WorkspaceGrid.vue'
 
 const props = defineProps<{ pageId: string }>()
-const { layout, loaded, load, save, locked, saveError, editing, reset, retry, page } = useWorkspace()
+const { layout, loaded, load, save, locked, saveError, editing, wide, reset, retry, page } = useWorkspace()
 const { activeView } = useViewState()
 onMounted(load)
 
 const current = computed(() => page(props.pageId))
 const refusal = ref<string | null>(null)
+
+// While editing, the stored tiles render even if a wide tile was left set from before.
+const displayPage = computed(() => {
+  const p = current.value
+  return p && !editing.value && wide.value ? { ...p, tiles: widenedTiles(p.tiles, wide.value) } : p
+})
 
 // Nothing is saved while the layout is locked, so edit mode ends with the lock.
 watch(locked, (l) => {
@@ -78,6 +84,6 @@ async function onRemove() {
       @rename="title => commit(renamePage(layout, pageId, title))"
       @remove="onRemove"
     />
-    <WorkspaceGrid v-if="loaded && current" class="min-h-0 flex-1" :page="current" :editing="editing" @change="onChange" @refuse="r => (refusal = r)" />
+    <WorkspaceGrid v-if="loaded && displayPage" class="min-h-0 flex-1" :page="displayPage" :editing="editing" @change="onChange" @refuse="r => (refusal = r)" />
   </div>
 </template>

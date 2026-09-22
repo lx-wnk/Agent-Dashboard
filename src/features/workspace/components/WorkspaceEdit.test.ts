@@ -23,6 +23,7 @@ const ws = {
   locked: ref<WorkspaceLock | null>(null),
   saveError: ref<string | null>(null),
   editing: ref(true),
+  wide: ref<string | null>(null),
   load: vi.fn(async () => {}),
   reset: vi.fn(async () => {}),
   retry: vi.fn(async () => {}),

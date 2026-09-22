@@ -15,6 +15,8 @@ const loaded = ref(false)
 const locked = ref<WorkspaceLock | null>(null)
 const saveError = ref<string | null>(null)
 const editing = ref(false)
+// The widget id shown wide on the current page, per browser window — never persisted, never sent to the server.
+const wide = ref<string | null>(null)
 let loading: Promise<void> | null = null
 let fetching = false
 let writing = false
@@ -141,5 +143,5 @@ function page(id: string): WorkspacePage | undefined {
 }
 
 export function useWorkspace() {
-  return { layout, loaded, locked, saveError, editing, load, retry: reload, save, reset, page }
+  return { layout, loaded, locked, saveError, editing, wide, load, retry: reload, save, reset, page }
 }

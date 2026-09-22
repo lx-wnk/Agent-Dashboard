@@ -247,6 +247,18 @@ describe('useWorkspace', () => {
     expect(fetch).toHaveBeenCalledTimes(3)
   })
 
+  // wide is per-window UI state, not layout: it must never reach the PATCH body or survive a load.
+  it('keeps wide out of the saved layout and null after load', async () => {
+    const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(settingsResponse(''))
+    const ws = await fresh()
+    await ws.load()
+    expect(ws.wide.value).toBeNull()
+    ws.wide.value = 'hub'
+    expect(await ws.save(DEFAULT_LAYOUT)).toBe(true)
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/settings/workspace.layout', expect.anything()))
+    expect(patchedValues(fetch)).toEqual([serializeLayout(DEFAULT_LAYOUT)])
+  })
+
   // Window events reach every module instance earlier tests imported, so these
   // stay last and answer every request instead of queueing one-shot responses.
   it('reads the layout again when the window regains focus or becomes visible', async () => {
