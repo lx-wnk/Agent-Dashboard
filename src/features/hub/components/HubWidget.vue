@@ -12,6 +12,7 @@ import { useAgents } from '@/features/agents'
 import { NeedsYouQueue, useKontorAgent, useKontorSession } from '@/features/mission'
 import { pageView, pageWithWidget, useWorkspace, ZENTRALE_PAGE_ID } from '@/features/workspace'
 import { attentionFor } from '@/utils/attention'
+import { isTypingTarget } from '@/utils/isTypingTarget'
 import { NAV_ITEMS } from '@/utils/navConfig'
 import { agentDisplayStatus } from '@/utils/statusColors'
 import { useHubCamera } from '../composables/useHubCamera'
@@ -228,13 +229,9 @@ const KEY_ACTIONS: Record<string, () => void> = {
   'L': toggleList,
 }
 
-function isTyping(target: HTMLElement): boolean {
-  return target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable
-}
-
 // Shift stays allowed: '+' needs it on most layouts.
 function ignored(e: KeyboardEvent): boolean {
-  return e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target as HTMLElement)
+  return e.ctrlKey || e.metaKey || e.altKey || isTypingTarget(e.target)
 }
 
 function onKey(e: KeyboardEvent) {

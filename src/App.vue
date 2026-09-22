@@ -36,6 +36,7 @@ import { pageIdOf, resolveView, useViewState } from './composables/useViewState'
 import { NeedsYouQueue, rankNextThings } from './features/mission'
 import { useWorkspace, watchExternalChanges, ZENTRALE_PAGE_ID } from './features/workspace'
 import { formatCost } from './utils/format'
+import { isTypingTarget } from './utils/isTypingTarget'
 
 // PERF-BUNDLE1: AgentModal is only ever rendered on agent selection — split into its own chunk
 const AgentModal = defineAsyncComponent(() => import('@/features/agents/components/AgentModal.vue'))
@@ -235,8 +236,7 @@ function resolveFocused(outcome: 'granted' | 'denied') {
 function handleKeydown(e: KeyboardEvent) {
   handleSidebarShortcut(e)
 
-  const tag = (e.target as HTMLElement)?.tagName
-  const isTyping = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (e.target as HTMLElement).isContentEditable
+  const isTyping = isTypingTarget(e.target)
   // key normalised so CapsLock doesn't break the lower-case shortcuts
   const key = e.key.toLowerCase()
 
