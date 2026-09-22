@@ -70,11 +70,15 @@ func rawWithPages(n int) string {
 	return `{"version":1,"pages":[` + strings.Join(pages, ",") + `]}`
 }
 
+// Distinct, non-overlapping tiles — one cell each, laid out row by row across
+// 12 columns — so only the tile-count cap rejects the layout, not the
+// duplicate-widget or overlap rule a repeated tile would trip instead.
 func rawWithTiles(n int) string {
-	tile := `{"widget":"agents","col":1,"row":1,"colSpan":1,"rowSpan":1}`
 	tiles := make([]string, n)
 	for i := range tiles {
-		tiles[i] = tile
+		col := i%12 + 1
+		row := i/12 + 1
+		tiles[i] = fmt.Sprintf(`{"widget":"w%d","col":%d,"row":%d,"colSpan":1,"rowSpan":1}`, i, col, row)
 	}
 	return `{"version":1,"pages":[{"id":"zentrale","title":"Zentrale","tiles":[` + strings.Join(tiles, ",") + `]}]}`
 }
