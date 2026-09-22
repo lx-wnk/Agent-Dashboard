@@ -3,6 +3,7 @@ package obsidian_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -18,6 +19,7 @@ import (
 	apiobsidian "github.com/lx-wnk/kontor/server/internal/api/obsidian"
 	obsidianapp "github.com/lx-wnk/kontor/server/internal/apps/obsidian"
 	"github.com/lx-wnk/kontor/server/internal/db"
+	"github.com/lx-wnk/kontor/server/internal/db/ent"
 	"github.com/lx-wnk/kontor/server/internal/db/repo"
 	"github.com/lx-wnk/kontor/server/internal/memory"
 )
@@ -223,16 +225,23 @@ func TestIndex_ConcurrentRunsAreSerialized(t *testing.T) {
 	assert.Len(t, entries, 1, "two overlapping runs must leave exactly one pointer, not a duplicate")
 }
 
-// newGraphVault fakes the two JsonLogic searches and /open/ of the Local REST
-// API and returns a function reporting every request it saw as "METHOD path".
-func newGraphVault(t *testing.T, searchStatus int) (*httptest.Server, func() []string) {
+// graphVault fakes the two JsonLogic searches and /open/ of the Local REST
+// API and records every request it saw as "METHOD path".
+type graphVault struct {
+	*httptest.Server
+	mu     sync.Mutex
+	calls  []string
+	mtimes string
+}
+
+func newGraphVault(t *testing.T, searchStatus int) *graphVault {
 	t.Helper()
-	var mu sync.Mutex
-	var calls []string
-	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mu.Lock()
-		calls = append(calls, r.Method+" "+r.URL.Path)
-		mu.Unlock()
+	v := &graphVault{mtimes: `[{"filename":"root/b.md","result":1700000000000},{"filename":"root/a.md","result":1700000001000},{"filename":"other/x.md","result":1},{"filename":"root/pic.png","result":5}]`}
+	v.Server = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		v.mu.Lock()
+		v.calls = append(v.calls, r.Method+" "+r.URL.Path)
+		mtimes := v.mtimes
+		v.mu.Unlock()
 		switch {
 		case r.Method == http.MethodPost && r.URL.Path == "/search/":
 			if searchStatus != http.StatusOK {
@@ -242,7 +251,7 @@ func newGraphVault(t *testing.T, searchStatus int) (*httptest.Server, func() []s
 			body, _ := io.ReadAll(r.Body)
 			switch string(body) {
 			case `{"var":"stat.mtime"}`:
-				_, _ = w.Write([]byte(`[{"filename":"root/b.md","result":1700000000000},{"filename":"root/a.md","result":1700000001000},{"filename":"other/x.md","result":1},{"filename":"root/pic.png","result":5}]`))
+				_, _ = w.Write([]byte(mtimes))
 			case `{"var":"links"}`:
 				_, _ = w.Write([]byte(`[{"filename":"root/a.md","result":["root/b.md","other/x.md","root/missing.md","root/a.md"]},{"filename":"other/x.md","result":["root/a.md"]}]`))
 			default:
@@ -254,12 +263,38 @@ func newGraphVault(t *testing.T, searchStatus int) (*httptest.Server, func() []s
 			w.WriteHeader(http.StatusNotFound)
 		}
 	}))
-	t.Cleanup(ts.Close)
-	return ts, func() []string {
-		mu.Lock()
-		defer mu.Unlock()
-		return append([]string(nil), calls...)
+	t.Cleanup(v.Close)
+	return v
+}
+
+func (v *graphVault) requests() []string {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return append([]string(nil), v.calls...)
+}
+
+func (v *graphVault) setMtimes(answer string) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.mtimes = answer
+}
+
+func opened(requests []string) []string {
+	var out []string
+	for _, r := range requests {
+		if strings.HasPrefix(r, "POST /open/") {
+			out = append(out, r)
+		}
 	}
+	return out
+}
+
+type failingGrants struct{ repo.GrantRepo }
+
+const grantsFailure = "database is locked: grants table detail"
+
+func (failingGrants) ListForCapability(context.Context, string) ([]*ent.Grant, error) {
+	return nil, errors.New(grantsFailure)
 }
 
 func serve(h *apiobsidian.Handler, method, target, body string) *httptest.ResponseRecorder {
@@ -286,19 +321,19 @@ func TestGraphAndOpen_UnconfiguredVault(t *testing.T) {
 
 func TestGraphAndOpen_MissingMemoryReadIsForbiddenAndNeverReachesTheVault(t *testing.T) {
 	mem, gate, spaceID := testDeps(t)
-	ts, calls := newGraphVault(t, http.StatusOK)
-	h := apiobsidian.NewHandler(newTestClient(t, ts), mem, gate, spaceID)
+	vault := newGraphVault(t, http.StatusOK)
+	h := apiobsidian.NewHandler(newTestClient(t, vault.Server), mem, gate, spaceID)
 
 	assert.Equal(t, http.StatusForbidden, serve(h, http.MethodGet, "/api/obsidian/graph", "").Code)
 	assert.Equal(t, http.StatusForbidden, serve(h, http.MethodPost, "/api/obsidian/open", `{"path":"a.md"}`).Code)
-	assert.Empty(t, calls(), "the vault must never be contacted before memory.read is granted")
+	assert.Empty(t, vault.requests(), "the vault must never be contacted before memory.read is granted")
 }
 
 func TestGraph_ServesTheConfinedGraphAndCachesIt(t *testing.T) {
 	mem, gate, spaceID := testDeps(t)
 	grantCapability(t, gate.Grants, repo.CapabilityMemoryRead)
-	ts, calls := newGraphVault(t, http.StatusOK)
-	h := apiobsidian.NewHandler(newTestClient(t, ts), mem, gate, spaceID)
+	vault := newGraphVault(t, http.StatusOK)
+	h := apiobsidian.NewHandler(newTestClient(t, vault.Server), mem, gate, spaceID)
 
 	first := serve(h, http.MethodGet, "/api/obsidian/graph", "")
 	require.Equal(t, http.StatusOK, first.Code)
@@ -308,20 +343,20 @@ func TestGraph_ServesTheConfinedGraphAndCachesIt(t *testing.T) {
 
 	second := serve(h, http.MethodGet, "/api/obsidian/graph", "")
 	require.Equal(t, http.StatusOK, second.Code)
-	assert.Len(t, calls(), 2, "a second request within 60 s is served from the cache")
+	assert.Len(t, vault.requests(), 2, "a second request within 60 s is served from the cache")
 }
 
 func TestOpen_OpensOnlyNotesTheGraphLists(t *testing.T) {
 	mem, gate, spaceID := testDeps(t)
 	grantCapability(t, gate.Grants, repo.CapabilityMemoryRead)
-	ts, calls := newGraphVault(t, http.StatusOK)
-	h := apiobsidian.NewHandler(newTestClient(t, ts), mem, gate, spaceID)
+	vault := newGraphVault(t, http.StatusOK)
+	h := apiobsidian.NewHandler(newTestClient(t, vault.Server), mem, gate, spaceID)
 
 	assert.Equal(t, http.StatusNoContent, serve(h, http.MethodPost, "/api/obsidian/open", `{"path":"a.md"}`).Code)
-	assert.Contains(t, calls(), "POST /open/root/a.md")
+	assert.Contains(t, vault.requests(), "POST /open/root/a.md")
 
 	assert.Equal(t, http.StatusNotFound, serve(h, http.MethodPost, "/api/obsidian/open", `{"path":"nope.md"}`).Code)
-	assert.NotContains(t, calls(), "POST /open/root/nope.md", "a path the graph does not list must never reach /open, which would create it")
+	assert.NotContains(t, vault.requests(), "POST /open/root/nope.md", "a path the graph does not list must never reach /open, which would create it")
 
 	assert.Equal(t, http.StatusBadRequest, serve(h, http.MethodPost, "/api/obsidian/open", `not json`).Code)
 }
@@ -329,10 +364,54 @@ func TestOpen_OpensOnlyNotesTheGraphLists(t *testing.T) {
 func TestGraph_UpstreamFailureIsBadGatewayWithoutTheVaultURL(t *testing.T) {
 	mem, gate, spaceID := testDeps(t)
 	grantCapability(t, gate.Grants, repo.CapabilityMemoryRead)
-	ts, _ := newGraphVault(t, http.StatusInternalServerError)
-	h := apiobsidian.NewHandler(newTestClient(t, ts), mem, gate, spaceID)
+	vault := newGraphVault(t, http.StatusInternalServerError)
+	h := apiobsidian.NewHandler(newTestClient(t, vault.Server), mem, gate, spaceID)
 
 	rec := serve(h, http.MethodGet, "/api/obsidian/graph", "")
 	assert.Equal(t, http.StatusBadGateway, rec.Code)
-	assert.NotContains(t, rec.Body.String(), ts.Listener.Addr().String())
+	assert.NotContains(t, rec.Body.String(), vault.Listener.Addr().String())
+}
+
+func TestGraphAndOpen_GateFailureIsServerErrorNotForbidden(t *testing.T) {
+	mem, gate, spaceID := testDeps(t)
+	gate.Grants = failingGrants{}
+	vault := newGraphVault(t, http.StatusOK)
+	h := apiobsidian.NewHandler(newTestClient(t, vault.Server), mem, gate, spaceID)
+
+	for _, rec := range []*httptest.ResponseRecorder{
+		serve(h, http.MethodGet, "/api/obsidian/graph", ""),
+		serve(h, http.MethodPost, "/api/obsidian/open", `{"path":"a.md"}`),
+	} {
+		assert.Equal(t, http.StatusInternalServerError, rec.Code, "a failed grant lookup is not a refusal")
+		assert.NotContains(t, rec.Body.String(), grantsFailure)
+	}
+	assert.Empty(t, vault.requests())
+}
+
+func TestOpen_RefusesANoteDeletedSinceTheCachedGraph(t *testing.T) {
+	mem, gate, spaceID := testDeps(t)
+	grantCapability(t, gate.Grants, repo.CapabilityMemoryRead)
+	vault := newGraphVault(t, http.StatusOK)
+	h := apiobsidian.NewHandler(newTestClient(t, vault.Server), mem, gate, spaceID)
+
+	require.Equal(t, http.StatusOK, serve(h, http.MethodGet, "/api/obsidian/graph", "").Code)
+	vault.setMtimes(`[{"filename":"root/b.md","result":1700000000000}]`)
+
+	assert.Equal(t, http.StatusNotFound, serve(h, http.MethodPost, "/api/obsidian/open", `{"path":"a.md"}`).Code)
+	assert.Empty(t, opened(vault.requests()), "a note gone from the vault must never reach /open, which would recreate it")
+
+	graph := serve(h, http.MethodGet, "/api/obsidian/graph", "")
+	assert.JSONEq(t, `{"configured":true,"notes":[["b.md",1700000000000]],"links":[]}`, graph.Body.String(),
+		"the graph open built is the one the next graph request serves")
+	assert.Len(t, vault.requests(), 4)
+}
+
+func TestOpen_RefusesAHeadingMarkerInThePath(t *testing.T) {
+	mem, gate, spaceID := testDeps(t)
+	grantCapability(t, gate.Grants, repo.CapabilityMemoryRead)
+	vault := newGraphVault(t, http.StatusOK)
+	h := apiobsidian.NewHandler(newTestClient(t, vault.Server), mem, gate, spaceID)
+
+	assert.Equal(t, http.StatusBadRequest, serve(h, http.MethodPost, "/api/obsidian/open", `{"path":"a.md#Heading"}`).Code)
+	assert.Empty(t, vault.requests())
 }

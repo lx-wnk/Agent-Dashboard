@@ -416,7 +416,10 @@ persists.
 (`server/internal/api/obsidian/handler.go`) both call
 `memory.Gate.Authorize(memory.read, "", global)` before the vault is
 contacted, through the same no-`Asker` gate the index trigger uses, so a
-missing grant is a `403`, never a held request. The graph is built from two
+missing grant is a `403`, never a held request. Only a refusal
+(`ErrDenied`/`ErrAskRequired`) is a `403`; a gate that cannot answer — the
+grant lookup failed — is a `500` with a generic body, so a database hiccup is
+never reported as "not granted". The graph is built from two
 JsonLogic searches (`Client.Graph`, `server/internal/apps/obsidian/graph.go`):
 each note's modification time and its resolved outgoing links — **no note
 body is read**. Both searches are vault-wide upstream, so every note and every
@@ -427,9 +430,17 @@ callers. An upstream failure answers `502` with a fixed message, never the
 upstream error text, which can carry the vault URL. **The open route refuses
 any path the graph does not list** (`404`): Obsidian's `POST /open/{path}`
 creates a note that does not exist, so passing a client-chosen path through
-would let the dashboard create files in the vault. A listed path is resolved
-inside `obsidian.vaultRoot` again (`resolveVaultPath`) before the request is
-built.
+would let the dashboard create files in the vault. The check runs against a
+**freshly built** graph, not the cached one — a note deleted or renamed in
+Obsidian within the last 60 seconds would otherwise still be listed, and
+opening it would recreate it empty under the old name. The fresh graph joins
+a rebuild already in flight and replaces the cached one. A sub-second window
+remains between that check and the open call, because Obsidian's REST API has
+no open-only-if-it-exists call. A path containing `#` is refused with `400`
+before anything else: Obsidian reads `#` as a heading inside a link, so
+`a.md#x` would open, or create, a different note than the one checked. A
+listed path is resolved inside `obsidian.vaultRoot` again
+(`resolveVaultPath`) before the request is built.
 
 ### GitHub's token and repository boundary
 

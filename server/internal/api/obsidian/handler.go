@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"slices"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -100,15 +101,15 @@ func (h *Handler) index(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (h *Handler) authorizeRead(r *http.Request) error {
-	if err := h.gate.Authorize(r.Context(), repo.CapabilityMemoryRead, "", repo.GlobalScope()); err != nil {
+	err := h.gate.Authorize(r.Context(), repo.CapabilityMemoryRead, "", repo.GlobalScope())
+	if errors.Is(err, capability.ErrDenied) || errors.Is(err, capability.ErrAskRequired) {
 		return apierr.NewAppError(http.StatusForbidden, err.Error())
 	}
-	return nil
+	return err
 }
 
-// cachedGraph maps an upstream failure to 502 without its text, which can carry the vault URL.
-func (h *Handler) cachedGraph(r *http.Request) (obsidianapp.Graph, error) {
-	g, err := h.graphs.get(r.Context(), h.client.Graph)
+// upstreamGraph maps an upstream failure to 502 without its text, which can carry the vault URL.
+func upstreamGraph(g obsidianapp.Graph, err error) (obsidianapp.Graph, error) {
 	if err != nil {
 		slog.Warn("obsidian graph rebuild failed", "err", err)
 		return obsidianapp.Graph{}, apierr.NewAppError(http.StatusBadGateway, "obsidian graph unavailable")
@@ -124,7 +125,7 @@ func (h *Handler) graph(w http.ResponseWriter, r *http.Request) error {
 	if err := h.authorizeRead(r); err != nil {
 		return err
 	}
-	g, err := h.cachedGraph(r)
+	g, err := upstreamGraph(h.graphs.get(r.Context(), h.client.Graph))
 	if err != nil {
 		return err
 	}
@@ -142,8 +143,7 @@ func (h *Handler) graph(w http.ResponseWriter, r *http.Request) error {
 
 const maxOpenBodyBytes = 4 << 10
 
-// open shows a note in Obsidian. Obsidian's /open creates a missing note, so
-// only a path the vault graph lists is ever passed on.
+// open passes on only a note a freshly built graph lists, because Obsidian's /open creates a missing note.
 func (h *Handler) open(w http.ResponseWriter, r *http.Request) error {
 	if h.client == nil {
 		return apierr.NewAppError(http.StatusServiceUnavailable, "obsidian vault not configured")
@@ -156,10 +156,14 @@ func (h *Handler) open(w http.ResponseWriter, r *http.Request) error {
 	if err := dec.Decode(&body); err != nil {
 		return apierr.NewAppError(http.StatusBadRequest, "invalid request body")
 	}
+	// Obsidian reads # as a heading subpath and would open, or create, a different note.
+	if strings.Contains(body.Path, "#") {
+		return apierr.NewAppError(http.StatusBadRequest, "note path must not contain #")
+	}
 	if err := h.authorizeRead(r); err != nil {
 		return err
 	}
-	g, err := h.cachedGraph(r)
+	g, err := upstreamGraph(h.graphs.refresh(r.Context(), h.client.Graph))
 	if err != nil {
 		return err
 	}
