@@ -88,13 +88,14 @@ const MOVES: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight
 function onKey(e: KeyboardEvent, index: number) {
   if (!props.editing)
     return
-  const onResizeHandle = (e.target as HTMLElement).hasAttribute('data-resize')
-  if (e.target !== e.currentTarget && !onResizeHandle)
+  // The resize handle's own accessible name promises "(Shift+arrows)" — that
+  // combination is the one exemption from the handle otherwise leaving keys
+  // to the tile it sits on, mirroring startDrag's own carve-out for it.
+  const onResizeArrow = e.key in MOVES && e.shiftKey && (e.target as HTMLElement).hasAttribute('data-resize')
+  if (e.target !== e.currentTarget && !onResizeArrow)
     return
   const t = props.page.tiles[index]
   if (e.key === 'Delete' || e.key === 'Backspace') {
-    if (onResizeHandle)
-      return
     e.preventDefault()
     emit('change', removeTile(props.page, index))
     return

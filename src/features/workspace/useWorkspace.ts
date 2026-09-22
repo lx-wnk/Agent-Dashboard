@@ -55,8 +55,12 @@ async function fetchLayout(): Promise<void> {
       throw new Error(`HTTP ${res.status}`)
     const items = await res.json() as Array<{ key: string, value: string }>
     const parsed = parseLayout(items.find(i => i.key === SETTING)?.value ?? '')
-    if (serializeLayout(parsed.layout) !== serializeLayout(layout.value))
+    if (serializeLayout(parsed.layout) !== serializeLayout(layout.value)) {
       layout.value = parsed.layout
+      // A failed save's "stays on screen" promise no longer holds once the
+      // screen has just been replaced by whatever the server actually has.
+      saveError.value = null
+    }
     locked.value = parsed.unreadable ? UNREADABLE : null
   }
   catch {

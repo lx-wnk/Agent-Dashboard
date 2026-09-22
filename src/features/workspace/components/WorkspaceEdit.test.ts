@@ -332,3 +332,36 @@ describe('a locked or loading layout', () => {
     w.unmount()
   })
 })
+
+describe('a refused save', () => {
+  const zentrale = { version: 1 as const, pages: [page] }
+
+  afterEach(() => {
+    ws.locked.value = null
+  })
+
+  it('shows a reloading reason when the store refuses an edit', async () => {
+    ws.layout.value = zentrale
+    ws.editing.value = true
+    ws.loaded.value = true
+    ws.save.mockResolvedValueOnce(false)
+    const w = mount(WorkspacePage, { props: { pageId: 'zentrale' } })
+    await w.get('[data-testid="workspace-tile-agents"]').trigger('keydown', { key: 'ArrowDown' })
+    await flushPromises()
+    expect(w.get('[data-testid="workspace-refusal"]').text()).toMatch(/reloading/i)
+    w.unmount()
+  })
+
+  it('shows the lock message instead when the layout is locked', async () => {
+    ws.layout.value = zentrale
+    ws.editing.value = true
+    ws.loaded.value = true
+    ws.locked.value = { kind: 'unloaded', message: 'The saved layout could not be loaded, so editing is locked until it loads.' }
+    ws.save.mockResolvedValueOnce(false)
+    const w = mount(WorkspacePage, { props: { pageId: 'zentrale' } })
+    await w.get('[data-testid="workspace-tile-agents"]').trigger('keydown', { key: 'ArrowDown' })
+    await flushPromises()
+    expect(w.get('[data-testid="workspace-refusal"]').text()).toMatch(/could not be loaded/i)
+    w.unmount()
+  })
+})

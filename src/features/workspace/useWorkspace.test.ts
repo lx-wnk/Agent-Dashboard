@@ -232,6 +232,21 @@ describe('useWorkspace', () => {
     expect(ws.saveError.value).toBeNull()
   })
 
+  it('clears the save error once a retry refetch replaces the layout', async () => {
+    const fetch = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(settingsResponse(''))
+      .mockResolvedValueOnce(new Response('{"error":"bad request"}', { status: 400 }))
+      .mockResolvedValueOnce(settingsResponse(serializeLayout(withoutFirst(1))))
+    const ws = await fresh()
+    await ws.load()
+    expect(await ws.save(withoutFirst(2))).toBe(true)
+    await vi.waitFor(() => expect(ws.saveError.value).toMatch(/not saved/i))
+    await ws.retry()
+    expect(ws.layout.value).toEqual(withoutFirst(1))
+    expect(ws.saveError.value).toBeNull()
+    expect(fetch).toHaveBeenCalledTimes(3)
+  })
+
   // Window events reach every module instance earlier tests imported, so these
   // stay last and answer every request instead of queueing one-shot responses.
   it('reads the layout again when the window regains focus or becomes visible', async () => {

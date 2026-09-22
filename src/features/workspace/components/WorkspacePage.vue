@@ -21,18 +21,29 @@ watch(locked, (l) => {
     editing.value = false
 })
 
+// save() returns false without a reason of its own (locked, not yet loaded,
+// or a refetch already in flight) — the caller is the one that knows an edit
+// was refused and must tell the operator.
+function saveFailureReason(): string {
+  return locked.value?.message ?? 'Not saved — the layout is reloading; try again in a moment.'
+}
+
 async function commit(r: OpResult<WorkspaceLayout>): Promise<boolean> {
   if (!r.ok) {
     refusal.value = r.reason
     return false
   }
   refusal.value = null
-  return save(r.value)
+  const saved = await save(r.value)
+  if (!saved)
+    refusal.value = saveFailureReason()
+  return saved
 }
 
-function onChange(next: Page) {
+async function onChange(next: Page) {
   refusal.value = null
-  save(replacePage(layout.value, next))
+  if (!await save(replacePage(layout.value, next)))
+    refusal.value = saveFailureReason()
 }
 
 async function onRemove() {
