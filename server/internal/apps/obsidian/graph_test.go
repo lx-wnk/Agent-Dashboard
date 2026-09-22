@@ -97,6 +97,47 @@ func TestGraphKeepsOnlyMarkdownNotesUnderTheRootAndLinksBetweenThem(t *testing.T
 	}
 }
 
+// TestGraphSkipsNoteWithMalformedMtimeInsteadOfFailingTheWholeGraph pins that
+// one note's malformed mtime, like one note's malformed links, must not blank
+// the whole graph.
+func TestGraphSkipsNoteWithMalformedMtimeInsteadOfFailingTheWholeGraph(t *testing.T) {
+	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/search/" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		body, _ := io.ReadAll(r.Body)
+		switch string(body) {
+		case `{"var":"stat.mtime"}`:
+			_, _ = w.Write([]byte(`[{"filename":"root/a.md","result":1700000001000},{"filename":"root/bad.md","result":"not-a-number"}]`))
+		case `{"var":"links"}`:
+			_, _ = w.Write([]byte(`[]`))
+		default:
+			w.WriteHeader(http.StatusBadRequest)
+		}
+	}))
+	t.Cleanup(ts.Close)
+
+	client, err := obsidian.NewClient(obsidian.Config{
+		BaseURL:   "https://" + ts.Listener.Addr().String(),
+		APIKey:    graphAPIKey,
+		VaultRoot: "root",
+		TLSMode:   obsidian.TLSPinned,
+	})
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	g, err := client.Graph(context.Background())
+	if err != nil {
+		t.Fatalf("Graph: want the malformed note skipped, not a failure: %v", err)
+	}
+	want := []obsidian.GraphNote{{Path: "a.md", MtimeMs: 1700000001000}}
+	if !reflect.DeepEqual(g.Notes, want) {
+		t.Errorf("Notes = %v, want %v (root/bad.md must be skipped, not block the rest)", g.Notes, want)
+	}
+}
+
 func TestGraphFailsWithoutLeakingTheAPIKeyWhenSearchIsRefused(t *testing.T) {
 	client, _ := newGraphVault(t, http.StatusInternalServerError)
 

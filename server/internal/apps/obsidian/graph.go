@@ -3,7 +3,7 @@ package obsidian
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 )
@@ -37,8 +37,10 @@ func (c *Client) Graph(ctx context.Context) (Graph, error) {
 			continue
 		}
 		var mtime float64
+		// One note's malformed mtime must not blank the whole graph, same as a malformed links value below.
 		if err := json.Unmarshal(hit.Result, &mtime); err != nil {
-			return Graph{}, fmt.Errorf("obsidian: graph: mtime of %q: %w", rel, err)
+			slog.Warn("obsidian: graph: skipping note with malformed mtime", "path", rel)
+			continue
 		}
 		g.Notes = append(g.Notes, GraphNote{Path: rel, MtimeMs: int64(mtime)})
 	}
