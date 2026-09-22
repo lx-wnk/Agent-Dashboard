@@ -112,6 +112,8 @@ test('edit mode ends on navigation and does not survive coming back', async ({ p
 // leave document.activeElement on the button itself, not <body>.
 test('choosing a view from the sidebar still lands focus on #main-content', async ({ page }) => {
   await page.goto('/', { waitUntil: 'domcontentloaded' })
+  // The hub's launchers mirror the sidebar's views; resolve the nav only once they are on screen.
+  await expect(page.getByTestId('hub-launcher-dashboard')).toBeVisible()
 
   await page.getByRole('button', { name: 'Dashboard' }).focus()
   await page.keyboard.press('Enter')
