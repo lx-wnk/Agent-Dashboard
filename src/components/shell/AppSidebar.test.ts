@@ -336,6 +336,24 @@ describe('appSidebar', () => {
     w.unmount()
   })
 
+  // The hub's launcher reaches startNewPage() through requestNewPage(), bypassing the
+  // nav button's own disabled state — the guard has to live in startNewPage() itself.
+  it('ignores a new page request from elsewhere while the button would be disabled', async () => {
+    const { AppSidebar, useSidebar } = await load()
+    ws.loaded.value = false
+    const w = mount(AppSidebar, { props, attachTo: document.body })
+    useSidebar().requestNewPage()
+    await flushPromises()
+    expect(w.find('[data-testid="nav-new-page-input"]').exists()).toBe(false)
+
+    ws.loaded.value = true
+    ws.locked.value = 'unreadable'
+    useSidebar().requestNewPage()
+    await flushPromises()
+    expect(w.find('[data-testid="nav-new-page-input"]').exists()).toBe(false)
+    w.unmount()
+  })
+
   it('cancels a new page on Escape or an empty title', async () => {
     const { AppSidebar } = await load()
     const w = mount(AppSidebar, { props, attachTo: document.body })

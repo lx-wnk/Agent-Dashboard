@@ -34,6 +34,7 @@ const workspace = useWorkspace()
 const ownPages = computed(() => workspace.layout.value.pages.filter(p => p.id !== ZENTRALE_PAGE_ID))
 const creatingPage = ref(false)
 const newPageSlot = ref<HTMLElement | null>(null)
+const newPageDisabled = computed(() => !workspace.loaded.value || !!workspace.locked.value)
 
 function badgeFor(view: CoreView): number | null {
   if (view === 'dashboard')
@@ -63,6 +64,10 @@ function selectView(view: ActiveView): void {
 }
 
 async function startNewPage(): Promise<void> {
+  // The nav button itself is a disabled <button> and never fires 'select', but
+  // the hub's launcher reaches here through requestNewPage() regardless of that state.
+  if (newPageDisabled.value)
+    return
   creatingPage.value = true
   await nextTick()
   newPageSlot.value?.querySelector('input')?.focus()
@@ -221,7 +226,7 @@ async function createPage(event: KeyboardEvent): Promise<void> {
               label="New page"
               :active="false"
               :expanded="expanded"
-              :disabled="!workspace.loaded.value || !!workspace.locked.value"
+              :disabled="newPageDisabled"
               @select="startNewPage"
             />
           </div>
