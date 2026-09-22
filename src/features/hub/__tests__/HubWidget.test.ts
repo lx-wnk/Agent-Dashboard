@@ -8,6 +8,7 @@ import { useSidebar } from '@/composables/useSidebar'
 import { useViewState } from '@/composables/useViewState'
 import { DEFAULT_LAYOUT, useWorkspace } from '@/features/workspace'
 import HubBrainCanvas from '../components/HubBrainCanvas.vue'
+import { hubFocusRequest } from '../composables/useHubFocus'
 import { AGENT_SPACING_PX, AGENT_STAGE_MARGIN_PX, DAY_MS, notePoint, planSectors } from '../hubGeometry'
 
 const NOTE_AGE_DAYS = 30
@@ -89,6 +90,7 @@ afterEach(() => {
   agents.value = initialAgents
   useWorkspace().layout.value = DEFAULT_LAYOUT
   useWorkspace().wide.value = null
+  hubFocusRequest.value = null
 })
 
 async function mountHub() {
@@ -504,6 +506,48 @@ describe('hubWidget', () => {
     await w.get('[data-testid="hub-list-note"]').trigger('click')
     await w.findAll('button').find(b => b.text() === 'Ask Kontor about this')!.trigger('click')
     expect(ask).toHaveBeenCalledWith('[[alpha/one]] ')
+    w.unmount()
+  })
+
+  it('flies to a note focus request at rel 5, opens its card and clears the request', async () => {
+    graph.status.value = 'ready'
+    graph.notes.value = [vaultNote(0, 'alpha/one.md'), vaultNote(1, 'beta/two.md')]
+    const w = await mountHub()
+    hubFocusRequest.value = { kind: 'note', path: 'beta/two.md' }
+    await flushPromises()
+    expect(scale(w)).toBeCloseTo(5)
+    expect(w.get('[role="dialog"][aria-label="beta/two.md"]').text()).toContain('beta')
+    expect(hubFocusRequest.value).toBeNull()
+    w.unmount()
+  })
+
+  it('flies to an agent focus request at rel 3, opens its card and clears the request', async () => {
+    const w = await mountHub()
+    hubFocusRequest.value = { kind: 'agent', pid: 102 }
+    await flushPromises()
+    expect(scale(w)).toBeCloseTo(3)
+    expect(w.get('[role="dialog"][aria-label="Web App"]')).toBeTruthy()
+    expect(hubFocusRequest.value).toBeNull()
+    w.unmount()
+  })
+
+  it('clears an unresolved focus request without flying or opening a card', async () => {
+    const w = await mountHub()
+    hubFocusRequest.value = { kind: 'agent', pid: 9999 }
+    await flushPromises()
+    expect(scale(w)).toBeCloseTo(1)
+    expect(w.find('[role="dialog"]').exists()).toBe(false)
+    expect(hubFocusRequest.value).toBeNull()
+    w.unmount()
+  })
+
+  it('consumes a focus request already pending when the widget mounts', async () => {
+    graph.status.value = 'ready'
+    graph.notes.value = [vaultNote(0, 'alpha/one.md')]
+    hubFocusRequest.value = { kind: 'note', path: 'alpha/one.md' }
+    const w = await mountHub()
+    expect(w.get('[role="dialog"][aria-label="alpha/one.md"]')).toBeTruthy()
+    expect(hubFocusRequest.value).toBeNull()
     w.unmount()
   })
 })

@@ -15,6 +15,7 @@ import { attentionFor } from '@/utils/attention'
 import { NAV_ITEMS } from '@/utils/navConfig'
 import { agentDisplayStatus } from '@/utils/statusColors'
 import { useHubCamera } from '../composables/useHubCamera'
+import { hubFocusRequest } from '../composables/useHubFocus'
 import { useObsidianGraph } from '../composables/useObsidianGraph'
 import { launchersDocked, LEVEL_TARGETS } from '../hubCamera'
 import { hitNote, hubNoteSet } from '../hubCanvas'
@@ -270,6 +271,23 @@ function launchFromList(launcher: Launcher) {
   listOpen.value = false
   launch(launcher)
 }
+
+// An unresolved target (deleted note, finished agent) is dropped silently: clearing the request either way stops a stale one from firing on the next mount.
+watch(hubFocusRequest, (target) => {
+  if (!target)
+    return
+  if (target.kind === 'note') {
+    const note = noteByPath(target.path)
+    if (note)
+      flyToNote(note.index, LIST_NOTE_FLY_REL)
+  }
+  else {
+    const agent = live.value.find(a => a.pid === target.pid)
+    if (agent)
+      flyToAgent(agent)
+  }
+  hubFocusRequest.value = null
+}, { immediate: true, flush: 'post' })
 </script>
 
 <template>
