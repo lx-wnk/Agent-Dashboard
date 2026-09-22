@@ -61,11 +61,21 @@ async function reload(): Promise<void> {
   await loading
 }
 
-window.addEventListener('focus', () => void reload())
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible')
-    void reload()
-})
+// Installed by the app shell, not at import: a listener added here at module
+// load would outlive any single component and stack across test module reloads.
+export function watchExternalChanges(): () => void {
+  const onFocus = () => void reload()
+  const onVisibilityChange = () => {
+    if (document.visibilityState === 'visible')
+      void reload()
+  }
+  window.addEventListener('focus', onFocus)
+  document.addEventListener('visibilitychange', onVisibilityChange)
+  return () => {
+    window.removeEventListener('focus', onFocus)
+    document.removeEventListener('visibilitychange', onVisibilityChange)
+  }
+}
 
 async function patch(next: WorkspaceLayout): Promise<void> {
   try {

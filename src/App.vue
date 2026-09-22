@@ -34,7 +34,7 @@ import { useUsage } from './composables/useUsage'
 import { useUser } from './composables/useUser'
 import { pageIdOf, resolveView, useViewState } from './composables/useViewState'
 import { NeedsYouQueue, rankNextThings } from './features/mission'
-import { useWorkspace, ZENTRALE_PAGE_ID } from './features/workspace'
+import { useWorkspace, watchExternalChanges, ZENTRALE_PAGE_ID } from './features/workspace'
 import { formatCost } from './utils/format'
 
 // PERF-BUNDLE1: AgentModal is only ever rendered on agent selection — split into its own chunk
@@ -84,6 +84,11 @@ const { theme, toggleTheme } = useTheme()
 
 const { activeView, focusAfterNavigation, editAfterNavigation, dashboardLayout } = useViewState()
 const workspace = useWorkspace()
+let stopWatching: (() => void) | undefined
+onMounted(() => {
+  stopWatching = watchExternalChanges()
+})
+onUnmounted(() => stopWatching?.())
 const { handleShortcut: handleSidebarShortcut } = useSidebar()
 const { resolveAgent, approveAll } = usePermissionResolve()
 
