@@ -19,12 +19,6 @@ Preparing the first public release.
   analytics code they pull in — so `App.vue`'s own static import of
   `ApiKeySettings.vue`, the largest module reachable from the entry point, put
   the chunk 5 KB over budget. Both now load through `defineAsyncComponent`.
-- **`MountWrite`'s doc comment stopped naming settings the code no longer
-  gates that way.** It warned callers to gate the route behind admin
-  authorization for `auth.mode`, `git.allowPush` and `worktree.force` as
-  "RCE/lockout-equivalent" — the route is mounted behind session auth only,
-  under the local-trust posture this project actually ships. The comment now
-  says that.
 - **A stored `page:zentrale` no longer falls through oddly.** `resolveView`
   folds it, and any stored page id that fails the page-id pattern, into the
   core `zentrale` view instead of treating it as an ordinary page lookup; a
@@ -34,16 +28,12 @@ Preparing the first public release.
   it.** Its capturing scroll listener ran `getBoundingClientRect` on every
   scroll underneath it, including the session transcript's own scrolling; it
   now skips scrolls the overlay itself contains.
-- **A page created or deleted from the sidebar keeps focus, and the Insights
-  group stops shifting as pages load in.** Creating a page dropped focus to
-  `<body>`; it now lands on the new page's own nav item. Deleting one did the
-  same when the edit bar's second confirmation removed it from under the
-  pointer; it now lands on the Zentrale nav item first. The `+ New page` slot
-  used to mount only once the layout had loaded, so the bottom-anchored
-  Insights group visibly jumped the moment it appeared; the slot — and its
-  button, disabled until then — now renders from first paint. The Pages
-  group's caption also duplicated the core groups' caption markup; both now
-  render through one shared `NavGroupCaption`.
+- **The Insights nav group no longer jumps as pages load in.** The
+  `+ New page` slot used to mount only once the layout had loaded, so the
+  bottom-anchored Insights group visibly shifted the moment it appeared; the
+  slot — and its button, disabled until then — now renders from first paint.
+  The Pages group's caption also duplicated the core groups' caption markup;
+  both now render through one shared `NavGroupCaption`.
 - **Only one Done button shows while editing a page, and edit mode ends when
   you navigate away.** The topbar's `Edit layout` toggle and the edit bar's
   own `Done` button both closed edit mode; the topbar button now hides while
@@ -54,25 +44,58 @@ Preparing the first public release.
   second click right after renaming the page could delete it instead of
   confirming the new title; it now disarms as soon as the title input
   changes or the rename is saved.
-- **The sidebar's new focus hand-offs (create → the new page's nav item,
-  delete → the Zentrale nav item) actually hold now.** `App.vue`'s own
-  `activeView` watcher refocuses `#main-content` on every navigation,
-  including the one the create/delete flow just made, so it was pulling
-  focus back off the nav item a tick after the flow set it. That refocus is
-  now a fallback: it only runs when nothing more specific already holds
-  focus.
-- **Choosing a view from the sidebar with the keyboard, or with a click, no
-  longer strands focus on the nav button.** The previous entry's body-only
-  fallback guard skipped `#main-content` whenever the just-activated nav
-  button still held focus — which a native `<button>` always does after a
-  click or an Enter keypress, so the watcher's original purpose (SC 2.4.3:
-  land a keyboard or screen-reader user in the view's content) broke for
-  every ordinary navigation, not only the create/delete flows the guard was
-  written for. `App.vue`'s `activeView` watcher is now the sole, declarative
-  owner of post-navigation focus and edit mode: `useViewState` gains
-  `focusAfterNavigation` and `editAfterNavigation`, which a caller sets
-  before navigating and the watcher consumes once, falling back to
-  `#main-content` only when nothing was declared.
+- **A page created or deleted from the sidebar keeps focus, and choosing any
+  view lands focus in its content instead of stranding it on the nav button
+  just activated (SC 2.4.3).** `App.vue`'s `activeView` watcher is the sole,
+  declarative owner of post-navigation focus: `useViewState` gains
+  `focusAfterNavigation`, which a caller sets before navigating and the
+  watcher consumes once, falling back to `#main-content` only when nothing
+  was declared. Creating a page declares its own new nav item; deleting one
+  declares the Zentrale nav item, landing there even when the edit bar's
+  second confirmation removed the page from under the pointer.
+- **Edit layout and Done keep focus on a reachable control instead of
+  dropping it to `<body>`.** Entering edit mode hides the toggle button that
+  held focus, and Done unmounts the edit bar that held it after; each click
+  now moves focus itself — Edit layout to the edit bar's own Done button,
+  Done back to the toggle.
+- **A rate-limited project load no longer leaves the spawn picker empty.** A
+  429 on the boot `GET /api/projects` left the project list empty until the
+  60 s fallback poll, so the spawn dialog offered no project. The load now
+  retries through `fetchWithRateLimitRetry`, the same helper `useWorkspace`
+  already used for the layout.
+- **Ask Kontor keeps its prompt when the tile mounts with one already
+  pending.** `KontorTile`'s watch ran its `immediate` call during setup,
+  before the agent's own pane existed, so the first prompt was silently
+  consumed and lost. A prompt already pending at mount is now taken in
+  `onMounted` instead; a later one still arrives through the watch. Clicking
+  the hub's core with no prompt (an empty ask) no longer stages one either,
+  so it no longer wipes a draft already typed into an open overlay.
+- **The hub flies to a note or agent requested before its stage has a
+  size.** A focus request pending when the hub mounts — from a launcher, the
+  command palette, or a card's link — used to fly against a 1×1 stage and a
+  placeholder scale, landing on the wrong point or, under reduced motion,
+  losing the flight to the first resize. The camera now queues that flight
+  and applies it once the first real size arrives.
+- **Opening a card from the hub's list focuses it; closing one, or its
+  target disappearing, hands focus back to the stage.** The separate
+  agent-pid and note-path state a card was keyed on let a stale id reopen a
+  card whose target was already gone; one `openCard` value now makes at most
+  one card possible by construction.
+- **A widget whose chunk fails to load shows an error tile instead of a
+  blank one, and a failed hub chunk still shows the needs-you strip.**
+  `defineAsyncComponent` rendered nothing on a rejected loader — the case
+  when the server is rebuilt while a tab stays open — leaving a blank tile
+  with no way back. Each widget now renders the shell's `PageLoadError` on
+  that failure and records it in a reactive set, which `pageHasHub` also
+  checks, so a failed hub tile no longer hides what needs you.
+- **A whitespace-only `workspace.layout` no longer bypasses its 1 MiB size
+  cap.** The empty-value shortcut ran before the byte-length check, so a
+  value that was all whitespace skipped the cap regardless of size; the size
+  check now runs first.
+- **A note with a malformed `mtime` no longer blanks the whole hub graph.**
+  One bad value aborted the graph request entirely; that note is now skipped
+  and logged by path (never the raw value), the same handling a malformed
+  `links` value already got.
 
 ### Changed
 
@@ -91,8 +114,6 @@ Preparing the first public release.
 - The hook script and its secret file keep their old names in this release. The
   copy already installed in `~/.claude` has those paths baked in, so renaming
   them without reinstalling the script would stop it authenticating.
-
-### Changed
 - **Every Zentrale tile gets the same frame.** `CockpitPanel` renders an icon,
   an uppercase label and, when a tile has one, a key figure shown large above
   its body — the prototype's header, now shared by every tile instead of each
