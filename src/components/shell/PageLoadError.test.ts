@@ -7,10 +7,7 @@ describe('pageLoadError', () => {
     vi.unstubAllGlobals()
   })
 
-  // Rendered as the errorComponent of a failed chunk load (see App.vue), which
-  // forwards its own non-prop attrs (page-id, class) — attrs fallthrough is a
-  // property of the component itself, so mounting it directly with a foreign
-  // attr exercises the same behaviour as going through defineAsyncComponent.
+  // Attrs fallthrough is a property of the component, so a direct mount stands in for its use as an errorComponent (see App.vue).
   it('does not inherit a foreign non-prop attr onto its root', () => {
     const w = mount(PageLoadError, { attrs: { 'page-id': 'p' } })
     expect(w.attributes('page-id')).toBeUndefined()
