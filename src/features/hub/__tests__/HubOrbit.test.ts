@@ -11,7 +11,7 @@ function agent(pid: number, projectName: string): Agent {
   return { pid, projectName, status: 'active', working: false } as Agent
 }
 
-function mountOrbit(level: HubLevel, { showSectorNames = true, agentRingPx = 116, coreDisabled = false } = {}) {
+function mountOrbit(level: HubLevel, { showSectorNames = true, agentRingPx = 116, coreDisabled = false, labelledAgents }: { showSectorNames?: boolean, agentRingPx?: number, coreDisabled?: boolean, labelledAgents?: ReadonlySet<number> } = {}) {
   return mount(HubOrbit, {
     props: {
       cam: { k: 1, tx: 500, ty: 500 },
@@ -28,6 +28,7 @@ function mountOrbit(level: HubLevel, { showSectorNames = true, agentRingPx = 116
       needsYou: 2,
       coreTitle: 'Open Kontor (idle)',
       coreDisabled,
+      labelledAgents,
     },
   })
 }
@@ -93,6 +94,27 @@ describe('hubOrbit', () => {
     const w = mountOrbit(0, { agentRingPx: 400 })
     const [, x, y] = /translate\(([-\d.]+)px, ([-\d.]+)px/.exec(w.get('[data-testid="hub-sector-0"]').attributes('style')!)!
     expect(Math.hypot(Number(x) - 500, Number(y) - 500)).toBeCloseTo(440)
+    w.unmount()
+  })
+
+  it('shows every label when labelledAgents is omitted', () => {
+    const w = mountOrbit(0)
+    const label = w.get('[data-testid="hub-agent-1"]').get('[data-testid="hub-label-name"]').element.parentElement!
+    expect(label.className).not.toContain('hidden')
+    w.unmount()
+  })
+
+  it('hides a culled label but keeps its dot, revealed again on hover/focus via CSS', () => {
+    const w = mountOrbit(0, { labelledAgents: new Set([2]) })
+    const button1 = w.get('[data-testid="hub-agent-1"]')
+    const label1 = button1.get('[data-testid="hub-label-name"]').element.parentElement!
+    expect(label1.className).toContain('hidden')
+    expect(label1.className).toContain('group-hover:flex')
+    expect(label1.className).toContain('group-focus-visible:flex')
+    expect(button1.findAll('span')[0].classes()).toContain('rounded-full')
+
+    const label2 = w.get('[data-testid="hub-agent-2"]').get('[data-testid="hub-label-name"]').element.parentElement!
+    expect(label2.className).not.toContain('hidden')
     w.unmount()
   })
 

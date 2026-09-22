@@ -1,6 +1,6 @@
 import type { HubNote } from './composables/useObsidianGraph'
 import { describe, expect, it } from 'vitest'
-import { cullLabels, hitNote, hubNoteSet, isToday, notePriority } from './hubCanvas'
+import { agentLabelBox, agentPriority, cullLabels, hitNote, hubNoteSet, isToday, notePriority } from './hubCanvas'
 
 describe('notePriority', () => {
   it('orders hub > touched > fresh > links', () => {
@@ -29,6 +29,52 @@ describe('cullLabels', () => {
       { index: 1, sx: 500, sy: 500, text: 'b', priority: 20 },
     ])
     expect(kept).toEqual(new Set([0, 1]))
+  })
+
+  it('places boxes with a caller-supplied shape instead of the note default', () => {
+    const kept = cullLabels([
+      { index: 0, sx: 100, sy: 100, text: 'a', priority: 10 },
+      { index: 1, sx: 100, sy: 500, text: 'b', priority: 20 },
+    ], agentLabelBox)
+    expect(kept).toEqual(new Set([0, 1]))
+  })
+})
+
+describe('agentPriority', () => {
+  it('ranks needs-operator above working above the rest', () => {
+    const needsOperator = agentPriority(true, false)
+    const working = agentPriority(false, true)
+    const rest = agentPriority(false, false)
+    expect(needsOperator).toBeGreaterThan(working)
+    expect(working).toBeGreaterThan(rest)
+  })
+})
+
+describe('agentLabelBox', () => {
+  it('centres the box under the dot', () => {
+    const box = agentLabelBox({ index: 0, sx: 100, sy: 100, text: 'Kontor Hub', priority: 0 })
+    expect(box.x + box.w / 2).toBeCloseTo(100)
+    expect(box.y).toBeGreaterThan(100)
+  })
+})
+
+describe('cullLabels with agent boxes', () => {
+  it('keeps only the highest-priority label of three agents whose boxes would collide', () => {
+    const kept = cullLabels([
+      { index: 1, sx: 100, sy: 100, text: 'Kontor Hub', priority: 0 },
+      { index: 2, sx: 106, sy: 100, text: 'Web App', priority: 2 },
+      { index: 3, sx: 112, sy: 100, text: 'Api Server', priority: 1 },
+    ], agentLabelBox)
+    expect(kept).toEqual(new Set([2]))
+  })
+
+  it('always keeps a needs-operator agent even when it collides with others', () => {
+    const kept = cullLabels([
+      { index: 1, sx: 100, sy: 100, text: 'A', priority: agentPriority(true, false) },
+      { index: 2, sx: 101, sy: 100, text: 'B', priority: agentPriority(false, true) },
+      { index: 3, sx: 102, sy: 100, text: 'C', priority: agentPriority(false, false) },
+    ], agentLabelBox)
+    expect(kept).toEqual(new Set([1]))
   })
 })
 

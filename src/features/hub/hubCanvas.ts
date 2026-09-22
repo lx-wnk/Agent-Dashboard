@@ -4,13 +4,14 @@ import { toScreen } from './hubCamera'
 
 export interface LabelCandidate { index: number, sx: number, sy: number, text: string, priority: number }
 
-interface LabelBox { x: number, y: number, w: number, h: number }
+export interface LabelBox { x: number, y: number, w: number, h: number }
 
-function labelBox(c: LabelCandidate): LabelBox {
+// A note's label sits to the right of its point (HubBrainCanvas.vue's drawLabels offset).
+function noteLabelBox(c: LabelCandidate): LabelBox {
   return { x: c.sx + 6, y: c.sy - 8, w: c.text.length * 6.3 + 10, h: 16 }
 }
 
-function overlaps(a: LabelBox, b: LabelBox): boolean {
+function boxesOverlap(a: LabelBox, b: LabelBox): boolean {
   return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y
 }
 
@@ -18,17 +19,29 @@ export function notePriority(n: { hub: boolean, touched: boolean, fresh: boolean
   return (n.hub ? 100 : 0) + (n.touched ? 80 : 0) + (n.fresh ? 40 : 0) + n.linkCount
 }
 
-export function cullLabels(candidates: LabelCandidate[]): Set<number> {
+// Greedy placement: highest priority first, skip a candidate whose box overlaps one already placed.
+export function cullLabels(candidates: LabelCandidate[], boxOf: (c: LabelCandidate) => LabelBox = noteLabelBox): Set<number> {
   const kept = new Set<number>()
   const placed: LabelBox[] = []
   for (const c of [...candidates].sort((a, b) => b.priority - a.priority)) {
-    const box = labelBox(c)
-    if (placed.some(p => overlaps(box, p)))
+    const box = boxOf(c)
+    if (placed.some(p => boxesOverlap(box, p)))
       continue
     placed.push(box)
     kept.add(c.index)
   }
   return kept
+}
+
+// An agent's label sits centred under its dot (HubOrbit.vue's button layout), unlike a note's.
+export function agentLabelBox(c: LabelCandidate): LabelBox {
+  const w = c.text.length * 6.3 + 24
+  return { x: c.sx - w / 2, y: c.sy + 20, w, h: 16 }
+}
+
+// needs-the-operator outranks working, which outranks everything else (Ruling R23).
+export function agentPriority(needsOperator: boolean, working: boolean): number {
+  return (needsOperator ? 2 : 0) + (working ? 1 : 0)
 }
 
 export function hitNote(points: ReadonlyArray<[number, number]>, cam: Camera, sx: number, sy: number, maxPx = 8): number {

@@ -21,6 +21,8 @@ const props = defineProps<{
   coreDisabled: boolean
   agentRingPx: number
   showSectorNames: boolean
+  // Omitted shows every label (used by callers that don't cull, e.g. tests); the dot is never gated.
+  labelledAgents?: ReadonlySet<number>
 }>()
 
 defineEmits<{ core: [], agent: [agent: Agent], sector: [sector: Sector] }>()
@@ -49,6 +51,10 @@ function at(x: number, y: number) {
 
 function atPolar(radius: number, deg: number) {
   return at(...polar(radius, deg))
+}
+
+function showsLabel(pid: number): boolean {
+  return !props.labelledAgents || props.labelledAgents.has(pid)
 }
 </script>
 
@@ -79,7 +85,7 @@ function atPolar(radius: number, deg: number) {
       :data-testid="`hub-agent-${agent.pid}`"
       :aria-label="`${friendlyProjectName(agent.projectName)}, ${statusLabel(state)}${needsOperator ? ', needs you' : ''}`"
       :title="friendlyProjectName(agent.projectName)"
-      class="pointer-events-auto flex -translate-x-1/2 -translate-y-[9px] cursor-pointer flex-col items-center gap-[3px]"
+      class="group pointer-events-auto flex -translate-x-1/2 -translate-y-[9px] cursor-pointer flex-col items-center gap-[3px]"
       :style="at(x, y)"
       @click="$emit('agent', agent)"
     >
@@ -89,7 +95,7 @@ function atPolar(radius: number, deg: number) {
       />
       <span
         class="flex gap-1 whitespace-nowrap rounded-md border bg-card/85 px-1.5 text-[10.5px] text-fg"
-        :class="needsOperator ? 'border-warning' : 'border-line'"
+        :class="[needsOperator ? 'border-warning' : 'border-line', !showsLabel(agent.pid) && 'hidden group-hover:flex group-focus-visible:flex']"
       >
         <span data-testid="hub-label-name" class="max-w-[14ch] truncate">{{ friendlyProjectName(agent.projectName) }}</span>
         <em class="not-italic" :class="needsOperator ? 'text-warning-text' : 'text-fg-mute'">{{ statusLabel(state) }}</em>

@@ -12,14 +12,15 @@ import { useAgents } from '@/features/agents'
 import { NeedsYouQueue, useKontorAgent, useKontorSession } from '@/features/mission'
 import { HUB_WIDGET, pageWithWidget, useWorkspace, ZENTRALE_PAGE_ID } from '@/features/workspace'
 import { attentionFor } from '@/utils/attention'
+import { friendlyProjectName } from '@/utils/friendlyProjectName'
 import { isTypingTarget } from '@/utils/isTypingTarget'
 import { NAV_ITEMS } from '@/utils/navConfig'
 import { agentDisplayStatus } from '@/utils/statusColors'
 import { useHubCamera } from '../composables/useHubCamera'
 import { hubFocusRequest } from '../composables/useHubFocus'
 import { useObsidianGraph } from '../composables/useObsidianGraph'
-import { launchersDocked, LEVEL_TARGETS } from '../hubCamera'
-import { hitNote, hubNoteSet } from '../hubCanvas'
+import { launchersDocked, LEVEL_TARGETS, toScreen } from '../hubCamera'
+import { agentLabelBox, agentPriority, cullLabels, hitNote, hubNoteSet } from '../hubCanvas'
 import { agentAngles, agentRadius, agentRingPx, agentSectorRingPx, DAY_MS, notePoint, planSectors, polar, radiusForAge, RINGS, SECTOR_PALETTE_SIZE, sectorMid, wedgePath } from '../hubGeometry'
 import { GRAPH_NOTICES } from '../hubGraphNotices'
 import { launchersFor } from '../hubLaunchers'
@@ -146,6 +147,23 @@ const placed = computed(() => {
       return { agent, x, y, state: agentDisplayStatus(agent), needsOperator }
     })
   })
+})
+
+// Greedy label culling (Ruling R23): the stagger only separates dots, a crowded sector still needs
+// a subset of labels drawn. A culled label stays reachable via hover/focus (HubOrbit.vue's CSS) and
+// the agent's full aria-label; the list view (L) is unaffected since it reads `placed`, not this set.
+const labelledAgents = computed(() => {
+  const candidates = placed.value.map((p) => {
+    const [sx, sy] = toScreen(cam.value, p.x, p.y)
+    return {
+      index: p.agent.pid,
+      sx,
+      sy,
+      text: friendlyProjectName(p.agent.projectName),
+      priority: agentPriority(p.needsOperator, p.state === 'working'),
+    }
+  })
+  return cullLabels(candidates, agentLabelBox)
 })
 
 const running = computed(() => placed.value.filter(p => p.state === 'working' || p.state === 'active').length)
@@ -371,6 +389,7 @@ watch(hubFocusRequest, (target) => {
         :core-disabled="!kontorPage"
         :agent-ring-px="ringOnScreenPx"
         :show-sector-names="vaultNotes.length > 0"
+        :labelled-agents="labelledAgents"
         @core="openKontor"
         @agent="flyToAgent"
         @sector="sector => flyTo(...polar(SECTOR_FLY_RADIUS, sectorMid(sector)), SECTOR_FLY_REL)"

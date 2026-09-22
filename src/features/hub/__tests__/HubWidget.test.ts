@@ -213,6 +213,28 @@ describe('hubWidget', () => {
     w.unmount()
   })
 
+  it('culls overlapping labels in a crowded, floor-narrow sector but never a dot, and always keeps a needs-operator label', async () => {
+    graph.status.value = 'ready'
+    // Six well-weighted note folders push the agents' unmatched "Other" sector down to the 24° floor,
+    // the same shape the real vault produces (Ruling R23's regression).
+    graph.notes.value = Array.from({ length: 6 }, (_, folder) => Array.from({ length: 20 }, (_, i) => vaultNote(folder * 20 + i, `folder${folder}/n${i}.md`))).flat()
+    agents.value = [
+      { pid: 301, status: 'idle', projectName: 'crowded-project', working: false },
+      { pid: 302, status: 'active', projectName: 'crowded-project', working: true },
+      { pid: 303, status: 'waiting', projectName: 'crowded-project', working: false, pendingPermissions: [{}] },
+      { pid: 304, status: 'idle', projectName: 'crowded-project', working: false },
+    ] as unknown as Agent[]
+    const w = await mountHub()
+
+    const pids = [301, 302, 303, 304]
+    for (const pid of pids) expect(() => w.get(`[data-testid="hub-agent-${pid}"] span`)).not.toThrow()
+
+    const labelHidden = (pid: number) => w.get(`[data-testid="hub-agent-${pid}"]`).get('[data-testid="hub-label-name"]').element.parentElement!.className.includes('hidden')
+    expect(labelHidden(303)).toBe(false)
+    expect(pids.some(labelHidden)).toBe(true)
+    w.unmount()
+  })
+
   it('opens the Kontor session when the core is pressed', async () => {
     const w = await mountHub()
     await w.get('[data-testid="hub-core"]').trigger('click')
