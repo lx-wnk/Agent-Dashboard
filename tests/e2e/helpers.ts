@@ -1,4 +1,4 @@
-import type { Locator, Page } from '@playwright/test'
+import type { APIRequestContext, APIResponse, Locator, Page } from '@playwright/test'
 import { expect } from '@playwright/test'
 
 /**
@@ -20,6 +20,26 @@ export async function stubAuthDisabled(page: Page): Promise<void> {
  */
 export async function parkPointerOffNav(page: Page): Promise<void> {
   await page.mouse.move(640, 360)
+}
+
+/**
+ * Stores a workspace layout via PATCH /api/settings/workspace.layout, shared
+ * server-side state rather than per-test-context state. Origin must match the
+ * server's own host (see 'Task API needs Origin header' in .agent-context/memory).
+ * The browser under test shares the server's per-IP rate limiter, so a 429 is
+ * retried — an ignored one leaves a seeded layout in place for the next test.
+ */
+export async function storeLayout(request: APIRequestContext, baseURL: string | undefined, value: string): Promise<void> {
+  let res: APIResponse | undefined
+  for (let attempt = 0; attempt < 5 && (!res || res.status() === 429); attempt++) {
+    if (res)
+      await new Promise(resolve => setTimeout(resolve, 1000))
+    res = await request.patch('/api/settings/workspace.layout', {
+      headers: { Origin: baseURL ?? 'http://localhost:13199' },
+      data: { value },
+    })
+  }
+  expect(res?.ok(), `store layout request (HTTP ${res?.status()})`).toBe(true)
 }
 
 /** Stubs a GET endpoint to return a fixed JSON body. */

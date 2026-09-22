@@ -1,5 +1,6 @@
-import type { APIRequestContext, APIResponse, Page } from '@playwright/test'
+import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
+import { storeLayout } from './helpers'
 
 // The client itself retries a 429 (useWorkspace's fetchWithRateLimitRetry), so an
 // in-between 429 is not a save's outcome — skip it and wait for the response that
@@ -7,23 +8,6 @@ import { expect, test } from '@playwright/test'
 function patched(page: Page) {
   return page.waitForResponse(resp =>
     resp.url().includes('/api/settings/workspace.layout') && resp.request().method() === 'PATCH' && resp.status() !== 429)
-}
-
-// Origin must match the server's own host (see 'Task API needs Origin header'
-// in .agent-context/memory). The browser under test shares the server's per-IP
-// rate limiter, so a 429 is retried — an ignored one leaves a seeded layout in
-// place for the next test.
-async function storeLayout(request: APIRequestContext, baseURL: string | undefined, value: string) {
-  let res: APIResponse | undefined
-  for (let attempt = 0; attempt < 5 && (!res || res.status() === 429); attempt++) {
-    if (res)
-      await new Promise(resolve => setTimeout(resolve, 1000))
-    res = await request.patch('/api/settings/workspace.layout', {
-      headers: { Origin: baseURL ?? 'http://localhost:13199' },
-      data: { value },
-    })
-  }
-  expect(res?.ok(), `store layout request (HTTP ${res?.status()})`).toBe(true)
 }
 
 // The stored layout is shared server-side state, not per-test-context state —
