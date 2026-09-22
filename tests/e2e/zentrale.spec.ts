@@ -116,10 +116,7 @@ test('edit mode ends on navigation and does not survive coming back', async ({ p
   await expect(page.getByTestId('workspace-edit-toggle')).toBeVisible()
 })
 
-// The navigation watcher's original purpose (SC 2.4.3): a keyboard or screen-reader
-// user who picks a view lands in its content, not stuck on the nav button they just
-// activated. Both the button-focused-by-click and the button-focused-by-Enter cases
-// leave document.activeElement on the button itself, not <body>.
+// SC 2.4.3: choosing a view lands focus in its content, not stuck on the nav button just activated.
 test('choosing a view from the sidebar still lands focus on #main-content', async ({ page }) => {
   await page.goto('/', { waitUntil: 'domcontentloaded' })
   // The hub's launchers mirror the sidebar's views; resolve the nav only once they are on screen.
@@ -204,8 +201,7 @@ test('a pointer drag on the resize handle resizes the cost-today tile and the ne
   await expect(page.getByTestId('workspace-tile-cost-today')).toHaveAttribute('style', /--row-span: 4\b/)
 })
 
-// A reload reads the layout from the server exactly as a restart does: the
-// layout lives only in the settings table.
+// A reload reads the layout from the server exactly as a restart does — it lives only in the settings table.
 test('a page of my own survives a reload', async ({ page }) => {
   await page.goto('/', { waitUntil: 'domcontentloaded' })
   await page.getByTestId('nav-new-page').click()
@@ -263,8 +259,7 @@ test('a page of my own is renamed and deleted in its edit mode', async ({ page, 
   expect((await removed).ok(), 'save (delete page) request').toBe(true)
   await expect(page.getByTestId('workspace-page-zentrale')).toBeVisible()
   await expect(page.getByTestId('nav-page-p-morning')).toHaveCount(0)
-  // Focus landed on the Zentrale nav item, not pulled back to #main-content by
-  // App.vue's navigation watcher once the delete's activeView change reaches it.
+  // Focus landed on the Zentrale nav item, not pulled back to #main-content by the navigation watcher.
   await expect(page.getByTestId('nav-item-zentrale')).toBeFocused()
 
   await page.reload({ waitUntil: 'domcontentloaded' })

@@ -22,11 +22,7 @@ export async function parkPointerOffNav(page: Page): Promise<void> {
   await page.mouse.move(640, 360)
 }
 
-/**
- * Sends a request the test makes itself, retrying a 429: the suite shares the
- * server's per-IP rate limiter with the browser under test, and the limiter
- * rejects before the handler runs, so a resend is safe even for a POST.
- */
+// The server's per-IP limiter is shared with the browser under test, so a resend here is safe even for a POST.
 export async function retryRateLimited(send: () => Promise<APIResponse>): Promise<APIResponse> {
   let res = await send()
   for (let attempt = 1; attempt < 5 && res.status() === 429; attempt++) {
@@ -36,12 +32,6 @@ export async function retryRateLimited(send: () => Promise<APIResponse>): Promis
   return res
 }
 
-/**
- * Stores a workspace layout via PATCH /api/settings/workspace.layout, shared
- * server-side state rather than per-test-context state. Origin must match the
- * server's own host (see 'Task API needs Origin header' in .agent-context/memory).
- * A 429 is retried — an ignored one leaves a seeded layout in place for the next test.
- */
 export async function storeLayout(request: APIRequestContext, baseURL: string | undefined, value: string): Promise<void> {
   const res = await retryRateLimited(() => request.patch('/api/settings/workspace.layout', {
     headers: { Origin: baseURL ?? 'http://localhost:13199' },
@@ -50,12 +40,7 @@ export async function storeLayout(request: APIRequestContext, baseURL: string | 
   expect(res.ok(), `store layout request (HTTP ${res.status()})`).toBe(true)
 }
 
-/**
- * Waits for the PATCH of workspace.layout that actually settles a save. The
- * client itself retries a 429 (useWorkspace's fetchWithRateLimitRetry), so an
- * in-between 429 is not the save's outcome — skip it and wait for the
- * response that is.
- */
+// The client itself retries a 429, so skip an in-between one and wait for the response that settles the save.
 export function waitForLayoutPatch(page: Page) {
   return page.waitForResponse(resp =>
     resp.url().includes('/api/settings/workspace.layout') && resp.request().method() === 'PATCH' && resp.status() !== 429)

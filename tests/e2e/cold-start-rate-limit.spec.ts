@@ -7,8 +7,7 @@ import { expect, test } from '@playwright/test'
  * once is the ordinary case — the desktop shell and a browser tab — and it must
  * not throttle the app's own boot.
  */
-// Burst over rate of IPRateLimiterConfig (server/internal/api/middleware.go): after
-// this much idle time the shared bucket is full, whatever the specs before this one spent.
+// Full-bucket refill time from IPRateLimiterConfig (server/internal/api/middleware.go).
 const BUCKET_REFILL_MS = (120 / 10) * 1000
 
 async function loadAndCollectThrottles(page: Page): Promise<string[]> {
