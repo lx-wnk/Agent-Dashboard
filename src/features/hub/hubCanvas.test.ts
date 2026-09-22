@@ -1,6 +1,6 @@
 import type { HubNote } from './composables/useObsidianGraph'
 import { describe, expect, it } from 'vitest'
-import { agentLabelBox, agentPriority, cullLabels, hitNote, hubNoteSet, isToday, notePriority } from './hubCanvas'
+import { agentDotBox, agentLabelBox, agentPriority, cullLabels, hitNote, hubNoteSet, isToday, notePriority, sectorLabelBox } from './hubCanvas'
 
 describe('notePriority', () => {
   it('orders hub > touched > fresh > links', () => {
@@ -75,6 +75,51 @@ describe('cullLabels with agent boxes', () => {
       { index: 3, sx: 102, sy: 100, text: 'C', priority: agentPriority(false, false) },
     ], agentLabelBox)
     expect(kept).toEqual(new Set([1]))
+  })
+
+  it('culls a label that would land on another agent\'s dot (defect 2)', () => {
+    // Agent 2's dot sits right where agent 1's label would be drawn.
+    const dotBox = agentDotBox(100, agentLabelBox({ index: 1, sx: 100, sy: 100, text: 'Kontor Hub', priority: 0 }).y + 8)
+    const kept = cullLabels(
+      [{ index: 1, sx: 100, sy: 100, text: 'Kontor Hub', priority: 0 }],
+      agentLabelBox,
+      [{ box: dotBox, ownerIndex: 2 }],
+    )
+    expect(kept).toEqual(new Set())
+  })
+
+  it('never blocks a label with its own dot', () => {
+    const candidate = { index: 1, sx: 100, sy: 100, text: 'Kontor Hub', priority: 0 }
+    const ownDot = agentDotBox(candidate.sx, candidate.sy + 15) // close enough to the label to collide if not excluded
+    const kept = cullLabels([candidate], agentLabelBox, [{ box: ownDot, ownerIndex: 1 }])
+    expect(kept).toEqual(new Set([1]))
+  })
+
+  it('culls a label that would land on a sector name (defect 3)', () => {
+    const sector = sectorLabelBox(100, 116, 'Other', 4)
+    const kept = cullLabels(
+      [{ index: 1, sx: 100, sy: 100, text: 'Kontor Hub', priority: 0 }],
+      agentLabelBox,
+      [{ box: sector }],
+    )
+    expect(kept).toEqual(new Set())
+  })
+})
+
+describe('agentDotBox', () => {
+  it('centres an 18px box on the screen point', () => {
+    const box = agentDotBox(100, 100)
+    expect(box).toEqual({ x: 91, y: 91, w: 18, h: 18 })
+  })
+})
+
+describe('sectorLabelBox', () => {
+  it('centres on the screen point and widens with the label and its weight badge', () => {
+    const short = sectorLabelBox(100, 100, 'X', 1)
+    const long = sectorLabelBox(100, 100, 'Agent Dashboard', 12)
+    expect(short.x + short.w / 2).toBeCloseTo(100)
+    expect(short.y + short.h / 2).toBeCloseTo(100)
+    expect(long.w).toBeGreaterThan(short.w)
   })
 })
 

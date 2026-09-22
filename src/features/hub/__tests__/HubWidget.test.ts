@@ -10,6 +10,7 @@ import { DEFAULT_LAYOUT, useWorkspace } from '@/features/workspace'
 import HubBrainCanvas from '../components/HubBrainCanvas.vue'
 import { hubFocusRequest } from '../composables/useHubFocus'
 import { fitScale } from '../hubCamera'
+import { agentDotBox, agentLabelBox, boxesOverlap, sectorLabelBox } from '../hubCanvas'
 import * as hubGeometry from '../hubGeometry'
 import { AGENT_SPACING_PX, AGENT_STAGE_MARGIN_PX, DAY_MS, notePoint, planSectors } from '../hubGeometry'
 
@@ -232,6 +233,89 @@ describe('hubWidget', () => {
     const labelHidden = (pid: number) => w.get(`[data-testid="hub-agent-${pid}"]`).get('[data-testid="hub-label-name"]').element.parentElement!.className.includes('hidden')
     expect(labelHidden(303)).toBe(false)
     expect(pids.some(labelHidden)).toBe(true)
+    w.unmount()
+  })
+
+  // Defect 1 (found by the coordinator's real-vault measurement): friendlyProjectName alone
+  // under-estimates a label's box, because the rendered label also shows the status word. Four
+  // agents share one project (a sector wide enough that bare-name boxes would all fit); six filler
+  // agents with distinct projects fill out the rest of the circle. RED before the width fix (the
+  // `text` line in HubWidget.vue reverted to `friendlyProjectName(p.agent.projectName)` alone): all
+  // four labels render, including a real, verified collision between pid 300's and pid 301's boxes.
+  it('culls a label whose bare name would clear its neighbour but whose name+status does not (defect 1)', async () => {
+    agents.value = [
+      { pid: 300, status: 'idle', projectName: 'target', working: false },
+      { pid: 301, status: 'active', projectName: 'target', working: true },
+      { pid: 302, status: 'waiting', projectName: 'target', working: false, pendingPermissions: [{}] },
+      { pid: 303, status: 'idle', projectName: 'target', working: false },
+      { pid: 310, status: 'idle', projectName: 'filler-a', working: false },
+      { pid: 311, status: 'idle', projectName: 'filler-b', working: false },
+      { pid: 312, status: 'idle', projectName: 'filler-c', working: false },
+      { pid: 313, status: 'idle', projectName: 'filler-d', working: false },
+      { pid: 314, status: 'idle', projectName: 'filler-e', working: false },
+      { pid: 315, status: 'idle', projectName: 'filler-f', working: false },
+    ] as unknown as Agent[]
+    const w = await mountHub()
+    const labelHidden = (pid: number) => w.get(`[data-testid="hub-agent-${pid}"]`).get('[data-testid="hub-label-name"]').element.parentElement!.className.includes('hidden')
+    // pid 300 is the lowest-priority (idle, not needsOperator) of the four and loses to pid 301's
+    // wider, higher-priority box once the status word is counted.
+    expect(labelHidden(300)).toBe(true)
+    expect(labelHidden(301)).toBe(false)
+    expect(labelHidden(302)).toBe(false)
+    expect(labelHidden(303)).toBe(false)
+    w.unmount()
+  })
+
+  // Defects 2 (a culled agent's dot hides under a neighbour's `bg-card/85` label) and 3 (a label
+  // covers a sector name, the map's legend) together: 25 same-project agents crammed into a
+  // 24°-floor sector (5 heavy note folders + a nearly-empty 6th), the shape that produced both
+  // "label-vs-dot" and "label-vs-sector" collisions in the real vault. Every shown label's real box
+  // (built from its actual rendered text, so the defect-1 fix is exercised too) is checked against
+  // every OTHER agent's real dot and every rendered, currently-visible sector name's real box.
+  it('never lets a shown label cover another agent\'s dot or a sector name (defects 2 and 3)', async () => {
+    graph.status.value = 'ready'
+    graph.notes.value = Array.from({ length: 6 }, (_, folder) => Array.from({ length: folder === 2 ? 1 : 20 }, (_, i) => vaultNote(folder * 20 + i, `folder${folder}/n${i}.md`))).flat()
+    agents.value = Array.from({ length: 25 }, (_, i) => ({
+      pid: 500 + i,
+      status: i % 3 === 0 ? 'active' : 'idle',
+      projectName: 'folder2',
+      working: i % 3 === 0,
+    })) as unknown as Agent[]
+    const w = await mountHub()
+
+    const pids = Array.from({ length: 25 }, (_, i) => 500 + i)
+    const posOf = (pid: number) => {
+      const [, x, y] = /translate\(([-\d.]+)px, ([-\d.]+)px/.exec(w.get(`[data-testid="hub-agent-${pid}"]`).attributes('style')!)!
+      return [Number(x), Number(y)] as const
+    }
+    const dots = pids.map(pid => ({ pid, xy: posOf(pid) }))
+    const shown = pids.filter((pid) => {
+      const el = w.get(`[data-testid="hub-agent-${pid}"]`).get('[data-testid="hub-label-name"]').element.parentElement!
+      return !el.className.includes('hidden')
+    })
+    expect(shown.length).toBeGreaterThan(0)
+    expect(shown.length).toBeLessThan(pids.length) // the crowd really is being culled, not just rendered whole
+
+    const sectorBoxes = w.findAll('[data-testid^="hub-sector-"]').map((s) => {
+      const [, x, y] = /translate\(([-\d.]+)px, ([-\d.]+)px/.exec(s.attributes('style')!)!
+      // Real rendered text is "<Label><weight>" with no separator; strip the trailing digits back off.
+      const label = s.text().replace(/\d+$/, '')
+      return sectorLabelBox(Number(x), Number(y), label, 0)
+    })
+
+    for (const pid of shown) {
+      const [sx, sy] = posOf(pid)
+      const text = w.get(`[data-testid="hub-agent-${pid}"]`).get('[data-testid="hub-label-name"]').element.parentElement!.textContent ?? ''
+      const box = agentLabelBox({ index: pid, sx, sy, text, priority: 0 })
+      for (const other of dots) {
+        if (other.pid === pid)
+          continue
+        const overlap = boxesOverlap(box, agentDotBox(...other.xy))
+        expect(overlap).toBe(false)
+      }
+      for (const sectorBox of sectorBoxes)
+        expect(boxesOverlap(box, sectorBox)).toBe(false)
+    }
     w.unmount()
   })
 
