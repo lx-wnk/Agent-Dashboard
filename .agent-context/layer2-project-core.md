@@ -38,6 +38,10 @@
 | Widget catalogue (titles, spans, minimums) | `src/features/workspace/widgetSpecs.ts` | `WIDGET_SPECS` |
 | Widget components | `src/features/workspace/widgetRegistry.ts` | `WIDGETS`, `widgetIds()` |
 | Needs-you placement rule | `src/composables/needsYouPlacement.ts` | `needsYouPlacement` |
+| Hub geometry constants | `src/features/hub/hubGeometry.ts` | `R0`, `R_MAX`, `RINGS`, `agentRingPx`, `planSectors` |
+| Hub camera thresholds | `src/features/hub/hubCamera.ts` | `LEVEL_TOPICS`, `LEVEL_NOTES`, `MIN_REL`, `MAX_REL`, `levelOf` |
+| Obsidian graph response type (client, hand-kept parity with `server/internal/api/obsidian/handler.go`) | `src/features/hub/graphApi.ts` | `GraphResponse` |
+| Shared 429 retry | `src/utils/fetchWithRateLimitRetry.ts` | `fetchWithRateLimitRetry`, used by `useWorkspace` and `useObsidianGraph` |
 
 **Client and server are different languages — no cross-import.** The Vue client (TypeScript) and the Go server each keep their own copy of a shared rule; Go cannot import TS. Where a rule must agree on both sides (e.g. the task-slug pattern), keep `server/internal/validation/slug.go` and `src/utils/validation.ts` in parity by hand — there is no shared module. The workspace layout rules are the second hand-kept TS↔Go pair, between `src/features/workspace/layout.ts` and `server/internal/settings/workspace_layout.go`.
 
