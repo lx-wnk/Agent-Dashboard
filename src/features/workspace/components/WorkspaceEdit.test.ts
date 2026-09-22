@@ -124,8 +124,7 @@ describe('drag and resize', () => {
     w.unmount()
   })
 
-  // Grabbing off-anchor must not shift the whole tile by the grab point itself
-  // (startDrag's grabCol/grabRow, subtracted back out in moveDrag).
+  // Grabbing off-anchor must not shift the tile by the grab point itself (grabCol/grabRow, subtracted back out in moveDrag).
   it('drops a tile grabbed 2 cells right of its anchor at the offset-adjusted cell', async () => {
     const w = mount(WorkspaceGrid, { props: { page, editing: true }, attachTo: document.body })
     const grid = w.get('[data-testid="workspace-grid"]').element as HTMLElement
@@ -269,7 +268,6 @@ describe('page rename and delete', () => {
     w.unmount()
   })
 
-  // The page and this bar unmount once the delete lands, taking focus with them.
   it('disarms the delete confirmation once the title changes', async () => {
     const w = mount(WorkspaceEditBar, { props: { page: morning, refusal: null } })
     await w.get('[data-testid="workspace-delete-page"]').trigger('click')
@@ -302,8 +300,7 @@ describe('page rename and delete', () => {
     w.unmount()
   })
 
-  // Focusing nav-item-zentrale for real needs App.vue's activeView watcher, which
-  // this component-only mount never sees — onRemove declares the target instead.
+  // Focusing nav-item-zentrale for real needs App.vue's watcher, absent here — onRemove declares the target instead.
   it('removes a deleted page, goes back to the Zentrale and declares its nav item as the focus target', async () => {
     seed()
     const w = mount(WorkspacePage, { props: { pageId: 'p-morning' } })
@@ -317,8 +314,7 @@ describe('page rename and delete', () => {
     w.unmount()
   })
 
-  // A refused delete must not leave a stale focus declaration for the next,
-  // unrelated navigation to pick up.
+  // A refused delete must not leave a stale focus declaration for the next navigation to pick up.
   it('stays on the page when the store refuses the delete, and clears the focus declaration', async () => {
     seed()
     ws.save.mockResolvedValueOnce(false)

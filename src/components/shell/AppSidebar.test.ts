@@ -276,10 +276,7 @@ describe('appSidebar', () => {
     expect(w.get('[data-testid="nav-page-p-a"]').attributes('aria-current')).toBe('page')
   })
 
-  // Turning edit mode on for real needs App.vue's activeView watcher, which this
-  // component-only mount never sees — createPage declares the intent instead of
-  // setting workspace.editing.value itself, so that watcher can apply it without
-  // racing its own default (end edit mode on every navigation).
+  // This component-only mount has no App.vue watcher to apply edit mode — asserts the declaration createPage hands it instead.
   it('creates a named page, opens it and declares edit mode for the navigation watcher', async () => {
     const { AppSidebar, useViewState } = await load()
     const w = mount(AppSidebar, { props, attachTo: document.body })
@@ -300,9 +297,7 @@ describe('appSidebar', () => {
     w.unmount()
   })
 
-  // Without attachTo the tree is detached, so focus()/blur() are no-ops and fire no
-  // events — the input's own @blur handler cannot be what closes it here, isolating
-  // the explicit close.
+  // No attachTo — focus()/blur() are no-ops here, so this isolates the explicit close from the @blur handler.
   it('closes the input explicitly after a successful save, not merely via blur', async () => {
     const { AppSidebar } = await load()
     const w = mount(AppSidebar, { props })
@@ -313,8 +308,7 @@ describe('appSidebar', () => {
     expect(w.find('[data-testid="nav-new-page-input"]').exists()).toBe(false)
   })
 
-  // The actual focus() call is App.vue's activeView watcher's — not present in this
-  // component-only mount — so this asserts the declaration createPage hands it.
+  // The focus() call itself is App.vue's watcher's, absent here — this asserts the declaration createPage hands it.
   it('declares the new page\'s nav item as the focus target after creating it', async () => {
     const { AppSidebar, useViewState } = await load()
     const w = mount(AppSidebar, { props, attachTo: document.body })
@@ -408,9 +402,7 @@ describe('appSidebar', () => {
     expect(box().classes()).toContain('h-10')
   })
 
-  // Adding onto the built-in layout before the stored one arrives would save over it.
-  // The button stays in the DOM (disabled) rather than disappearing, so the Insights
-  // group below it never shifts once the layout finishes loading.
+  // Disabled, not hidden, while unloaded: hiding it would shift the Insights group, and enabling early would save over a layout not yet arrived.
   it('disables the new-page button until the layout has loaded, and while it is locked', async () => {
     const { AppSidebar } = await load()
     ws.loaded.value = false

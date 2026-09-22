@@ -12,10 +12,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-// The dashboard's own boot burst can exhaust the shared per-IP rate limiter
-// (server/internal/api/middleware.go); a 429 here is transient load, not a
-// real failure, so both the load and the save get a few retries before
-// reporting failure.
+// A 429 here is typically the dashboard's own boot burst exhausting the shared per-IP limiter (server/internal/api/middleware.go) — transient, so retry before failing.
 export async function fetchWithRateLimitRetry(input: string, init?: RequestInit): Promise<Response> {
   let res = await fetch(input, init)
   for (let attempt = 0; attempt < MAX_429_RETRIES && res.status === 429; attempt++) {

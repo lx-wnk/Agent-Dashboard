@@ -11,7 +11,7 @@ const props = defineProps<{ page: WorkspacePage, editing: boolean }>()
 const emit = defineEmits<{ change: [page: WorkspacePage], refuse: [reason: string] }>()
 
 // DOM order is reading order — what the single-column layout below md shows and what a screen reader announces; from md up tiles are placed explicitly, so it stops mattering.
-const ordered = computed(() => readingOrder(props.page.tiles))
+const ordered = computed(() => readingOrder(props.page.tiles).map(o => ({ ...o, widget: widgetOf(o.tile) })))
 const rows = computed(() => rowsUsed(props.page.tiles))
 
 const GAP = 12 // matches .workspace-grid gap
@@ -93,9 +93,7 @@ const MOVES: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight
 function onKey(e: KeyboardEvent, index: number) {
   if (!props.editing)
     return
-  // The resize handle's own accessible name promises "(Shift+arrows)" — that
-  // combination is the one exemption from the handle otherwise leaving keys
-  // to the tile it sits on, mirroring startDrag's own carve-out for it.
+  // Shift+arrows is the one exemption from the resize handle otherwise leaving keys to the tile it sits on (mirrors startDrag's own carve-out).
   const onResizeArrow = e.key in MOVES && e.shiftKey && (e.target as HTMLElement).hasAttribute('data-resize')
   if (e.target !== e.currentTarget && !onResizeArrow)
     return
@@ -114,8 +112,7 @@ function onKey(e: KeyboardEvent, index: number) {
     : moveTile(props.page, index, t.col + d[0], t.row + d[1]))
 }
 
-// Candidates for "swap": everything not already on the page; the ones whose
-// minimum does not fit this tile are listed disabled with the reason.
+// Swap candidates: everything not already on the page; ones whose minimum doesn't fit this tile are listed disabled with the reason.
 function swapOptions(index: number) {
   const t = props.page.tiles[index]
   const placed = new Set(props.page.tiles.map(p => p.widget))
@@ -126,7 +123,7 @@ function swapOptions(index: number) {
 <template>
   <div ref="gridEl" data-testid="workspace-grid" class="workspace-grid" :style="{ '--rows': rows }">
     <div
-      v-for="{ tile, index } in ordered"
+      v-for="{ tile, index, widget } in ordered"
       :key="tile.widget"
       :data-testid="`workspace-tile-${tile.widget}`"
       class="workspace-tile"
@@ -164,7 +161,7 @@ function swapOptions(index: number) {
           ✕
         </button>
       </div>
-      <component :is="widgetOf(tile)!.component" v-if="widgetOf(tile)" />
+      <component :is="widget?.component" v-if="widget" />
       <div v-else data-testid="workspace-unknown" class="h-full rounded-xl border border-dashed border-line p-4 text-[12px] text-fg-mute">
         {{ tile.widget }} is not available — the module that provides it may be inactive.
       </div>

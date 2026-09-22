@@ -6,8 +6,7 @@ import { WIDGET_IDS, WIDGET_SPECS } from './widgetSpecs'
 
 export type WidgetDef = WidgetSpec & { component: Component }
 
-// Each widget is its own chunk: a static import here would put every widget, and
-// every feature it imports, into the index chunk that App.vue loads first.
+// One chunk per feature barrel, not per widget — a static import here would put every feature into the entry chunk App.vue loads first.
 const LOADERS: Record<WidgetId, () => Promise<Component>> = {
   'kontor': () => import('@/features/mission').then(m => m.KontorWidget),
   'hub': () => import('@/features/hub').then(m => m.HubWidget),

@@ -61,8 +61,7 @@ async function reload(): Promise<void> {
   await loading
 }
 
-// Installed by the app shell, not at import: a listener added here at module
-// load would outlive any single component and stack across test module reloads.
+// Installed by the app shell, not at import — a module-level listener would outlive components and stack across test reloads.
 export function watchExternalChanges(): () => void {
   const onFocus = () => void reload()
   const onVisibilityChange = () => {

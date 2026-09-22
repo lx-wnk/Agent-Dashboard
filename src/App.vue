@@ -66,8 +66,7 @@ const TaskModal = defineAsyncComponent(() => import('@/features/pipeline/compone
 const RefinementChat = defineAsyncComponent(() => import('@/features/pipeline/components/RefinementChat.vue'))
 const PlanReviewPanel = defineAsyncComponent(() => import('@/features/pipeline/components/PlanReviewPanel.vue'))
 const EditGateModal = defineAsyncComponent(() => import('./components/EditGateModal.vue'))
-// The settings panel and its statically-imported tabs (Spawner, Project, Grant, …)
-// are the largest module reachable from the entry chunk — load on demand.
+// The settings panel and its tabs are the largest module reachable from the entry chunk — load on demand.
 const ApiKeySettings = defineAsyncComponent(() => import('@/features/settings/components/ApiKeySettings.vue'))
 
 const { user, authEnabled, loaded, loadUser } = useUser()
@@ -110,8 +109,7 @@ const combinedAttentionCount = computed(() => attentionCount.value + permissionI
 // and Cost view agree. Distinct from totalCost (cost of agents running now).
 const { todayUsd, start: startTodayCost } = useTodayCost()
 
-// Ranked once per tick and provided — every queue and the hub core read this
-// same list instead of each re-ranking on every SSE tick.
+// Ranked once per tick and provided, so every queue and the hub core share one ranking instead of re-ranking per SSE tick.
 const needsYou = computed(() => rankNextThings(permissionItems.value, tasks.value, agents.value, pendingCapabilityDecisions.value))
 provide(NEEDS_YOU, needsYou)
 const needsYouCount = computed(() => needsYou.value.length)
@@ -137,16 +135,7 @@ watch(loaded, (isLoaded) => {
   }
 }, { immediate: true })
 
-// The sole owner of post-navigation focus and edit mode — a wide tile is per
-// window, so it doesn't survive navigating to another page either. Edit mode is
-// per page too — surviving a navigation would leave a stale edit bar open over
-// whatever the operator navigated to next, unless a caller declared it should
-// stay on (editAfterNavigation, e.g. a page just created from the sidebar).
-// A caller that knows what should hold focus declares it via
-// focusAfterNavigation instead of moving focus itself: this watcher runs after
-// every navigation regardless of who triggered it, so a caller-side focus call
-// has no reliable ordering against it otherwise (SC 2.4.3 is the reason
-// #main-content is the default target).
+// Sole owner of post-navigation focus and (default-off) edit mode; #main-content is the fallback focus target per SC 2.4.3.
 watch(activeView, () => {
   workspace.wide.value = null
   workspace.editing.value = editAfterNavigation.value
