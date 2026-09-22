@@ -18,4 +18,13 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
   })
   if (!res.ok)
     throw new Error(`global-setup: dismissing onboarding failed (${res.status})`)
+
+  // A prior run killed before its afterEach would otherwise leak a stored layout into this one.
+  const layoutRes = await fetch(`${baseURL}/api/settings/workspace.layout`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'Origin': baseURL },
+    body: JSON.stringify({ value: '' }),
+  })
+  if (!layoutRes.ok)
+    throw new Error(`global-setup: resetting workspace.layout failed (${layoutRes.status})`)
 }

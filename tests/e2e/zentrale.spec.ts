@@ -361,8 +361,10 @@ test('Escape on the hub with the Kontor overlay open collapses only the overlay'
   const stage = page.getByTestId('hub-stage')
   const camera = () => stage.locator('svg g').first().getAttribute('transform')
 
+  const before = await camera()
   await stage.press('+')
   const zoomed = await camera()
+  expect(zoomed).not.toBe(before)
   await page.getByTestId('hub-core').click()
   await expect(page.getByTestId('kontor-expanded')).toBeVisible()
   // The overlay focuses its own input; the operator going back to the map leaves it open.
