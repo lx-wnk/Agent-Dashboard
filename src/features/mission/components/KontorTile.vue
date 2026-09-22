@@ -30,18 +30,25 @@ const paneRef = ref<InstanceType<typeof AgentSessionPane> | null>(null)
 onMounted(refresh)
 
 // flush: 'post' so paneRef (agent's own pane) is mounted before prefill runs.
-watch([pendingPrompt, agent], ([prompt]) => {
-  if (prompt === null)
+watch([pendingPrompt, agent], ([prompt], previous) => {
+  if (prompt !== null) {
+    const t = takePendingPrompt()
+    if (t === null)
+      return
+    if (agent.value) {
+      paneRef.value?.prefill(t)
+    }
+    else {
+      text.value = t
+      nextTick(() => document.getElementById('kontor-input')?.focus())
+    }
     return
-  const t = takePendingPrompt()
-  if (t === null)
-    return
-  if (agent.value) {
-    paneRef.value?.prefill(t)
   }
-  else {
-    text.value = t
-    nextTick(() => document.getElementById('kontor-input')?.focus())
+  // Own input still held unsent text when the agent appeared — hand it to the pane before it unmounts.
+  if (agent.value && !previous?.[1] && text.value) {
+    const t = text.value
+    text.value = ''
+    nextTick(() => paneRef.value?.prefill(t))
   }
 }, { immediate: true, flush: 'post' })
 

@@ -58,8 +58,7 @@ function grow() {
 
 useEventListener(computed(() => open.value ? window : null), 'resize', () => place())
 useEventListener(computed(() => open.value ? window : null), 'scroll', (e) => {
-  // The overlay's own scrolling (the session transcript) triggers this same
-  // capturing listener on window; only a scroll outside it should re-place.
+  // The overlay's own scrolling triggers this same capturing listener; skip it.
   if (overlay.value?.contains(e.target as Node))
     return
   place()
@@ -69,9 +68,7 @@ useEventListener(computed(() => open.value ? window : null), 'scroll', (e) => {
 // a cell that collapse or unmount already moved past.
 onUnmounted(cancelPendingFrame)
 
-// A watch's immediate call runs at setup time, before `cell` exists, so a
-// request already pending when this widget mounts is picked up in onMounted
-// instead; flush: 'post' covers a request made later, after cell is mounted.
+// A watch's immediate call runs before `cell` exists, so a pending request is picked up in onMounted instead.
 function openIfRequested() {
   if (!openRequested.value)
     return

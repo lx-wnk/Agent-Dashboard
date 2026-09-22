@@ -210,4 +210,20 @@ describe('kontorTile', () => {
     expect(session.pendingPrompt.value).toBeNull()
     w.unmount()
   })
+
+  it('hands unsent text from its own input to the pane once the agent appears, and clears the own input', async () => {
+    const w = mount(KontorTile)
+    session.pendingPrompt.value = '[[notes/a]] '
+    await flushPromises()
+    expect(inputValue(w)).toBe('[[notes/a]] ')
+
+    session.pid.value = 1234
+    session.status.value = 'running'
+    agents.value = [{ pid: 1234 }]
+    await flushPromises()
+
+    expect(paneprefillMock).toHaveBeenCalledWith('[[notes/a]] ')
+    expect(w.find('[data-testid="kontor-input"]').exists()).toBe(false)
+    w.unmount()
+  })
 })

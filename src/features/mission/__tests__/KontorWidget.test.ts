@@ -175,8 +175,7 @@ describe('kontorWidget', () => {
     w.unmount()
   })
 
-  // The request must survive a page navigation: ask() may run before the
-  // widget carrying the tile is even mounted.
+  // ask() may run before this widget mounts, e.g. across a page navigation.
   it('opens already-expanded when mounted after ask() was called', async () => {
     session.ask('[[notes/a]] ')
     const w = mount(KontorWidget, { attachTo: document.body })
