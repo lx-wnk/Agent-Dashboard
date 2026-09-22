@@ -65,7 +65,7 @@ onMounted(() => refreshGraph())
           <button
             type="button"
             data-testid="cockpit-memory-recent-note"
-            class="flex w-full cursor-pointer items-center justify-between gap-2 rounded-md px-1.5 py-1 text-left text-[12px] text-fg hover:bg-raised"
+            class="flex w-full cursor-pointer items-center justify-between gap-2 rounded-md px-1.5 py-1 text-left text-[12px] text-fg hover:bg-raised focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
             @click="openNote(note.path)"
           >
             <span class="truncate">{{ note.title }}</span>
