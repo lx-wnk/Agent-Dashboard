@@ -23,23 +23,31 @@ export async function parkPointerOffNav(page: Page): Promise<void> {
 }
 
 /**
+ * Sends a request the test makes itself, retrying a 429: the suite shares the
+ * server's per-IP rate limiter with the browser under test, and the limiter
+ * rejects before the handler runs, so a resend is safe even for a POST.
+ */
+export async function retryRateLimited(send: () => Promise<APIResponse>): Promise<APIResponse> {
+  let res = await send()
+  for (let attempt = 1; attempt < 5 && res.status() === 429; attempt++) {
+    await new Promise(resolve => setTimeout(resolve, 1000))
+    res = await send()
+  }
+  return res
+}
+
+/**
  * Stores a workspace layout via PATCH /api/settings/workspace.layout, shared
  * server-side state rather than per-test-context state. Origin must match the
  * server's own host (see 'Task API needs Origin header' in .agent-context/memory).
- * The browser under test shares the server's per-IP rate limiter, so a 429 is
- * retried — an ignored one leaves a seeded layout in place for the next test.
+ * A 429 is retried — an ignored one leaves a seeded layout in place for the next test.
  */
 export async function storeLayout(request: APIRequestContext, baseURL: string | undefined, value: string): Promise<void> {
-  let res: APIResponse | undefined
-  for (let attempt = 0; attempt < 5 && (!res || res.status() === 429); attempt++) {
-    if (res)
-      await new Promise(resolve => setTimeout(resolve, 1000))
-    res = await request.patch('/api/settings/workspace.layout', {
-      headers: { Origin: baseURL ?? 'http://localhost:13199' },
-      data: { value },
-    })
-  }
-  expect(res?.ok(), `store layout request (HTTP ${res?.status()})`).toBe(true)
+  const res = await retryRateLimited(() => request.patch('/api/settings/workspace.layout', {
+    headers: { Origin: baseURL ?? 'http://localhost:13199' },
+    data: { value },
+  }))
+  expect(res.ok(), `store layout request (HTTP ${res.status()})`).toBe(true)
 }
 
 /**
