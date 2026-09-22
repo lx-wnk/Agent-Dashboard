@@ -330,3 +330,15 @@ test('Escape on the hub with the Kontor overlay open collapses only the overlay'
   await expect(page.getByTestId('kontor-expanded')).toHaveCount(0)
   expect(await camera()).toBe(zoomed)
 })
+
+test('below md the stacked tiles keep their content height and the hub stays visible', async ({ page }) => {
+  await page.setViewportSize({ width: 700, height: 900 })
+  await page.goto('/')
+  await expect(page.getByTestId('hub-stage')).toBeVisible()
+  expect((await page.getByTestId('hub').boundingBox())!.height).toBeGreaterThanOrEqual(416)
+  const tiles = await page.locator('[data-testid^="workspace-tile-"]').evaluateAll(els => els
+    .map(el => ({ widget: el.getAttribute('data-testid'), top: el.getBoundingClientRect().top, contentBottom: el.firstElementChild!.getBoundingClientRect().bottom }))
+    .sort((a, b) => a.top - b.top))
+  for (let i = 1; i < tiles.length; i++)
+    expect(tiles[i].top, `${tiles[i].widget} starts below ${tiles[i - 1].widget}'s content`).toBeGreaterThanOrEqual(tiles[i - 1].contentBottom - 0.5)
+})
