@@ -10,7 +10,8 @@ export const WORLD_RADIUS = 520
 export const WEDGE_INNER = 100
 export const WEDGE_OUTER = 440
 export const SECTOR_LABEL_RADIUS = 392
-export const LAUNCHER_RING_RADIUS = 470
+export const LAUNCHER_PX = 40 // HubLaunchers.vue's `size-10` button, centred on its slot.
+export const LAUNCHER_SECTOR_CLEARANCE_PX = 56
 export const SECTOR_FLOOR_DEG = 24
 export const AGENT_FLOOR_PX = 116
 export const AGENT_WAITING_FLOOR_PX = 88
@@ -157,6 +158,12 @@ export function agentRadius(scale: number, waiting: boolean, ringPx = AGENT_FLOO
 
 export function sectorLabelRadius(scale: number, agentRingPx: number): number {
   return Math.max(SECTOR_LABEL_RADIUS, (agentRingPx + SECTOR_LABEL_AGENT_CLEARANCE_PX) / scale)
+}
+
+// The launchers ring outside the legend, never in its band: whatever pushes the sector names out
+// pushes the launchers the same way, keeping a fixed gap on screen.
+export function launcherRingRadius(scale: number, agentRingPx: number): number {
+  return sectorLabelRadius(scale, agentRingPx) + LAUNCHER_SECTOR_CLEARANCE_PX / scale
 }
 
 export function visibleRingLabels(scale: number, agentRingPx: number): typeof RINGS {

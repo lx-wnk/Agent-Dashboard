@@ -12,7 +12,7 @@ import { hubFocusRequest } from '../composables/useHubFocus'
 import { fitScale } from '../hubCamera'
 import { agentDotBox, agentLabelBox, boxesOverlap, sectorLabelBox } from '../hubCanvas'
 import * as hubGeometry from '../hubGeometry'
-import { AGENT_SPACING_PX, AGENT_STAGE_MARGIN_PX, DAY_MS, notePoint, planSectors } from '../hubGeometry'
+import { AGENT_SPACING_PX, AGENT_STAGE_MARGIN_PX, DAY_MS, LAUNCHER_PX, notePoint, planSectors } from '../hubGeometry'
 import { labelSize, stubLabelMeasurement } from './labelMeasurement'
 
 const NOTE_AGE_DAYS = 30
@@ -98,7 +98,11 @@ afterEach(() => {
   hubFocusRequest.value = null
 })
 
-async function mountHub() {
+// The hub tile as the default layout draws it on a 1512-wide screen; the roomier default stage
+// hides every collision the real tile has.
+const TILE = { width: 584, height: 734 }
+
+async function mountHub(size = { width: 1090, height: 1130 }) {
   const w = mount(HubWidget, {
     attachTo: document.body,
     global: {
@@ -113,7 +117,7 @@ async function mountHub() {
   // vueuse's post-flush observers bind to the stage only after the next tick.
   await flushPromises()
   const observer = MockResizeObserver.last!
-  observer.callback([{ contentRect: { width: 1090, height: 1130 } } as ResizeObserverEntry], observer as unknown as ResizeObserver)
+  observer.callback([{ contentRect: size } as ResizeObserverEntry], observer as unknown as ResizeObserver)
   await flushPromises()
   return w
 }
@@ -129,9 +133,46 @@ function labelHidden(w: Hub, pid: number): boolean {
   return label(w, pid).classes().includes('invisible')
 }
 
-function screenOf(w: Hub, pid: number): { sx: number, sy: number } {
-  const [, x, y] = /translate\(([-\d.]+)px, ([-\d.]+)px/.exec(w.get(`[data-testid="hub-agent-${pid}"]`).attributes('style')!)!
+function translateOf(el: { attributes: (name: string) => string | undefined }): { sx: number, sy: number } {
+  const [, x, y] = /translate\(([-\d.]+)px, ([-\d.]+)px/.exec(el.attributes('style')!)!
   return { sx: Number(x), sy: Number(y) }
+}
+
+function screenOf(w: Hub, pid: number): { sx: number, sy: number } {
+  return translateOf(w.get(`[data-testid="hub-agent-${pid}"]`))
+}
+
+// The direction the hub placed this label in, read back from the offset it rendered.
+function labelDirectionOf(w: Hub, pid: number): [number, number] {
+  const [, dx, dy] = /translate\(-50%, -50%\) translate\(([-\d.]+)px, ([-\d.]+)px\)/.exec(label(w, pid).attributes('style')!)!
+  const d = Math.hypot(Number(dx), Number(dy))
+  return [Number(dx) / d, Number(dy) / d]
+}
+
+// Every sector name the hub actually draws, with the box it occupies.
+function drawnSectorNames(w: Hub) {
+  return w.findAll('[data-testid^="hub-sector-"]')
+    .filter(s => !s.classes().includes('invisible'))
+    .map((s) => {
+      const { sx, sy } = translateOf(s)
+      return sectorLabelBox(sx, sy, labelSize(s.attributes('data-label-key')!))
+    })
+}
+
+// Six note folders; seven agents crowd the third, the other five sit one per folder.
+const VAULT_PIDS = Array.from({ length: 12 }, (_, i) => 400 + i)
+
+function vaultFolders(): HubNote[] {
+  return Array.from({ length: 6 }, (_, folder) => Array.from({ length: 20 }, (_, i) => vaultNote(folder * 20 + i, `folder${folder}/n${i}.md`))).flat()
+}
+
+function vaultAgents(): Agent[] {
+  return VAULT_PIDS.map((pid, i) => ({
+    pid,
+    status: i % 3 === 0 ? 'active' : 'idle',
+    projectName: i < 7 ? 'folder2' : `folder${i - 7 + (i - 7 >= 2 ? 1 : 0)}`,
+    working: i % 3 === 0,
+  })) as unknown as Agent[]
 }
 
 // The core sits at the centre of the 1090×1130 stage; at fit one world unit is one pixel.
@@ -193,7 +234,7 @@ describe('hubWidget', () => {
     w.unmount()
   })
 
-  it('docks the launchers when their ring would not clear the agents, and keeps the ring when it does', async () => {
+  it('docks the launchers when the ring the sector names push out leaves the stage, and keeps the ring when it fits', async () => {
     const launcherX = (w: Awaited<ReturnType<typeof mountHub>>) => Number(/translate\(([-\d.]+)px/.exec(w.get('[data-testid^="hub-launcher-"]').attributes('style')!)![1])
     const roomy = await mountHub()
     expect(launcherX(roomy)).not.toBe(30)
@@ -242,10 +283,14 @@ describe('hubWidget', () => {
       { pid: 302, status: 'active', projectName: 'crowded-project', working: true },
       { pid: 303, status: 'waiting', projectName: 'crowded-project', working: false, pendingPermissions: [{}] },
       { pid: 304, status: 'idle', projectName: 'crowded-project', working: false },
+      { pid: 305, status: 'idle', projectName: 'crowded-project', working: false },
+      { pid: 306, status: 'active', projectName: 'crowded-project', working: true },
+      { pid: 307, status: 'idle', projectName: 'crowded-project', working: false },
+      { pid: 308, status: 'idle', projectName: 'crowded-project', working: false },
     ] as unknown as Agent[]
     const w = await mountHub()
 
-    const pids = [301, 302, 303, 304]
+    const pids = [301, 302, 303, 304, 305, 306, 307, 308]
     for (const pid of pids) expect(() => w.get(`[data-testid="hub-agent-${pid}"] span`)).not.toThrow()
 
     expect(labelHidden(w, 303)).toBe(false)
@@ -255,15 +300,15 @@ describe('hubWidget', () => {
 
   // Defect 1 (found by the coordinator's real-vault measurement): a label's box was taken from the
   // project name alone, while the rendered label also shows the status word. Four agents share one
-  // project; three fillers with distinct projects fill out the rest of the circle. The test proves
-  // its own fixture: the bare-name boxes at these positions all clear each other, so a cull can only
-  // come from measuring what is really rendered.
+  // project, three fillers fill out the circle. The test proves its own fixture: at these positions, in the directions the
+  // hub placed them, the bare-name boxes all clear each other while the rendered ones do not, so the
+  // cull can only come from measuring what is really rendered.
   it('culls a label whose bare name would clear its neighbour but whose name+status does not (defect 1)', async () => {
     agents.value = [
-      { pid: 300, status: 'idle', projectName: 'target', working: false },
-      { pid: 301, status: 'active', projectName: 'target', working: true },
-      { pid: 302, status: 'waiting', projectName: 'target', working: false, pendingPermissions: [{}] },
-      { pid: 303, status: 'idle', projectName: 'target', working: false },
+      { pid: 300, status: 'idle', projectName: 'target-project', working: false },
+      { pid: 301, status: 'active', projectName: 'target-project', working: true },
+      { pid: 302, status: 'waiting', projectName: 'target-project', working: false, pendingPermissions: [{}] },
+      { pid: 303, status: 'idle', projectName: 'target-project', working: false },
       { pid: 310, status: 'idle', projectName: 'filler-a', working: false },
       { pid: 311, status: 'idle', projectName: 'filler-b', working: false },
       { pid: 312, status: 'idle', projectName: 'filler-c', working: false },
@@ -271,9 +316,13 @@ describe('hubWidget', () => {
     const w = await mountHub()
 
     const shared = [300, 301, 302, 303]
-    const bareBoxes = shared.map(pid => agentLabelBox({ index: pid, ...screenOf(w, pid), text: 'Target', priority: 0 }, labelSize('Target')))
-    const bareClear = bareBoxes.every((a, i) => bareBoxes.every((b, j) => i === j || !boxesOverlap(a, b)))
-    expect(bareClear, 'bare-name boxes clear each other at these positions').toBe(true)
+    const boxesOf = (text?: string) => shared.map((pid) => {
+      const key = text ?? label(w, pid).attributes('data-label-key')!
+      return agentLabelBox({ index: pid, ...screenOf(w, pid), text: key, priority: 0 }, labelSize(key), labelDirectionOf(w, pid))
+    })
+    const anyOverlap = (boxes: ReturnType<typeof boxesOf>) => boxes.some((a, i) => boxes.some((b, j) => i !== j && boxesOverlap(a, b)))
+    expect(anyOverlap(boxesOf('Target Project')), 'bare-name boxes clear each other at these positions').toBe(false)
+    expect(anyOverlap(boxesOf()), 'name+status boxes collide at the same positions').toBe(true)
 
     expect(shared.filter(pid => labelHidden(w, pid)).length).toBeGreaterThan(0)
     expect(labelHidden(w, 302)).toBe(false) // needs-operator always keeps its label
@@ -304,15 +353,12 @@ describe('hubWidget', () => {
     expect(shown.length).toBeLessThan(pids.length) // the crowd really is being culled, not just rendered whole
 
     // Both boxes are rebuilt from the key the DOM carries, so they are the ones the culler used.
-    const sectorBoxes = w.findAll('[data-testid^="hub-sector-"]').map((s) => {
-      const [, x, y] = /translate\(([-\d.]+)px, ([-\d.]+)px/.exec(s.attributes('style')!)!
-      return sectorLabelBox(Number(x), Number(y), labelSize(s.attributes('data-label-key')!))
-    })
+    const sectorBoxes = drawnSectorNames(w)
     expect(sectorBoxes.length).toBeGreaterThan(0)
 
     for (const pid of shown) {
       const key = label(w, pid).attributes('data-label-key')!
-      const box = agentLabelBox({ index: pid, ...screenOf(w, pid), text: key, priority: 0 }, labelSize(key))
+      const box = agentLabelBox({ index: pid, ...screenOf(w, pid), text: key, priority: 0 }, labelSize(key), labelDirectionOf(w, pid))
       for (const other of dots) {
         if (other.pid === pid)
           continue
@@ -320,6 +366,40 @@ describe('hubWidget', () => {
       }
       for (const sectorBox of sectorBoxes)
         expect(boxesOverlap(box, sectorBox)).toBe(false)
+    }
+    w.unmount()
+  })
+
+  // The real vault's shape: six note folders, twelve agents, seven of them in one project. Before
+  // labels hung inward, the southern two thirds of the ring lost every label to the sector names.
+  it('keeps a label on most of a vault-shaped crowd', async () => {
+    graph.status.value = 'ready'
+    graph.notes.value = vaultFolders()
+    agents.value = vaultAgents()
+    const w = await mountHub(TILE)
+
+    const shown = VAULT_PIDS.filter(pid => !labelHidden(w, pid))
+    expect(shown.length, `labels kept of ${VAULT_PIDS.length}`).toBeGreaterThanOrEqual(6)
+    w.unmount()
+  })
+
+  it('never lets a launcher cover a sector name, on the ring or docked', async () => {
+    graph.status.value = 'ready'
+    graph.notes.value = vaultFolders()
+    agents.value = vaultAgents()
+    const w = await mountHub(TILE)
+
+    for (let presses = 0; presses < 4; presses++) {
+      if (presses > 0)
+        await press(w, '+')
+      const sectorBoxes = drawnSectorNames(w)
+      expect(sectorBoxes.length, `names drawn at zoom ${presses}`).toBeGreaterThan(0)
+      for (const launcher of w.findAll('[data-testid^="hub-launcher-"]')) {
+        const { sx, sy } = translateOf(launcher)
+        const box = { x: sx - LAUNCHER_PX / 2, y: sy - LAUNCHER_PX / 2, w: LAUNCHER_PX, h: LAUNCHER_PX }
+        for (const sectorBox of sectorBoxes)
+          expect(boxesOverlap(box, sectorBox), `${launcher.attributes('data-testid')} at zoom ${presses}`).toBe(false)
+      }
     }
     w.unmount()
   })

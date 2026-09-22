@@ -64,12 +64,46 @@ export function sectorLabelKey(label: string, weight: number): string {
 }
 
 const AGENT_DOT_PX = 18 // HubOrbit.vue's `size-[18px]` dot, centred on the agent's screen point.
-// The label hangs under the dot: half the dot plus HubOrbit.vue's `mt-[3px]`.
-const AGENT_LABEL_TOP_PX = AGENT_DOT_PX / 2 + 3
+const AGENT_DOT_SIZE: LabelSize = { w: AGENT_DOT_PX, h: AGENT_DOT_PX }
+const AGENT_LABEL_GAP_PX = 3
+const INWARD_DOWN: readonly [number, number] = [0, 1]
 
-// An agent's label sits centred under its dot (HubOrbit.vue's absolute layout).
-export function agentLabelBox(c: LabelCandidate, size: LabelSize = UNMEASURED): LabelBox {
-  return { x: c.sx - size.w / 2, y: c.sy + AGENT_LABEL_TOP_PX, w: size.w, h: size.h }
+// The direction from an agent back to the core, which sits at the world origin.
+export function inwardUnit(x: number, y: number): [number, number] {
+  const d = Math.hypot(x, y)
+  // An agent on the core has no inward direction; below the dot is where a label hangs anyway.
+  return d === 0 ? [...INWARD_DOWN] : [-x / d, -y / d]
+}
+
+// How far a box reaches from its centre along a direction.
+function reach(size: LabelSize, ux: number, uy: number): number {
+  return Math.abs(ux) * size.w / 2 + Math.abs(uy) * size.h / 2
+}
+
+// An agent's label hangs inward, toward the core: in the southern half "below the dot" points into
+// the sector-name ring, where the label always loses. The push is long enough that the label's own
+// box clears the dot's box at any angle — the two reaches plus the gap separate them on one axis.
+export function agentLabelOffset(inward: readonly [number, number], size: LabelSize = UNMEASURED): [number, number] {
+  const [ux, uy] = inward
+  const d = AGENT_LABEL_GAP_PX + reach(AGENT_DOT_SIZE, ux, uy) + reach(size, ux, uy)
+  return [ux * d, uy * d]
+}
+
+// The box a label occupies. HubOrbit.vue translates the rendered span by the same offset, so this is
+// the box the browser draws and not a second guess at it.
+export function agentLabelBox(c: LabelCandidate, size: LabelSize = UNMEASURED, inward: readonly [number, number] = INWARD_DOWN): LabelBox {
+  const [dx, dy] = agentLabelOffset(inward, size)
+  return { x: c.sx + dx - size.w / 2, y: c.sy + dy - size.h / 2, w: size.w, h: size.h }
+}
+
+// Inward is the first choice, outward the fallback: same-sector agents sit on radial tiers, so
+// inward is exactly where the tier below has its dots. A label with nowhere to go keeps its inward
+// place and the culler drops it.
+export function agentLabelDirection(c: LabelCandidate, size: LabelSize | undefined, inward: readonly [number, number], obstacles: readonly LabelObstacle[]): [number, number] {
+  const outward: [number, number] = [-inward[0], -inward[1]]
+  const blocked = (d: readonly [number, number]) =>
+    obstacles.some(o => o.ownerIndex !== c.index && boxesOverlap(agentLabelBox(c, size, d), o.box))
+  return blocked(inward) && !blocked(outward) ? outward : [inward[0], inward[1]]
 }
 
 // An agent's own dot: an obstacle a neighbour's label must not cover, or that agent's dot becomes

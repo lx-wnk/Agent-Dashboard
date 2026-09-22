@@ -11,6 +11,8 @@ import {
   agentSectorRingPx,
   buildSectors,
   hash01,
+  LAUNCHER_SECTOR_CLEARANCE_PX,
+  launcherRingRadius,
   MAX_AGE_DAYS,
   notePoint,
   OTHER_SECTOR_KEY,
@@ -241,6 +243,15 @@ describe('sectorLabelRadius', () => {
     for (const [scale, ring] of [[0.3, 116], [0.57, 196], [1, 116], [2, 300]]) {
       expect(sectorLabelRadius(scale, ring) * scale).toBeGreaterThanOrEqual(ring + SECTOR_LABEL_AGENT_CLEARANCE_PX - 1e-9)
       expect(sectorLabelRadius(scale, ring)).toBeGreaterThanOrEqual(SECTOR_LABEL_RADIUS)
+    }
+  })
+})
+
+describe('launcherRingRadius', () => {
+  it('holds the launchers a fixed screen gap outside the sector names, whatever pushes those out', () => {
+    for (const [scale, ring] of [[0.3, 116], [0.57, 196], [1, 116], [2, 300], [1, 455]]) {
+      const gap = (launcherRingRadius(scale, ring) - sectorLabelRadius(scale, ring)) * scale
+      expect(gap).toBeCloseTo(LAUNCHER_SECTOR_CLEARANCE_PX)
     }
   })
 })

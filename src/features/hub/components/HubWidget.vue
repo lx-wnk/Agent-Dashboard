@@ -20,10 +20,10 @@ import { useHubCamera } from '../composables/useHubCamera'
 import { hubFocusRequest } from '../composables/useHubFocus'
 import { useObsidianGraph } from '../composables/useObsidianGraph'
 import { launchersDocked, LEVEL_TARGETS, toScreen } from '../hubCamera'
-import { agentDotBox, agentLabelBox, agentLabelKey, agentPriority, cullLabels, hitNote, hubNoteSet, sectorLabelBox, sectorLabelKey } from '../hubCanvas'
+import { agentDotBox, agentLabelBox, agentLabelDirection, agentLabelKey, agentPriority, boxesOverlap, cullLabels, hitNote, hubNoteSet, inwardUnit, sectorLabelBox, sectorLabelKey } from '../hubCanvas'
 import { agentAngles, agentRadius, agentRingPx, agentSectorRingPx, DAY_MS, notePoint, planSectors, polar, radiusForAge, RINGS, SECTOR_PALETTE_SIZE, sectorLabelRadius, sectorMid, wedgePath } from '../hubGeometry'
 import { GRAPH_NOTICES } from '../hubGraphNotices'
-import { launchersFor } from '../hubLaunchers'
+import { launcherBox, launchersFor } from '../hubLaunchers'
 import HubAgentCard from './HubAgentCard.vue'
 import HubBrainCanvas from './HubBrainCanvas.vue'
 import HubControls from './HubControls.vue'
@@ -132,7 +132,7 @@ useEventListener(window, 'focus', () => refreshGraph())
 const stagePx = computed(() => Math.min(size.value.width, size.value.height))
 const ringPx = computed(() => agentRingPx(live.value.length, stagePx.value))
 const ringOnScreenPx = computed(() => agentRadius(cam.value.k, false, ringPx.value) * cam.value.k)
-const docked = computed(() => launchersDocked(rel.value, cam.value.k, ringOnScreenPx.value))
+const docked = computed(() => launchersDocked(rel.value, cam.value.k, ringOnScreenPx.value, stagePx.value))
 
 const placed = computed(() => {
   const k = cam.value.k
@@ -163,7 +163,16 @@ const labelSizes = shallowRef<ReadonlyMap<string, LabelSize>>(new Map())
 // (own dot excluded, or a label could never sit next to its own agent) and, when they are actually
 // drawn (HubOrbit.vue only shows them below level 2 and with showSectorNames), every sector name —
 // the map's legend, which never yields to an agent label.
-const labelledAgents = computed(() => {
+// The legend as HubOrbit draws it: one entry per name on screen, with the box it occupies.
+const sectorNames = computed(() => level.value >= 2 || !showSectorNames.value
+  ? []
+  : plan.value.sectors.map((sector) => {
+      const [wx, wy] = polar(sectorLabelRadius(cam.value.k, ringOnScreenPx.value), sectorMid(sector))
+      const [sx, sy] = toScreen(cam.value, wx, wy)
+      return { key: sector.key, box: sectorLabelBox(sx, sy, labelSizes.value.get(sectorLabelKey(sector.label, sector.weight))) }
+    }))
+
+const labels = computed(() => {
   const sizes = labelSizes.value
   const placedScreen = placed.value.map(p => ({ p, screen: toScreen(cam.value, p.x, p.y) }))
   const candidates = placedScreen.map(({ p, screen: [sx, sy] }) => ({
@@ -174,14 +183,12 @@ const labelledAgents = computed(() => {
     priority: agentPriority(p.needsOperator, p.state === 'working'),
   }))
   const dotObstacles = placedScreen.map(({ p, screen: [sx, sy] }) => ({ box: agentDotBox(sx, sy), ownerIndex: p.agent.pid }))
-  const sectorObstacles = level.value < 2 && showSectorNames.value
-    ? plan.value.sectors.map((sector) => {
-        const [wx, wy] = polar(sectorLabelRadius(cam.value.k, ringOnScreenPx.value), sectorMid(sector))
-        const [sx, sy] = toScreen(cam.value, wx, wy)
-        return { box: sectorLabelBox(sx, sy, sizes.get(sectorLabelKey(sector.label, sector.weight))) }
-      })
-    : []
-  return cullLabels(candidates, c => agentLabelBox(c, sizes.get(c.text)), [...dotObstacles, ...sectorObstacles])
+  const obstacles = [...dotObstacles, ...sectorNames.value]
+  const directions = new Map(candidates.map((c, i) => [
+    c.index,
+    agentLabelDirection(c, sizes.get(c.text), inwardUnit(placedScreen[i].p.x, placedScreen[i].p.y), obstacles),
+  ]))
+  return { directions, kept: cullLabels(candidates, c => agentLabelBox(c, sizes.get(c.text), directions.get(c.index)), obstacles) }
 })
 
 const running = computed(() => placed.value.filter(p => p.state === 'working' || p.state === 'active').length)
@@ -203,6 +210,12 @@ watch(() => openCard.value !== null && !cardAgent.value && !cardNote.value, (gon
 
 const otherPages = computed(() => layout.value.pages.filter(p => p.id !== ZENTRALE_PAGE_ID))
 const launchers = computed(() => launchersFor(NAV_ITEMS, otherPages.value, activeView.value))
+// A launcher is opaque chrome, and half a sector name reads as a shorter, wrong one. The ring clears
+// the legend by construction; the docked rail is fixed to the screen and cannot, so the name yields.
+const namedSectors = computed(() => {
+  const boxes = launchers.value.map((_, i) => launcherBox(i, docked.value, cam.value, ringOnScreenPx.value))
+  return new Set(sectorNames.value.filter(s => !boxes.some(b => boxesOverlap(s.box, b))).map(s => s.key))
+})
 const listLaunchers = computed(() => launchersFor(NAV_ITEMS, otherPages.value, activeView.value, Infinity))
 
 function openKontor(prefill?: string) {
@@ -407,13 +420,15 @@ watch(hubFocusRequest, (target) => {
         :core-disabled="!kontorPage"
         :agent-ring-px="ringOnScreenPx"
         :show-sector-names="showSectorNames"
-        :labelled-agents="labelledAgents"
+        :labelled-agents="labels.kept"
+        :label-directions="labels.directions"
+        :named-sectors="namedSectors"
         @core="openKontor"
         @agent="flyToAgent"
         @sector="sector => flyTo(...polar(SECTOR_FLY_RADIUS, sectorMid(sector)), SECTOR_FLY_REL)"
         @measure="sizes => labelSizes = sizes"
       />
-      <HubLaunchers :launchers="launchers" :cam="cam" :docked="docked" @launch="launch" />
+      <HubLaunchers :launchers="launchers" :cam="cam" :docked="docked" :agent-ring-px="ringOnScreenPx" @launch="launch" />
       <HubControls
         :level="level"
         :wide="wide === HUB_WIDGET"

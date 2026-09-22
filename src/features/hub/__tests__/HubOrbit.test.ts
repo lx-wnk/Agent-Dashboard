@@ -4,7 +4,7 @@ import type { Agent } from '@/types'
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it } from 'vitest'
 import HubOrbit from '../components/HubOrbit.vue'
-import { agentLabelKey, sectorLabelKey } from '../hubCanvas'
+import { agentLabelKey, agentLabelOffset, inwardUnit, sectorLabelKey } from '../hubCanvas'
 import { buildSectors } from '../hubGeometry'
 import { labelSize, stubLabelMeasurement } from './labelMeasurement'
 
@@ -14,7 +14,16 @@ function agent(pid: number, projectName: string): Agent {
   return { pid, projectName, status: 'active', working: false } as Agent
 }
 
-function mountOrbit(level: HubLevel, { showSectorNames = true, agentRingPx = 116, coreDisabled = false, labelledAgents }: { showSectorNames?: boolean, agentRingPx?: number, coreDisabled?: boolean, labelledAgents?: ReadonlySet<number> } = {}) {
+interface OrbitOptions {
+  showSectorNames?: boolean
+  agentRingPx?: number
+  coreDisabled?: boolean
+  labelledAgents?: ReadonlySet<number>
+  namedSectors?: ReadonlySet<string>
+  labelDirections?: ReadonlyMap<number, readonly [number, number]>
+}
+
+function mountOrbit(level: HubLevel, { showSectorNames = true, agentRingPx = 116, coreDisabled = false, labelledAgents, namedSectors, labelDirections }: OrbitOptions = {}) {
   return mount(HubOrbit, {
     props: {
       cam: { k: 1, tx: 500, ty: 500 },
@@ -32,6 +41,8 @@ function mountOrbit(level: HubLevel, { showSectorNames = true, agentRingPx = 116
       coreTitle: 'Open Kontor (idle)',
       coreDisabled,
       labelledAgents,
+      namedSectors,
+      labelDirections,
     },
   })
 }
@@ -143,6 +154,40 @@ describe('hubOrbit', () => {
     const w = mountOrbit(0)
     const ids = w.findAll('[data-testid^="hub-sector-"], [data-testid^="hub-agent-"]').map(e => e.attributes('data-testid'))
     expect(ids).toEqual(['hub-sector-0', 'hub-sector-1', 'hub-agent-1', 'hub-agent-2'])
+    w.unmount()
+  })
+
+  // The rendered span and hubCanvas' agentLabelBox must sit on the same pixels, or the culler judges
+  // a box the DOM never draws. Both come from agentLabelOffset, and this proves the template uses it.
+  it('translates a label onto the box the culler judges, inward from its dot', async () => {
+    const w = mountOrbit(0)
+    await flushPromises()
+    for (const [pid, x, y] of [[1, 82, 0], [2, -60, 0]] as const) {
+      const label = w.get(`[data-testid="hub-agent-${pid}"]`).get('[data-testid="hub-label"]')
+      const [dx, dy] = agentLabelOffset(inwardUnit(x, y), labelSize(label.attributes('data-label-key')!))
+      expect(Math.sign(dx), `agent ${pid} hangs its label toward the core`).toBe(-Math.sign(x))
+      expect(label.attributes('style')).toBe(`transform: translate(-50%, -50%) translate(${dx}px, ${dy}px);`)
+    }
+    w.unmount()
+  })
+
+  it('hangs a label the way the culler placed it, not always toward the core', async () => {
+    const outward: [number, number] = [1, 0] // agent 1 sits east of the core, so this is away from it
+    const w = mountOrbit(0, { labelDirections: new Map([[1, outward]]) })
+    await flushPromises()
+    const label = w.get('[data-testid="hub-agent-1"]').get('[data-testid="hub-label"]')
+    const [dx, dy] = agentLabelOffset(outward, labelSize(label.attributes('data-label-key')!))
+    expect(label.attributes('style')).toBe(`transform: translate(-50%, -50%) translate(${dx}px, ${dy}px);`)
+    w.unmount()
+  })
+
+  // A launcher button is opaque: half a sector name reads as a shorter, wrong one.
+  it('hides a sector name the caller cannot place, without dropping its box', async () => {
+    const w = mountOrbit(0, { namedSectors: new Set(['web-app']) })
+    await flushPromises()
+    expect(w.get('[data-testid="hub-sector-0"]').classes()).toContain('invisible')
+    expect(w.get('[data-testid="hub-sector-1"]').classes()).not.toContain('invisible')
+    expect(w.get('[data-testid="hub-sector-0"]').element.getBoundingClientRect().width).toBeGreaterThan(0)
     w.unmount()
   })
 

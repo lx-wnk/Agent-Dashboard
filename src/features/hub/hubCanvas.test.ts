@@ -2,7 +2,8 @@ import type { HubNote } from './composables/useObsidianGraph'
 import type { LabelCandidate } from './hubCanvas'
 import { describe, expect, it } from 'vitest'
 import { labelSize } from './__tests__/labelMeasurement'
-import { agentDotBox, agentLabelBox, agentLabelKey, agentPriority, boxesOverlap, cullLabels, hitNote, hubNoteSet, isToday, notePriority, sectorLabelBox, sectorLabelKey } from './hubCanvas'
+import { agentDotBox, agentLabelBox, agentLabelDirection, agentLabelKey, agentLabelOffset, agentPriority, boxesOverlap, cullLabels, hitNote, hubNoteSet, inwardUnit, isToday, notePriority, sectorLabelBox, sectorLabelKey } from './hubCanvas'
+import { polar } from './hubGeometry'
 
 const measured = (c: LabelCandidate) => agentLabelBox(c, labelSize(c.text))
 
@@ -85,6 +86,91 @@ describe('agentLabelBox', () => {
   it('has no box at all while its size is unmeasured', () => {
     const box = agentLabelBox({ index: 0, sx: 100, sy: 100, text: 'Kontor Hub', priority: 0 })
     expect(boxesOverlap(box, agentDotBox(100, 112))).toBe(false)
+  })
+})
+
+describe('agentLabelBox placed inward', () => {
+  const candidate = { index: 0, sx: 300, sy: 300, text: 'Kontor Hub Working', priority: 0 }
+  const size = labelSize(candidate.text)
+
+  it('hangs a southern agent\'s label toward the core and leaves a northern one below its dot', () => {
+    const south = agentLabelBox(candidate, size, inwardUnit(...polar(240, 90)))
+    const north = agentLabelBox(candidate, size, inwardUnit(...polar(240, -90)))
+    expect(south.y + south.h).toBeLessThanOrEqual(candidate.sy)
+    expect(north.y).toBeGreaterThanOrEqual(candidate.sy)
+    // Straight down is the default, so every caller that has no direction keeps today's placement.
+    expect(north).toEqual(agentLabelBox(candidate, size))
+  })
+
+  it('centres the label on the radial line and never covers its own dot, at any angle', () => {
+    for (let deg = 0; deg < 360; deg += 5) {
+      const [x, y] = polar(240, deg)
+      const [ux, uy] = inwardUnit(x, y)
+      const box = agentLabelBox(candidate, size, [ux, uy])
+      const offCentre = (box.x + box.w / 2 - candidate.sx) * uy - (box.y + box.h / 2 - candidate.sy) * ux
+      expect(offCentre, `${deg}° off the radial line`).toBeCloseTo(0)
+      expect(boxesOverlap(box, agentDotBox(candidate.sx, candidate.sy)), `${deg}° covers its own dot`).toBe(false)
+    }
+  })
+
+  it('frees a southern agent from the sector name drawn outside its dot', () => {
+    // The sector name sits one agent-ring clearance beyond the dot: the collision that culls every
+    // southern label while labels always hang below.
+    const sector = sectorLabelBox(candidate.sx, candidate.sy + 24, labelSize(sectorLabelKey('Work', 120)))
+    const inward = inwardUnit(...polar(240, 90))
+    expect(cullLabels([candidate], c => agentLabelBox(c, size), [{ box: sector }])).toEqual(new Set())
+    expect(cullLabels([candidate], c => agentLabelBox(c, size, inward), [{ box: sector }])).toEqual(new Set([0]))
+  })
+})
+
+describe('agentLabelOffset', () => {
+  it('is the offset agentLabelBox places the label centre at', () => {
+    const c = { index: 0, sx: 300, sy: 300, text: 'Kontor Hub Working', priority: 0 }
+    const size = labelSize(c.text)
+    for (let deg = 0; deg < 360; deg += 45) {
+      const inward = inwardUnit(...polar(240, deg))
+      const box = agentLabelBox(c, size, inward)
+      const [dx, dy] = agentLabelOffset(inward, size)
+      expect(box.x + box.w / 2 - c.sx).toBeCloseTo(dx)
+      expect(box.y + box.h / 2 - c.sy).toBeCloseTo(dy)
+    }
+  })
+})
+
+describe('agentLabelDirection', () => {
+  const candidate = { index: 1, sx: 300, sy: 300, text: 'Kontor Hub Working', priority: 0 }
+  const size = labelSize(candidate.text)
+  const inward = inwardUnit(...polar(240, 90)) // straight up: the agent sits due south
+
+  it('keeps the inward place while nothing stands there', () => {
+    expect(agentLabelDirection(candidate, size, inward, [])).toEqual(inward)
+  })
+
+  it('turns outward when a tier-mate\'s dot sits inward of the agent', () => {
+    const tierMate = { box: agentDotBox(candidate.sx, candidate.sy - 26), ownerIndex: 2 }
+    expect(agentLabelDirection(candidate, size, inward, [tierMate])).toEqual([-inward[0], -inward[1]])
+  })
+
+  it('stays inward when both sides are taken, and lets the culler decide', () => {
+    const boxed = [-26, 26].map(dy => ({ box: agentDotBox(candidate.sx, candidate.sy + dy), ownerIndex: 2 }))
+    expect(agentLabelDirection(candidate, size, inward, boxed)).toEqual(inward)
+  })
+
+  it('never turns away from its own dot', () => {
+    const own = { box: agentDotBox(candidate.sx, candidate.sy - 26), ownerIndex: candidate.index }
+    expect(agentLabelDirection(candidate, size, inward, [own])).toEqual(inward)
+  })
+})
+
+describe('inwardUnit', () => {
+  it('points from the agent back to the core and is a unit vector', () => {
+    const [ux, uy] = inwardUnit(...polar(240, 30))
+    expect(Math.hypot(ux, uy)).toBeCloseTo(1)
+    expect([ux, uy]).toEqual([-Math.cos(Math.PI / 6), -Math.sin(Math.PI / 6)].map(v => expect.closeTo(v)))
+  })
+
+  it('falls back to straight down for an agent sitting on the core', () => {
+    expect(inwardUnit(0, 0)).toEqual([0, 1])
   })
 })
 

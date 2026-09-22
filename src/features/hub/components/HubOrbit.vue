@@ -4,11 +4,11 @@ import type { LabelSize } from '../hubCanvas'
 import type { Sector } from '../hubGeometry'
 import type { Agent } from '@/types'
 import type { AgentDisplayStatus, ChipTone } from '@/utils/statusColors'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, shallowRef, watch } from 'vue'
 import { friendlyProjectName } from '@/utils/friendlyProjectName'
 import { agentStatusTone, statusLabel } from '@/utils/statusColors'
 import { toScreen } from '../hubCamera'
-import { agentLabelKey, sectorLabelKey } from '../hubCanvas'
+import { agentLabelKey, agentLabelOffset, inwardUnit, sectorLabelKey } from '../hubCanvas'
 import { polar, radiusForAge, SECTOR_PALETTE_SIZE, sectorLabelRadius, sectorMid, visibleRingLabels } from '../hubGeometry'
 
 const props = defineProps<{
@@ -25,6 +25,10 @@ const props = defineProps<{
   showSectorNames: boolean
   // Omitted shows every label (used by callers that don't cull, e.g. tests); the dot is never gated.
   labelledAgents?: ReadonlySet<number>
+  // Sector keys whose name is drawable; omitted draws them all.
+  namedSectors?: ReadonlySet<string>
+  // The direction the culler placed each label in; omitted hangs every label toward the core.
+  labelDirections?: ReadonlyMap<number, readonly [number, number]>
 }>()
 
 const emit = defineEmits<{ core: [], agent: [agent: Agent], sector: [sector: Sector], measure: [sizes: ReadonlyMap<string, LabelSize>] }>()
@@ -39,7 +43,7 @@ const sectorNamesShown = computed(() => props.level < 2 && props.showSectorNames
 // Label sizes come from the DOM, never from a character count: an estimate has twice placed labels
 // over what they must clear. A size depends on the text and the font only — the camera scales
 // neither — so each distinct text is measured once and reused across every pan and zoom.
-const sizes = new Map<string, LabelSize>()
+const sizes = shallowRef<ReadonlyMap<string, LabelSize>>(new Map())
 
 // Joined, so a camera tick — which hands us new objects for the same labels — is not a change.
 const labelKeys = computed(() => [
@@ -48,17 +52,18 @@ const labelKeys = computed(() => [
 ].join('\n'))
 
 function measure() {
-  let grew = false
+  const grown = new Map(sizes.value)
   for (const el of root.value?.querySelectorAll<HTMLElement>('[data-label-key]') ?? []) {
     const key = el.dataset.labelKey!
-    if (sizes.has(key))
+    if (grown.has(key))
       continue
     const { width, height } = el.getBoundingClientRect()
-    sizes.set(key, { w: width, h: height })
-    grew = true
+    grown.set(key, { w: width, h: height })
   }
-  if (grew)
-    emit('measure', new Map(sizes))
+  if (grown.size === sizes.value.size)
+    return
+  sizes.value = grown
+  emit('measure', grown)
 }
 
 onMounted(measure)
@@ -88,6 +93,16 @@ function atPolar(radius: number, deg: number) {
 
 function showsLabel(pid: number): boolean {
   return !props.labelledAgents || props.labelledAgents.has(pid)
+}
+
+function showsSectorName(key: string): boolean {
+  return !props.namedSectors || props.namedSectors.has(key)
+}
+
+// Centred on the dot, then pushed along the radial line — the offset the culler's box uses.
+function labelStyle(pid: number, x: number, y: number, key: string) {
+  const [dx, dy] = agentLabelOffset(props.labelDirections?.get(pid) ?? inwardUnit(x, y), sizes.value.get(key))
+  return { transform: `translate(-50%, -50%) translate(${dx}px, ${dy}px)` }
 }
 </script>
 
@@ -119,7 +134,7 @@ function showsLabel(pid: number): boolean {
         :data-testid="`hub-sector-${i}`"
         :data-label-key="sectorLabelKey(sector.label, sector.weight)"
         class="pointer-events-auto -translate-1/2 cursor-pointer whitespace-nowrap rounded px-1.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-widest hover:bg-fg/5"
-        :class="level === 1 && 'opacity-55'"
+        :class="[level === 1 && 'opacity-55', !showsSectorName(sector.key) && 'invisible']"
         :style="{ ...atPolar(sectorNameRadius, sectorMid(sector)), color: `var(--sector-${i % SECTOR_PALETTE_SIZE})` }"
         @click="$emit('sector', sector)"
       >
@@ -156,8 +171,9 @@ function showsLabel(pid: number): boolean {
       <span
         data-testid="hub-label"
         :data-label-key="agentLabelKey(agent.projectName, state)"
-        class="absolute left-1/2 top-full mt-[3px] flex -translate-x-1/2 gap-1 whitespace-nowrap rounded-md border bg-card/85 px-1.5 text-[10.5px] text-fg"
+        class="absolute left-1/2 top-1/2 flex gap-1 whitespace-nowrap rounded-md border bg-card/85 px-1.5 text-[10.5px] text-fg"
         :class="[needsOperator ? 'border-warning' : 'border-line', !showsLabel(agent.pid) && 'invisible group-hover:visible group-focus-visible:visible']"
+        :style="labelStyle(agent.pid, x, y, agentLabelKey(agent.projectName, state))"
       >
         <span data-testid="hub-label-name" class="max-w-[14ch] truncate">{{ friendlyProjectName(agent.projectName) }}</span>
         <em class="not-italic" :class="needsOperator ? 'text-warning-text' : 'text-fg-mute'">{{ statusLabel(state) }}</em>
