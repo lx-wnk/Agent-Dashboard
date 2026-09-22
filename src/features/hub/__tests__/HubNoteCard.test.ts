@@ -59,6 +59,23 @@ describe('hubNoteCard', () => {
     expect(w.get('[role="alert"]').text()).toBe('note not found')
   })
 
+  it('disables Open in Obsidian while the request is in flight, so a second click cannot double-fire it', async () => {
+    let resolve!: (v: string | null) => void
+    const pending = new Promise<string | null>((res) => {
+      resolve = res
+    })
+    openInObsidian.mockClear().mockReturnValueOnce(pending)
+    const w = mountCard()
+    const open = () => w.findAll('button').find(b => b.text() === 'Open in Obsidian')!
+    await open().trigger('click')
+    expect(open().attributes('disabled')).toBeDefined()
+    await open().trigger('click')
+    expect(openInObsidian).toHaveBeenCalledOnce()
+    resolve(null)
+    await flushPromises()
+    expect(open().attributes('disabled')).toBeUndefined()
+  })
+
   it('closes from its button', async () => {
     const w = mountCard()
     await w.get('button[aria-label="Close card"]').trigger('click')

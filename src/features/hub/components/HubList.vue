@@ -1,17 +1,21 @@
 <script setup lang="ts">
+import type { GraphStatus } from '../composables/useObsidianGraph'
 import type { Launcher } from '../hubLaunchers'
 import type { Agent } from '@/types'
 import type { AgentDisplayStatus } from '@/utils/statusColors'
-import { inject, onMounted, ref } from 'vue'
+import { computed, inject, onMounted, ref } from 'vue'
 import AppChip from '@/components/ui/AppChip.vue'
 import { OPEN_SETTINGS } from '@/composables/openTask'
 import { formatRelativeThenDate } from '@/utils/format'
 import { friendlyProjectName } from '@/utils/friendlyProjectName'
 import { agentStatusTone, statusLabel } from '@/utils/statusColors'
+import { GRAPH_NOTICES } from '../hubGraphNotices'
 
-defineProps<{
+const props = defineProps<{
   agents: ReadonlyArray<{ agent: Agent, state: AgentDisplayStatus }>
   notes: ReadonlyArray<{ path: string, title: string, sector: string, mtimeMs: number }>
+  graphStatus: GraphStatus
+  graphMessage: string
   launchers: Launcher[]
 }>()
 
@@ -27,6 +31,17 @@ onMounted(() => panel.value?.querySelector('button')?.focus())
 function touched(mtimeMs: number): string {
   return formatRelativeThenDate(new Date(mtimeMs).toISOString())
 }
+
+// unconfigured keeps its own wording (list-specific); denied and failed reuse the hub notice's.
+const noteNotice = computed<string | null>(() => {
+  if (props.graphStatus === 'unconfigured')
+    return 'Connect Obsidian to see recently touched notes.'
+  if (props.graphStatus === 'denied' || props.graphStatus === 'failed')
+    return GRAPH_NOTICES[props.graphStatus]!
+  if (props.graphStatus === 'ready' && props.notes.length === 0)
+    return 'No notes yet.'
+  return null
+})
 
 const HEADING = 'mb-1 mt-3 text-[11px] font-semibold uppercase tracking-wider text-fg-mute'
 const ROW = 'flex w-full cursor-pointer items-center justify-between gap-3 rounded-md px-2 py-1 text-left text-[13px] text-fg hover:bg-raised'
@@ -71,9 +86,14 @@ const ROW = 'flex w-full cursor-pointer items-center justify-between gap-3 round
     <h3 :class="HEADING">
       Recently touched
     </h3>
-    <p v-if="notes.length === 0" class="flex items-center gap-2 px-2 text-[13px] text-fg-mute">
-      Connect Obsidian to see recently touched notes.
-      <button type="button" class="cursor-pointer text-accent underline-offset-2 hover:underline" @click="openSettings()">
+    <p
+      v-if="noteNotice"
+      data-testid="hub-list-note-notice"
+      :title="graphStatus === 'denied' ? graphMessage : undefined"
+      class="flex items-center gap-2 px-2 text-[13px] text-fg-mute"
+    >
+      {{ noteNotice }}
+      <button v-if="graphStatus === 'unconfigured'" type="button" class="cursor-pointer text-accent underline-offset-2 hover:underline" @click="openSettings()">
         Open settings
       </button>
     </p>

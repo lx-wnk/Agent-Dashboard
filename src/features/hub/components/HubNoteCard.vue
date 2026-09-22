@@ -18,6 +18,7 @@ const CHIP_LIMIT = 8
 const MD_EXTENSION = /\.md$/
 const { openInObsidian } = useObsidianGraph()
 const openError = ref<string | null>(null)
+const opening = ref(false)
 
 const changed = computed(() => formatRelativeThenDate(new Date(props.note.mtimeMs).toISOString()))
 const chipGroups = computed(() => [
@@ -34,7 +35,13 @@ function askKontor() {
 }
 
 async function openNote() {
-  openError.value = await openInObsidian(props.note.path)
+  opening.value = true
+  try {
+    openError.value = await openInObsidian(props.note.path)
+  }
+  finally {
+    opening.value = false
+  }
 }
 </script>
 
@@ -83,7 +90,7 @@ async function openNote() {
       >
         Ask Kontor about this
       </AppButton>
-      <AppButton size="sm" @click="openNote">
+      <AppButton size="sm" :disabled="opening" @click="openNote">
         Open in Obsidian
       </AppButton>
     </div>

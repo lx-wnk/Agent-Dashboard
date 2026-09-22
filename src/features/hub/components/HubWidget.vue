@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import type { GraphStatus } from '../composables/useObsidianGraph'
 import type { HubLevel } from '../hubCamera'
 import type { Launcher } from '../hubLaunchers'
 import type { WidgetId } from '@/features/workspace'
@@ -20,6 +19,7 @@ import { useObsidianGraph } from '../composables/useObsidianGraph'
 import { launchersDocked, LEVEL_TARGETS } from '../hubCamera'
 import { hitNote, hubNoteSet } from '../hubCanvas'
 import { agentAngles, agentRadius, agentRingPx, DAY_MS, notePoint, planSectors, polar, radiusForAge, RINGS, SECTOR_PALETTE_SIZE, sectorMid, wedgePath } from '../hubGeometry'
+import { GRAPH_NOTICES } from '../hubGraphNotices'
 import { launchersFor } from '../hubLaunchers'
 import HubAgentCard from './HubAgentCard.vue'
 import HubBrainCanvas from './HubBrainCanvas.vue'
@@ -59,11 +59,6 @@ const CHIP_FLY_MIN_REL = 3
 const LIST_NOTE_FLY_REL = 5
 const LIST_NOTE_COUNT = 14
 const MINIMAP_FLY_MIN_REL = 2
-const GRAPH_NOTICES: Partial<Record<GraphStatus, string>> = {
-  unconfigured: 'Connect Obsidian to see your notes here.',
-  denied: 'Memory reads are not granted, so your notes stay hidden.',
-  failed: 'Your notes could not be loaded; retrying when you come back to this window.',
-}
 const ZOOM_STEP = 1.4
 const PAN_STEP_PX = 60
 const SLOT_KEY = /^\d$/
@@ -392,6 +387,8 @@ function launchFromList(launcher: Launcher) {
       v-if="listOpen"
       :agents="placed"
       :notes="listNotes"
+      :graph-status="graphStatus"
+      :graph-message="graphMessage"
       :launchers="listLaunchers"
       @agent="pickFromList"
       @note="pickNoteFromList"
