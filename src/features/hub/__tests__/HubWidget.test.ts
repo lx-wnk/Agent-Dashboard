@@ -322,6 +322,58 @@ describe('hubWidget', () => {
     w.unmount()
   })
 
+  it('focuses a card opened from the list', async () => {
+    graph.status.value = 'ready'
+    graph.notes.value = [vaultNote(0, 'alpha/one.md')]
+    const w = await mountHub()
+    await press(w, 'L')
+    await w.findAll('[data-testid="hub-list-agent"]').find(r => r.attributes('aria-label') === 'Web App, Quiet')!.trigger('click')
+    await flushPromises()
+    expect(w.get('[role="dialog"][aria-label="Web App"]').element.contains(document.activeElement)).toBe(true)
+
+    await press(w, 'L')
+    await w.get('[data-testid="hub-list-note"]').trigger('click')
+    await flushPromises()
+    expect(w.find('[role="dialog"][aria-label="Web App"]').exists()).toBe(false)
+    expect(w.get('[role="dialog"][aria-label="alpha/one.md"]').element.contains(document.activeElement)).toBe(true)
+    w.unmount()
+  })
+
+  it('closes the card of an agent that finished, hands focus back to the stage and keeps it closed', async () => {
+    const w = await mountHub()
+    await w.get('[data-testid="hub-agent-101"]').trigger('click')
+    ;(w.get('[aria-label="Kontor Hub"] button').element as HTMLElement).focus()
+
+    agents.value = initialAgents.filter(a => a.pid !== 101)
+    await flushPromises()
+    expect(w.find('[aria-label="Kontor Hub"]').exists()).toBe(false)
+    expect(document.activeElement).toBe(w.get('[data-testid="hub-stage"]').element)
+
+    agents.value = initialAgents
+    await flushPromises()
+    expect(w.find('[aria-label="Kontor Hub"]').exists()).toBe(false)
+    w.unmount()
+  })
+
+  it('closes the card of a note gone after a refetch and hands focus back to the stage', async () => {
+    graph.status.value = 'ready'
+    graph.notes.value = [vaultNote(0, 'alpha/one.md'), vaultNote(1, 'beta/two.md')]
+    const w = await mountHub()
+    await press(w, 'L')
+    await w.findAll('[data-testid="hub-list-note"]')[1].trigger('click')
+    ;(w.get('[role="dialog"][aria-label="beta/two.md"] button').element as HTMLElement).focus()
+
+    graph.notes.value = [vaultNote(0, 'alpha/one.md')]
+    await flushPromises()
+    expect(w.find('[role="dialog"][aria-label="beta/two.md"]').exists()).toBe(false)
+    expect(document.activeElement).toBe(w.get('[data-testid="hub-stage"]').element)
+
+    graph.notes.value = [vaultNote(0, 'alpha/one.md'), vaultNote(1, 'beta/two.md')]
+    await flushPromises()
+    expect(w.find('[role="dialog"][aria-label="beta/two.md"]').exists()).toBe(false)
+    w.unmount()
+  })
+
   it('flies to the point picked on the minimap', async () => {
     const w = await mountHub()
     const map = w.get('svg[aria-label="Overview map"]')

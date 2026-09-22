@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { HubNote } from '../composables/useObsidianGraph'
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import { formatRelativeThenDate } from '@/utils/format'
 import { useObsidianGraph } from '../composables/useObsidianGraph'
@@ -19,6 +19,9 @@ const MD_EXTENSION = /\.md$/
 const { openInObsidian } = useObsidianGraph()
 const openError = ref<string | null>(null)
 const opening = ref(false)
+const panel = ref<HTMLElement | null>(null)
+
+onMounted(() => panel.value?.querySelector('button')?.focus())
 
 const changed = computed(() => formatRelativeThenDate(new Date(props.note.mtimeMs).toISOString()))
 const chipGroups = computed(() => [
@@ -47,6 +50,7 @@ async function openNote() {
 
 <template>
   <div
+    ref="panel"
     data-hub-layer
     role="dialog"
     :aria-label="note.title"

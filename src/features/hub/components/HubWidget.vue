@@ -42,7 +42,6 @@ const hub = ref<HTMLElement | null>(null)
 const stage = ref<HTMLElement | null>(null)
 const { cam, size, rel, level, dragging, zoomBy, panBy, flyTo, fit, centreWorld } = useHubCamera(stage, { onTap: tapNote })
 const { status: graphStatus, message: graphMessage, notes, refresh: refreshGraph, recentNotes, noteByPath } = useObsidianGraph()
-const selectedPath = ref<string | null>(null)
 const { agents } = useAgents({ autoStart: false })
 const { ask, overlayOpen } = useKontorSession()
 const kontorAgent = useKontorAgent()
@@ -50,7 +49,7 @@ const { activeView } = useViewState()
 const { layout, wide } = useWorkspace()
 const { requestNewPage } = useSidebar()
 const listOpen = ref(false)
-const cardPid = ref<number | null>(null)
+const openCard = ref<{ kind: 'agent', pid: number } | { kind: 'note', path: string } | null>(null)
 
 const SECTOR_FLY_RADIUS = 260
 const SECTOR_FLY_REL = 2.6
@@ -91,7 +90,10 @@ const brain = computed(() => {
   }
 })
 
-const cardNote = computed(() => vaultNotes.value.find(n => n.path === selectedPath.value) ?? null)
+const cardNote = computed(() => {
+  const card = openCard.value
+  return card?.kind === 'note' ? vaultNotes.value.find(n => n.path === card.path) ?? null : null
+})
 
 function sectorLabel(path: string): string {
   const { sectors, sectorOfNote } = plan.value
@@ -101,8 +103,7 @@ function sectorLabel(path: string): string {
 const listNotes = computed(() => vaultNotes.value.length ? recentNotes(LIST_NOTE_COUNT).map(n => ({ ...n, sector: sectorLabel(n.path) })) : [])
 
 function openNote(index: number) {
-  cardPid.value = null
-  selectedPath.value = vaultNotes.value[index].path
+  openCard.value = { kind: 'note', path: vaultNotes.value[index].path }
 }
 
 function flyToNote(index: number, relTarget: number) {
@@ -146,7 +147,16 @@ const kontorState = computed(() => kontorAgent.value ? agentDisplayStatus(kontor
 const kontorPage = computed(() => pageWithWidget(layout.value, KONTOR_WIDGET))
 const coreTitle = computed(() => kontorPage.value ? `Open Kontor (${kontorState.value})` : 'Add the Kontor tile to a page to open it here')
 
-const cardAgent = computed(() => live.value.find(a => a.pid === cardPid.value) ?? null)
+const cardAgent = computed(() => {
+  const card = openCard.value
+  return card?.kind === 'agent' ? live.value.find(a => a.pid === card.pid) ?? null : null
+})
+
+// A finished agent or a note gone after a refetch closes its card for good.
+watch(() => openCard.value !== null && !cardAgent.value && !cardNote.value, (gone) => {
+  if (gone)
+    openCard.value = null
+})
 
 const otherPages = computed(() => layout.value.pages.filter(p => p.id !== ZENTRALE_PAGE_ID))
 const launchers = computed(() => launchersFor(NAV_ITEMS, otherPages.value, activeView.value))
@@ -181,16 +191,14 @@ function toggleList() {
 }
 
 // Post-flush: a closed layer that held focus has unmounted by now and dropped focus to <body>.
-watch([listOpen, cardPid, selectedPath], () => {
+watch([listOpen, openCard], () => {
   if (!hub.value?.contains(document.activeElement))
     stage.value?.focus()
 }, { flush: 'post' })
 
 function escape() {
-  if (cardAgent.value)
-    cardPid.value = null
-  else if (cardNote.value)
-    selectedPath.value = null
+  if (openCard.value)
+    openCard.value = null
   else if (listOpen.value)
     toggleList()
   else
@@ -250,8 +258,7 @@ function onEscape(e: KeyboardEvent) {
 }
 
 function flyToAgent(agent: Agent) {
-  selectedPath.value = null
-  cardPid.value = agent.pid
+  openCard.value = { kind: 'agent', pid: agent.pid }
   const hit = placed.value.find(p => p.agent.pid === agent.pid)
   if (hit)
     flyTo(hit.x, hit.y, AGENT_FLY_REL)
@@ -413,7 +420,7 @@ watch(hubFocusRequest, (target) => {
       @launch="launchFromList"
       @close="listOpen = false"
     />
-    <HubAgentCard v-if="cardAgent" :agent="cardAgent" @close="cardPid = null" />
+    <HubAgentCard v-if="cardAgent" :agent="cardAgent" @close="openCard = null" />
     <HubNoteCard
       v-if="cardNote"
       :key="cardNote.path"
@@ -423,7 +430,7 @@ watch(hubFocusRequest, (target) => {
       :kontor-reachable="!!kontorPage"
       @fly="index => flyToNote(index, Math.max(rel, CHIP_FLY_MIN_REL))"
       @ask="openKontor"
-      @close="selectedPath = null"
+      @close="openCard = null"
     />
   </section>
 </template>
