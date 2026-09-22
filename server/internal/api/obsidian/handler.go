@@ -1,11 +1,16 @@
-// Package obsidian implements the HTTP surface that triggers an Obsidian
-// vault indexing pass on demand.
+// Package obsidian implements the HTTP surface of the Obsidian vault: an
+// on-demand indexing pass, the vault's note graph, and opening a note in
+// Obsidian.
 package obsidian
 
 import (
+	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
+	"slices"
 	"sync/atomic"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -16,8 +21,10 @@ import (
 	"github.com/lx-wnk/kontor/server/internal/memory"
 )
 
-// Handler serves POST /api/obsidian/index, the manual trigger for
-// obsidianapp.IndexNotes.
+// Handler serves POST /api/obsidian/index (the manual trigger for
+// obsidianapp.IndexNotes), GET /api/obsidian/graph (the note graph under
+// VaultRoot, cached) and POST /api/obsidian/open (shows a graph-listed note
+// in Obsidian).
 type Handler struct {
 	client  *obsidianapp.Client
 	mem     repo.MemoryRepo
@@ -37,6 +44,7 @@ type Handler struct {
 	// revisit only if this trigger is ever driven from more than one
 	// server process against the same vault.
 	running atomic.Bool
+	graphs  graphCache
 }
 
 // NewHandler creates a Handler. client is nil when the vault is unconfigured
@@ -44,12 +52,14 @@ type Handler struct {
 // 503 rather than reaching a nil client, the same "optional integration,
 // never a boot failure" rule that function follows.
 func NewHandler(client *obsidianapp.Client, mem repo.MemoryRepo, gate memory.Gate, spaceID string) *Handler {
-	return &Handler{client: client, mem: mem, gate: gate, spaceID: spaceID}
+	return &Handler{client: client, mem: mem, gate: gate, spaceID: spaceID, graphs: graphCache{now: time.Now}}
 }
 
 // Mount registers the /api/obsidian/* routes on r.
 func (h *Handler) Mount(r chi.Router) {
 	r.Post("/api/obsidian/index", apierr.ErrorMiddleware(h.index))
+	r.Get("/api/obsidian/graph", apierr.ErrorMiddleware(h.graph))
+	r.Post("/api/obsidian/open", apierr.ErrorMiddleware(h.open))
 }
 
 // index runs one obsidianapp.IndexNotes pass and reports how many new
@@ -86,5 +96,80 @@ func (h *Handler) index(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	apierr.WriteJSON(w, http.StatusOK, map[string]int{"indexed": count})
+	return nil
+}
+
+func (h *Handler) authorizeRead(r *http.Request) error {
+	if err := h.gate.Authorize(r.Context(), repo.CapabilityMemoryRead, "", repo.GlobalScope()); err != nil {
+		return apierr.NewAppError(http.StatusForbidden, err.Error())
+	}
+	return nil
+}
+
+// cachedGraph maps an upstream failure to 502 without its text, which can carry the vault URL.
+func (h *Handler) cachedGraph(r *http.Request) (obsidianapp.Graph, error) {
+	g, err := h.graphs.get(r.Context(), h.client.Graph)
+	if err != nil {
+		slog.Warn("obsidian graph rebuild failed", "err", err)
+		return obsidianapp.Graph{}, apierr.NewAppError(http.StatusBadGateway, "obsidian graph unavailable")
+	}
+	return g, nil
+}
+
+func (h *Handler) graph(w http.ResponseWriter, r *http.Request) error {
+	if h.client == nil {
+		apierr.WriteJSON(w, http.StatusOK, map[string]bool{"configured": false})
+		return nil
+	}
+	if err := h.authorizeRead(r); err != nil {
+		return err
+	}
+	g, err := h.cachedGraph(r)
+	if err != nil {
+		return err
+	}
+	notes := make([][2]any, len(g.Notes))
+	for i, n := range g.Notes {
+		notes[i] = [2]any{n.Path, n.MtimeMs}
+	}
+	links := g.Links
+	if links == nil {
+		links = [][2]int{}
+	}
+	apierr.WriteJSON(w, http.StatusOK, map[string]any{"configured": true, "notes": notes, "links": links})
+	return nil
+}
+
+const maxOpenBodyBytes = 4 << 10
+
+// open shows a note in Obsidian. Obsidian's /open creates a missing note, so
+// only a path the vault graph lists is ever passed on.
+func (h *Handler) open(w http.ResponseWriter, r *http.Request) error {
+	if h.client == nil {
+		return apierr.NewAppError(http.StatusServiceUnavailable, "obsidian vault not configured")
+	}
+	var body struct {
+		Path string `json:"path"`
+	}
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxOpenBodyBytes))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&body); err != nil {
+		return apierr.NewAppError(http.StatusBadRequest, "invalid request body")
+	}
+	if err := h.authorizeRead(r); err != nil {
+		return err
+	}
+	g, err := h.cachedGraph(r)
+	if err != nil {
+		return err
+	}
+	if !slices.ContainsFunc(g.Notes, func(n obsidianapp.GraphNote) bool { return n.Path == body.Path }) {
+		return apierr.NewAppError(http.StatusNotFound, "note is not in the vault graph")
+	}
+	if err := h.client.OpenNote(r.Context(), body.Path); err != nil {
+		slog.Warn("obsidian open failed", "err", err)
+		return apierr.NewAppError(http.StatusBadGateway, "obsidian open failed")
+	}
+	w.WriteHeader(http.StatusNoContent)
 	return nil
 }
