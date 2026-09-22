@@ -42,3 +42,34 @@ describe('workspaceGrid', () => {
     w.unmount()
   })
 })
+
+describe('workspaceGrid keyboard on the resize handle', () => {
+  const editablePage = {
+    id: 'zentrale',
+    title: 'Zentrale',
+    tiles: [{ widget: 'agents', col: 1, row: 1, colSpan: 4, rowSpan: 2 }],
+  }
+
+  it('resizes the tile on Shift+ArrowDown focused on the resize handle', async () => {
+    const w = mount(WorkspaceGrid, { props: { page: editablePage, editing: true } })
+    await w.get('[data-testid="workspace-resize-agents"]').trigger('keydown', { key: 'ArrowDown', shiftKey: true })
+    const changed = w.emitted('change')
+    expect(changed).toBeTruthy()
+    expect((changed![0][0] as typeof editablePage).tiles[0]).toMatchObject({ rowSpan: 3 })
+    w.unmount()
+  })
+
+  it('ignores Backspace focused on the resize handle', async () => {
+    const w = mount(WorkspaceGrid, { props: { page: editablePage, editing: true } })
+    await w.get('[data-testid="workspace-resize-agents"]').trigger('keydown', { key: 'Backspace' })
+    expect(w.emitted('change')).toBeFalsy()
+    w.unmount()
+  })
+
+  it('still ignores ArrowDown focused on the swap select', async () => {
+    const w = mount(WorkspaceGrid, { props: { page: editablePage, editing: true } })
+    await w.get('[data-testid="workspace-swap-agents"]').trigger('keydown', { key: 'ArrowDown' })
+    expect(w.emitted('change')).toBeFalsy()
+    w.unmount()
+  })
+})

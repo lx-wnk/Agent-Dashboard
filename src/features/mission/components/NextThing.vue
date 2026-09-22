@@ -81,7 +81,7 @@ async function decide(decision: PermissionDecision) {
 
 async function answer(intent: AnswerIntent) {
   const n = props.next
-  if (n?.pid === undefined || answering.value)
+  if (n?.pid === undefined || answering.value || guarding.value)
     return
   answering.value = true
   problem.value = ''
@@ -136,9 +136,9 @@ async function answer(intent: AnswerIntent) {
         {{ problem }}
       </p>
 
-      <div v-if="next.kind === 'question'" data-testid="mission-question" :class="answering ? 'opacity-60 pointer-events-none' : ''">
-        <QuestionCard v-if="next.question" :detected-question="next.question" @answer="answer" />
-        <ConfirmCard v-else-if="next.confirm" :detected-confirm="next.confirm" @answer="answer" />
+      <div v-if="next.kind === 'question'" data-testid="mission-question" :class="(answering || guarding) ? 'opacity-60 pointer-events-none' : ''">
+        <QuestionCard v-if="next.question" :detected-question="next.question" :disabled="guarding" @answer="answer" />
+        <ConfirmCard v-else-if="next.confirm" :detected-confirm="next.confirm" :disabled="guarding" @answer="answer" />
       </div>
 
       <div v-else-if="next.kind === 'permission'" class="flex flex-wrap gap-2 pt-1">

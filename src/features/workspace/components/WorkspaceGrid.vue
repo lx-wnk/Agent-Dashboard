@@ -86,10 +86,15 @@ function apply(r: OpResult<WorkspacePage>) {
 const MOVES: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }
 
 function onKey(e: KeyboardEvent, index: number) {
-  if (!props.editing || e.target !== e.currentTarget)
+  if (!props.editing)
+    return
+  const onResizeHandle = (e.target as HTMLElement).hasAttribute('data-resize')
+  if (e.target !== e.currentTarget && !onResizeHandle)
     return
   const t = props.page.tiles[index]
   if (e.key === 'Delete' || e.key === 'Backspace') {
+    if (onResizeHandle)
+      return
     e.preventDefault()
     emit('change', removeTile(props.page, index))
     return

@@ -2,13 +2,19 @@ import type { NextThing as NextThingItem } from '../composables/useNextThing'
 import { mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { resolvePermissionRequest } from '@/features/pipeline'
+import { sendQuestionAnswer } from '@/utils/answerQuestion'
 import NextThing from '../components/NextThing.vue'
 
 vi.mock('@/features/pipeline', () => ({ resolvePermissionRequest: vi.fn() }))
+vi.mock('@/utils/answerQuestion', () => ({ sendQuestionAnswer: vi.fn() }))
 
 const stubs = {
-  QuestionCard: { name: 'QuestionCard', props: ['detectedQuestion'], template: '<div data-testid="stub-question" />' },
-  ConfirmCard: { name: 'ConfirmCard', props: ['detectedConfirm'], template: '<div data-testid="stub-confirm" />' },
+  QuestionCard: {
+    name: 'QuestionCard',
+    props: ['detectedQuestion', 'disabled'],
+    template: '<button data-testid="stub-question" :disabled="disabled" @click="!disabled && $emit(\'answer\', { mode: \'single\', index: 0 })" />',
+  },
+  ConfirmCard: { name: 'ConfirmCard', props: ['detectedConfirm', 'disabled'], template: '<div data-testid="stub-confirm" />' },
 }
 
 function mountNext(next: NextThingItem | null) {
@@ -102,6 +108,24 @@ describe('nextThing decision guard', () => {
     expect(w.get('[data-testid="mission-decide-allow_once"]').attributes('disabled')).toBeUndefined()
     await w.get('[data-testid="mission-decide-allow_once"]').trigger('click')
     expect(resolvePermissionRequest).toHaveBeenCalledWith('t1', 'r2', 'allow_once')
+    w.unmount()
+  })
+
+  it('disables the answer controls for 500ms after the shown question changes, then sends', async () => {
+    vi.useFakeTimers()
+    const w = mountNext(question)
+    await vi.advanceTimersByTimeAsync(500)
+    expect(w.get('[data-testid="stub-question"]').attributes('disabled')).toBeUndefined()
+
+    const next: NextThingItem = { ...question, pid: 4712 }
+    await w.setProps({ next })
+    expect(w.get('[data-testid="stub-question"]').attributes('disabled')).toBeDefined()
+    await w.get('[data-testid="stub-question"]').trigger('click')
+    expect(sendQuestionAnswer).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(500)
+    await w.get('[data-testid="stub-question"]').trigger('click')
+    expect(sendQuestionAnswer).toHaveBeenCalledWith(4712, { mode: 'single', index: 0 })
     w.unmount()
   })
 })
