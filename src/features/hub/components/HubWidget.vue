@@ -1,10 +1,12 @@
 <script setup lang="ts">
+import type { GraphStatus } from '../composables/useObsidianGraph'
 import type { HubLevel } from '../hubCamera'
 import type { Launcher } from '../hubLaunchers'
 import type { WidgetId } from '@/features/workspace'
 import type { Agent } from '@/types'
-import { computed, inject, ref, watch } from 'vue'
-import { NEEDS_YOU } from '@/composables/openTask'
+import { useEventListener } from '@vueuse/core'
+import { computed, inject, onMounted, ref, watch } from 'vue'
+import { NEEDS_YOU, OPEN_SETTINGS } from '@/composables/openTask'
 import { useSidebar } from '@/composables/useSidebar'
 import { useViewState } from '@/composables/useViewState'
 import { useAgents } from '@/features/agents'
@@ -14,10 +16,13 @@ import { attentionFor } from '@/utils/attention'
 import { NAV_ITEMS } from '@/utils/navConfig'
 import { agentDisplayStatus } from '@/utils/statusColors'
 import { useHubCamera } from '../composables/useHubCamera'
+import { useObsidianGraph } from '../composables/useObsidianGraph'
 import { launchersDocked, LEVEL_TARGETS } from '../hubCamera'
-import { agentAngles, agentRadius, agentRingPx, planSectors, polar, radiusForAge, RINGS, sectorMid, wedgePath } from '../hubGeometry'
+import { hitNote, hubNoteSet } from '../hubCanvas'
+import { agentAngles, agentRadius, agentRingPx, notePoint, planSectors, polar, radiusForAge, RINGS, sectorMid, wedgePath } from '../hubGeometry'
 import { launchersFor } from '../hubLaunchers'
 import HubAgentCard from './HubAgentCard.vue'
+import HubBrainCanvas from './HubBrainCanvas.vue'
 import HubControls from './HubControls.vue'
 import HubLaunchers from './HubLaunchers.vue'
 import HubList from './HubList.vue'
@@ -27,10 +32,15 @@ import HubOrbit from './HubOrbit.vue'
 const needsYou = inject(NEEDS_YOU)
 if (!needsYou)
   throw new Error('HubWidget requires NEEDS_YOU from App.vue')
+const openSettings = inject(OPEN_SETTINGS)
+if (!openSettings)
+  throw new Error('HubWidget requires OPEN_SETTINGS from App.vue')
 
 const hub = ref<HTMLElement | null>(null)
 const stage = ref<HTMLElement | null>(null)
-const { cam, size, rel, level, dragging, zoomBy, panBy, flyTo, fit, centreWorld } = useHubCamera(stage)
+const { cam, size, rel, level, dragging, zoomBy, panBy, flyTo, fit, centreWorld } = useHubCamera(stage, { onTap: tapNote })
+const { status: graphStatus, message: graphMessage, notes, refresh: refreshGraph } = useObsidianGraph()
+const selectedNote = ref<number | null>(null)
 const { agents } = useAgents({ autoStart: false })
 const { ask, overlayOpen } = useKontorSession()
 const kontorAgent = useKontorAgent()
@@ -43,7 +53,14 @@ const cardPid = ref<number | null>(null)
 const SECTOR_FLY_RADIUS = 260
 const SECTOR_FLY_REL = 2.6
 const AGENT_FLY_REL = 3
+const NOTE_FLY_REL = 2.6
 const MINIMAP_FLY_MIN_REL = 2
+const DAY_MS = 86_400_000
+const GRAPH_NOTICES: Partial<Record<GraphStatus, string>> = {
+  unconfigured: 'Connect Obsidian to see your notes here.',
+  denied: 'Memory reads are not granted, so your notes stay hidden.',
+  failed: 'Your notes could not be loaded; retrying when you come back to this window.',
+}
 const ZOOM_STEP = 1.4
 const PAN_STEP_PX = 60
 const SLOT_KEY = /^\d$/
@@ -57,8 +74,35 @@ function blocksOnOperator(agent: Agent): boolean {
 }
 
 const live = computed(() => agents.value.filter(a => a.status !== 'finished').sort((a, b) => a.pid - b.pid))
-const notePaths: readonly string[] = []
-const plan = computed(() => planSectors(notePaths, live.value.map(a => a.projectName)))
+const vaultNotes = computed(() => graphStatus.value === 'ready' ? notes.value : [])
+const plan = computed(() => planSectors(vaultNotes.value.map(n => n.path), live.value.map(a => a.projectName)))
+const graphNotice = computed(() => GRAPH_NOTICES[graphStatus.value])
+
+const brain = computed(() => {
+  const { sectors, sectorOfNote } = plan.value
+  const slotOf = new Map(sectors.map((sector, i) => [sector.key, { sector, colour: i % 8 }]))
+  const now = Date.now()
+  const slots = vaultNotes.value.map(n => slotOf.get(sectorOfNote.get(n.path)!)!)
+  return {
+    points: vaultNotes.value.map((n, i) => notePoint(n.path, slots[i].sector, (now - n.mtimeMs) / DAY_MS)),
+    colours: slots.map(s => s.colour),
+    links: vaultNotes.value.flatMap(n => n.links.map((to): [number, number] => [n.index, to])),
+    hubNotes: hubNoteSet(vaultNotes.value, n => sectorOfNote.get(n.path)!),
+  }
+})
+
+function tapNote(sx: number, sy: number) {
+  const hit = hitNote(brain.value.points, cam.value, sx, sy)
+  if (hit < 0)
+    return
+  if (level.value === 0)
+    flyTo(...brain.value.points[hit], NOTE_FLY_REL)
+  else
+    selectedNote.value = hit
+}
+
+onMounted(() => refreshGraph())
+useEventListener(window, 'focus', () => refreshGraph())
 const ringPx = computed(() => agentRingPx(live.value.length, Math.min(size.value.width, size.value.height)))
 const ringOnScreenPx = computed(() => agentRadius(cam.value.k, false, ringPx.value) * cam.value.k)
 const docked = computed(() => launchersDocked(rel.value, cam.value.k, ringOnScreenPx.value))
@@ -243,6 +287,17 @@ function launchFromList(launcher: Launcher) {
           />
         </g>
       </svg>
+      <HubBrainCanvas
+        :cam="cam"
+        :size="size"
+        :level="level"
+        :points="brain.points"
+        :colours="brain.colours"
+        :notes="vaultNotes"
+        :links="brain.links"
+        :hub-notes="brain.hubNotes"
+        :selected="selectedNote"
+      />
       <HubOrbit
         :cam="cam"
         :sectors="plan.sectors"
@@ -253,7 +308,7 @@ function launchFromList(launcher: Launcher) {
         :needs-you="needsYou.length"
         :core-title="coreTitle"
         :agent-ring-px="ringOnScreenPx"
-        :show-sector-names="notePaths.length > 0"
+        :show-sector-names="vaultNotes.length > 0"
         @core="openKontor"
         @agent="flyToAgent"
         @sector="sector => flyTo(...polar(SECTOR_FLY_RADIUS, sectorMid(sector)), SECTOR_FLY_REL)"
@@ -277,12 +332,31 @@ function launchFromList(launcher: Launcher) {
         @fly="(x, y) => flyTo(x, y, Math.max(rel, MINIMAP_FLY_MIN_REL))"
       />
     </div>
-    <NeedsYouQueue
-      variant="docked"
-      data-hub-layer
-      class="absolute left-1/2 top-2.5 z-10 max-h-[45%] w-[min(560px,calc(100%-120px))] -translate-x-1/2 overflow-y-auto rounded-[10px] border bg-card/95 px-2.5 py-2 shadow-lg"
-      :class="needsYou.length > 0 ? 'border-warning-line' : 'border-line'"
-    />
+    <div class="pointer-events-none absolute left-1/2 top-2.5 z-10 flex max-h-[45%] w-[min(560px,calc(100%-120px))] -translate-x-1/2 flex-col items-start gap-1.5">
+      <NeedsYouQueue
+        variant="docked"
+        data-hub-layer
+        class="pointer-events-auto min-h-0 w-full overflow-y-auto rounded-[10px] border bg-card/95 px-2.5 py-2 shadow-lg"
+        :class="needsYou.length > 0 ? 'border-warning-line' : 'border-line'"
+      />
+      <p
+        v-if="graphNotice"
+        data-hub-layer
+        data-testid="hub-graph-notice"
+        :title="graphStatus === 'denied' ? graphMessage : undefined"
+        class="pointer-events-auto flex shrink-0 items-center gap-2 rounded-lg border border-line bg-card/95 px-2.5 py-1.5 text-[12px] text-fg-mute shadow"
+      >
+        {{ graphNotice }}
+        <button
+          v-if="graphStatus === 'unconfigured'"
+          type="button"
+          class="cursor-pointer text-accent underline-offset-2 hover:underline"
+          @click="openSettings()"
+        >
+          Open settings
+        </button>
+      </p>
+    </div>
     <HubList
       v-if="listOpen"
       :agents="placed"

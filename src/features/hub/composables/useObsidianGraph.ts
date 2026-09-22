@@ -58,8 +58,7 @@ async function doFetch(): Promise<void> {
   }
 }
 
-// memory.Gate.Authorize records a rate-limit use per request, so this must never poll:
-// a fetch runs only on demand (mount, window focus) and at most once per REFRESH_INTERVAL_MS unless forced.
+// Every request books a memory.Gate rate-limit use: never poll, fetch on mount/focus at most once per interval unless forced.
 async function refresh(force = false): Promise<void> {
   if (!force && Date.now() - lastFetchMs < REFRESH_INTERVAL_MS)
     return

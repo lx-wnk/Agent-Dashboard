@@ -1,12 +1,29 @@
+import type { GraphStatus, HubNote } from '../composables/useObsidianGraph'
 import type { Agent } from '@/types'
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { computed, ref } from 'vue'
+import { computed, ref, shallowRef } from 'vue'
 import { NEEDS_YOU, OPEN_SETTINGS, OPEN_TASK, PENDING_PERMISSIONS } from '@/composables/openTask'
 import { useSidebar } from '@/composables/useSidebar'
 import { useViewState } from '@/composables/useViewState'
 import { DEFAULT_LAYOUT, useWorkspace } from '@/features/workspace'
-import { AGENT_SPACING_PX, AGENT_STAGE_MARGIN_PX } from '../hubGeometry'
+import { AGENT_SPACING_PX, AGENT_STAGE_MARGIN_PX, notePoint, planSectors } from '../hubGeometry'
+
+const DAY_MS = 86_400_000
+const NOTE_AGE_DAYS = 30
+const graph = {
+  status: ref<GraphStatus>('idle'),
+  message: ref(''),
+  notes: shallowRef<HubNote[]>([]),
+  refresh: vi.fn(async () => {}),
+}
+const openSettings = vi.fn()
+
+vi.mock('../composables/useObsidianGraph', () => ({ useObsidianGraph: () => graph }))
+
+function vaultNote(index: number, path: string): HubNote {
+  return { index, path, title: path, mtimeMs: Date.now() - NOTE_AGE_DAYS * DAY_MS, links: [], backlinks: [] }
+}
 
 const agents = ref([
   { pid: 101, status: 'active', projectName: 'kontor-hub', working: true },
@@ -56,9 +73,16 @@ beforeEach(() => {
   ask.mockClear()
   overlayOpen.value = false
   useViewState().activeView.value = 'zentrale'
+  // jsdom has no canvas; the brain layer only needs a context that accepts every call.
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(new Proxy({}, { get: () => () => {}, set: () => true }) as never)
 })
 
 afterEach(() => {
+  graph.status.value = 'idle'
+  graph.message.value = ''
+  graph.notes.value = []
+  graph.refresh.mockClear()
+  openSettings.mockClear()
   agents.value = initialAgents
   useWorkspace().layout.value = DEFAULT_LAYOUT
   useWorkspace().wide.value = null
@@ -72,7 +96,7 @@ async function mountHub() {
         [NEEDS_YOU]: computed(() => []),
         [PENDING_PERMISSIONS]: { items: ref([]), refresh: vi.fn() },
         [OPEN_TASK]: vi.fn(),
-        [OPEN_SETTINGS]: vi.fn(),
+        [OPEN_SETTINGS]: openSettings,
       },
     },
   })
@@ -344,6 +368,67 @@ describe('hubWidget', () => {
     expect(core.attributes('title')).toBe('Add the Kontor tile to a page to open it here')
     await core.trigger('click')
     expect(ask).not.toHaveBeenCalled()
+    w.unmount()
+  })
+
+  it('refreshes the vault graph on mount and when the window regains focus', async () => {
+    const w = await mountHub()
+    expect(graph.refresh).toHaveBeenCalledOnce()
+    window.dispatchEvent(new Event('focus'))
+    expect(graph.refresh).toHaveBeenCalledTimes(2)
+    w.unmount()
+  })
+
+  it('names a sector per top-level vault folder once the graph is ready', async () => {
+    graph.status.value = 'ready'
+    graph.notes.value = [vaultNote(0, 'alpha/one.md'), vaultNote(1, 'beta/two.md')]
+    const w = await mountHub()
+    const names = w.findAll('[data-testid^="hub-sector-"]').map(b => b.text()).join(' ')
+    expect(names).toContain('alpha')
+    expect(names).toContain('beta')
+    expect(w.find('canvas[aria-hidden="true"]').exists()).toBe(true)
+    w.unmount()
+  })
+
+  it('flies to a note tapped at the overview level', async () => {
+    graph.status.value = 'ready'
+    graph.notes.value = [vaultNote(0, 'alpha/one.md'), vaultNote(1, 'beta/two.md')]
+    const w = await mountHub()
+    const { sectors, sectorOfNote } = planSectors(['alpha/one.md', 'beta/two.md'], ['kontor-hub', 'web-app', 'api-server', 'worker-queue'])
+    const [x, y] = notePoint('alpha/one.md', sectors.find(s => s.key === sectorOfNote.get('alpha/one.md'))!, NOTE_AGE_DAYS)
+    const stage = w.get('[data-testid="hub-stage"]').element
+    for (const type of ['pointerdown', 'pointerup'])
+      stage.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 1, clientX: 545 + x, clientY: 565 + y }))
+    await flushPromises()
+    expect(scale(w)).toBeCloseTo(2.6)
+    w.unmount()
+  })
+
+  it('offers to connect Obsidian while the vault is unconfigured', async () => {
+    graph.status.value = 'unconfigured'
+    const w = await mountHub()
+    const notice = w.get('[data-testid="hub-graph-notice"]')
+    expect(notice.text()).toContain('Connect Obsidian to see your notes here.')
+    await notice.get('button').trigger('click')
+    expect(openSettings).toHaveBeenCalledOnce()
+    w.unmount()
+  })
+
+  it('explains a denied or failed vault read, and says nothing while loading', async () => {
+    graph.status.value = 'denied'
+    graph.message.value = 'memory.read denied'
+    const w = await mountHub()
+    const notice = w.get('[data-testid="hub-graph-notice"]')
+    expect(notice.text()).toBe('Memory reads are not granted, so your notes stay hidden.')
+    expect(notice.attributes('title')).toBe('memory.read denied')
+
+    graph.status.value = 'failed'
+    await flushPromises()
+    expect(w.get('[data-testid="hub-graph-notice"]').text()).toBe('Your notes could not be loaded; retrying when you come back to this window.')
+
+    graph.status.value = 'loading'
+    await flushPromises()
+    expect(w.find('[data-testid="hub-graph-notice"]').exists()).toBe(false)
     w.unmount()
   })
 })
