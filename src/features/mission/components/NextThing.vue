@@ -9,6 +9,7 @@ import { toast } from '@/composables/useToast'
 import { useCapabilityDecisions } from '@/features/agents'
 import { resolvePermissionRequest } from '@/features/pipeline'
 import { sendQuestionAnswer } from '@/utils/answerQuestion'
+import { capabilityValueLabel, elidedTitle } from '@/utils/capabilityDecision'
 import { errorMessage } from '@/utils/errorMessage'
 
 const props = defineProps<{ next: NextThing | null }>()
@@ -144,13 +145,25 @@ async function answer(intent: AnswerIntent) {
           {{ next.kind }}
         </span>
         <span data-testid="mission-context" class="text-[12.5px] text-fg-mute">
-          {{ next.kind === 'capability' ? (next.decision?.context ?? '') : [next.projectName || next.taskTitle, next.stage].filter(Boolean).join(' · ') }}
+          <template v-if="next.kind === 'capability'">{{ next.decision?.context ?? '' }}<span
+            v-if="next.decision?.contextElided"
+            data-testid="mission-capability-context-elided"
+            :title="elidedTitle(next.decision.contextElided)"
+          >…</span></template>
+          <template v-else>{{ [next.projectName || next.taskTitle, next.stage].filter(Boolean).join(' · ') }}</template>
         </span>
       </div>
 
       <h2 v-if="next.kind !== 'question'" class="text-[23px] font-medium leading-snug text-fg">
         <template v-if="next.kind === 'permission'">
           Let this agent run <span class="font-mono text-[20px] text-accent">{{ next.title }}</span>?
+        </template>
+        <template v-else-if="next.kind === 'capability' && next.decision">
+          <span class="font-mono text-[20px] text-accent">{{ next.decision.capability }}({{ capabilityValueLabel(next.decision) }}<span
+            v-if="next.decision.valueElided"
+            data-testid="mission-capability-value-elided"
+            :title="elidedTitle(next.decision.valueElided)"
+          >…</span>)</span>
         </template>
         <template v-else>
           {{ next.title }}

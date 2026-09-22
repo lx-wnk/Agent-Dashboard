@@ -112,6 +112,24 @@ describe('nextThing', () => {
     vi.useRealTimers()
   })
 
+  // A server-truncated value or context must never read as complete — the
+  // queue is a global surface, so this is the only place some operators will
+  // ever see the ask before allowing or denying it.
+  it('marks a truncated value and context so a cut ask cannot look complete', () => {
+    const truncated: NextThingItem = {
+      ...capability,
+      decision: { ...capability.decision, valueElided: 12, contextElided: 3 } as never,
+    }
+    const w = mountNext(truncated)
+    const valueMark = w.get('[data-testid="mission-capability-value-elided"]')
+    expect(valueMark.text()).toBe('…')
+    expect(valueMark.attributes('title')).toBe('12 characters cut off')
+    const contextMark = w.get('[data-testid="mission-capability-context-elided"]')
+    expect(contextMark.text()).toBe('…')
+    expect(contextMark.attributes('title')).toBe('3 characters cut off')
+    w.unmount()
+  })
+
   it('says nothing needs you in one faint line so the Kontor tile gets the height', () => {
     const w = mountNext(null)
     const calm = w.get('[data-testid="mission-calm"]')
