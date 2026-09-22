@@ -138,7 +138,12 @@ watch(loaded, (isLoaded) => {
 watch(activeView, () => {
   workspace.wide.value = null
   workspace.editing.value = false
-  nextTick(() => document.getElementById('main-content')?.focus())
+  // Fallback only: a caller that navigated here (creating or deleting a page) may
+  // already have moved focus somewhere more specific by the time this runs.
+  nextTick(() => {
+    if (document.activeElement === document.body || !document.activeElement)
+      document.getElementById('main-content')?.focus()
+  })
 })
 
 // A wide tile would hide most of the page's tiles from the editor.

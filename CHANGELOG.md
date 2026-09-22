@@ -54,6 +54,13 @@ Preparing the first public release.
   second click right after renaming the page could delete it instead of
   confirming the new title; it now disarms as soon as the title input
   changes or the rename is saved.
+- **The sidebar's new focus hand-offs (create → the new page's nav item,
+  delete → the Zentrale nav item) actually hold now.** `App.vue`'s own
+  `activeView` watcher refocuses `#main-content` on every navigation,
+  including the one the create/delete flow just made, so it was pulling
+  focus back off the nav item a tick after the flow set it. That refocus is
+  now a fallback: it only runs when nothing more specific already holds
+  focus.
 
 ### Changed
 

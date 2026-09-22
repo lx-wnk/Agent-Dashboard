@@ -196,6 +196,10 @@ test('a page of my own survives a reload', async ({ page }) => {
   await page.getByTestId('nav-new-page-input').press('Enter')
   expect((await created).ok(), 'save (new page) request').toBe(true)
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Morning')
+  // Edit mode survived the navigation watcher, and focus landed on the new page's
+  // own nav item rather than being pulled back to #main-content by App.vue's watcher.
+  await expect(page.getByTestId('workspace-edit-bar')).toBeVisible()
+  await expect(page.locator('[data-testid^="nav-page-"]', { hasText: 'Morning' })).toBeFocused()
 
   await page.getByTestId('workspace-add').selectOption('github')
   const filled = patched(page)
@@ -236,6 +240,9 @@ test('a page of my own is renamed and deleted in its edit mode', async ({ page, 
   expect((await removed).ok(), 'save (delete page) request').toBe(true)
   await expect(page.getByTestId('workspace-page-zentrale')).toBeVisible()
   await expect(page.getByTestId('nav-page-p-morning')).toHaveCount(0)
+  // Focus landed on the Zentrale nav item, not pulled back to #main-content by
+  // App.vue's navigation watcher once the delete's activeView change reaches it.
+  await expect(page.getByTestId('nav-item-zentrale')).toBeFocused()
 })
 
 // An edit on the built-in layout before the stored one arrives would save over it.
