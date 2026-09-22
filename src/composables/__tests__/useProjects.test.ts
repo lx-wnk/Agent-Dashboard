@@ -65,13 +65,9 @@ function withSetup<T>(composable: () => T) {
 describe('useProjects', () => {
   it('fetches /api/projects on first subscribe and populates projects', async () => {
     const { result, wrapper } = withSetup(() => useProjectsMod.useProjects())
-    // microtask drain for fetch.then()
-    await Promise.resolve()
-    await Promise.resolve()
-    await nextTick()
 
-    expect(fetch).toHaveBeenCalledWith('/api/projects')
-    expect(result.projects.value).toHaveLength(1)
+    await vi.waitFor(() => expect(result.projects.value).toHaveLength(1))
+    expect(fetch).toHaveBeenCalledWith('/api/projects', undefined)
     expect(result.projects.value[0].slug).toBe('alpha')
     wrapper.unmount()
   })
@@ -97,8 +93,7 @@ describe('useProjects', () => {
 
   it('prepends on project_created event', async () => {
     const { result, wrapper } = withSetup(() => useProjectsMod.useProjects())
-    await Promise.resolve()
-    await nextTick()
+    await vi.waitFor(() => expect(result.projects.value).toHaveLength(1))
 
     const es = MockEventSource.instances[0]
     const newProject = makeProject('p2', 'beta')
@@ -113,8 +108,7 @@ describe('useProjects', () => {
 
   it('mutates entry on project_updated event', async () => {
     const { result, wrapper } = withSetup(() => useProjectsMod.useProjects())
-    await Promise.resolve()
-    await nextTick()
+    await vi.waitFor(() => expect(result.projects.value).toHaveLength(1))
 
     const es = MockEventSource.instances[0]
     const renamed = makeProject('p1', 'alpha', { name: 'Renamed' })
@@ -129,8 +123,7 @@ describe('useProjects', () => {
 
   it('removes entry on project_deleted event', async () => {
     const { result, wrapper } = withSetup(() => useProjectsMod.useProjects())
-    await Promise.resolve()
-    await nextTick()
+    await vi.waitFor(() => expect(result.projects.value).toHaveLength(1))
 
     const es = MockEventSource.instances[0]
     es.onmessage?.(new MessageEvent('message', {
