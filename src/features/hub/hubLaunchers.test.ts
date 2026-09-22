@@ -18,6 +18,12 @@ describe('launchersFor', () => {
     expect(l).toHaveLength(MAX_LAUNCHERS)
     expect(l.at(-1)).toMatchObject({ id: 'more', kind: 'more' })
   })
+  it('lists every view without a More slot when uncapped', () => {
+    const pages = [{ id: 'a', title: 'A' }, { id: 'b', title: 'B' }, { id: 'c', title: 'C' }]
+    const l = launchersFor(NAV_ITEMS, pages, 'zentrale', Infinity)
+    expect(l.map(x => x.id)).toEqual(expect.arrayContaining(['page:a', 'page:b', 'page:c', 'new-page']))
+    expect(l.map(x => x.id)).not.toContain('more')
+  })
   it('leaves out the view the hub is on', () => {
     expect(launchersFor(NAV_ITEMS, [{ id: 'a', title: 'A' }], 'page:a').map(x => x.id)).not.toContain('page:a')
   })

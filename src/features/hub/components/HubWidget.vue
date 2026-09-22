@@ -15,7 +15,7 @@ import { NAV_ITEMS } from '@/utils/navConfig'
 import { agentDisplayStatus } from '@/utils/statusColors'
 import { useHubCamera } from '../composables/useHubCamera'
 import { LEVEL_TARGETS } from '../hubCamera'
-import { agentAngles, agentRadius, planSectors, polar, radiusForAge, RINGS, sectorMid, WEDGE_INNER, WEDGE_OUTER } from '../hubGeometry'
+import { agentAngles, agentRadius, planSectors, polar, radiusForAge, RINGS, sectorMid, wedgePath } from '../hubGeometry'
 import { launchersFor } from '../hubLaunchers'
 import HubControls from './HubControls.vue'
 import HubLaunchers from './HubLaunchers.vue'
@@ -144,19 +144,6 @@ function onKey(e: KeyboardEvent) {
     return
   e.preventDefault()
   action()
-}
-
-function arcTo(radius: number, deg: number, sweep: 0 | 1): string {
-  const [x, y] = polar(radius, deg)
-  return `A${radius},${radius} 0 0 ${sweep} ${x},${y}`
-}
-
-// Two half-arcs per edge: a lone 360° sector's single arc would end on its own start and draw nothing.
-function wedgePath(start: number, end: number): string {
-  const mid = (start + end) / 2
-  const [ox, oy] = polar(WEDGE_OUTER, start)
-  const [ix, iy] = polar(WEDGE_INNER, end)
-  return `M${ox},${oy}${arcTo(WEDGE_OUTER, mid, 1)}${arcTo(WEDGE_OUTER, end, 1)}L${ix},${iy}${arcTo(WEDGE_INNER, mid, 0)}${arcTo(WEDGE_INNER, start, 0)}Z`
 }
 
 function flyToAgent(agent: Agent) {
