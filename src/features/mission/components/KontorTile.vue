@@ -29,28 +29,36 @@ const paneRef = ref<InstanceType<typeof AgentSessionPane> | null>(null)
 // Reattaches after a reload, a view switch or a server restart.
 onMounted(refresh)
 
-// flush: 'post' so paneRef (agent's own pane) is mounted before prefill runs.
-watch([pendingPrompt, agent], ([prompt], previous) => {
+function forwardPendingPrompt() {
+  const t = takePendingPrompt()
+  if (t === null)
+    return
+  if (agent.value) {
+    paneRef.value?.prefill(t)
+  }
+  else {
+    text.value = t
+    nextTick(() => document.getElementById('kontor-input')?.focus())
+  }
+}
+
+// A watch's immediate call runs before paneRef exists, so a prompt already pending at mount is taken in onMounted instead.
+onMounted(() => {
+  if (pendingPrompt.value !== null)
+    forwardPendingPrompt()
+})
+watch([pendingPrompt, agent], ([prompt], [, before]) => {
   if (prompt !== null) {
-    const t = takePendingPrompt()
-    if (t === null)
-      return
-    if (agent.value) {
-      paneRef.value?.prefill(t)
-    }
-    else {
-      text.value = t
-      nextTick(() => document.getElementById('kontor-input')?.focus())
-    }
+    forwardPendingPrompt()
     return
   }
   // Own input still held unsent text when the agent appeared — hand it to the pane before it unmounts.
-  if (agent.value && !previous?.[1] && text.value) {
+  if (agent.value && !before && text.value) {
     const t = text.value
     text.value = ''
     nextTick(() => paneRef.value?.prefill(t))
   }
-}, { immediate: true, flush: 'post' })
+}, { flush: 'post' })
 
 async function submit() {
   const r = reading.value

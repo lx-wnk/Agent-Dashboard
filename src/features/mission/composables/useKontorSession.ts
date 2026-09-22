@@ -104,7 +104,7 @@ async function send(text: string): Promise<boolean> {
 
 /** Requests the tile to open with `prefill` staged in its prompt — any view can call this. */
 function ask(prefill = ''): void {
-  pendingPrompt.value = prefill
+  pendingPrompt.value = prefill || null
   openRequested.value = true
 }
 
