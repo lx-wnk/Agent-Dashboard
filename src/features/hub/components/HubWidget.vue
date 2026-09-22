@@ -28,7 +28,7 @@ if (!needsYou)
 const stage = ref<HTMLElement | null>(null)
 const { cam, level, docked, dragging, zoomBy, panBy, flyTo, fit, centreWorld } = useHubCamera(stage)
 const { agents } = useAgents({ autoStart: false })
-const { ask } = useKontorSession()
+const { ask, overlayOpen } = useKontorSession()
 const kontorAgent = useKontorAgent()
 const { activeView } = useViewState()
 const { layout, wide } = useWorkspace()
@@ -134,6 +134,9 @@ function isTyping(target: HTMLElement): boolean {
 // Shift stays allowed: '+' needs it on most layouts.
 function onKey(e: KeyboardEvent) {
   if (e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target as HTMLElement))
+    return
+  // The Kontor overlay sits above the hub and collapses on this same Escape from its window listener.
+  if (e.key === 'Escape' && overlayOpen.value)
     return
   const slot = SLOT_KEY.test(e.key) ? launchers.value[Number(e.key) - 1] : undefined
   const action = KEY_ACTIONS[e.key] ?? (slot && (() => launch(slot)))

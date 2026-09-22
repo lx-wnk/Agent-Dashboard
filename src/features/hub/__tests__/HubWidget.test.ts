@@ -15,6 +15,7 @@ const agents = ref([
   { pid: 105, status: 'idle', projectName: 'worker-queue', working: false },
 ] as unknown as Agent[])
 const ask = vi.fn()
+const overlayOpen = ref(false)
 
 vi.mock('@/features/agents', () => ({
   useAgents: () => ({ agents }),
@@ -24,7 +25,7 @@ vi.mock('@/features/mission', () => ({
     props: ['variant'],
     template: '<div data-testid="stub-queue">{{ variant }}</div>',
   },
-  useKontorSession: () => ({ ask }),
+  useKontorSession: () => ({ ask, overlayOpen }),
   useKontorAgent: () => computed(() => null),
 }))
 
@@ -51,6 +52,7 @@ beforeEach(() => {
     removeEventListener: vi.fn(),
   })) as unknown as typeof window.matchMedia
   ask.mockClear()
+  overlayOpen.value = false
   useViewState().activeView.value = 'zentrale'
 })
 
@@ -186,6 +188,22 @@ describe('hubWidget', () => {
     const w = await mountHub()
     await press(w, '+')
     await press(w, 'L')
+    await press(w, 'Escape')
+    expect(scale(w)).toBeCloseTo(1.4)
+    await press(w, 'Escape')
+    expect(scale(w)).toBeCloseTo(1)
+    w.unmount()
+  })
+
+  it('leaves Escape to the open Kontor overlay above it', async () => {
+    const w = await mountHub()
+    await press(w, '+')
+    await press(w, 'L')
+    overlayOpen.value = true
+    const escape = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+    w.get('[data-testid="hub-stage"]').element.dispatchEvent(escape)
+    expect(escape.defaultPrevented).toBe(false)
+    overlayOpen.value = false
     await press(w, 'Escape')
     expect(scale(w)).toBeCloseTo(1.4)
     await press(w, 'Escape')

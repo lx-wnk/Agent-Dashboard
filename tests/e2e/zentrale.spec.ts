@@ -311,3 +311,22 @@ test('the hub widens on F, opens the sidebar New page input from its launcher an
   await stage.press('1')
   await expect.poll(() => page.evaluate(() => localStorage.getItem('agent-active-view'))).toBe('dashboard')
 })
+
+test('Escape on the hub with the Kontor overlay open collapses only the overlay', async ({ page }) => {
+  // Reduced motion makes the hub's fit synchronous, so a wrong fit shows up without waiting out a flight.
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  const stage = page.getByTestId('hub-stage')
+  const camera = () => stage.locator('svg g').first().getAttribute('transform')
+
+  await stage.press('+')
+  const zoomed = await camera()
+  await page.getByTestId('hub-core').click()
+  await expect(page.getByTestId('kontor-expanded')).toBeVisible()
+  // The overlay focuses its own input; the operator going back to the map leaves it open.
+  await stage.focus()
+
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('kontor-expanded')).toHaveCount(0)
+  expect(await camera()).toBe(zoomed)
+})
