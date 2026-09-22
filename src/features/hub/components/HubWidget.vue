@@ -62,12 +62,13 @@ const plan = computed(() => planSectors([], live.value.map(a => a.projectName)))
 const placed = computed(() => {
   const k = cam.value.k
   const { sectors, sectorOfProject } = plan.value
+  const count = live.value.length
   return sectors.flatMap((sector) => {
     const members = live.value.filter(a => sectorOfProject.get(a.projectName) === sector.key)
     const angles = agentAngles(members.length, sector)
     return members.map((agent, i) => {
       const needsOperator = blocksOnOperator(agent)
-      const [x, y] = polar(agentRadius(k, needsOperator), angles[i])
+      const [x, y] = polar(agentRadius(k, needsOperator, count), angles[i])
       return { agent, x, y, state: agentDisplayStatus(agent), needsOperator }
     })
   })
@@ -203,7 +204,7 @@ function launchFromList(launcher: Launcher) {
     ref="hub"
     data-testid="hub"
     aria-label="Zentrale"
-    class="relative h-full min-h-0 overflow-hidden rounded-xl border border-line bg-card"
+    class="relative h-full min-h-[26rem] overflow-hidden rounded-xl border border-line bg-card md:min-h-0"
     @keydown.escape="onEscape"
   >
     <div

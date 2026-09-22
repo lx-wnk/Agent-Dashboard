@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   AGENT_FLOOR_PX,
+  AGENT_SPACING_PX,
   AGENT_WAITING_FLOOR_PX,
   agentAngles,
   agentRadius,
@@ -13,8 +14,10 @@ import {
   R0,
   R_MAX,
   radiusForAge,
+  RINGS,
   SECTOR_FLOOR_DEG,
   sectorKeyFor,
+  visibleRingLabels,
 } from './hubGeometry'
 
 const span = (s: { start: number, end: number }) => s.end - s.start
@@ -97,6 +100,39 @@ describe('agents', () => {
       expect(agentRadius(k, true) * k).toBeGreaterThanOrEqual(AGENT_WAITING_FLOOR_PX - 1e-9)
       expect(agentRadius(k, true)).toBeLessThanOrEqual(agentRadius(k, false))
     }
+  })
+  it('widens the on-screen ring with the number of agents so neighbours get room, never below the floor', () => {
+    const k = 0.6
+    for (const count of [0, 1, 6, 11, 40]) {
+      const ring = Math.max(AGENT_FLOOR_PX, count * AGENT_SPACING_PX / (2 * Math.PI))
+      expect(agentRadius(k, false, count) * k).toBeCloseTo(ring)
+      expect(agentRadius(k, true, count) * k).toBeCloseTo(ring - (AGENT_FLOOR_PX - AGENT_WAITING_FLOOR_PX))
+      expect(agentRadius(k, true, count) * k).toBeGreaterThanOrEqual(AGENT_WAITING_FLOOR_PX - 1e-9)
+    }
+    expect(agentRadius(k, false, 11)).toBeGreaterThan(agentRadius(k, false, 4))
+    expect(agentRadius(k, false, 0)).toBe(agentRadius(k, false))
+  })
+})
+
+describe('visibleRingLabels', () => {
+  const px = (label: string, k: number) => radiusForAge(RINGS.find(r => r.label === label)!.days) * k
+
+  it('draws every ring label when the rings are far apart and outside the agent ring', () => {
+    expect(visibleRingLabels(3, 116).map(r => r.label)).toEqual(['today', 'week', 'month', 'year'])
+  })
+
+  it('hides ring labels inside the agent ring plus its clearance', () => {
+    const k = 3
+    const labels = visibleRingLabels(k, px('month', k) - 11).map(r => r.label)
+    expect(labels).toEqual(['year'])
+  })
+
+  it('skips a ring label closer than 16 px to the last drawn one', () => {
+    const k = 0.57
+    const drawn = visibleRingLabels(k, 0).map(r => px(r.label, k))
+    for (let i = 1; i < drawn.length; i++) expect(drawn[i] - drawn[i - 1]).toBeGreaterThanOrEqual(16)
+    expect(drawn.length).toBeLessThan(RINGS.length)
+    expect(drawn[0]).toBe(px('today', k))
   })
 })
 

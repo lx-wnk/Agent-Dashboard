@@ -55,6 +55,20 @@ describe('hubOrbit', () => {
     w.unmount()
   })
 
+  it('bounds an agent label to a truncated name and keeps the full name in its title', () => {
+    const w = mountOrbit(0)
+    const button = w.get('[data-testid="hub-agent-1"]')
+    expect(button.attributes('title')).toBe('Kontor Hub')
+    expect(button.get('[data-testid="hub-label-name"]').classes()).toEqual(expect.arrayContaining(['truncate', 'max-w-[14ch]']))
+    w.unmount()
+  })
+
+  it('leaves out ring labels inside the agent ring and ones that would crowd the last drawn label', () => {
+    const w = mountOrbit(0)
+    expect(w.findAll('[data-testid="hub-ring-label"]').map(l => l.text())).toEqual(['week', 'month', 'year'])
+    w.unmount()
+  })
+
   it('dims sector names at the topics level and drops them at the notes level', () => {
     const topics = mountOrbit(1)
     expect(topics.get('[data-testid="hub-sector-0"]').classes()).toContain('opacity-55')

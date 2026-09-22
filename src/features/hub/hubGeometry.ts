@@ -10,6 +10,9 @@ export const LAUNCHER_RING_RADIUS = 470
 export const SECTOR_FLOOR_DEG = 24
 export const AGENT_FLOOR_PX = 116
 export const AGENT_WAITING_FLOOR_PX = 88
+export const AGENT_SPACING_PX = 112
+export const RING_LABEL_GAP_PX = 16
+export const RING_LABEL_AGENT_CLEARANCE_PX = 12
 const AGENT_WORLD_MIN = 82
 const AGENT_WAITING_WORLD_MIN = 60
 export const OTHER_SECTOR_KEY = '__other__'
@@ -105,11 +108,23 @@ export function agentAngles(count: number, sector: Sector): number[] {
   return Array.from({ length: count }, (_, i) => sector.start + (sector.end - sector.start) * (i + 1) / (count + 1))
 }
 
-// World radius that keeps the agent at least its floor away from the core on screen.
-export function agentRadius(scale: number, waiting: boolean): number {
+// World radius that keeps the agent its floor away from the core on screen; the floor widens with the agent count.
+export function agentRadius(scale: number, waiting: boolean, count = 0): number {
+  const floorPx = Math.max(AGENT_FLOOR_PX, count * AGENT_SPACING_PX / (2 * Math.PI))
   return waiting
-    ? Math.max(AGENT_WAITING_WORLD_MIN, AGENT_WAITING_FLOOR_PX / scale)
-    : Math.max(AGENT_WORLD_MIN, AGENT_FLOOR_PX / scale)
+    ? Math.max(AGENT_WAITING_WORLD_MIN, (floorPx - (AGENT_FLOOR_PX - AGENT_WAITING_FLOOR_PX)) / scale)
+    : Math.max(AGENT_WORLD_MIN, floorPx / scale)
+}
+
+export function visibleRingLabels(scale: number, agentRingPx: number): typeof RINGS {
+  let last = -Infinity
+  return RINGS.filter((ring) => {
+    const px = radiusForAge(ring.days) * scale
+    if (px < agentRingPx + RING_LABEL_AGENT_CLEARANCE_PX || px - last < RING_LABEL_GAP_PX)
+      return false
+    last = px
+    return true
+  })
 }
 
 export function sectorKeyFor(path: string, projects: readonly string[]): { key: string, label: string } {

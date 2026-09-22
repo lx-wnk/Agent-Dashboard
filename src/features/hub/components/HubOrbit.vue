@@ -3,10 +3,11 @@ import type { Camera, HubLevel } from '../hubCamera'
 import type { Sector } from '../hubGeometry'
 import type { Agent } from '@/types'
 import type { AgentDisplayStatus } from '@/utils/statusColors'
+import { computed } from 'vue'
 import { friendlyProjectName } from '@/utils/friendlyProjectName'
 import { statusLabel } from '@/utils/statusColors'
 import { toScreen } from '../hubCamera'
-import { polar, radiusForAge, RINGS, SECTOR_LABEL_RADIUS, sectorMid } from '../hubGeometry'
+import { agentRadius, polar, radiusForAge, SECTOR_LABEL_RADIUS, sectorMid, visibleRingLabels } from '../hubGeometry'
 
 const props = defineProps<{
   cam: Camera
@@ -22,6 +23,11 @@ const props = defineProps<{
 defineEmits<{ core: [], agent: [agent: Agent], sector: [sector: Sector] }>()
 
 const RING_LABEL_DEG = -128
+
+const ringLabels = computed(() => {
+  const k = props.cam.k
+  return visibleRingLabels(k, agentRadius(k, false, props.agents.length) * k)
+})
 
 const DOT_CLASS: Record<AgentDisplayStatus, string> = {
   working: 'bg-info-dot',
@@ -66,6 +72,7 @@ function atPolar(radius: number, deg: number) {
       type="button"
       :data-testid="`hub-agent-${agent.pid}`"
       :aria-label="`${friendlyProjectName(agent.projectName)}, ${statusLabel(state)}${needsOperator ? ', needs you' : ''}`"
+      :title="friendlyProjectName(agent.projectName)"
       class="pointer-events-auto flex -translate-x-1/2 -translate-y-[9px] cursor-pointer flex-col items-center gap-[3px]"
       :style="at(x, y)"
       @click="$emit('agent', agent)"
@@ -75,10 +82,10 @@ function atPolar(radius: number, deg: number) {
         :class="[DOT_CLASS[state], needsOperator && 'outline-2 outline-warning motion-safe:animate-pulse']"
       />
       <span
-        class="whitespace-nowrap rounded-md border bg-card/85 px-1.5 text-[10.5px] text-fg"
+        class="flex gap-1 whitespace-nowrap rounded-md border bg-card/85 px-1.5 text-[10.5px] text-fg"
         :class="needsOperator ? 'border-warning' : 'border-line'"
       >
-        {{ friendlyProjectName(agent.projectName) }}
+        <span data-testid="hub-label-name" class="max-w-[14ch] truncate">{{ friendlyProjectName(agent.projectName) }}</span>
         <em class="not-italic" :class="needsOperator ? 'text-warning-text' : 'text-fg-mute'">{{ statusLabel(state) }}</em>
       </span>
     </button>
@@ -97,8 +104,9 @@ function atPolar(radius: number, deg: number) {
         {{ sector.label }}<small class="ml-1 font-normal normal-case tracking-normal text-fg-mute">{{ sector.weight }}</small>
       </button>
       <span
-        v-for="ring in RINGS"
+        v-for="ring in ringLabels"
         :key="ring.label"
+        data-testid="hub-ring-label"
         class="-translate-1/2 text-[9px] text-fg-faint"
         :style="atPolar(radiusForAge(ring.days), RING_LABEL_DEG)"
       >{{ ring.label }}</span>
