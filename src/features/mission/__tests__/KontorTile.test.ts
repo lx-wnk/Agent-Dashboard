@@ -6,13 +6,20 @@ const session = {
   pid: ref<number | null>(null),
   status: ref<'idle' | 'starting' | 'running' | 'error'>('idle'),
   error: ref(''),
+  pendingPrompt: ref<string | null>(null),
   refresh: vi.fn(),
   send: vi.fn(),
   end: vi.fn(),
   renew: vi.fn(),
+  takePendingPrompt: vi.fn(() => {
+    const t = session.pendingPrompt.value
+    session.pendingPrompt.value = null
+    return t
+  }),
 }
 const activeView = ref('zentrale')
 const agents = ref<Array<{ pid: number }>>([])
+const paneprefillMock = vi.fn()
 
 vi.mock('../composables/useKontorSession', () => ({
   useKontorSession: () => session,
@@ -23,6 +30,9 @@ vi.mock('@/features/agents', () => ({
   AgentSessionPane: {
     props: ['agent', 'title'],
     template: '<div data-testid="stub-pane" :data-pid="agent.pid" :data-title="title"><slot name="actions" /></div>',
+    setup(_props: unknown, { expose }: { expose: (exposed: Record<string, unknown>) => void }) {
+      expose({ prefill: paneprefillMock })
+    },
   },
 }))
 vi.mock('@/composables/useViewState', async (importOriginal) => {
@@ -44,12 +54,15 @@ beforeEach(() => {
   session.pid.value = null
   session.status.value = 'idle'
   session.error.value = ''
+  session.pendingPrompt.value = null
   for (const fn of [session.refresh, session.send, session.end, session.renew])
     fn.mockReset()
+  session.takePendingPrompt.mockClear()
   session.send.mockResolvedValue(true)
   session.renew.mockResolvedValue(true)
   activeView.value = 'zentrale'
   agents.value = []
+  paneprefillMock.mockClear()
 })
 
 describe('kontorTile', () => {
@@ -173,6 +186,28 @@ describe('kontorTile', () => {
     await flushPromises()
     expect(pane.get('[data-testid="kontor-new"]').attributes('disabled')).toBeDefined()
     expect(pane.get('[data-testid="kontor-end"]').attributes('disabled')).toBeDefined()
+    w.unmount()
+  })
+
+  it('prefills its own input with a pending prompt when no agent runs yet', async () => {
+    const w = mount(KontorTile)
+    session.pendingPrompt.value = '[[notes/a]] '
+    await flushPromises()
+    expect(inputValue(w)).toBe('[[notes/a]] ')
+    expect(session.takePendingPrompt).toHaveBeenCalledOnce()
+    expect(session.pendingPrompt.value).toBeNull()
+    w.unmount()
+  })
+
+  it('forwards a pending prompt to the running session\'s own prompt input', async () => {
+    session.pid.value = 1234
+    session.status.value = 'running'
+    agents.value = [{ pid: 1234 }]
+    const w = mount(KontorTile)
+    session.pendingPrompt.value = '[[notes/a]] '
+    await flushPromises()
+    expect(paneprefillMock).toHaveBeenCalledWith('[[notes/a]] ')
+    expect(session.pendingPrompt.value).toBeNull()
     w.unmount()
   })
 })

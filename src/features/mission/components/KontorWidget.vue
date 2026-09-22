@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { onKeyStroke, useEventListener } from '@vueuse/core'
-import { computed, nextTick, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useKontorAgent, useKontorSession } from '../composables/useKontorSession'
 import KontorTile from './KontorTile.vue'
 
-const { status } = useKontorSession()
+const { status, openRequested } = useKontorSession()
 const agent = useKontorAgent()
 
 const state = computed(() => {
@@ -68,6 +68,19 @@ useEventListener(computed(() => open.value ? window : null), 'scroll', (e) => {
 // A pending frame from an open still in flight must not run place() against
 // a cell that collapse or unmount already moved past.
 onUnmounted(cancelPendingFrame)
+
+// A watch's immediate call runs at setup time, before `cell` exists, so a
+// request already pending when this widget mounts is picked up in onMounted
+// instead; flush: 'post' covers a request made later, after cell is mounted.
+function openIfRequested() {
+  if (!openRequested.value)
+    return
+  openRequested.value = false
+  if (!open.value)
+    grow()
+}
+onMounted(openIfRequested)
+watch(openRequested, openIfRequested, { flush: 'post' })
 
 async function collapse() {
   cancelPendingFrame()

@@ -5,6 +5,11 @@ import { computed, nextTick, ref } from 'vue'
 const session = {
   pid: ref<number | null>(42),
   status: ref<'idle' | 'starting' | 'running' | 'error'>('running'),
+  openRequested: ref(false),
+  ask(prefill = '') {
+    void prefill
+    session.openRequested.value = true
+  },
 }
 const agents = ref([{ pid: 42, status: 'active', working: true, lastOutput: 'PR #467 has four red checks.' }])
 
@@ -20,6 +25,7 @@ const { default: KontorWidget } = await import('../components/KontorWidget.vue')
 beforeEach(() => {
   session.pid.value = 42
   session.status.value = 'running'
+  session.openRequested.value = false
   agents.value = [{ pid: 42, status: 'active', working: true, lastOutput: 'PR #467 has four red checks.' }]
 })
 
@@ -156,6 +162,26 @@ describe('kontorWidget', () => {
     await nextTick()
     expect(getRectSpy).toHaveBeenCalled()
 
+    w.unmount()
+  })
+
+  it('opens when ask() requests it, and resets the request flag', async () => {
+    const w = mount(KontorWidget, { attachTo: document.body })
+    expect(document.querySelector('[data-testid="kontor-expanded"]')).toBeNull()
+    session.ask('[[notes/a]] ')
+    await nextTick()
+    expect(document.querySelector('[data-testid="kontor-expanded"]')).not.toBeNull()
+    expect(session.openRequested.value).toBe(false)
+    w.unmount()
+  })
+
+  // The request must survive a page navigation: ask() may run before the
+  // widget carrying the tile is even mounted.
+  it('opens already-expanded when mounted after ask() was called', async () => {
+    session.ask('[[notes/a]] ')
+    const w = mount(KontorWidget, { attachTo: document.body })
+    await nextTick()
+    expect(document.querySelector('[data-testid="kontor-expanded"]')).not.toBeNull()
     w.unmount()
   })
 })

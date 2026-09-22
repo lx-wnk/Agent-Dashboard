@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import type { KontorStatus } from '../composables/useKontorSession'
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useViewState } from '@/composables/useViewState'
 import { AgentSessionPane } from '@/features/agents'
 import { useKontorAgent, useKontorSession } from '../composables/useKontorSession'
 import { readInput, SLASH_COMMAND_REFUSAL } from '../composables/useReading'
 
-const { status, error, refresh, send, end, renew } = useKontorSession()
+const { status, error, refresh, send, end, renew, pendingPrompt, takePendingPrompt } = useKontorSession()
 const { activeView } = useViewState()
 
 const STATE_LABELS: Record<KontorStatus, string> = {
@@ -24,9 +24,26 @@ const reading = computed(() => readInput(text.value, running.value))
 // The scanner lists a fresh pid a few seconds after it starts; until then the
 // tile keeps its own input so a prompt typed meanwhile still reaches the session.
 const agent = useKontorAgent()
+const paneRef = ref<InstanceType<typeof AgentSessionPane> | null>(null)
 
 // Reattaches after a reload, a view switch or a server restart.
 onMounted(refresh)
+
+// flush: 'post' so paneRef (agent's own pane) is mounted before prefill runs.
+watch([pendingPrompt, agent], ([prompt]) => {
+  if (prompt === null)
+    return
+  const t = takePendingPrompt()
+  if (t === null)
+    return
+  if (agent.value) {
+    paneRef.value?.prefill(t)
+  }
+  else {
+    text.value = t
+    nextTick(() => document.getElementById('kontor-input')?.focus())
+  }
+}, { immediate: true, flush: 'post' })
 
 async function submit() {
   const r = reading.value
@@ -61,7 +78,7 @@ async function renewSession() {
   >
     <!-- Absolute, so the transcript scrolls inside the tile: the Mission column
          has no fixed height and would otherwise grow with every message. -->
-    <AgentSessionPane v-if="agent" :key="agent.pid" :agent="agent" title="Kontor" class="absolute inset-0">
+    <AgentSessionPane v-if="agent" ref="paneRef" :key="agent.pid" :agent="agent" title="Kontor" class="absolute inset-0">
       <template #actions>
         <button
           type="button"
