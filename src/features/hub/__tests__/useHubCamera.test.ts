@@ -43,8 +43,7 @@ async function mountCamera(options?: HubCameraOptions) {
     },
     template: '<div ref="stage"></div>',
   }), { attachTo: document.body })
-  // vueuse's flush:'post' watchers run their immediate call before the template
-  // ref is set; they re-run with the real element only after the next tick.
+  // vueuse's flush:'post' watchers run their immediate call before the ref exists; they rerun once it's set.
   await flushPromises()
   const el = wrapper.element as HTMLElement
   el.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1090, height: 1130, right: 1090, bottom: 1130, x: 0, y: 0, toJSON: () => ({}) })

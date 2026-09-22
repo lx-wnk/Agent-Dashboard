@@ -85,8 +85,7 @@ async function decide(decision: PermissionDecision) {
   }
 }
 
-// Mirrors AgentTriageBand's handleCapabilityDecision: the same three
-// outcomes (applied, already-resolved, error) read the same way here.
+// Mirrors AgentTriageBand's handleCapabilityDecision: same three outcomes, read the same way.
 async function decideCapability(choice: 'allow' | 'deny') {
   const n = props.next
   if (!n?.decision || capabilityBusy.value || guarding.value)

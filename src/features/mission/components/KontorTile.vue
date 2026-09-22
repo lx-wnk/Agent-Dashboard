@@ -21,8 +21,7 @@ const problem = ref('')
 const running = computed(() => status.value === 'running')
 const busy = computed(() => status.value === 'starting')
 const reading = computed(() => readInput(text.value, running.value))
-// The scanner lists a fresh pid a few seconds after it starts; until then the
-// tile keeps its own input so a prompt typed meanwhile still reaches the session.
+// The scanner lists a fresh pid a few seconds after start; until then the tile keeps its own input so a typed prompt still reaches the session.
 const agent = useKontorAgent()
 const paneRef = ref<InstanceType<typeof AgentSessionPane> | null>(null)
 

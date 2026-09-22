@@ -18,7 +18,6 @@ export function notePriority(n: { hub: boolean, touched: boolean, fresh: boolean
   return (n.hub ? 100 : 0) + (n.touched ? 80 : 0) + (n.fresh ? 40 : 0) + n.linkCount
 }
 
-// The prototype's greedy placement: highest priority first, skip a label whose box overlaps one already placed.
 export function cullLabels(candidates: LabelCandidate[]): Set<number> {
   const kept = new Set<number>()
   const placed: LabelBox[] = []
@@ -52,7 +51,6 @@ export function isToday(mtimeMs: number, nowMs: number): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
 }
 
-// Per sector, the notes with the most backlinks — the sector's local hubs.
 export function hubNoteSet(notes: ReadonlyArray<HubNote>, sectorOf: (n: HubNote) => string): Set<number> {
   const bySector = new Map<string, HubNote[]>()
   for (const n of notes) {

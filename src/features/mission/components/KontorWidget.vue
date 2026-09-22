@@ -31,8 +31,7 @@ function cancelPendingFrame() {
   }
 }
 
-// Grows out of its own cell towards the larger free side, up to 64% of the
-// window, as an overlay: the grid underneath does not re-flow.
+// Grows out of its own cell as an overlay, up to 64% of the window: the grid underneath does not re-flow.
 function place(heightOverride?: number) {
   const r = cell.value!.getBoundingClientRect()
   const vh = window.innerHeight
@@ -65,8 +64,7 @@ useEventListener(computed(() => open.value ? window : null), 'scroll', (e) => {
   place()
 }, { capture: true })
 
-// A pending frame from an open still in flight must not run place() against
-// a cell that collapse or unmount already moved past.
+// A pending frame from an open still in flight must not run place() against a cell that collapse/unmount already moved past.
 onUnmounted(cancelPendingFrame)
 
 watch(open, setOverlayOpen, { flush: 'sync' })

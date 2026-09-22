@@ -12,7 +12,7 @@ export const LAUNCHER_AGENT_CLEARANCE_PX = 44
 export const FLY_MS = 480
 export const LEVEL_TARGETS: Record<HubLevel, number> = { 0: 1, 1: 2.4, 2: 5.5 }
 
-// The prototype's fit: the disc of radius 490 plus room for the controls (110 px) and the queue (150 px).
+// Reserves 110px for the controls and 150px for the queue when fitting the disc (radius 490).
 export function fitScale(width: number, height: number): number {
   return Math.max(0.05, Math.min(width - 110, height - 150) / (2 * 490))
 }

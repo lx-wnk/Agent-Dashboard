@@ -249,8 +249,7 @@ function onKey(e: KeyboardEvent) {
   action()
 }
 
-// On the hub root so Escape from the list and card reaches it too; the Kontor overlay above
-// the hub collapses on this same Escape from its window listener.
+// On the hub root so Escape from the list and card reaches it too; the Kontor overlay handles its own Escape via a window listener.
 function onEscape(e: KeyboardEvent) {
   if (ignored(e) || overlayOpen.value)
     return

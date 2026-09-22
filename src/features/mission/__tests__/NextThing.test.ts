@@ -94,8 +94,7 @@ describe('nextThing', () => {
     expect(mountNext(permission).get('[data-testid="mission-context"]').text()).toBe('Dashboard · implementation')
   })
 
-  // Reuses the triage band's own resolve call — no second, incompatible way
-  // to answer a capability ask.
+  // Reuses the triage band's own resolve call — no second, incompatible way to answer.
   it('shows the capability ask and resolves it the way the triage band does', async () => {
     vi.useFakeTimers()
     resolveCapability.mockResolvedValue({ outcome: 'applied' })
@@ -111,9 +110,7 @@ describe('nextThing', () => {
     vi.useRealTimers()
   })
 
-  // A server-truncated value or context must never read as complete — the
-  // queue is a global surface, so this is the only place some operators will
-  // ever see the ask before allowing or denying it.
+  // A truncated value/context must never read as complete — some operators only see this queue.
   it('marks a truncated value and context so a cut ask cannot look complete', () => {
     const truncated: NextThingItem = {
       ...capability,

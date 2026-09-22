@@ -28,7 +28,6 @@ export interface NextThing {
   /** Whichever screen that agent is holding open — one of the two, never both. */
   question?: DetectedQuestion
   confirm?: DetectedConfirm
-  /** The decision to allow or deny, for the capability kind. */
   decision?: PendingCapabilityDecision
   /** What the centre puts in its headline. */
   title?: string
