@@ -39,6 +39,8 @@ function step(by: number) {
     data-testid="needs-you"
     :data-variant="variant"
     aria-label="Needs you"
+    :role="variant === 'strip' ? 'status' : undefined"
+    :aria-live="variant === 'strip' ? 'polite' : undefined"
     :class="variant === 'strip' ? 'rounded-xl border border-warning-line bg-warning-soft px-4 py-3' : ''"
   >
     <div v-if="ranked.length > 1" class="mb-2 flex items-center gap-2 text-[11px] uppercase tracking-widest text-warning-text">

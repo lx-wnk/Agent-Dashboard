@@ -129,7 +129,7 @@ export function rankNextThings(items: PermissionItem[], tasks: PipelineTask[], a
 }
 
 function waitedSince(n: NextThing): number {
-  const at = n.request?.requestedAt
+  const at = n.request?.requestedAt ?? n.decision?.requestedAt
   if (!at)
     return Number.MAX_SAFE_INTEGER
   const t = Date.parse(at)

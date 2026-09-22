@@ -1,12 +1,22 @@
 import type { NextThing as NextThingItem } from '../composables/useNextThing'
 import { mount } from '@vue/test-utils'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { ref } from 'vue'
+import { useCapabilityDecisions } from '@/features/agents'
 import { resolvePermissionRequest } from '@/features/pipeline'
 import { sendQuestionAnswer } from '@/utils/answerQuestion'
 import NextThing from '../components/NextThing.vue'
 
 vi.mock('@/features/pipeline', () => ({ resolvePermissionRequest: vi.fn() }))
 vi.mock('@/utils/answerQuestion', () => ({ sendQuestionAnswer: vi.fn() }))
+vi.mock('@/features/agents', () => ({ useCapabilityDecisions: vi.fn() }))
+
+const resolveCapability = vi.fn()
+vi.mocked(useCapabilityDecisions).mockReturnValue({ resolvingIds: ref({}), resolve: resolveCapability })
+
+beforeEach(() => {
+  resolveCapability.mockClear()
+})
 
 const stubs = {
   QuestionCard: {
@@ -30,6 +40,17 @@ const permission: NextThingItem = {
   request: { id: 'r1', stageRunId: 'run', tool: 'Bash', pattern: 'task lint', requestedAt: '2026-09-18T12:00:00Z', resolvedAt: null, outcome: null } as never,
   title: 'Bash(task lint)',
   why: 'First because an agent is stopped until you answer.',
+}
+
+const capability: NextThingItem = {
+  kind: 'capability',
+  taskId: '',
+  taskTitle: '',
+  projectName: '',
+  stage: '',
+  decision: { id: 'd1', capability: 'net.fetch', value: 'api.github.com', context: 'routine:nightly', reason: 'not granted', requestedAt: '2026-09-22T10:00:00Z' } as never,
+  title: 'net.fetch(api.github.com)',
+  why: 'A run is paused until you allow or deny this capability.',
 }
 
 const question: NextThingItem = {
@@ -72,6 +93,23 @@ describe('nextThing', () => {
   it('leaves no dangling separator when there is no stage', () => {
     expect(mountNext(question).get('[data-testid="mission-context"]').text()).toBe('agent-dashboard')
     expect(mountNext(permission).get('[data-testid="mission-context"]').text()).toBe('Dashboard · implementation')
+  })
+
+  // Reuses the triage band's own resolve call — no second, incompatible way
+  // to answer a capability ask.
+  it('shows the capability ask and resolves it the way the triage band does', async () => {
+    vi.useFakeTimers()
+    resolveCapability.mockResolvedValue({ outcome: 'applied' })
+    const w = mountNext(capability)
+    await vi.advanceTimersByTimeAsync(500)
+    expect(w.get('h2').text()).toBe('net.fetch(api.github.com)')
+    expect(w.get('[data-testid="mission-context"]').text()).toBe('routine:nightly')
+    expect(w.get('[data-testid="mission-capability-reason"]').text()).toBe('not granted')
+
+    await w.get('[data-testid="mission-capability-allow"]').trigger('click')
+    expect(resolveCapability).toHaveBeenCalledWith('d1', 'allow')
+    w.unmount()
+    vi.useRealTimers()
   })
 
   it('says nothing needs you in one faint line so the Kontor tile gets the height', () => {
@@ -126,6 +164,25 @@ describe('nextThing decision guard', () => {
     await vi.advanceTimersByTimeAsync(500)
     await w.get('[data-testid="stub-question"]').trigger('click')
     expect(sendQuestionAnswer).toHaveBeenCalledWith(4712, { mode: 'single', index: 0 })
+    w.unmount()
+  })
+
+  it('disables the capability actions for 500ms after the shown decision changes, then sends', async () => {
+    vi.useFakeTimers()
+    resolveCapability.mockResolvedValue({ outcome: 'applied' })
+    const w = mountNext(capability)
+    await vi.advanceTimersByTimeAsync(500)
+    expect(w.get('[data-testid="mission-capability-allow"]').attributes('disabled')).toBeUndefined()
+
+    const next: NextThingItem = { ...capability, decision: { ...capability.decision, id: 'd2' } as never }
+    await w.setProps({ next })
+    expect(w.get('[data-testid="mission-capability-allow"]').attributes('disabled')).toBeDefined()
+    await w.get('[data-testid="mission-capability-allow"]').trigger('click')
+    expect(resolveCapability).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(500)
+    await w.get('[data-testid="mission-capability-allow"]').trigger('click')
+    expect(resolveCapability).toHaveBeenCalledWith('d2', 'allow')
     w.unmount()
   })
 })

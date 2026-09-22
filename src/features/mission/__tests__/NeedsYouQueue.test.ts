@@ -65,6 +65,16 @@ describe('needsYouQueue', () => {
     strip.unmount()
   })
 
+  it('announces the strip variant as a status region, unlike the docked one', () => {
+    items.value = [{ kind: 'permission', taskId: 't1', taskTitle: 'First', projectName: 'Dashboard', stage: 'implementation', title: 'First', why: 'w' }]
+    const strip = mountQueue('strip')
+    expect(strip.get('[data-testid="needs-you"]').attributes()).toMatchObject({ 'role': 'status', 'aria-live': 'polite' })
+    const docked = mountQueue('docked')
+    expect(docked.get('[data-testid="needs-you"]').attributes('role')).toBeUndefined()
+    strip.unmount()
+    docked.unmount()
+  })
+
   it('shows only the given kinds, and nothing as a strip when none of them waits', async () => {
     const permission: NextThing = { kind: 'permission', taskId: 't1', taskTitle: 'Perm', projectName: 'Dashboard', stage: 'implementation', title: 'Perm', why: 'w' }
     const plan: NextThing = { kind: 'plan', taskId: 't2', taskTitle: 'Plan', projectName: '', stage: 'plan_review', title: 'Plan', why: 'w' }

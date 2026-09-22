@@ -6,6 +6,7 @@ import { computed, onUnmounted, ref, watch } from 'vue'
 import ConfirmCard from '@/components/ConfirmCard.vue'
 import QuestionCard from '@/components/QuestionCard.vue'
 import { toast } from '@/composables/useToast'
+import { useCapabilityDecisions } from '@/features/agents'
 import { resolvePermissionRequest } from '@/features/pipeline'
 import { sendQuestionAnswer } from '@/utils/answerQuestion'
 import { errorMessage } from '@/utils/errorMessage'
@@ -15,7 +16,9 @@ const emit = defineEmits<{ resolved: [], open: [taskId: string] }>()
 
 const busy = ref<PermissionDecision | null>(null)
 const answering = ref(false)
+const capabilityBusy = ref<'allow' | 'deny' | null>(null)
 const problem = ref('')
+const { resolve: resolveCapability } = useCapabilityDecisions()
 
 // Identifies which item is on screen so the card below can remount on
 // change: a permission's own id, or the agent holding a question/confirm
@@ -26,6 +29,8 @@ const itemKey = computed(() => {
     return undefined
   if (n.kind === 'permission')
     return `permission:${n.request?.id ?? ''}`
+  if (n.kind === 'capability')
+    return `capability:${n.decision?.id ?? ''}`
   if (n.pid !== undefined)
     return `question:${n.pid}`
   return `task:${n.taskId}`
@@ -79,6 +84,30 @@ async function decide(decision: PermissionDecision) {
   }
 }
 
+// Mirrors AgentTriageBand's handleCapabilityDecision: the same three
+// outcomes (applied, already-resolved, error) read the same way here.
+async function decideCapability(choice: 'allow' | 'deny') {
+  const n = props.next
+  if (!n?.decision || capabilityBusy.value || guarding.value)
+    return
+  capabilityBusy.value = choice
+  problem.value = ''
+  try {
+    const result = await resolveCapability(n.decision.id, choice)
+    if (result.outcome === 'error') {
+      problem.value = result.message
+      toast.error(problem.value)
+      return
+    }
+    if (result.outcome === 'already-resolved')
+      toast.info('Too late — that ask already expired or was answered elsewhere')
+    emit('resolved')
+  }
+  finally {
+    capabilityBusy.value = null
+  }
+}
+
 async function answer(intent: AnswerIntent) {
   const n = props.next
   if (n?.pid === undefined || answering.value || guarding.value)
@@ -99,7 +128,7 @@ async function answer(intent: AnswerIntent) {
 </script>
 
 <template>
-  <div v-if="next && next.kind !== 'capability'" data-testid="mission-next" class="flex flex-col gap-4">
+  <div v-if="next" data-testid="mission-next" class="flex flex-col gap-4">
     <div class="flex items-center gap-3">
       <span class="text-[11px] font-mono tracking-widest text-accent">NEXT</span>
       <span class="h-px flex-grow bg-line" />
@@ -115,7 +144,7 @@ async function answer(intent: AnswerIntent) {
           {{ next.kind }}
         </span>
         <span data-testid="mission-context" class="text-[12.5px] text-fg-mute">
-          {{ [next.projectName || next.taskTitle, next.stage].filter(Boolean).join(' · ') }}
+          {{ next.kind === 'capability' ? (next.decision?.context ?? '') : [next.projectName || next.taskTitle, next.stage].filter(Boolean).join(' · ') }}
         </span>
       </div>
 
@@ -130,6 +159,10 @@ async function answer(intent: AnswerIntent) {
 
       <p v-if="next.request?.outsideSafeList" class="text-[13px] text-warning-text leading-relaxed">
         This command is outside the server's safe list — allowing it is a deliberate override, not a formality.
+      </p>
+
+      <p v-if="next.kind === 'capability' && next.decision?.reason" data-testid="mission-capability-reason" class="text-[13px] text-fg-mute leading-relaxed">
+        {{ next.decision.reason }}
       </p>
 
       <p v-if="problem" data-testid="mission-problem" role="alert" class="text-[13px] text-warning-text">
@@ -162,6 +195,26 @@ async function answer(intent: AnswerIntent) {
           @click="emit('open', next.taskId)"
         >
           Open agent
+        </button>
+      </div>
+      <div v-else-if="next.kind === 'capability'" class="flex flex-wrap gap-2 pt-1">
+        <button
+          type="button"
+          data-testid="mission-capability-allow"
+          :disabled="capabilityBusy !== null || guarding"
+          class="h-9 rounded-lg bg-accent px-4 text-[13.5px] font-semibold text-accent-contrast disabled:opacity-60"
+          @click="decideCapability('allow')"
+        >
+          {{ capabilityBusy === 'allow' ? 'Working…' : 'Allow' }}
+        </button>
+        <button
+          type="button"
+          data-testid="mission-capability-deny"
+          :disabled="capabilityBusy !== null || guarding"
+          class="h-9 rounded-lg border border-line-strong px-4 text-[13.5px] text-fg-soft disabled:opacity-60"
+          @click="decideCapability('deny')"
+        >
+          {{ capabilityBusy === 'deny' ? 'Working…' : 'Deny' }}
         </button>
       </div>
       <div v-else class="flex gap-2 pt-1">
