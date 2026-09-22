@@ -15,6 +15,7 @@ const props = defineProps<{
 const emit = defineEmits<{ fly: [index: number], ask: [prefill: string], close: [] }>()
 
 const CHIP_LIMIT = 8
+const MD_EXTENSION = /\.md$/
 const { openInObsidian } = useObsidianGraph()
 const openError = ref<string | null>(null)
 
@@ -29,7 +30,7 @@ function count(n: number, noun: string): string {
 }
 
 function askKontor() {
-  emit('ask', `[[${props.note.path.replace(/\.md$/, '')}]] `)
+  emit('ask', `[[${props.note.path.replace(MD_EXTENSION, '')}]] `)
 }
 
 async function openNote() {

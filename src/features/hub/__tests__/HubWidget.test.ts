@@ -16,6 +16,9 @@ const graph = {
   message: ref(''),
   notes: shallowRef<HubNote[]>([]),
   refresh: vi.fn(async () => {}),
+  recentNotes: (count: number) => [...graph.notes.value].sort((a, b) => b.mtimeMs - a.mtimeMs).slice(0, count),
+  noteByPath: (path: string) => graph.notes.value.find(n => n.path === path),
+  openInObsidian: vi.fn(async () => null),
 }
 const openSettings = vi.fn()
 
@@ -445,6 +448,62 @@ describe('hubWidget', () => {
     graph.status.value = 'loading'
     await flushPromises()
     expect(w.find('[data-testid="hub-graph-notice"]').exists()).toBe(false)
+    w.unmount()
+  })
+
+  it('lists the recently touched notes by sector, and a row closes the list, flies to the note and opens its card', async () => {
+    graph.status.value = 'ready'
+    graph.notes.value = [vaultNote(0, 'alpha/one.md'), vaultNote(1, 'beta/two.md')]
+    const w = await mountHub()
+    await press(w, 'L')
+    const rows = w.findAll('[data-testid="hub-list-note"]')
+    expect(rows.map(r => r.attributes('aria-label'))).toEqual([expect.stringMatching(/^alpha\/one\.md, alpha, /), expect.stringMatching(/^beta\/two\.md, beta, /)])
+    await rows[1].trigger('click')
+    expect(w.find(LIST).exists()).toBe(false)
+    expect(scale(w)).toBeCloseTo(5)
+    expect(w.get('[role="dialog"][aria-label="beta/two.md"]').text()).toContain('beta')
+    expect(w.getComponent(HubBrainCanvas).props('selected')).toBe(1)
+    w.unmount()
+  })
+
+  it('flies from a link chip to the linked note at least at rel 3 and opens its card; Escape closes the card first', async () => {
+    graph.status.value = 'ready'
+    graph.notes.value = [{ ...vaultNote(0, 'alpha/one.md'), links: [1] }, { ...vaultNote(1, 'beta/two.md'), backlinks: [0] }]
+    const w = await mountHub()
+    await press(w, 'L')
+    await w.findAll('[data-testid="hub-list-note"]')[0].trigger('click')
+    await w.get('[data-testid="hub-note-link"]').trigger('click')
+    expect(scale(w)).toBeCloseTo(5)
+    expect(w.find('[role="dialog"][aria-label="beta/two.md"]').exists()).toBe(true)
+    expect(w.find('[role="dialog"][aria-label="alpha/one.md"]').exists()).toBe(false)
+    await pressFocused('Escape')
+    expect(w.find('[role="dialog"][aria-label="beta/two.md"]').exists()).toBe(false)
+    expect(w.getComponent(HubBrainCanvas).props('selected')).toBeNull()
+    expect(scale(w)).toBeCloseTo(5)
+    w.unmount()
+  })
+
+  it('keeps the selected note by path when a refetch shifts the indices', async () => {
+    graph.status.value = 'ready'
+    graph.notes.value = [vaultNote(0, 'alpha/one.md'), vaultNote(1, 'beta/two.md')]
+    const w = await mountHub()
+    await press(w, 'L')
+    await w.findAll('[data-testid="hub-list-note"]')[1].trigger('click')
+    graph.notes.value = [vaultNote(0, 'alpha/new.md'), vaultNote(1, 'alpha/one.md'), vaultNote(2, 'beta/two.md')]
+    await flushPromises()
+    expect(w.getComponent(HubBrainCanvas).props('selected')).toBe(2)
+    expect(w.find('[role="dialog"][aria-label="beta/two.md"]').exists()).toBe(true)
+    w.unmount()
+  })
+
+  it('asks Kontor about the open note as a wiki link', async () => {
+    graph.status.value = 'ready'
+    graph.notes.value = [vaultNote(0, 'alpha/one.md')]
+    const w = await mountHub()
+    await press(w, 'L')
+    await w.get('[data-testid="hub-list-note"]').trigger('click')
+    await w.findAll('button').find(b => b.text() === 'Ask Kontor about this')!.trigger('click')
+    expect(ask).toHaveBeenCalledWith('[[alpha/one]] ')
     w.unmount()
   })
 })

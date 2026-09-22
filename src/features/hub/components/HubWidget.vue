@@ -27,6 +27,7 @@ import HubControls from './HubControls.vue'
 import HubLaunchers from './HubLaunchers.vue'
 import HubList from './HubList.vue'
 import HubMinimap from './HubMinimap.vue'
+import HubNoteCard from './HubNoteCard.vue'
 import HubOrbit from './HubOrbit.vue'
 
 const needsYou = inject(NEEDS_YOU)
@@ -39,8 +40,8 @@ if (!openSettings)
 const hub = ref<HTMLElement | null>(null)
 const stage = ref<HTMLElement | null>(null)
 const { cam, size, rel, level, dragging, zoomBy, panBy, flyTo, fit, centreWorld } = useHubCamera(stage, { onTap: tapNote })
-const { status: graphStatus, message: graphMessage, notes, refresh: refreshGraph } = useObsidianGraph()
-const selectedNote = ref<number | null>(null)
+const { status: graphStatus, message: graphMessage, notes, refresh: refreshGraph, recentNotes, noteByPath } = useObsidianGraph()
+const selectedPath = ref<string | null>(null)
 const { agents } = useAgents({ autoStart: false })
 const { ask, overlayOpen } = useKontorSession()
 const kontorAgent = useKontorAgent()
@@ -54,6 +55,9 @@ const SECTOR_FLY_RADIUS = 260
 const SECTOR_FLY_REL = 2.6
 const AGENT_FLY_REL = 3
 const NOTE_FLY_REL = 2.6
+const CHIP_FLY_MIN_REL = 3
+const LIST_NOTE_FLY_REL = 5
+const LIST_NOTE_COUNT = 14
 const MINIMAP_FLY_MIN_REL = 2
 const GRAPH_NOTICES: Partial<Record<GraphStatus, string>> = {
   unconfigured: 'Connect Obsidian to see your notes here.',
@@ -91,6 +95,25 @@ const brain = computed(() => {
   }
 })
 
+const cardNote = computed(() => vaultNotes.value.find(n => n.path === selectedPath.value) ?? null)
+
+function sectorLabel(path: string): string {
+  const { sectors, sectorOfNote } = plan.value
+  return sectors.find(s => s.key === sectorOfNote.get(path))!.label
+}
+
+const listNotes = computed(() => vaultNotes.value.length ? recentNotes(LIST_NOTE_COUNT).map(n => ({ ...n, sector: sectorLabel(n.path) })) : [])
+
+function openNote(index: number) {
+  cardPid.value = null
+  selectedPath.value = vaultNotes.value[index].path
+}
+
+function flyToNote(index: number, relTarget: number) {
+  openNote(index)
+  flyTo(...brain.value.points[index], relTarget)
+}
+
 function tapNote(sx: number, sy: number) {
   const hit = hitNote(brain.value.points, cam.value, sx, sy)
   if (hit < 0)
@@ -98,7 +121,7 @@ function tapNote(sx: number, sy: number) {
   if (level.value === 0)
     flyTo(...brain.value.points[hit], NOTE_FLY_REL)
   else
-    selectedNote.value = hit
+    openNote(hit)
 }
 
 onMounted(() => refreshGraph())
@@ -133,13 +156,13 @@ const otherPages = computed(() => layout.value.pages.filter(p => p.id !== ZENTRA
 const launchers = computed(() => launchersFor(NAV_ITEMS, otherPages.value, activeView.value))
 const listLaunchers = computed(() => launchersFor(NAV_ITEMS, otherPages.value, activeView.value, Infinity))
 
-function openKontor() {
+function openKontor(prefill?: string) {
   if (!kontorPage.value)
     return
   const current = layout.value.pages.find(p => pageView(p.id) === activeView.value)
   if (!current?.tiles.some(t => t.widget === KONTOR_WIDGET))
     activeView.value = pageView(kontorPage.value.id)
-  ask()
+  ask(prefill)
 }
 
 function launch(launcher: Launcher) {
@@ -162,7 +185,7 @@ function toggleList() {
 }
 
 // Post-flush: a closed layer that held focus has unmounted by now and dropped focus to <body>.
-watch([listOpen, cardPid], () => {
+watch([listOpen, cardPid, selectedPath], () => {
   if (!hub.value?.contains(document.activeElement))
     stage.value?.focus()
 }, { flush: 'post' })
@@ -170,6 +193,8 @@ watch([listOpen, cardPid], () => {
 function escape() {
   if (cardAgent.value)
     cardPid.value = null
+  else if (cardNote.value)
+    selectedPath.value = null
   else if (listOpen.value)
     toggleList()
   else
@@ -229,6 +254,7 @@ function onEscape(e: KeyboardEvent) {
 }
 
 function flyToAgent(agent: Agent) {
+  selectedPath.value = null
   cardPid.value = agent.pid
   const hit = placed.value.find(p => p.agent.pid === agent.pid)
   if (hit)
@@ -238,6 +264,11 @@ function flyToAgent(agent: Agent) {
 function pickFromList(agent: Agent) {
   listOpen.value = false
   flyToAgent(agent)
+}
+
+function pickNoteFromList(path: string) {
+  listOpen.value = false
+  flyToNote(noteByPath(path)!.index, LIST_NOTE_FLY_REL)
 }
 
 function launchFromList(launcher: Launcher) {
@@ -296,7 +327,7 @@ function launchFromList(launcher: Launcher) {
         :notes="vaultNotes"
         :links="brain.links"
         :hub-notes="brain.hubNotes"
-        :selected="selectedNote"
+        :selected="cardNote?.index ?? null"
       />
       <HubOrbit
         :cam="cam"
@@ -360,12 +391,24 @@ function launchFromList(launcher: Launcher) {
     <HubList
       v-if="listOpen"
       :agents="placed"
-      :notes="[]"
+      :notes="listNotes"
       :launchers="listLaunchers"
       @agent="pickFromList"
+      @note="pickNoteFromList"
       @launch="launchFromList"
       @close="listOpen = false"
     />
     <HubAgentCard v-if="cardAgent" :agent="cardAgent" @close="cardPid = null" />
+    <HubNoteCard
+      v-if="cardNote"
+      :key="cardNote.path"
+      :note="cardNote"
+      :notes="vaultNotes"
+      :sector-label="sectorLabel(cardNote.path)"
+      :kontor-reachable="!!kontorPage"
+      @fly="index => flyToNote(index, Math.max(rel, CHIP_FLY_MIN_REL))"
+      @ask="openKontor"
+      @close="selectedPath = null"
+    />
   </section>
 </template>
