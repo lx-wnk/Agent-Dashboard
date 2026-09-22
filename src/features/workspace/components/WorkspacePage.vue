@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { OpResult, WorkspacePage as Page, WorkspaceLayout } from '../layout'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useViewState } from '@/composables/useViewState'
 import { removePage, renamePage, replacePage, widenedTiles } from '../layout'
 import { useWorkspace } from '../useWorkspace'
@@ -52,6 +52,14 @@ async function onChange(next: Page) {
     refusal.value = saveFailureReason()
 }
 
+// The bar's own Done click, not a watcher on editing: that ref also flips false on
+// navigation and when the layout locks, neither of which leaves the toggle on screen.
+async function onDone() {
+  editing.value = false
+  await nextTick()
+  document.querySelector<HTMLElement>('[data-testid="workspace-edit-toggle"]')?.focus()
+}
+
 async function onRemove() {
   // Declared before save(), not after: removing the page the operator is on makes
   // App.vue's own resolveView watcher (reacting to the layout write, not to this
@@ -87,7 +95,7 @@ async function onRemove() {
       :refusal="refusal"
       @change="onChange"
       @refuse="r => (refusal = r)"
-      @done="editing = false"
+      @done="onDone"
       @rename="title => commit(renamePage(layout, pageId, title))"
       @remove="onRemove"
     />

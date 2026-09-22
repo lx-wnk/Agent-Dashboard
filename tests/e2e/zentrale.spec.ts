@@ -84,6 +84,16 @@ test('a moved tile stays moved after a reload', async ({ page }) => {
   await expect(page.getByTestId('workspace-tile-cost-today')).toHaveAttribute('style', /--row: 11/)
 })
 
+test('opening and closing edit mode by keyboard keeps focus on a reachable control', async ({ page }) => {
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await page.getByTestId('workspace-edit-toggle').focus()
+  await page.keyboard.press('Enter')
+  await expect(page.getByTestId('workspace-done')).toBeFocused()
+
+  await page.keyboard.press('Enter')
+  await expect(page.getByTestId('workspace-edit-toggle')).toBeFocused()
+})
+
 test('edit mode ends on navigation and does not survive coming back', async ({ page, request, baseURL }) => {
   const layout = {
     version: 1,

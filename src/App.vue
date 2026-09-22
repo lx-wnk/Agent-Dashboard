@@ -318,6 +318,15 @@ watch([activeView, workspace.layout, workspace.loaded], () => {
 }, { immediate: true })
 const needsYouPlace = computed(() => needsYouPlacement({ view: activeView.value, pageHasHub: pageHasHub.value, error: !!error.value }))
 
+// The toggle's own click, not a watcher on workspace.editing: that ref also flips on
+// navigation (activeView watcher above) and on create-page, which already owns focus
+// through focusAfterNavigation — a watcher here would fight that declaration.
+async function enterEditLayout() {
+  workspace.editing.value = true
+  await nextTick()
+  document.querySelector<HTMLElement>('[data-testid="workspace-done"]')?.focus()
+}
+
 // Single routing rule: plan_review tasks open the plan panel, all others the generic modal.
 function openTask(t: PipelineTask) {
   if (t.currentStage === 'plan_review') {
@@ -375,7 +384,7 @@ onMounted(() => usageComposable.start())
               type="button"
               data-testid="workspace-edit-toggle"
               class="h-8 rounded-md border border-line-strong px-3 text-[12.5px] text-fg-soft"
-              @click="workspace.editing.value = true"
+              @click="enterEditLayout"
             >
               Edit layout
             </button>
