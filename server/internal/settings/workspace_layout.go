@@ -50,7 +50,7 @@ type workspaceLayout struct {
 }
 
 func validWorkspaceLayout(raw string) error {
-	if raw == "" {
+	if strings.TrimSpace(raw) == "" {
 		return nil
 	}
 	if len(raw) > workspaceMaxRawBytes {

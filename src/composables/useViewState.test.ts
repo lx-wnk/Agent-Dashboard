@@ -72,6 +72,16 @@ describe('useViewState', () => {
     expect(resolveView('page:p-abc', ['zentrale', 'p-abc'])).toBe('page:p-abc')
   })
 
+  it('maps page:zentrale to the core zentrale view', async () => {
+    const { resolveView } = await freshModule()
+    expect(resolveView('page:zentrale', ['zentrale', 'morning'])).toBe('zentrale')
+  })
+
+  it('falls back when a stored page id does not match the id pattern', async () => {
+    const { resolveView } = await freshModule()
+    expect(resolveView('page:Not Valid!', ['Not Valid!'])).toBe('zentrale')
+  })
+
   it('ignores an unknown stored activeView and falls back to zentrale', async () => {
     localStorage.setItem('agent-active-view', 'kanban')
     const { useViewState } = await freshModule()

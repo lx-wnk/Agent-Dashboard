@@ -25,6 +25,8 @@ func TestWorkspaceLayout_Validation(t *testing.T) {
 
 	// Empty means "the built-in layout".
 	require.NoError(t, d.Validate(""))
+	// Whitespace-only counts as empty too, mirroring parseLayout in layout.ts.
+	require.NoError(t, d.Validate("   "))
 	// An unknown widget id is kept: a deactivated module must not cost the layout.
 	require.NoError(t, d.Validate(zentraleOnly))
 

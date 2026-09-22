@@ -104,7 +104,7 @@ const combinedAttentionCount = computed(() => attentionCount.value + permissionI
 const { todayUsd, start: startTodayCost } = useTodayCost()
 
 const needsYouCount = computed(() => rankNextThings(permissionItems.value, tasks.value, agents.value).length)
-const BASE_TITLE = 'Agent Dashboard — Claude Code agent monitor'
+const BASE_TITLE = document.title
 watchEffect(() => {
   document.title = needsYouCount.value ? `(${needsYouCount.value}) ${BASE_TITLE}` : BASE_TITLE
 })

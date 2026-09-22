@@ -1,5 +1,6 @@
 import type { AgentGroup, AgentSort } from '../utils/agentGroup'
 import { ref, watch } from 'vue'
+import { PAGE_ID_PATTERN, ZENTRALE_PAGE_ID } from '@/features/workspace/layout'
 import { AGENT_GROUP_OPTIONS, AGENT_SORT_OPTIONS, resolveGroup } from '../utils/agentGroup'
 
 export type CoreView = 'zentrale' | 'dashboard' | 'workflows' | 'pipeline' | 'cost' | 'schedules' | 'eval'
@@ -22,7 +23,11 @@ export function pageIdOf(v: ActiveView): string | null {
 
 export function resolveView(v: ActiveView, pageIds: string[]): ActiveView {
   const id = pageIdOf(v)
-  return id === null || pageIds.includes(id) ? v : 'zentrale'
+  if (id === null)
+    return v
+  if (id === ZENTRALE_PAGE_ID || !PAGE_ID_PATTERN.test(id) || !pageIds.includes(id))
+    return 'zentrale'
+  return v
 }
 const AGENT_SORT_VALUES: AgentSort[] = AGENT_SORT_OPTIONS.map(o => o.value)
 const AGENT_GROUP_VALUES: AgentGroup[] = AGENT_GROUP_OPTIONS.map(o => o.value)

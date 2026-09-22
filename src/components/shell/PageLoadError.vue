@@ -1,4 +1,7 @@
 <script setup lang="ts">
+defineOptions({ inheritAttrs: false })
+defineProps<{ error?: Error }>()
+
 function reload() {
   window.location.reload()
 }
