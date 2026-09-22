@@ -6,6 +6,7 @@ import { useMutationObserver } from '@vueuse/core'
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { toScreen } from '../hubCamera'
 import { cullLabels, isToday, notePriority } from '../hubCanvas'
+import { DAY_MS } from '../hubGeometry'
 
 const props = defineProps<{
   cam: Camera
@@ -29,14 +30,11 @@ const HALO_ALPHA = 0.8
 const HALO_WIDTH_PX = 1.2
 const SELECTION_SCALE = 3.2
 const SELECTION_WIDTH_PX = 1.5
-const SELECTION_COLOUR = '#fff'
 const VIEWPORT_MARGIN_PX = 20
 const LABEL_FONT = '11px system-ui, sans-serif'
 const HUB_LABEL_FONT = `600 ${LABEL_FONT}`
 const LABEL_STROKE_PX = 3
 const LABEL_OFFSET_PX = 8.8
-const SECTOR_TOKENS = Array.from({ length: 8 }, (_, i) => `--sector-${i}`)
-const DAY_MS = 86_400_000
 const FULL_CIRCLE = Math.PI * 2
 
 interface Scene {
@@ -52,8 +50,9 @@ interface Scene {
 const canvas = ref<HTMLCanvasElement | null>(null)
 let frame: number | null = null
 
-function circle(ctx: CanvasRenderingContext2D, [x, y]: [number, number], r: number) {
-  ctx.beginPath()
+// moveTo opens a new sub-path, so circles batched into one path are not joined by lines.
+function addCircle(ctx: CanvasRenderingContext2D, [x, y]: [number, number], r: number) {
+  ctx.moveTo(x + r, y)
   ctx.arc(x, y, r, 0, FULL_CIRCLE)
 }
 
@@ -71,21 +70,41 @@ function drawLinks({ ctx, screen, onStage, token }: Scene) {
   ctx.stroke()
 }
 
-function drawNotes({ ctx, screen, visible, radius, now, token }: Scene) {
-  const palette = SECTOR_TOKENS.map(token)
+function strokeHalos({ ctx, screen, visible, radius, now, token }: Scene) {
+  if (props.level === 0)
+    return
+  ctx.globalAlpha = HALO_ALPHA
   ctx.strokeStyle = token('--halo')
   ctx.lineWidth = HALO_WIDTH_PX
+  ctx.beginPath()
   for (const i of visible) {
-    if (props.level > 0 && isToday(props.notes[i].mtimeMs, now)) {
-      ctx.globalAlpha = HALO_ALPHA
-      circle(ctx, screen[i], radius * HALO_SCALE)
-      ctx.stroke()
+    if (isToday(props.notes[i].mtimeMs, now))
+      addCircle(ctx, screen[i], radius * HALO_SCALE)
+  }
+  ctx.stroke()
+}
+
+// One path per (kind, colour); plain notes first so hub notes sit on top.
+function fillNotes({ ctx, screen, visible, radius, token }: Scene) {
+  for (const hub of [false, true]) {
+    const byColour = new Map<number, number[]>()
+    for (const i of visible) {
+      if (props.hubNotes.has(i) !== hub)
+        continue
+      const members = byColour.get(props.colours[i])
+      if (members)
+        members.push(i)
+      else
+        byColour.set(props.colours[i], [i])
     }
-    const hub = props.hubNotes.has(i)
     ctx.globalAlpha = hub ? 1 : NOTE_ALPHA
-    ctx.fillStyle = palette[props.colours[i]]
-    circle(ctx, screen[i], hub ? radius * HUB_NOTE_SCALE : radius)
-    ctx.fill()
+    for (const [colour, members] of byColour) {
+      ctx.fillStyle = token(`--sector-${colour}`)
+      ctx.beginPath()
+      for (const i of members)
+        addCircle(ctx, screen[i], hub ? radius * HUB_NOTE_SCALE : radius)
+      ctx.fill()
+    }
   }
 }
 
@@ -128,14 +147,15 @@ function drawLabels({ ctx, screen, visible, now, token }: Scene) {
   }
 }
 
-function drawSelection({ ctx, screen, onStage, radius }: Scene) {
+function drawSelection({ ctx, screen, onStage, radius, token }: Scene) {
   const i = props.selected
   if (i === null || !onStage[i])
     return
   ctx.globalAlpha = 1
-  ctx.strokeStyle = SELECTION_COLOUR
+  ctx.strokeStyle = token('--fg')
   ctx.lineWidth = SELECTION_WIDTH_PX
-  circle(ctx, screen[i], radius * SELECTION_SCALE)
+  ctx.beginPath()
+  addCircle(ctx, screen[i], radius * SELECTION_SCALE)
   ctx.stroke()
 }
 
@@ -149,8 +169,13 @@ function draw() {
     throw new Error('HubBrainCanvas needs a 2D canvas context')
   const { width, height } = props.size
   const dpr = window.devicePixelRatio || 1
-  el.width = Math.round(width * dpr)
-  el.height = Math.round(height * dpr)
+  const bufferWidth = Math.round(width * dpr)
+  const bufferHeight = Math.round(height * dpr)
+  // Assigning either dimension reallocates and clears the backing store, even to the same value.
+  if (el.width !== bufferWidth || el.height !== bufferHeight) {
+    el.width = bufferWidth
+    el.height = bufferHeight
+  }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
   ctx.clearRect(0, 0, width, height)
   const style = getComputedStyle(el)
@@ -167,7 +192,8 @@ function draw() {
     token: name => style.getPropertyValue(name).trim(),
   }
   drawLinks(scene)
-  drawNotes(scene)
+  strokeHalos(scene)
+  fillNotes(scene)
   drawLabels(scene)
   drawSelection(scene)
 }

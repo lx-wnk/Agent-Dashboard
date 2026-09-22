@@ -69,6 +69,29 @@ describe('useObsidianGraph', () => {
     expect(g.notes.value).toBe(before)
   })
 
+  it('fetches again on the next refresh within 60s after a failed fetch', async () => {
+    fetchMock
+      .mockRejectedValueOnce(new TypeError('network down'))
+      .mockResolvedValueOnce(jsonResponse({ configured: true, notes: [['a.md', 1]], links: [] }))
+    const g = useObsidianGraph()
+    await g.refresh()
+    expect(g.status.value).toBe('failed')
+    await g.refresh()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(g.status.value).toBe('ready')
+  })
+
+  it('drops links whose note indices are out of range', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({
+      configured: true,
+      notes: [['One.md', 1], ['Two.md', 2]],
+      links: [[0, 1], [0, 5], [-1, 0], [7, 1], [1, 0.5]],
+    }))
+    const g = useObsidianGraph()
+    await g.refresh()
+    expect(g.notes.value.map(n => [n.links, n.backlinks])).toEqual([[[1], []], [[], [0]]])
+  })
+
   it('recentNotes returns the newest notes first', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({
       configured: true,

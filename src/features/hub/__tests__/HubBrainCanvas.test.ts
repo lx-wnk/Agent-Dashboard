@@ -3,18 +3,18 @@ import { mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 import HubBrainCanvas from '../components/HubBrainCanvas.vue'
+import { DAY_MS } from '../hubGeometry'
 
-interface Call { name: string, args: unknown[] }
+interface Call { name: string, args: unknown[], state: Record<string | symbol, unknown> }
 
-const DAY_MS = 86_400_000
 const FRAME_MS = 16
 let calls: Call[]
 
-// Records every method call; property writes (fillStyle, globalAlpha, …) are kept as plain values.
+// Records every method call with the style state at that moment; property writes are kept as plain values.
 function recordingContext(): CanvasRenderingContext2D {
   const state: Record<string | symbol, unknown> = {}
   return new Proxy(state, {
-    get: (_, key) => key in state ? state[key] : (...args: unknown[]) => calls.push({ name: String(key), args }),
+    get: (_, key) => key in state ? state[key] : (...args: unknown[]) => calls.push({ name: String(key), args, state: { ...state } }),
     set: (_, key, value) => {
       state[key] = value
       return true
@@ -96,6 +96,34 @@ describe('hubBrainCanvas', () => {
     mountBrain({ level: 1, notes, selected: 2 })
     await nextFrame()
     expect(named('arc')).toHaveLength(5)
+  })
+
+  it('fills notes of one colour and kind in one path, hub notes above the rest', async () => {
+    vi.spyOn(globalThis, 'getComputedStyle').mockReturnValue({ getPropertyValue: (name: string) => `tok(${name})` } as never)
+    mountBrain({ colours: [0, 0, 1], hubNotes: new Set([2]) })
+    await nextFrame()
+    expect(named('arc')).toHaveLength(3)
+    expect(named('fill').map(c => [c.state.fillStyle, c.state.globalAlpha])).toEqual([['tok(--sector-0)', 0.75], ['tok(--sector-1)', 1]])
+  })
+
+  it('strokes the selection ring in the foreground token', async () => {
+    vi.spyOn(globalThis, 'getComputedStyle').mockReturnValue({ getPropertyValue: (name: string) => `tok(${name})` } as never)
+    mountBrain({ selected: 1 })
+    await nextFrame()
+    expect(named('stroke').at(-1)!.state.strokeStyle).toBe('tok(--fg)')
+  })
+
+  it('resizes the backing store only when the stage size changes', async () => {
+    const setWidth = vi.spyOn(HTMLCanvasElement.prototype, 'width', 'set')
+    const w = mountBrain()
+    await nextFrame()
+    expect(setWidth).toHaveBeenCalledOnce()
+    await w.setProps({ cam: { k: 1, tx: 5, ty: 0 } })
+    await nextFrame()
+    expect(setWidth).toHaveBeenCalledOnce()
+    await w.setProps({ size: { width: 500, height: 300 } })
+    await nextFrame()
+    expect(setWidth).toHaveBeenCalledTimes(2)
   })
 
   it('coalesces camera changes into one redraw per frame', async () => {

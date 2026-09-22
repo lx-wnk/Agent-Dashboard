@@ -19,7 +19,7 @@ import { useHubCamera } from '../composables/useHubCamera'
 import { useObsidianGraph } from '../composables/useObsidianGraph'
 import { launchersDocked, LEVEL_TARGETS } from '../hubCamera'
 import { hitNote, hubNoteSet } from '../hubCanvas'
-import { agentAngles, agentRadius, agentRingPx, notePoint, planSectors, polar, radiusForAge, RINGS, sectorMid, wedgePath } from '../hubGeometry'
+import { agentAngles, agentRadius, agentRingPx, DAY_MS, notePoint, planSectors, polar, radiusForAge, RINGS, SECTOR_PALETTE_SIZE, sectorMid, wedgePath } from '../hubGeometry'
 import { launchersFor } from '../hubLaunchers'
 import HubAgentCard from './HubAgentCard.vue'
 import HubBrainCanvas from './HubBrainCanvas.vue'
@@ -55,7 +55,6 @@ const SECTOR_FLY_REL = 2.6
 const AGENT_FLY_REL = 3
 const NOTE_FLY_REL = 2.6
 const MINIMAP_FLY_MIN_REL = 2
-const DAY_MS = 86_400_000
 const GRAPH_NOTICES: Partial<Record<GraphStatus, string>> = {
   unconfigured: 'Connect Obsidian to see your notes here.',
   denied: 'Memory reads are not granted, so your notes stay hidden.',
@@ -74,13 +73,14 @@ function blocksOnOperator(agent: Agent): boolean {
 }
 
 const live = computed(() => agents.value.filter(a => a.status !== 'finished').sort((a, b) => a.pid - b.pid))
-const vaultNotes = computed(() => graphStatus.value === 'ready' ? notes.value : [])
+// A refetch passes through 'loading'; keeping the last notes stops the brain from blanking and the agents from jumping.
+const vaultNotes = computed(() => graphStatus.value === 'ready' || graphStatus.value === 'loading' ? notes.value : [])
 const plan = computed(() => planSectors(vaultNotes.value.map(n => n.path), live.value.map(a => a.projectName)))
 const graphNotice = computed(() => GRAPH_NOTICES[graphStatus.value])
 
 const brain = computed(() => {
   const { sectors, sectorOfNote } = plan.value
-  const slotOf = new Map(sectors.map((sector, i) => [sector.key, { sector, colour: i % 8 }]))
+  const slotOf = new Map(sectors.map((sector, i) => [sector.key, { sector, colour: i % SECTOR_PALETTE_SIZE }]))
   const now = Date.now()
   const slots = vaultNotes.value.map(n => slotOf.get(sectorOfNote.get(n.path)!)!)
   return {
@@ -274,7 +274,7 @@ function launchFromList(launcher: Launcher) {
             :key="sector.key"
             :d="wedgePath(sector.start, sector.end)"
             fill-opacity="0.035"
-            :style="{ fill: `var(--sector-${i % 8})` }"
+            :style="{ fill: `var(--sector-${i % SECTOR_PALETTE_SIZE})` }"
           />
           <circle
             v-for="ring in RINGS"

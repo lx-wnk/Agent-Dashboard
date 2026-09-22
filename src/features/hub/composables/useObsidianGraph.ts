@@ -23,8 +23,10 @@ function titleOf(path: string): string {
 function buildNotes(body: GraphResponse): HubNote[] {
   const built = (body.notes ?? []).map(([path, mtimeMs], index): HubNote => ({ index, path, title: titleOf(path), mtimeMs, links: [], backlinks: [] }))
   for (const [from, to] of body.links ?? []) {
-    built[from]?.links.push(to)
-    built[to]?.backlinks.push(from)
+    if (!built[from] || !built[to])
+      continue
+    built[from].links.push(to)
+    built[to].backlinks.push(from)
   }
   return built
 }
@@ -65,7 +67,8 @@ async function refresh(force = false): Promise<void> {
   if (inFlight)
     return inFlight
   inFlight = doFetch().finally(() => {
-    lastFetchMs = Date.now()
+    if (status.value !== 'failed')
+      lastFetchMs = Date.now()
     inFlight = null
   })
   return inFlight

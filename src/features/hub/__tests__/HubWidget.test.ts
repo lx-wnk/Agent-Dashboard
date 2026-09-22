@@ -7,9 +7,9 @@ import { NEEDS_YOU, OPEN_SETTINGS, OPEN_TASK, PENDING_PERMISSIONS } from '@/comp
 import { useSidebar } from '@/composables/useSidebar'
 import { useViewState } from '@/composables/useViewState'
 import { DEFAULT_LAYOUT, useWorkspace } from '@/features/workspace'
-import { AGENT_SPACING_PX, AGENT_STAGE_MARGIN_PX, notePoint, planSectors } from '../hubGeometry'
+import HubBrainCanvas from '../components/HubBrainCanvas.vue'
+import { AGENT_SPACING_PX, AGENT_STAGE_MARGIN_PX, DAY_MS, notePoint, planSectors } from '../hubGeometry'
 
-const DAY_MS = 86_400_000
 const NOTE_AGE_DAYS = 30
 const graph = {
   status: ref<GraphStatus>('idle'),
@@ -387,6 +387,22 @@ describe('hubWidget', () => {
     expect(names).toContain('alpha')
     expect(names).toContain('beta')
     expect(w.find('canvas[aria-hidden="true"]').exists()).toBe(true)
+    w.unmount()
+  })
+
+  it('keeps the sectors and the notes on screen while the graph refetches', async () => {
+    graph.status.value = 'ready'
+    graph.notes.value = [vaultNote(0, 'alpha/one.md'), vaultNote(1, 'beta/two.md')]
+    const w = await mountHub()
+    const sectorNames = () => w.findAll('[data-testid^="hub-sector-"]').map(b => b.text())
+    const namesBefore = sectorNames()
+    const pointsBefore = w.getComponent(HubBrainCanvas).props('points')
+    expect(pointsBefore).toHaveLength(2)
+
+    graph.status.value = 'loading'
+    await flushPromises()
+    expect(sectorNames()).toEqual(namesBefore)
+    expect(w.getComponent(HubBrainCanvas).props('points')).toEqual(pointsBefore)
     w.unmount()
   })
 

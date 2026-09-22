@@ -7,7 +7,7 @@ import { computed } from 'vue'
 import { friendlyProjectName } from '@/utils/friendlyProjectName'
 import { statusLabel } from '@/utils/statusColors'
 import { toScreen } from '../hubCamera'
-import { polar, radiusForAge, sectorLabelRadius, sectorMid, visibleRingLabels } from '../hubGeometry'
+import { polar, radiusForAge, SECTOR_PALETTE_SIZE, sectorLabelRadius, sectorMid, visibleRingLabels } from '../hubGeometry'
 
 const props = defineProps<{
   cam: Camera
@@ -99,7 +99,7 @@ function atPolar(radius: number, deg: number) {
           :data-testid="`hub-sector-${i}`"
           class="pointer-events-auto -translate-1/2 cursor-pointer whitespace-nowrap rounded px-1.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-widest hover:bg-fg/5"
           :class="level === 1 && 'opacity-55'"
-          :style="{ ...atPolar(sectorNameRadius, sectorMid(sector)), color: `var(--sector-${i % 8})` }"
+          :style="{ ...atPolar(sectorNameRadius, sectorMid(sector)), color: `var(--sector-${i % SECTOR_PALETTE_SIZE})` }"
           @click="$emit('sector', sector)"
         >
           {{ sector.label }}<small class="ml-1 font-normal normal-case tracking-normal text-fg-mute">{{ sector.weight }}</small>

@@ -1,3 +1,7 @@
+export const DAY_MS = 86_400_000
+// Matches the --sector-0…7 theme tokens in main.css.
+export const SECTOR_PALETTE_SIZE = 8
+
 // World units: the hub's "fit all" view shows a disc of about WORLD_RADIUS around the core.
 export const R0 = 110
 export const R_MAX = 410

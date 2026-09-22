@@ -3,7 +3,7 @@ import type { Camera } from '../hubCamera'
 import type { Sector } from '../hubGeometry'
 import type { AgentDisplayStatus } from '@/utils/statusColors'
 import { computed } from 'vue'
-import { wedgePath } from '../hubGeometry'
+import { SECTOR_PALETTE_SIZE, wedgePath } from '../hubGeometry'
 
 const props = defineProps<{
   cam: Camera
@@ -49,7 +49,7 @@ function onClick(e: MouseEvent) {
       :key="sector.key"
       :d="wedgePath(sector.start, sector.end)"
       fill-opacity="0.12"
-      :style="{ fill: `var(--sector-${i % 8})` }"
+      :style="{ fill: `var(--sector-${i % SECTOR_PALETTE_SIZE})` }"
     />
     <circle v-for="(agent, i) in agents" :key="i" :cx="agent.x" :cy="agent.y" :r="AGENT_DOT_R" :class="DOT_FILL[agent.state]" />
     <rect v-bind="viewport" stroke-width="6" class="fill-accent/10 stroke-accent" />
