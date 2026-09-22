@@ -1,6 +1,6 @@
 import { mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { nextTick, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 
 const session = {
   pid: ref<number | null>(42),
@@ -8,7 +8,10 @@ const session = {
 }
 const agents = ref([{ pid: 42, status: 'active', working: true, lastOutput: 'PR #467 has four red checks.' }])
 
-vi.mock('../composables/useKontorSession', () => ({ useKontorSession: () => session }))
+vi.mock('../composables/useKontorSession', () => ({
+  useKontorSession: () => session,
+  useKontorAgent: () => computed(() => agents.value.find(a => a.pid === session.pid.value) ?? null),
+}))
 vi.mock('@/features/agents', () => ({ useAgents: () => ({ agents }) }))
 vi.mock('../components/KontorTile.vue', () => ({ default: { template: '<div data-testid="stub-kontor-tile" />' } }))
 
@@ -134,6 +137,25 @@ describe('kontorWidget', () => {
     expect(getRectSpy).not.toHaveBeenCalled()
 
     innerHeightSpy.mockRestore()
+    w.unmount()
+  })
+
+  it('does not re-place on a scroll inside the overlay, but does on a scroll elsewhere', async () => {
+    const w = mount(KontorWidget, { attachTo: document.body })
+    const cellEl = w.get('[data-testid="kontor-collapsed"]').element as HTMLElement
+    const getRectSpy = vi.spyOn(cellEl, 'getBoundingClientRect')
+    await w.get('[data-testid="kontor-collapsed"]').trigger('click')
+    getRectSpy.mockClear()
+
+    const inner = document.querySelector('[data-testid="stub-kontor-tile"]') as HTMLElement
+    inner.dispatchEvent(new Event('scroll'))
+    await nextTick()
+    expect(getRectSpy).not.toHaveBeenCalled()
+
+    document.dispatchEvent(new Event('scroll'))
+    await nextTick()
+    expect(getRectSpy).toHaveBeenCalled()
+
     w.unmount()
   })
 })

@@ -1,6 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 
 const session = {
   pid: ref<number | null>(null),
@@ -14,7 +14,10 @@ const session = {
 const activeView = ref('zentrale')
 const agents = ref<Array<{ pid: number }>>([])
 
-vi.mock('../composables/useKontorSession', () => ({ useKontorSession: () => session }))
+vi.mock('../composables/useKontorSession', () => ({
+  useKontorSession: () => session,
+  useKontorAgent: () => computed(() => agents.value.find(a => a.pid === session.pid.value) ?? null),
+}))
 vi.mock('@/features/agents', () => ({
   useAgents: () => ({ agents }),
   AgentSessionPane: {

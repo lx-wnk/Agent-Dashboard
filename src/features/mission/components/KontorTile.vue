@@ -2,13 +2,12 @@
 import type { KontorStatus } from '../composables/useKontorSession'
 import { computed, onMounted, ref } from 'vue'
 import { useViewState } from '@/composables/useViewState'
-import { AgentSessionPane, useAgents } from '@/features/agents'
-import { useKontorSession } from '../composables/useKontorSession'
+import { AgentSessionPane } from '@/features/agents'
+import { useKontorAgent, useKontorSession } from '../composables/useKontorSession'
 import { readInput, SLASH_COMMAND_REFUSAL } from '../composables/useReading'
 
-const { pid, status, error, refresh, send, end, renew } = useKontorSession()
+const { status, error, refresh, send, end, renew } = useKontorSession()
 const { activeView } = useViewState()
-const { agents } = useAgents({ autoStart: false })
 
 const STATE_LABELS: Record<KontorStatus, string> = {
   idle: 'No session',
@@ -24,7 +23,7 @@ const busy = computed(() => status.value === 'starting')
 const reading = computed(() => readInput(text.value, running.value))
 // The scanner lists a fresh pid a few seconds after it starts; until then the
 // tile keeps its own input so a prompt typed meanwhile still reaches the session.
-const agent = computed(() => pid.value === null ? null : agents.value.find(a => a.pid === pid.value) ?? null)
+const agent = useKontorAgent()
 
 // Reattaches after a reload, a view switch or a server restart.
 onMounted(refresh)

@@ -1,13 +1,11 @@
 <script setup lang="ts">
 import { onKeyStroke, useEventListener } from '@vueuse/core'
 import { computed, nextTick, onUnmounted, ref } from 'vue'
-import { useAgents } from '@/features/agents'
-import { useKontorSession } from '../composables/useKontorSession'
+import { useKontorAgent, useKontorSession } from '../composables/useKontorSession'
 import KontorTile from './KontorTile.vue'
 
-const { pid, status } = useKontorSession()
-const { agents } = useAgents({ autoStart: false })
-const agent = computed(() => (pid.value === null ? null : agents.value.find(a => a.pid === pid.value) ?? null))
+const { status } = useKontorSession()
+const agent = useKontorAgent()
 
 const state = computed(() => {
   const a = agent.value
@@ -20,6 +18,7 @@ const state = computed(() => {
 const last = computed(() => agent.value?.lastOutput ?? (agent.value ? '' : 'Start Kontor — ask for anything'))
 
 const cell = ref<HTMLElement | null>(null)
+const overlay = ref<HTMLElement | null>(null)
 const open = ref(false)
 const box = ref<Record<string, string>>({})
 let frameId: number | null = null
@@ -58,7 +57,13 @@ function grow() {
 }
 
 useEventListener(computed(() => open.value ? window : null), 'resize', () => place())
-useEventListener(computed(() => open.value ? window : null), 'scroll', () => place(), { capture: true })
+useEventListener(computed(() => open.value ? window : null), 'scroll', (e) => {
+  // The overlay's own scrolling (the session transcript) triggers this same
+  // capturing listener on window; only a scroll outside it should re-place.
+  if (overlay.value?.contains(e.target as Node))
+    return
+  place()
+}, { capture: true })
 
 // A pending frame from an open still in flight must not run place() against
 // a cell that collapse or unmount already moved past.
@@ -108,7 +113,7 @@ onKeyStroke('Escape', () => {
   </div>
 
   <Teleport to="body">
-    <div v-if="open" data-testid="kontor-expanded" class="fixed z-40 flex flex-col overflow-hidden rounded-xl border border-accent bg-card shadow-2xl transition-[height] duration-200 ease motion-reduce:transition-none" :style="box">
+    <div v-if="open" ref="overlay" data-testid="kontor-expanded" class="fixed z-40 flex flex-col overflow-hidden rounded-xl border border-accent bg-card shadow-2xl transition-[height] duration-200 motion-reduce:transition-none" :style="box">
       <button type="button" data-testid="kontor-collapse" aria-label="Collapse Kontor (Esc)" class="absolute right-2 top-2 z-10 rounded border border-line-strong px-1.5 text-[12px] text-fg-mute" @click="collapse">
         ▾
       </button>

@@ -1,4 +1,6 @@
-import { effectScope, ref, watch } from 'vue'
+import type { ComputedRef } from 'vue'
+import type { Agent } from '@/types'
+import { computed, effectScope, ref, watch } from 'vue'
 import { useAgents } from '@/features/agents'
 import { errorMessage, readErrorMessage } from '@/utils/errorMessage'
 
@@ -133,4 +135,10 @@ function watchAgentExit() {
 export function useKontorSession() {
   watchAgentExit()
   return { pid, status, error, refresh, start, send, end, renew }
+}
+
+/** The agents-stream entry for the Kontor session's pid, shared by every caller. */
+export function useKontorAgent(): ComputedRef<Agent | null> {
+  const { agents } = useAgents({ autoStart: false })
+  return computed(() => (pid.value === null ? null : agents.value.find(a => a.pid === pid.value) ?? null))
 }
