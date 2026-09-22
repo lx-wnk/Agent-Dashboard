@@ -1,0 +1,68 @@
+import type { HubLevel } from '../hubCamera'
+import type { Agent } from '@/types'
+import { mount } from '@vue/test-utils'
+import { describe, expect, it } from 'vitest'
+import HubOrbit from '../components/HubOrbit.vue'
+import { buildSectors } from '../hubGeometry'
+
+const sectors = buildSectors([{ key: 'kontor-hub', label: 'kontor-hub', weight: 1 }, { key: 'web-app', label: 'web-app', weight: 1 }])
+
+function agent(pid: number, projectName: string): Agent {
+  return { pid, projectName, status: 'active', working: false } as Agent
+}
+
+function mountOrbit(level: HubLevel) {
+  return mount(HubOrbit, {
+    props: {
+      cam: { k: 1, tx: 500, ty: 500 },
+      sectors,
+      agents: [
+        { agent: agent(1, 'kontor-hub'), x: 82, y: 0, state: 'working', needsOperator: false },
+        { agent: agent(2, 'web-app'), x: -60, y: 0, state: 'waiting', needsOperator: true },
+      ],
+      level,
+      running: 3,
+      waiting: 1,
+      needsYou: 2,
+      kontorState: 'idle',
+    },
+  })
+}
+
+describe('hubOrbit', () => {
+  it('draws the core, one button per agent and one per sector at the overview level', async () => {
+    const w = mountOrbit(0)
+    const core = w.get('[data-testid="hub-core"]')
+    expect(core.text()).toContain('3 running · 1 waiting')
+    expect(w.get('[data-testid="hub-core-needs-you"]').text()).toContain('2')
+    expect(core.attributes('style')).toContain('translate(500px, 500px)')
+    expect(w.get('[data-testid="hub-agent-1"]').attributes('aria-label')).toBe('Kontor Hub, Working')
+    expect(w.get('[data-testid="hub-agent-2"]').attributes('aria-label')).toBe('Web App, Quiet, needs you')
+    expect(w.get('[data-testid="hub-agent-1"]').attributes('style')).toContain('translate(582px, 500px)')
+    expect(w.findAll('[data-testid^="hub-sector-"]')).toHaveLength(2)
+
+    await core.trigger('click')
+    expect(w.emitted('core')).toHaveLength(1)
+    w.unmount()
+  })
+
+  it('emits the clicked agent and sector', async () => {
+    const w = mountOrbit(0)
+    await w.get('[data-testid="hub-agent-2"]').trigger('click')
+    await w.get('[data-testid="hub-sector-1"]').trigger('click')
+    expect(w.emitted('agent')?.[0]).toEqual([agent(2, 'web-app')])
+    expect(w.emitted('sector')?.[0]).toEqual([sectors[1]])
+    w.unmount()
+  })
+
+  it('dims sector names at the topics level and drops them at the notes level', () => {
+    const topics = mountOrbit(1)
+    expect(topics.get('[data-testid="hub-sector-0"]').classes()).toContain('opacity-55')
+    topics.unmount()
+
+    const notes = mountOrbit(2)
+    expect(notes.findAll('[data-testid^="hub-sector-"]')).toHaveLength(0)
+    expect(notes.findAll('[data-testid^="hub-agent-"]')).toHaveLength(2)
+    notes.unmount()
+  })
+})
