@@ -4,6 +4,7 @@ import { computed, inject, ref } from 'vue'
 import { NEEDS_YOU } from '@/composables/openTask'
 import { useAgents } from '@/features/agents'
 import { NeedsYouQueue, useKontorAgent, useKontorSession } from '@/features/mission'
+import { attentionFor } from '@/utils/attention'
 import { agentDisplayStatus } from '@/utils/statusColors'
 import { useHubCamera } from '../composables/useHubCamera'
 import { agentAngles, agentRadius, planSectors, polar, radiusForAge, RINGS, sectorMid, WEDGE_INNER, WEDGE_OUTER } from '../hubGeometry'
@@ -23,6 +24,12 @@ const SECTOR_FLY_RADIUS = 260
 const SECTOR_FLY_REL = 2.6
 const AGENT_FLY_REL = 3
 
+// Only the blocking kinds: needsAttention() is also true for every non-working agent ('yourTurn').
+function blocksOnOperator(agent: Agent): boolean {
+  const kind = attentionFor(agent, null)?.kind
+  return kind === 'question' || kind === 'permission'
+}
+
 const live = computed(() => agents.value.filter(a => a.status !== 'finished').sort((a, b) => a.pid - b.pid))
 const plan = computed(() => planSectors([], live.value.map(a => a.projectName)))
 
@@ -33,7 +40,7 @@ const placed = computed(() => {
     const members = live.value.filter(a => sectorOfProject.get(a.projectName) === sector.key)
     const angles = agentAngles(members.length, sector)
     return members.map((agent, i) => {
-      const needsOperator = !!(agent.pendingQuestion || agent.pendingConfirm || agent.pendingPermissions?.length)
+      const needsOperator = blocksOnOperator(agent)
       const [x, y] = polar(agentRadius(k, needsOperator), angles[i])
       return { agent, x, y, state: agentDisplayStatus(agent), needsOperator }
     })

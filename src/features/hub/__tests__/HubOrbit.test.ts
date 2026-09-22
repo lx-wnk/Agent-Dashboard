@@ -33,7 +33,7 @@ describe('hubOrbit', () => {
   it('draws the core, one button per agent and one per sector at the overview level', async () => {
     const w = mountOrbit(0)
     const core = w.get('[data-testid="hub-core"]')
-    expect(core.text()).toContain('3 running · 1 waiting')
+    expect(core.text()).toContain('3 running · 1 need you')
     expect(w.get('[data-testid="hub-core-needs-you"]').text()).toContain('2')
     expect(core.attributes('style')).toContain('translate(500px, 500px)')
     expect(w.get('[data-testid="hub-agent-1"]').attributes('aria-label')).toBe('Kontor Hub, Working')

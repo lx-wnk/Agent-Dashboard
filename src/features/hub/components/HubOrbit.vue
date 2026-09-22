@@ -52,12 +52,12 @@ function atPolar(radius: number, deg: number) {
       @click="$emit('core')"
     >
       <b class="text-[13px] text-fg">Kontor</b>
-      <span class="text-[10px] text-fg-mute">{{ running }} running · {{ waiting }} waiting</span>
+      <span class="text-[10px] text-fg-mute">{{ running }} running · {{ waiting }} need you</span>
       <span
         v-if="needsYou > 0"
         data-testid="hub-core-needs-you"
         class="absolute -right-1 -top-1 rounded-full border border-warning-line bg-warning-soft px-1.5 text-[10px] font-semibold text-warning-text"
-      >{{ needsYou }}<span class="sr-only"> need you</span></span>
+      >{{ needsYou }}<span class="sr-only"> in the needs-you queue</span></span>
     </button>
 
     <button
