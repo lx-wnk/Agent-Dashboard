@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest'
 import {
   centredOn,
   clampScale,
+  DOCK_REL,
   fitScale,
   flyFrame,
+  LAUNCHER_AGENT_CLEARANCE_PX,
+  launchersDocked,
   levelOf,
   MAX_REL,
   MIN_REL,
@@ -11,6 +14,7 @@ import {
   toWorld,
   zoomAt,
 } from './hubCamera'
+import { LAUNCHER_RING_RADIUS } from './hubGeometry'
 
 describe('levelOf', () => {
   it('switches at 1.8 and 4', () => {
@@ -49,5 +53,20 @@ describe('camera maths', () => {
     expect(end).toEqual(centredOn(40, -20, 3, 800, 600))
     const start = flyFrame(from, { wx: 40, wy: -20, k: 3 }, 800, 600, 0)
     expect(start.k).toBeCloseTo(1)
+  })
+})
+
+describe('launchersDocked', () => {
+  const clears = (ring: number) => (ring + LAUNCHER_AGENT_CLEARANCE_PX) / LAUNCHER_RING_RADIUS
+  it('keeps the ring while it clears the agents and the camera is below the dock zoom', () => {
+    expect(launchersDocked(1, 0.57, 196)).toBe(false)
+    expect(launchersDocked(DOCK_REL, clears(196) + 0.001, 196)).toBe(false)
+  })
+  it('docks beyond the dock zoom', () => {
+    expect(launchersDocked(DOCK_REL + 0.01, 1, 116)).toBe(true)
+  })
+  it('docks when the launcher ring would not clear the agent ring', () => {
+    expect(launchersDocked(1, clears(196) - 0.001, 196)).toBe(true)
+    expect(launchersDocked(1, 0.4, 196)).toBe(true)
   })
 })

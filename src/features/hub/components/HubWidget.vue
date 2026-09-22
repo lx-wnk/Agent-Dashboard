@@ -14,7 +14,7 @@ import { attentionFor } from '@/utils/attention'
 import { NAV_ITEMS } from '@/utils/navConfig'
 import { agentDisplayStatus } from '@/utils/statusColors'
 import { useHubCamera } from '../composables/useHubCamera'
-import { LEVEL_TARGETS } from '../hubCamera'
+import { launchersDocked, LEVEL_TARGETS } from '../hubCamera'
 import { agentAngles, agentRadius, agentRingPx, planSectors, polar, radiusForAge, RINGS, sectorMid, wedgePath } from '../hubGeometry'
 import { launchersFor } from '../hubLaunchers'
 import HubAgentCard from './HubAgentCard.vue'
@@ -30,7 +30,7 @@ if (!needsYou)
 
 const hub = ref<HTMLElement | null>(null)
 const stage = ref<HTMLElement | null>(null)
-const { cam, size, rel, level, docked, dragging, zoomBy, panBy, flyTo, fit, centreWorld } = useHubCamera(stage)
+const { cam, size, rel, level, dragging, zoomBy, panBy, flyTo, fit, centreWorld } = useHubCamera(stage)
 const { agents } = useAgents({ autoStart: false })
 const { ask, overlayOpen } = useKontorSession()
 const kontorAgent = useKontorAgent()
@@ -60,6 +60,8 @@ const live = computed(() => agents.value.filter(a => a.status !== 'finished').so
 const notePaths: readonly string[] = []
 const plan = computed(() => planSectors(notePaths, live.value.map(a => a.projectName)))
 const ringPx = computed(() => agentRingPx(live.value.length, Math.min(size.value.width, size.value.height)))
+const ringOnScreenPx = computed(() => agentRadius(cam.value.k, false, ringPx.value) * cam.value.k)
+const docked = computed(() => launchersDocked(rel.value, cam.value.k, ringOnScreenPx.value))
 
 const placed = computed(() => {
   const k = cam.value.k
@@ -250,7 +252,7 @@ function launchFromList(launcher: Launcher) {
         :waiting="waiting"
         :needs-you="needsYou.length"
         :core-title="coreTitle"
-        :agent-ring-px="agentRadius(cam.k, false, ringPx) * cam.k"
+        :agent-ring-px="ringOnScreenPx"
         :show-sector-names="notePaths.length > 0"
         @core="openKontor"
         @agent="flyToAgent"

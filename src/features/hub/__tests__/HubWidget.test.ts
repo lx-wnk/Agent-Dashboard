@@ -143,6 +143,18 @@ describe('hubWidget', () => {
     w.unmount()
   })
 
+  it('docks the launchers when their ring would not clear the agents, and keeps the ring when it does', async () => {
+    const launcherX = (w: Awaited<ReturnType<typeof mountHub>>) => Number(/translate\(([-\d.]+)px/.exec(w.get('[data-testid^="hub-launcher-"]').attributes('style')!)![1])
+    const roomy = await mountHub()
+    expect(launcherX(roomy)).not.toBe(30)
+    roomy.unmount()
+
+    agents.value = Array.from({ length: 40 }, (_, i) => ({ pid: 200 + i, status: 'idle', projectName: `project-${i}`, working: false })) as unknown as Agent[]
+    const crowded = await mountHub()
+    expect(launcherX(crowded)).toBe(30)
+    crowded.unmount()
+  })
+
   it('draws no sector names without notes, where every sector is one agent\'s project', async () => {
     const w = await mountHub()
     expect(w.findAll('[data-testid^="hub-sector-"]')).toHaveLength(0)

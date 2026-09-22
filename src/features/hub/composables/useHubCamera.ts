@@ -2,7 +2,7 @@ import type { ComputedRef, Ref, ShallowRef } from 'vue'
 import type { Camera, HubLevel } from '../hubCamera'
 import { useEventListener, usePreferredReducedMotion, useResizeObserver } from '@vueuse/core'
 import { computed, onUnmounted, readonly, ref, shallowRef } from 'vue'
-import { clampScale, DOCK_REL, fitScale, FLY_MS, flyFrame, levelOf, toWorld, zoomAt } from '../hubCamera'
+import { clampScale, fitScale, FLY_MS, flyFrame, levelOf, toWorld, zoomAt } from '../hubCamera'
 
 export interface HubCameraOptions {
   /** A click that did not move the pointer more than 3 px, in stage coordinates. */
@@ -15,7 +15,6 @@ export interface UseHubCamera {
   size: Readonly<Ref<{ width: number, height: number }>>
   rel: ComputedRef<number>
   level: ComputedRef<HubLevel>
-  docked: ComputedRef<boolean>
   dragging: Ref<boolean>
   zoomBy: (factor: number, mx?: number, my?: number) => void
   panBy: (dx: number, dy: number) => void
@@ -37,7 +36,6 @@ export function useHubCamera(stage: Ref<HTMLElement | null>, options?: HubCamera
 
   const rel = computed(() => cam.value.k / k0.value)
   const level = computed<HubLevel>(() => levelOf(rel.value))
-  const docked = computed(() => rel.value > DOCK_REL)
 
   const reducedMotion = usePreferredReducedMotion()
   let rafId: number | null = null
@@ -155,7 +153,6 @@ export function useHubCamera(stage: Ref<HTMLElement | null>, options?: HubCamera
     size: readonly(size),
     rel,
     level,
-    docked,
     dragging,
     zoomBy,
     panBy,
