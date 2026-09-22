@@ -406,6 +406,38 @@ func TestOpen_RefusesANoteDeletedSinceTheCachedGraph(t *testing.T) {
 	assert.Len(t, vault.requests(), 4)
 }
 
+func TestOpen_RefusesABodyOver4KiB(t *testing.T) {
+	mem, gate, spaceID := testDeps(t)
+	grantCapability(t, gate.Grants, repo.CapabilityMemoryRead)
+	vault := newGraphVault(t, http.StatusOK)
+	h := apiobsidian.NewHandler(newTestClient(t, vault.Server), mem, gate, spaceID)
+
+	body := `{"path":"` + strings.Repeat("a", 4<<10) + `"}`
+	assert.Equal(t, http.StatusBadRequest, serve(h, http.MethodPost, "/api/obsidian/open", body).Code)
+}
+
+func TestOpen_RefusesAnUnknownField(t *testing.T) {
+	mem, gate, spaceID := testDeps(t)
+	grantCapability(t, gate.Grants, repo.CapabilityMemoryRead)
+	vault := newGraphVault(t, http.StatusOK)
+	h := apiobsidian.NewHandler(newTestClient(t, vault.Server), mem, gate, spaceID)
+
+	assert.Equal(t, http.StatusBadRequest,
+		serve(h, http.MethodPost, "/api/obsidian/open", `{"path":"a.md","extra":true}`).Code)
+}
+
+func TestGraph_ConfiguredVaultWithNoNotesReturnsEmptyArrays(t *testing.T) {
+	mem, gate, spaceID := testDeps(t)
+	grantCapability(t, gate.Grants, repo.CapabilityMemoryRead)
+	vault := newGraphVault(t, http.StatusOK)
+	vault.setMtimes(`[]`)
+	h := apiobsidian.NewHandler(newTestClient(t, vault.Server), mem, gate, spaceID)
+
+	rec := serve(h, http.MethodGet, "/api/obsidian/graph", "")
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.JSONEq(t, `{"configured":true,"notes":[],"links":[]}`, rec.Body.String())
+}
+
 func TestOpen_RefusesAHeadingMarkerInThePath(t *testing.T) {
 	mem, gate, spaceID := testDeps(t)
 	grantCapability(t, gate.Grants, repo.CapabilityMemoryRead)
