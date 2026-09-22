@@ -115,11 +115,11 @@ test('choosing a view from the sidebar still lands focus on #main-content', asyn
   // The hub's launchers mirror the sidebar's views; resolve the nav only once they are on screen.
   await expect(page.getByTestId('hub-launcher-dashboard')).toBeVisible()
 
-  await page.getByRole('button', { name: 'Dashboard' }).focus()
+  await page.getByTestId('nav-item-dashboard').focus()
   await page.keyboard.press('Enter')
   await expect(page.locator('#main-content')).toBeFocused()
 
-  await page.getByRole('button', { name: 'Pipeline' }).click()
+  await page.getByTestId('nav-item-pipeline').click()
   await expect(page.locator('#main-content')).toBeFocused()
 })
 
