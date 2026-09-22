@@ -133,8 +133,11 @@ watch(loaded, (isLoaded) => {
 
 // Move focus to main content on view change for keyboard/screen-reader users;
 // a wide tile is per window, so it doesn't survive navigating to another page either.
+// Edit mode is per page too — surviving a navigation would leave a stale edit bar
+// open over whatever the operator navigated to next.
 watch(activeView, () => {
   workspace.wide.value = null
+  workspace.editing.value = false
   nextTick(() => document.getElementById('main-content')?.focus())
 })
 
@@ -351,14 +354,13 @@ onMounted(() => usageComposable.start())
               + New Agent
             </button>
             <button
-              v-if="currentPageId !== null && !error && !workspaceChunkFailed && workspace.loaded.value && !workspace.locked.value"
+              v-if="currentPageId !== null && !error && !workspaceChunkFailed && workspace.loaded.value && !workspace.locked.value && !workspace.editing.value"
               type="button"
               data-testid="workspace-edit-toggle"
-              :aria-pressed="workspace.editing.value"
               class="h-8 rounded-md border border-line-strong px-3 text-[12.5px] text-fg-soft"
-              @click="workspace.editing.value = !workspace.editing.value"
+              @click="workspace.editing.value = true"
             >
-              {{ workspace.editing.value ? 'Done' : 'Edit layout' }}
+              Edit layout
             </button>
           </template>
         </AppTopbar>

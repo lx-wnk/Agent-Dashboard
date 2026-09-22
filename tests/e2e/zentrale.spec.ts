@@ -75,6 +75,8 @@ test('pages are offered in the command palette on a view that holds no workspace
 test('a moved tile stays moved after a reload', async ({ page }) => {
   await page.goto('/', { waitUntil: 'domcontentloaded' })
   await page.getByTestId('workspace-edit-toggle').click()
+  // One Done button while editing: the topbar toggle hides in favour of the edit bar's own.
+  await expect(page.getByTestId('workspace-edit-toggle')).toHaveCount(0)
   await page.getByTestId('workspace-tile-cost-today').focus()
   // Each keypress saves through a fire-and-forget fetch (useWorkspace's
   // `write`, chained one save after the other), so reloading right after can
@@ -86,9 +88,31 @@ test('a moved tile stays moved after a reload', async ({ page }) => {
   const secondSaved = patched(page)
   await page.keyboard.press('ArrowDown')
   expect((await secondSaved).ok(), 'second save (move) request').toBe(true)
-  await page.getByTestId('workspace-edit-toggle').click()
+  await page.getByTestId('workspace-done').click()
   await page.reload({ waitUntil: 'domcontentloaded' })
   await expect(page.getByTestId('workspace-tile-cost-today')).toHaveAttribute('style', /--row: 11/)
+})
+
+test('edit mode ends on navigation and does not survive coming back', async ({ page, request, baseURL }) => {
+  const layout = {
+    version: 1,
+    pages: [
+      { id: 'zentrale', title: 'Zentrale', tiles: [] },
+      { id: 'p-morning', title: 'Morning', tiles: [] },
+    ],
+  }
+  await storeLayout(request, baseURL, JSON.stringify(layout))
+  await page.addInitScript(() => localStorage.setItem('agent-active-view', 'page:p-morning'))
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await page.getByTestId('workspace-edit-toggle').click()
+  await expect(page.getByTestId('workspace-edit-bar')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Dashboard' }).click()
+  await expect(page.getByTestId('workspace-edit-bar')).toHaveCount(0)
+
+  await page.locator('[data-testid^="nav-page-"]', { hasText: 'Morning' }).click()
+  await expect(page.getByTestId('workspace-edit-bar')).toHaveCount(0)
+  await expect(page.getByTestId('workspace-edit-toggle')).toBeVisible()
 })
 
 test('"/" opens the Kontor tile and Escape closes it', async ({ page }) => {
@@ -157,7 +181,7 @@ test('a pointer drag on the resize handle resizes the cost-today tile and the ne
   await expect(page.getByTestId('workspace-tile-cost-today')).toHaveAttribute('style', /--row-span: 4\b/)
   expect((await saved).ok(), 'save (resize) request').toBe(true)
 
-  await page.getByTestId('workspace-edit-toggle').click()
+  await page.getByTestId('workspace-done').click()
   await page.reload({ waitUntil: 'domcontentloaded' })
   await expect(page.getByTestId('workspace-tile-cost-today')).toHaveAttribute('style', /--row-span: 4\b/)
 })
@@ -227,11 +251,11 @@ test('the layout cannot be edited before it has loaded', async ({ page }) => {
   await page.goto('/', { waitUntil: 'domcontentloaded' })
   await expect(page.getByTestId('workspace-page-zentrale')).toBeVisible()
   await expect(page.getByTestId('workspace-edit-toggle')).toHaveCount(0)
-  await expect(page.getByTestId('nav-new-page')).toHaveCount(0)
+  await expect(page.getByTestId('nav-new-page')).toBeDisabled()
 
   release()
   await expect(page.getByTestId('workspace-edit-toggle')).toBeVisible()
-  await expect(page.getByTestId('nav-new-page')).toBeVisible()
+  await expect(page.getByTestId('nav-new-page')).toBeEnabled()
 })
 
 // A stale tab after a server upgrade asks for a page chunk the server no longer has.

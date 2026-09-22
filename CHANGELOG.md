@@ -44,6 +44,16 @@ Preparing the first public release.
   button, disabled until then — now renders from first paint. The Pages
   group's caption also duplicated the core groups' caption markup; both now
   render through one shared `NavGroupCaption`.
+- **Only one Done button shows while editing a page, and edit mode ends when
+  you navigate away.** The topbar's `Edit layout` toggle and the edit bar's
+  own `Done` button both closed edit mode; the topbar button now hides while
+  editing instead. Edit mode also used to survive navigating to another view
+  and back, leaving a stale edit bar open over whatever the operator went to
+  next; `App.vue`'s existing `activeView` watcher now ends it on every
+  navigation. The delete confirmation stayed armed across a rename, so a
+  second click right after renaming the page could delete it instead of
+  confirming the new title; it now disarms as soon as the title input
+  changes or the rename is saved.
 
 ### Changed
 

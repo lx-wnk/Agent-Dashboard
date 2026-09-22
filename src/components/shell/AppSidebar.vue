@@ -90,12 +90,14 @@ async function createPage(event: KeyboardEvent): Promise<void> {
   }
   if (!await workspace.save(r.value.layout))
     return
-  workspace.editing.value = true
   selectView(`page:${r.value.pageId}`)
   creatingPage.value = false
   // Blur before the input unmounts: a removed input fires no focusout, which would hold the nav open.
   input.blur()
   await nextTick()
+  // Set after the view-change flush: App.vue's watcher on activeView ends edit mode on
+  // every navigation, and creating a page must still land in edit mode despite that.
+  workspace.editing.value = true
   document.querySelector<HTMLElement>(`[data-testid="nav-page-${r.value.pageId}"]`)?.focus()
 }
 </script>

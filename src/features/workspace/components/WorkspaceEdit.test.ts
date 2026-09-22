@@ -250,6 +250,16 @@ describe('page rename and delete', () => {
     w.unmount()
   })
 
+  it('disarms the delete confirmation once the title changes', async () => {
+    const w = mount(WorkspaceEditBar, { props: { page: morning, refusal: null } })
+    await w.get('[data-testid="workspace-delete-page"]').trigger('click')
+    expect(w.find('[data-testid="workspace-delete-confirm"]').exists()).toBe(true)
+
+    await w.get('[data-testid="workspace-rename"]').setValue('Dawn')
+    expect(w.find('[data-testid="workspace-delete-confirm"]').exists()).toBe(false)
+    w.unmount()
+  })
+
   function seed() {
     ws.layout.value = { version: 1, pages: [{ id: 'zentrale', title: 'Zentrale', tiles: [] }, morning] }
     ws.editing.value = true
