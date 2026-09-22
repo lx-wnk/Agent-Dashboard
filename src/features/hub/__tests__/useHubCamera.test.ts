@@ -137,6 +137,19 @@ describe('useHubCamera', () => {
     expect(onTap).not.toHaveBeenCalled()
   })
 
+  it.each([false, true])('flies to a target requested before the stage had a size once it is measured (reduced motion %s)', async (reduce) => {
+    stubReducedMotion(reduce)
+    const { api } = await mountCamera()
+
+    api.flyTo(100, 0, 5)
+    resize(700, 700)
+
+    expect(api.rel.value).toBeCloseTo(5)
+    const [sx, sy] = toScreen(api.cam.value, 100, 0)
+    expect(sx).toBeCloseTo(350)
+    expect(sy).toBeCloseTo(350)
+  })
+
   it('keeps the centre world point and rel across a later resize', async () => {
     const { api } = await mountCamera()
     resize(1090, 1130)

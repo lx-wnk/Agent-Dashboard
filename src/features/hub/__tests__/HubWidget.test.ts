@@ -9,6 +9,7 @@ import { useViewState } from '@/composables/useViewState'
 import { DEFAULT_LAYOUT, useWorkspace } from '@/features/workspace'
 import HubBrainCanvas from '../components/HubBrainCanvas.vue'
 import { hubFocusRequest } from '../composables/useHubFocus'
+import { fitScale } from '../hubCamera'
 import { AGENT_SPACING_PX, AGENT_STAGE_MARGIN_PX, DAY_MS, notePoint, planSectors } from '../hubGeometry'
 
 const NOTE_AGE_DAYS = 30
@@ -547,6 +548,7 @@ describe('hubWidget', () => {
     hubFocusRequest.value = { kind: 'note', path: 'alpha/one.md' }
     const w = await mountHub()
     expect(w.get('[role="dialog"][aria-label="alpha/one.md"]')).toBeTruthy()
+    expect(scale(w) / fitScale(1090, 1130)).toBeCloseTo(5)
     expect(hubFocusRequest.value).toBeNull()
     w.unmount()
   })

@@ -2,7 +2,7 @@ import type { ComputedRef, Ref, ShallowRef } from 'vue'
 import type { Camera, HubLevel } from '../hubCamera'
 import { useEventListener, usePreferredReducedMotion, useResizeObserver } from '@vueuse/core'
 import { computed, onUnmounted, readonly, ref, shallowRef } from 'vue'
-import { clampScale, fitScale, FLY_MS, flyFrame, levelOf, toWorld, zoomAt } from '../hubCamera'
+import { centredOn, clampScale, fitScale, FLY_MS, flyFrame, levelOf, toWorld, zoomAt } from '../hubCamera'
 
 export interface HubCameraOptions {
   /** A click that did not move the pointer more than 3 px, in stage coordinates. */
@@ -33,6 +33,7 @@ export function useHubCamera(stage: Ref<HTMLElement | null>, options?: HubCamera
   const size = ref({ width: 0, height: 0 })
   const dragging = ref(false)
   let sized = false
+  let pendingFlight: { wx: number, wy: number, rel: number } | null = null
 
   const rel = computed(() => cam.value.k / k0.value)
   const level = computed<HubLevel>(() => levelOf(rel.value))
@@ -63,6 +64,11 @@ export function useHubCamera(stage: Ref<HTMLElement | null>, options?: HubCamera
 
   function flyTo(wx: number, wy: number, relTarget: number) {
     cancelFlight()
+    // Before the first measure k0 and the stage centre are placeholders; the first resize lands it.
+    if (!sized) {
+      pendingFlight = { wx, wy, rel: relTarget }
+      return
+    }
     const from = cam.value
     const to = { wx, wy, k: clampScale(k0.value * relTarget, k0.value) }
     if (reducedMotion.value === 'reduce') {
@@ -89,6 +95,12 @@ export function useHubCamera(stage: Ref<HTMLElement | null>, options?: HubCamera
     sized = true
     size.value = { width, height }
     k0.value = fitScale(width, height)
+    if (pendingFlight) {
+      const { wx, wy, rel: relTarget } = pendingFlight
+      pendingFlight = null
+      cam.value = centredOn(wx, wy, clampScale(k0.value * relTarget, k0.value), width, height)
+      return
+    }
     const k = k0.value * relCurrent
     cam.value = { k, tx: width / 2 - cx * k, ty: height / 2 - cy * k }
   })
