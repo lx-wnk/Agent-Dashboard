@@ -11,9 +11,9 @@ const state = computed<PanelState>(() => (todayUsd.value === null ? 'loading' : 
 </script>
 
 <template>
-  <CockpitPanel id="cost-today" title="Today" :state="state">
-    <p data-testid="cost-today-value" class="text-[24px] font-semibold leading-none text-fg">
-      {{ formatCost(todayUsd ?? 0) }}
-    </p>
+  <CockpitPanel id="cost-today" title="Today" icon="$" :state="state">
+    <template #figure>
+      <span data-testid="cost-today-value">{{ formatCost(todayUsd ?? 0) }}</span>
+    </template>
   </CockpitPanel>
 </template>
