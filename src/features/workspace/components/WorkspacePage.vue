@@ -9,7 +9,7 @@ import WorkspaceGrid from './WorkspaceGrid.vue'
 
 const props = defineProps<{ pageId: string }>()
 const { layout, loaded, load, save, locked, saveError, editing, wide, reset, retry, page } = useWorkspace()
-const { activeView } = useViewState()
+const { activeView, focusAfterNavigation } = useViewState()
 onMounted(load)
 
 const current = computed(() => page(props.pageId))
@@ -53,8 +53,15 @@ async function onChange(next: Page) {
 }
 
 async function onRemove() {
-  if (!await commit(removePage(layout.value, props.pageId)))
+  // Declared before save(), not after: removing the page the operator is on makes
+  // App.vue's own resolveView watcher (reacting to the layout write, not to this
+  // function) redirect activeView to 'zentrale' before this function's own line
+  // below would — the declaration has to already be in place when that happens.
+  focusAfterNavigation.value = '[data-testid="nav-item-zentrale"]'
+  if (!await commit(removePage(layout.value, props.pageId))) {
+    focusAfterNavigation.value = null
     return
+  }
   editing.value = false
   activeView.value = 'zentrale'
 }

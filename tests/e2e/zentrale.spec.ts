@@ -115,6 +115,21 @@ test('edit mode ends on navigation and does not survive coming back', async ({ p
   await expect(page.getByTestId('workspace-edit-toggle')).toBeVisible()
 })
 
+// The navigation watcher's original purpose (SC 2.4.3): a keyboard or screen-reader
+// user who picks a view lands in its content, not stuck on the nav button they just
+// activated. Both the button-focused-by-click and the button-focused-by-Enter cases
+// leave document.activeElement on the button itself, not <body>.
+test('choosing a view from the sidebar still lands focus on #main-content', async ({ page }) => {
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+
+  await page.getByRole('button', { name: 'Dashboard' }).focus()
+  await page.keyboard.press('Enter')
+  await expect(page.locator('#main-content')).toBeFocused()
+
+  await page.getByRole('button', { name: 'Pipeline' }).click()
+  await expect(page.locator('#main-content')).toBeFocused()
+})
+
 test('"/" opens the Kontor tile and Escape closes it', async ({ page }) => {
   await page.goto('/', { waitUntil: 'domcontentloaded' })
   // Wait for the collapsed tile — the Kontor widget is behind an async chunk,

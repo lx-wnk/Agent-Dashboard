@@ -61,6 +61,18 @@ Preparing the first public release.
   focus back off the nav item a tick after the flow set it. That refocus is
   now a fallback: it only runs when nothing more specific already holds
   focus.
+- **Choosing a view from the sidebar with the keyboard, or with a click, no
+  longer strands focus on the nav button.** The previous entry's body-only
+  fallback guard skipped `#main-content` whenever the just-activated nav
+  button still held focus — which a native `<button>` always does after a
+  click or an Enter keypress, so the watcher's original purpose (SC 2.4.3:
+  land a keyboard or screen-reader user in the view's content) broke for
+  every ordinary navigation, not only the create/delete flows the guard was
+  written for. `App.vue`'s `activeView` watcher is now the sole, declarative
+  owner of post-navigation focus and edit mode: `useViewState` gains
+  `focusAfterNavigation` and `editAfterNavigation`, which a caller sets
+  before navigating and the watcher consumes once, falling back to
+  `#main-content` only when nothing was declared.
 
 ### Changed
 

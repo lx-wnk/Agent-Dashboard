@@ -115,6 +115,14 @@ function readStoredSpawner(): string {
 
 const initial = readInitial()
 const activeView = ref<ActiveView>(initial.view)
+// A caller that knows what should hold focus once its navigation lands sets this to a
+// CSS selector before changing activeView; App.vue's watcher is the sole consumer —
+// it focuses the target once and clears it, falling back to #main-content when it's
+// unset or the target isn't in the DOM.
+const focusAfterNavigation = ref<string | null>(null)
+// Set alongside focusAfterNavigation by a caller (e.g. creating a page) that wants
+// edit mode to stay on across the navigation it is about to make; also consumed once.
+const editAfterNavigation = ref(false)
 const dashboardLayout = ref<DashboardLayout>(initial.layout)
 const dashboardSort = ref<AgentSort>(readStoredSort())
 const dashboardGroup = ref<AgentGroup>(readStoredGroup())
@@ -173,5 +181,5 @@ watch(dashboardSpawner, (v) => {
 }, { flush: 'sync' })
 
 export function useViewState() {
-  return { activeView, dashboardLayout, dashboardSort, dashboardGroup, setDashboardGroup, dashboardProject, dashboardSpawner }
+  return { activeView, focusAfterNavigation, editAfterNavigation, dashboardLayout, dashboardSort, dashboardGroup, setDashboardGroup, dashboardProject, dashboardSpawner }
 }

@@ -25,7 +25,7 @@ const emit = defineEmits<{
 }>()
 
 const { expanded, pinned, togglePinned, setHovering, setFocused, collapseAfterSelect, newPageRequests } = useSidebar()
-const { activeView } = useViewState()
+const { activeView, focusAfterNavigation, editAfterNavigation } = useViewState()
 
 const grouped = computed(() =>
   NAV_GROUPS.map(group => ({ group, items: NAV_ITEMS.filter(i => i.group === group) })))
@@ -90,15 +90,15 @@ async function createPage(event: KeyboardEvent): Promise<void> {
   }
   if (!await workspace.save(r.value.layout))
     return
+  // App.vue's activeView watcher is the sole mover of focus and edit mode after a
+  // navigation — declare the target and intent before triggering it, rather than
+  // racing that watcher with a focus()/editing.value call of our own.
+  focusAfterNavigation.value = `[data-testid="nav-page-${r.value.pageId}"]`
+  editAfterNavigation.value = true
   selectView(`page:${r.value.pageId}`)
   creatingPage.value = false
   // Blur before the input unmounts: a removed input fires no focusout, which would hold the nav open.
   input.blur()
-  await nextTick()
-  // Set after the view-change flush: App.vue's watcher on activeView ends edit mode on
-  // every navigation, and creating a page must still land in edit mode despite that.
-  workspace.editing.value = true
-  document.querySelector<HTMLElement>(`[data-testid="nav-page-${r.value.pageId}"]`)?.focus()
 }
 </script>
 

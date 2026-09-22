@@ -238,18 +238,6 @@ describe('page rename and delete', () => {
   })
 
   // The page and this bar unmount once the delete lands, taking focus with them.
-  it('focuses the Zentrale nav item before the delete removes the page', async () => {
-    const zentraleNav = document.createElement('button')
-    zentraleNav.setAttribute('data-testid', 'nav-item-zentrale')
-    document.body.appendChild(zentraleNav)
-    const w = mount(WorkspaceEditBar, { props: { page: morning, refusal: null } })
-    await w.get('[data-testid="workspace-delete-page"]').trigger('click')
-    await w.get('[data-testid="workspace-delete-confirm"]').trigger('click')
-    expect(document.activeElement).toBe(zentraleNav)
-    zentraleNav.remove()
-    w.unmount()
-  })
-
   it('disarms the delete confirmation once the title changes', async () => {
     const w = mount(WorkspaceEditBar, { props: { page: morning, refusal: null } })
     await w.get('[data-testid="workspace-delete-page"]').trigger('click')
@@ -282,7 +270,9 @@ describe('page rename and delete', () => {
     w.unmount()
   })
 
-  it('removes a deleted page and goes back to the Zentrale', async () => {
+  // Focusing nav-item-zentrale for real needs App.vue's activeView watcher, which
+  // this component-only mount never sees — onRemove declares the target instead.
+  it('removes a deleted page, goes back to the Zentrale and declares its nav item as the focus target', async () => {
     seed()
     const w = mount(WorkspacePage, { props: { pageId: 'p-morning' } })
     await w.get('[data-testid="workspace-delete-page"]').trigger('click')
@@ -290,11 +280,14 @@ describe('page rename and delete', () => {
     await flushPromises()
     expect(ws.save.mock.calls[0]![0].pages.map((p: { id: string }) => p.id)).toEqual(['zentrale'])
     expect(useViewState().activeView.value).toBe('zentrale')
+    expect(useViewState().focusAfterNavigation.value).toBe('[data-testid="nav-item-zentrale"]')
     expect(ws.editing.value).toBe(false)
     w.unmount()
   })
 
-  it('stays on the page when the store refuses the delete', async () => {
+  // A refused delete must not leave a stale focus declaration for the next,
+  // unrelated navigation to pick up.
+  it('stays on the page when the store refuses the delete, and clears the focus declaration', async () => {
     seed()
     ws.save.mockResolvedValueOnce(false)
     const w = mount(WorkspacePage, { props: { pageId: 'p-morning' } })
@@ -304,6 +297,7 @@ describe('page rename and delete', () => {
     expect(ws.save).toHaveBeenCalledTimes(1)
     expect(useViewState().activeView.value).toBe('page:p-morning')
     expect(ws.editing.value).toBe(true)
+    expect(useViewState().focusAfterNavigation.value).toBe(null)
     w.unmount()
   })
 })

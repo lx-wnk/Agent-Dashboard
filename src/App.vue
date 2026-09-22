@@ -82,7 +82,7 @@ watch(showLogin, (visible) => {
 const { canInstall, promptInstall } = useInstallPrompt()
 const { theme, toggleTheme } = useTheme()
 
-const { activeView, dashboardLayout } = useViewState()
+const { activeView, focusAfterNavigation, editAfterNavigation, dashboardLayout } = useViewState()
 const workspace = useWorkspace()
 const { handleShortcut: handleSidebarShortcut } = useSidebar()
 const { resolveAgent, approveAll } = usePermissionResolve()
@@ -131,18 +131,25 @@ watch(loaded, (isLoaded) => {
   }
 }, { immediate: true })
 
-// Move focus to main content on view change for keyboard/screen-reader users;
-// a wide tile is per window, so it doesn't survive navigating to another page either.
-// Edit mode is per page too — surviving a navigation would leave a stale edit bar
-// open over whatever the operator navigated to next.
+// The sole owner of post-navigation focus and edit mode — a wide tile is per
+// window, so it doesn't survive navigating to another page either. Edit mode is
+// per page too — surviving a navigation would leave a stale edit bar open over
+// whatever the operator navigated to next, unless a caller declared it should
+// stay on (editAfterNavigation, e.g. a page just created from the sidebar).
+// A caller that knows what should hold focus declares it via
+// focusAfterNavigation instead of moving focus itself: this watcher runs after
+// every navigation regardless of who triggered it, so a caller-side focus call
+// has no reliable ordering against it otherwise (SC 2.4.3 is the reason
+// #main-content is the default target).
 watch(activeView, () => {
   workspace.wide.value = null
-  workspace.editing.value = false
-  // Fallback only: a caller that navigated here (creating or deleting a page) may
-  // already have moved focus somewhere more specific by the time this runs.
+  workspace.editing.value = editAfterNavigation.value
+  editAfterNavigation.value = false
+  const target = focusAfterNavigation.value
+  focusAfterNavigation.value = null
   nextTick(() => {
-    if (document.activeElement === document.body || !document.activeElement)
-      document.getElementById('main-content')?.focus()
+    const el = (target && document.querySelector<HTMLElement>(target)) || document.getElementById('main-content')
+    el?.focus()
   })
 })
 
