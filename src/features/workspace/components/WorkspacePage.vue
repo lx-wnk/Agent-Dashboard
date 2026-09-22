@@ -2,6 +2,7 @@
 import type { OpResult, WorkspacePage as Page, WorkspaceLayout } from '../layout'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useViewState } from '@/composables/useViewState'
+import { navItemSelector } from '@/utils/navConfig'
 import { removePage, renamePage, replacePage, widenedTiles } from '../layout'
 import { useWorkspace } from '../useWorkspace'
 import WorkspaceEditBar from './WorkspaceEditBar.vue'
@@ -61,11 +62,8 @@ async function onDone() {
 }
 
 async function onRemove() {
-  // Declared before save(), not after: removing the page the operator is on makes
-  // App.vue's own resolveView watcher (reacting to the layout write, not to this
-  // function) redirect activeView to 'zentrale' before this function's own line
-  // below would — the declaration has to already be in place when that happens.
-  focusAfterNavigation.value = '[data-testid="nav-item-zentrale"]'
+  // Declared before save(): App.vue's resolveView watcher can redirect activeView first.
+  focusAfterNavigation.value = navItemSelector('zentrale')
   if (!await commit(removePage(layout.value, props.pageId))) {
     focusAfterNavigation.value = null
     return

@@ -1,7 +1,7 @@
 import type { Ref } from 'vue'
 import { ref } from 'vue'
-import { useViewState } from '@/composables/useViewState'
-import { HUB_WIDGET, pageView, pageWithWidget, useWorkspace } from '@/features/workspace'
+import { pageView, useViewState } from '@/composables/useViewState'
+import { HUB_WIDGET, pageWithWidget, useWorkspace } from '@/features/workspace'
 
 export type HubTarget = { kind: 'note', path: string } | { kind: 'agent', pid: number }
 

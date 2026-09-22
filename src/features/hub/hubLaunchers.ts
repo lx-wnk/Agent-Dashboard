@@ -1,4 +1,5 @@
 import type { ActiveView, CoreView } from '@/composables/useViewState'
+import { pageView } from '@/composables/useViewState'
 
 export interface Launcher { id: string, label: string, icon: string, kind: 'view' | 'new-page' | 'more', view?: ActiveView }
 
@@ -13,8 +14,8 @@ export function launchersFor(
   const views: Launcher[] = [
     ...items.filter(i => i.view !== current).map(i => ({ id: i.view, label: i.label, icon: i.icon, kind: 'view' as const, view: i.view })),
     ...pages
-      .filter(p => `page:${p.id}` !== current)
-      .map(p => ({ id: `page:${p.id}`, label: p.title, icon: '▣', kind: 'view' as const, view: `page:${p.id}` as ActiveView })),
+      .filter(p => pageView(p.id) !== current)
+      .map(p => ({ id: pageView(p.id), label: p.title, icon: '▣', kind: 'view' as const, view: pageView(p.id) })),
   ]
   const newPage: Launcher = { id: 'new-page', label: 'New page', icon: '+', kind: 'new-page' }
   if (views.length + 1 <= max)

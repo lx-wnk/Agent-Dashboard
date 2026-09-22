@@ -3,8 +3,8 @@ import type { ActiveView, CoreView } from '../../composables/useViewState'
 import { computed, nextTick, ref, watch } from 'vue'
 import { addPage, useWorkspace, ZENTRALE_PAGE_ID } from '@/features/workspace'
 import { useSidebar } from '../../composables/useSidebar'
-import { useViewState } from '../../composables/useViewState'
-import { NAV_GROUPS, NAV_ITEMS } from '../../utils/navConfig'
+import { pageView, useViewState } from '../../composables/useViewState'
+import { NAV_GROUPS, NAV_ITEMS, navItemSelector, navItemTestId } from '../../utils/navConfig'
 import NavGroupCaption from './NavGroupCaption.vue'
 import NavItem from './NavItem.vue'
 import SidebarFooter from './SidebarFooter.vue'
@@ -95,12 +95,11 @@ async function createPage(event: KeyboardEvent): Promise<void> {
   }
   if (!await workspace.save(r.value.layout))
     return
-  // App.vue's activeView watcher is the sole mover of focus and edit mode after a
-  // navigation — declare the target and intent before triggering it, rather than
-  // racing that watcher with a focus()/editing.value call of our own.
-  focusAfterNavigation.value = `[data-testid="nav-page-${r.value.pageId}"]`
+  // App.vue's watcher owns focus/edit-mode after navigation — declare the target here
+  // rather than racing it with a focus()/editing.value call of our own.
+  focusAfterNavigation.value = navItemSelector(pageView(r.value.pageId))
   editAfterNavigation.value = true
-  selectView(`page:${r.value.pageId}`)
+  selectView(pageView(r.value.pageId))
   creatingPage.value = false
   // Blur before the input unmounts: a removed input fires no focusout, which would hold the nav open.
   input.blur()
@@ -170,7 +169,7 @@ async function createPage(event: KeyboardEvent): Promise<void> {
           <NavItem
             v-for="item in g.items"
             :key="item.view"
-            :data-testid="`nav-item-${item.view}`"
+            :data-testid="navItemTestId(item.view)"
             :icon="item.icon"
             :label="item.label"
             :active="activeView === item.view"
@@ -193,12 +192,12 @@ async function createPage(event: KeyboardEvent): Promise<void> {
           <NavItem
             v-for="p in ownPages"
             :key="p.id"
-            :data-testid="`nav-page-${p.id}`"
+            :data-testid="navItemTestId(pageView(p.id))"
             icon="▢"
             :label="p.title"
-            :active="activeView === `page:${p.id}`"
+            :active="activeView === pageView(p.id)"
             :expanded="expanded"
-            @select="selectView(`page:${p.id}`)"
+            @select="selectView(pageView(p.id))"
           />
           <!-- The input takes the button's place in the same box, so no row moves. -->
           <div

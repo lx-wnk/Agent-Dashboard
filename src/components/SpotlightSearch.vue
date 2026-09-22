@@ -3,11 +3,11 @@ import type { Agent, PipelineTask } from '../types'
 import type { ActiveView } from '@/composables/useViewState'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { toast } from '@/composables/useToast'
-import { ACTIVE_VIEWS, useViewState } from '@/composables/useViewState'
+import { ACTIVE_VIEWS, pageView, useViewState } from '@/composables/useViewState'
 import { focusInHub, NO_HUB_PAGE_MESSAGE, useObsidianGraph } from '@/features/hub'
 import { useKontorSession } from '@/features/mission/composables/useKontorSession'
 import { SLASH_COMMAND_REFUSAL } from '@/features/mission/composables/useReading'
-import { pageView, pageWithWidget, useWorkspace, ZENTRALE_PAGE_ID } from '@/features/workspace'
+import { pageWithWidget, useWorkspace, ZENTRALE_PAGE_ID } from '@/features/workspace'
 import AppModal from './ui/AppModal.vue'
 
 const emit = defineEmits<{
@@ -54,9 +54,9 @@ const commands = computed<Command[]>(() => [
     run: () => { activeView.value = view },
   })),
   ...layout.value.pages.filter(p => p.id !== ZENTRALE_PAGE_ID).map(p => ({
-    id: `view:page:${p.id}`,
+    id: `view:${pageView(p.id)}`,
     label: `Go to ${p.title}`,
-    run: () => { activeView.value = `page:${p.id}` },
+    run: () => { activeView.value = pageView(p.id) },
   })),
 ])
 
@@ -362,7 +362,6 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
             </div>
           </template>
 
-          <!-- Notes section -->
           <template v-if="matchingNotes.length > 0">
             <div
               class="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-fg-faint"
