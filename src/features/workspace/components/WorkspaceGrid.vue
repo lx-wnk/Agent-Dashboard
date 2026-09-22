@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import type { OpResult, PlacedTile, WorkspacePage } from '../layout'
+import type { WidgetDef } from '../widgetRegistry'
 import { computed, ref } from 'vue'
 import { cellAt } from '../gridGeometry'
 import { fitsMinimum, moveTile, readingOrder, removeTile, resizeTile, rowsUsed, swapTile, validatePlacement } from '../layout'
 import { widgetIds, WIDGETS } from '../widgetRegistry'
+import { isWidgetId } from '../widgetSpecs'
 
 const props = defineProps<{ page: WorkspacePage, editing: boolean }>()
 const emit = defineEmits<{ change: [page: WorkspacePage], refuse: [reason: string] }>()
@@ -68,8 +70,12 @@ function placement(t: PlacedTile): Record<string, number> {
   return { '--col': t.col, '--col-span': t.colSpan, '--row': t.row, '--row-span': t.rowSpan }
 }
 
+function widgetOf(tile: PlacedTile): WidgetDef | undefined {
+  return isWidgetId(tile.widget) ? WIDGETS[tile.widget] : undefined
+}
+
 function widgetTitle(tile: PlacedTile): string {
-  return WIDGETS[tile.widget]?.title ?? tile.widget
+  return widgetOf(tile)?.title ?? tile.widget
 }
 
 function tileAriaLabel(tile: PlacedTile): string {
@@ -159,7 +165,7 @@ function swapOptions(index: number) {
           ✕
         </button>
       </div>
-      <component :is="WIDGETS[tile.widget].component" v-if="WIDGETS[tile.widget]" />
+      <component :is="widgetOf(tile)!.component" v-if="widgetOf(tile)" />
       <div v-else data-testid="workspace-unknown" class="h-full rounded-xl border border-dashed border-line p-4 text-[12px] text-fg-mute">
         {{ tile.widget }} is not available — the module that provides it may be inactive.
       </div>

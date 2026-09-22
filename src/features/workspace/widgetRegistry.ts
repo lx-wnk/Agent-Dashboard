@@ -1,28 +1,28 @@
 import type { Component } from 'vue'
-import type { WidgetSpec } from './widgetSpecs'
-import { CostTodayWidget } from '@/features/analytics'
-import { AgentsPanel, GitHubPanel, MemoryPanel, PipelinePanel, RoutinesPanel } from '@/features/cockpit'
-import { HubWidget, KontorWidget, LiveWorkWidget } from '@/features/mission'
-import { WIDGET_SPECS } from './widgetSpecs'
+import type { WidgetId, WidgetSpec } from './widgetSpecs'
+import { defineAsyncComponent } from 'vue'
+import { WIDGET_IDS, WIDGET_SPECS } from './widgetSpecs'
 
 export type WidgetDef = WidgetSpec & { component: Component }
 
-const COMPONENTS: Record<string, Component> = {
-  'kontor': KontorWidget,
-  'hub': HubWidget,
-  'live-work': LiveWorkWidget,
-  'agents': AgentsPanel,
-  'pipeline': PipelinePanel,
-  'routines': RoutinesPanel,
-  'github': GitHubPanel,
-  'memory': MemoryPanel,
-  'cost-today': CostTodayWidget,
+// Each widget is its own chunk: a static import here would put every widget, and
+// every feature it imports, into the index chunk that App.vue loads first.
+const LOADERS: Record<WidgetId, () => Promise<Component>> = {
+  'kontor': () => import('@/features/mission').then(m => m.KontorWidget),
+  'hub': () => import('@/features/mission').then(m => m.HubWidget),
+  'live-work': () => import('@/features/mission').then(m => m.LiveWorkWidget),
+  'agents': () => import('@/features/cockpit').then(m => m.AgentsPanel),
+  'pipeline': () => import('@/features/cockpit').then(m => m.PipelinePanel),
+  'routines': () => import('@/features/cockpit').then(m => m.RoutinesPanel),
+  'github': () => import('@/features/cockpit').then(m => m.GitHubPanel),
+  'memory': () => import('@/features/cockpit').then(m => m.MemoryPanel),
+  'cost-today': () => import('@/features/analytics').then(m => m.CostTodayWidget),
 }
 
-export const WIDGETS: Record<string, WidgetDef> = Object.fromEntries(
-  Object.entries(COMPONENTS).map(([id, component]) => [id, { ...WIDGET_SPECS[id], component }]),
-)
+export const WIDGETS: Record<WidgetId, WidgetDef> = Object.fromEntries(
+  WIDGET_IDS.map(id => [id, { ...WIDGET_SPECS[id], component: defineAsyncComponent(LOADERS[id]) }]),
+) as Record<WidgetId, WidgetDef>
 
-export function widgetIds(): string[] {
-  return Object.keys(WIDGETS)
+export function widgetIds(): WidgetId[] {
+  return [...WIDGET_IDS]
 }

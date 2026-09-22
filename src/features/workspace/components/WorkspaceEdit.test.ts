@@ -9,7 +9,7 @@ import { WIDGET_SPECS } from '../widgetSpecs'
 // Real panels would fetch from jsdom; the swap/add candidates are the four
 // stub widgets below so the assertions on which options are offered hold.
 vi.mock('../widgetRegistry', () => {
-  const ids = ['agents', 'github', 'pipeline', 'live-work']
+  const ids = ['agents', 'github', 'pipeline', 'live-work'] as const
   const stub = (id: string) => defineComponent({ name: id, render: () => h('p', `${id} body`) })
   return {
     WIDGETS: Object.fromEntries(ids.map(id => [id, { ...WIDGET_SPECS[id], component: stub(id) }])),

@@ -1,4 +1,11 @@
-import { WIDGET_SPECS } from './widgetSpecs'
+import type { WidgetSpec } from './widgetSpecs'
+import { isWidgetId, WIDGET_SPECS } from './widgetSpecs'
+
+// Tiles are persisted layout data (see validateLayout below): the widget id
+// crossed that boundary as a plain string, so every lookup here is guarded.
+function specOf(widget: string): WidgetSpec | undefined {
+  return isWidgetId(widget) ? WIDGET_SPECS[widget] : undefined
+}
 
 export interface PlacedTile { widget: string, col: number, row: number, colSpan: number, rowSpan: number }
 export interface WorkspacePage { id: string, title: string, tiles: PlacedTile[] }
@@ -60,12 +67,12 @@ export function validatePlacement(tiles: PlacedTile[], c: PlacedTile, ignoreInde
     return `A tile must start at row 1 or below and end by row ${MAX_ROW}.`
   const other = tiles.findIndex((o, i) => i !== ignoreIndex && overlaps(o, c))
   if (other !== -1)
-    return `That spot would overlap ${WIDGET_SPECS[tiles[other].widget]?.title ?? tiles[other].widget}.`
+    return `That spot would overlap ${specOf(tiles[other].widget)?.title ?? tiles[other].widget}.`
   return null
 }
 
 export function fitsMinimum(widget: string, colSpan: number, rowSpan: number): string | null {
-  const s = WIDGET_SPECS[widget]
+  const s = specOf(widget)
   if (!s || (colSpan >= s.minColSpan && rowSpan >= s.minRowSpan))
     return null
   return `${s.title} needs at least ${s.minColSpan} × ${s.minRowSpan}.`
@@ -88,7 +95,7 @@ export function resizeTile(page: WorkspacePage, index: number, colSpan: number, 
 
 export function swapTile(page: WorkspacePage, index: number, widget: string): OpResult<WorkspacePage> {
   if (page.tiles.some((tile, i) => i !== index && tile.widget === widget))
-    return fail(`${WIDGET_SPECS[widget]?.title ?? widget} is already on this page.`)
+    return fail(`${specOf(widget)?.title ?? widget} is already on this page.`)
   return replaceTile(page, index, { ...page.tiles[index], widget })
 }
 
@@ -112,7 +119,7 @@ export function firstFreeSpot(tiles: PlacedTile[], colSpan: number, rowSpan: num
 }
 
 export function addTile(page: WorkspacePage, widget: string): OpResult<WorkspacePage> {
-  const s = WIDGET_SPECS[widget]
+  const s = specOf(widget)
   if (!s)
     return fail(`Unknown widget ${widget}.`)
   if (page.tiles.some(tile => tile.widget === widget))

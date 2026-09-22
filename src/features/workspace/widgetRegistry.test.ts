@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { widgetIds, WIDGETS } from './widgetRegistry'
-import { WIDGET_SPECS } from './widgetSpecs'
+import { isWidgetId, WIDGET_IDS, WIDGET_SPECS, widgetIds, WIDGETS } from './index'
 
 describe('widget registry', () => {
   // Both sides are read: a spec without a component, or a component without a
@@ -24,5 +23,23 @@ describe('widget registry', () => {
       expect(w.minRowSpan).toBeGreaterThanOrEqual(1)
       expect(w.minRowSpan).toBeLessThanOrEqual(w.defaultRowSpan)
     }
+  })
+})
+
+describe('widget ids', () => {
+  it('has one spec and one widget per id, and nothing else', () => {
+    expect(Object.keys(WIDGET_SPECS).sort()).toEqual([...WIDGET_IDS].sort())
+    expect(widgetIds().sort()).toEqual([...WIDGET_IDS].sort())
+  })
+
+  it('recognises known ids and rejects module and unknown ids', () => {
+    expect(isWidgetId('hub')).toBe(true)
+    expect(isWidgetId('github__prs')).toBe(false)
+    expect(isWidgetId('nope')).toBe(false)
+  })
+
+  it('loads widget components lazily', () => {
+    for (const id of WIDGET_IDS)
+      expect((WIDGETS[id].component as { __asyncLoader?: unknown }).__asyncLoader, id).toBeTypeOf('function')
   })
 })

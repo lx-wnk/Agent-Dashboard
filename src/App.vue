@@ -4,7 +4,6 @@ import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, provi
 import { useAgents } from '@/features/agents/composables/useAgents'
 import BacklogForm from '@/features/pipeline/components/BacklogForm.vue'
 import { useTasks } from '@/features/pipeline/composables/useTasks'
-import ApiKeySettings from '@/features/settings/components/ApiKeySettings.vue'
 import LoginPage from './components/LoginPage.vue'
 import OnboardingFlow from './components/onboarding/OnboardingFlow.vue'
 import ServerReconnectOverlay from './components/ServerReconnectOverlay.vue'
@@ -66,6 +65,9 @@ const TaskModal = defineAsyncComponent(() => import('@/features/pipeline/compone
 const RefinementChat = defineAsyncComponent(() => import('@/features/pipeline/components/RefinementChat.vue'))
 const PlanReviewPanel = defineAsyncComponent(() => import('@/features/pipeline/components/PlanReviewPanel.vue'))
 const EditGateModal = defineAsyncComponent(() => import('./components/EditGateModal.vue'))
+// The settings panel and its statically-imported tabs (Spawner, Project, Grant, …)
+// are the largest module reachable from the entry chunk — load on demand.
+const ApiKeySettings = defineAsyncComponent(() => import('@/features/settings/components/ApiKeySettings.vue'))
 
 const { user, authEnabled, loaded, loadUser } = useUser()
 const { homedir, loadServerConfig } = useServerConfig()
