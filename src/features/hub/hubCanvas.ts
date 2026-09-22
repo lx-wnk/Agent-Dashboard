@@ -113,8 +113,9 @@ export function agentDotBox(sx: number, sy: number): LabelBox {
   return { x: sx - r, y: sy - r, w: AGENT_DOT_PX, h: AGENT_DOT_PX }
 }
 
-// A sector name centres on its point (HubOrbit.vue's `-translate-1/2`). It is the map's legend and
-// is never culled itself, only ever an obstacle for an agent label.
+// A sector name centres on its point (HubOrbit.vue's `-translate-1/2`). It is an obstacle for an
+// agent label and never yields to one; it yields only to the docked launcher rail, which is fixed to
+// the screen while the map pans under it (HubWidget.vue's `namedSectors`).
 export function sectorLabelBox(sx: number, sy: number, size: LabelSize = UNMEASURED): LabelBox {
   return { x: sx - size.w / 2, y: sy - size.h / 2, w: size.w, h: size.h }
 }

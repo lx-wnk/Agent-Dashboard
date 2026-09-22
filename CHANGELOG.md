@@ -163,7 +163,19 @@ Preparing the first public release.
   title, path, last change, link/backlink chips and **Ask Kontor about
   this**, which opens the Kontor tile with the note's `[[wikilink]]`
   prefilled; the memory tile lists recently touched notes, and the command
-  palette finds a note by title.
+  palette finds a note by title. Note labels and agent labels are both placed
+  greedily by priority — agents that need you first, then working ones — from
+  boxes measured in the DOM rather than estimated, and a label is dropped
+  rather than drawn over another label, over another agent's dot, or over a
+  sector name, because a sector name is the map's legend and has no fallback
+  while a dropped agent label returns on hover or keyboard focus and the agent
+  still has its dot, its accessible name and its row in the `L` list. An agent
+  label hangs radially, toward the core where there is room for it; a sector
+  carrying agents is given the arc its labels need instead of the bare
+  minimum; and the launcher ring is derived from the legend's radius so the
+  two never share a band. Where the launcher rail is docked it is fixed to the
+  screen while the map pans beneath it, so a sector name it would cover is
+  left undrawn rather than half-hidden.
 - **Capability decisions answer from the needs-you queue.** A pending
   capability decision now ranks between a question and a plan review instead
   of being silently skipped, rendering the same Allow/Deny card the agent
