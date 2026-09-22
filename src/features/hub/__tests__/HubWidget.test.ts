@@ -356,6 +356,22 @@ describe('hubWidget', () => {
     w.unmount()
   })
 
+  it('leaves focus outside the hub alone when the open card closes on its own', async () => {
+    const w = await mountHub()
+    await w.get('[data-testid="hub-agent-101"]').trigger('click')
+    const outside = document.createElement('button')
+    document.body.appendChild(outside)
+    outside.focus()
+
+    agents.value = initialAgents.filter(a => a.pid !== 101)
+    await flushPromises()
+    expect(w.find('[aria-label="Kontor Hub"]').exists()).toBe(false)
+    expect(document.activeElement).toBe(outside)
+
+    outside.remove()
+    w.unmount()
+  })
+
   it('closes the card of a note gone after a refetch and hands focus back to the stage', async () => {
     graph.status.value = 'ready'
     graph.notes.value = [vaultNote(0, 'alpha/one.md'), vaultNote(1, 'beta/two.md')]

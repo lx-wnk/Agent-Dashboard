@@ -195,9 +195,17 @@ function toggleList() {
   listOpen.value = !listOpen.value
 }
 
-// Post-flush: a closed layer that held focus has unmounted by now and dropped focus to <body>.
+// Pre-flush: the closing layer is still in the DOM here, so this is the last chance to see whether it held focus.
+let closingLayerHadFocus = false
 watch([listOpen, openCard], () => {
-  if (!hub.value?.contains(document.activeElement))
+  closingLayerHadFocus = !!hub.value?.contains(document.activeElement)
+}, { flush: 'pre' })
+
+// Post-flush: only reclaim focus for the hub itself, never steal it from elsewhere (sidebar, topbar, Kontor overlay).
+watch([listOpen, openCard], () => {
+  const active = document.activeElement
+  const nothingFocused = active === document.body || !active
+  if (closingLayerHadFocus || nothingFocused)
     stage.value?.focus()
 }, { flush: 'post' })
 
