@@ -3,7 +3,7 @@ import type { HubLevel } from '../hubCamera'
 import type { Launcher } from '../hubLaunchers'
 import type { WidgetId } from '@/features/workspace'
 import type { Agent } from '@/types'
-import { computed, inject, ref } from 'vue'
+import { computed, inject, ref, watch } from 'vue'
 import { NEEDS_YOU } from '@/composables/openTask'
 import { useSidebar } from '@/composables/useSidebar'
 import { useViewState } from '@/composables/useViewState'
@@ -17,8 +17,11 @@ import { useHubCamera } from '../composables/useHubCamera'
 import { LEVEL_TARGETS } from '../hubCamera'
 import { agentAngles, agentRadius, planSectors, polar, radiusForAge, RINGS, sectorMid, wedgePath } from '../hubGeometry'
 import { launchersFor } from '../hubLaunchers'
+import HubAgentCard from './HubAgentCard.vue'
 import HubControls from './HubControls.vue'
 import HubLaunchers from './HubLaunchers.vue'
+import HubList from './HubList.vue'
+import HubMinimap from './HubMinimap.vue'
 import HubOrbit from './HubOrbit.vue'
 
 const needsYou = inject(NEEDS_YOU)
@@ -26,7 +29,7 @@ if (!needsYou)
   throw new Error('HubWidget requires NEEDS_YOU from App.vue')
 
 const stage = ref<HTMLElement | null>(null)
-const { cam, level, docked, dragging, zoomBy, panBy, flyTo, fit, centreWorld } = useHubCamera(stage)
+const { cam, size, rel, level, docked, dragging, zoomBy, panBy, flyTo, fit, centreWorld } = useHubCamera(stage)
 const { agents } = useAgents({ autoStart: false })
 const { ask, overlayOpen } = useKontorSession()
 const kontorAgent = useKontorAgent()
@@ -34,10 +37,12 @@ const { activeView } = useViewState()
 const { layout, wide } = useWorkspace()
 const { requestNewPage } = useSidebar()
 const listOpen = ref(false)
+const cardPid = ref<number | null>(null)
 
 const SECTOR_FLY_RADIUS = 260
 const SECTOR_FLY_REL = 2.6
 const AGENT_FLY_REL = 3
+const MINIMAP_FLY_MIN_REL = 2
 const ZOOM_STEP = 1.4
 const PAN_STEP_PX = 60
 const SLOT_KEY = /^\d$/
@@ -73,7 +78,11 @@ const kontorState = computed(() => kontorAgent.value ? agentDisplayStatus(kontor
 const kontorPage = computed(() => pageWithWidget(layout.value, KONTOR_WIDGET))
 const coreTitle = computed(() => kontorPage.value ? `Open Kontor (${kontorState.value})` : 'Add the Kontor tile to a page to open it here')
 
-const launchers = computed(() => launchersFor(NAV_ITEMS, layout.value.pages.filter(p => p.id !== ZENTRALE_PAGE_ID), activeView.value))
+const cardAgent = computed(() => live.value.find(a => a.pid === cardPid.value) ?? null)
+
+const otherPages = computed(() => layout.value.pages.filter(p => p.id !== ZENTRALE_PAGE_ID))
+const launchers = computed(() => launchersFor(NAV_ITEMS, otherPages.value, activeView.value))
+const listLaunchers = computed(() => launchersFor(NAV_ITEMS, otherPages.value, activeView.value, Infinity))
 
 function openKontor() {
   if (!kontorPage.value)
@@ -103,6 +112,25 @@ function toggleList() {
   listOpen.value = !listOpen.value
 }
 
+watch(listOpen, (open) => {
+  if (!open)
+    stage.value?.focus()
+})
+
+function closeCard() {
+  cardPid.value = null
+  stage.value?.focus()
+}
+
+function escape() {
+  if (cardAgent.value)
+    closeCard()
+  else if (listOpen.value)
+    toggleList()
+  else
+    fit()
+}
+
 function flyToLevel(target: HubLevel) {
   const [x, y] = target === 0 ? [0, 0] : centreWorld()
   flyTo(x, y, LEVEL_TARGETS[target])
@@ -124,7 +152,7 @@ const KEY_ACTIONS: Record<string, () => void> = {
   'F': toggleWide,
   'l': toggleList,
   'L': toggleList,
-  'Escape': () => listOpen.value ? toggleList() : fit(),
+  'Escape': escape,
 }
 
 function isTyping(target: HTMLElement): boolean {
@@ -147,9 +175,20 @@ function onKey(e: KeyboardEvent) {
 }
 
 function flyToAgent(agent: Agent) {
+  cardPid.value = agent.pid
   const hit = placed.value.find(p => p.agent.pid === agent.pid)
   if (hit)
     flyTo(hit.x, hit.y, AGENT_FLY_REL)
+}
+
+function pickFromList(agent: Agent) {
+  listOpen.value = false
+  flyToAgent(agent)
+}
+
+function launchFromList(launcher: Launcher) {
+  listOpen.value = false
+  launch(launcher)
 }
 </script>
 
@@ -212,6 +251,13 @@ function flyToAgent(agent: Agent) {
         @list="toggleList"
         @level="flyToLevel"
       />
+      <HubMinimap
+        :cam="cam"
+        :size="size"
+        :sectors="plan.sectors"
+        :agents="placed"
+        @fly="(x, y) => flyTo(x, y, Math.max(rel, MINIMAP_FLY_MIN_REL))"
+      />
     </div>
     <NeedsYouQueue
       variant="docked"
@@ -219,5 +265,15 @@ function flyToAgent(agent: Agent) {
       class="absolute left-1/2 top-2.5 z-10 max-h-[45%] w-[min(560px,calc(100%-120px))] -translate-x-1/2 overflow-y-auto rounded-[10px] border bg-card/95 px-2.5 py-2 shadow-lg"
       :class="needsYou.length > 0 ? 'border-warning-line' : 'border-line'"
     />
+    <HubList
+      v-if="listOpen"
+      :agents="placed"
+      :notes="[]"
+      :launchers="listLaunchers"
+      @agent="pickFromList"
+      @launch="launchFromList"
+      @close="listOpen = false"
+    />
+    <HubAgentCard v-if="cardAgent" :agent="cardAgent" @close="closeCard" />
   </section>
 </template>

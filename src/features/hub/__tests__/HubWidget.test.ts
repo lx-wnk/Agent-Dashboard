@@ -2,7 +2,7 @@ import type { Agent } from '@/types'
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { computed, ref } from 'vue'
-import { NEEDS_YOU, OPEN_TASK, PENDING_PERMISSIONS } from '@/composables/openTask'
+import { NEEDS_YOU, OPEN_SETTINGS, OPEN_TASK, PENDING_PERMISSIONS } from '@/composables/openTask'
 import { useSidebar } from '@/composables/useSidebar'
 import { useViewState } from '@/composables/useViewState'
 import { DEFAULT_LAYOUT, useWorkspace } from '@/features/workspace'
@@ -18,7 +18,7 @@ const ask = vi.fn()
 const overlayOpen = ref(false)
 
 vi.mock('@/features/agents', () => ({
-  useAgents: () => ({ agents }),
+  useAgents: () => ({ agents, selectAgent: vi.fn() }),
 }))
 vi.mock('@/features/mission', () => ({
   NeedsYouQueue: {
@@ -69,6 +69,7 @@ async function mountHub() {
         [NEEDS_YOU]: computed(() => []),
         [PENDING_PERMISSIONS]: { items: ref([]), refresh: vi.fn() },
         [OPEN_TASK]: vi.fn(),
+        [OPEN_SETTINGS]: vi.fn(),
       },
     },
   })
@@ -192,6 +193,48 @@ describe('hubWidget', () => {
     expect(scale(w)).toBeCloseTo(1.4)
     await press(w, 'Escape')
     expect(scale(w)).toBeCloseTo(1)
+    w.unmount()
+  })
+
+  it('flies to an agent picked in the orbit and opens its card; Escape closes the card, then the list, then fits', async () => {
+    const w = await mountHub()
+    const stage = w.get('[data-testid="hub-stage"]').element
+    await w.get('[data-testid="hub-agent-101"]').trigger('click')
+    expect(scale(w)).toBeCloseTo(3)
+    expect(w.get('[role="dialog"][aria-label="Kontor Hub"]').text()).toContain('Working')
+    await press(w, 'L')
+    expect(w.find('[role="dialog"][aria-label="Zentrale as a list"]').exists()).toBe(true)
+    expect(document.activeElement).toBe(w.get('[aria-label="Zentrale as a list"] button').element)
+    await press(w, 'Escape')
+    expect(w.find('[aria-label="Kontor Hub"]').exists()).toBe(false)
+    expect(w.find('[aria-label="Zentrale as a list"]').exists()).toBe(true)
+    await press(w, 'Escape')
+    expect(w.find('[aria-label="Zentrale as a list"]').exists()).toBe(false)
+    expect(document.activeElement).toBe(stage)
+    expect(scale(w)).toBeCloseTo(3)
+    await press(w, 'Escape')
+    expect(scale(w)).toBeCloseTo(1)
+    w.unmount()
+  })
+
+  it('closes the list on an agent picked in it, flies there and opens its card', async () => {
+    const w = await mountHub()
+    await press(w, 'L')
+    const row = w.findAll('[data-testid="hub-list-agent"]').find(r => r.attributes('aria-label') === 'Web App, Quiet')!
+    await row.trigger('click')
+    expect(w.find('[aria-label="Zentrale as a list"]').exists()).toBe(false)
+    expect(w.find('[role="dialog"][aria-label="Web App"]').exists()).toBe(true)
+    expect(scale(w)).toBeCloseTo(3)
+    w.unmount()
+  })
+
+  it('flies to the point picked on the minimap', async () => {
+    const w = await mountHub()
+    const map = w.get('svg[aria-label="Overview map"]')
+    map.element.getBoundingClientRect = () => ({ left: 0, top: 0, width: 108, height: 108 }) as DOMRect
+    await map.trigger('click', { clientX: 81, clientY: 54 })
+    expect(scale(w)).toBeCloseTo(2)
+    expect(w.get('svg g').attributes('transform')).toBe('translate(5,565) scale(2)')
     w.unmount()
   })
 
