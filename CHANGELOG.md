@@ -182,7 +182,8 @@ Preparing the first public release.
   note it read in the last ten minutes, a dotted one to each note it wrote,
   fading as the touch ages. The server reads them from the agent's Obsidian MCP
   calls and its `curl …/vault/…` commands (a `${VAR:-default}` is read as its
-  default; a path holding any other shell variable is skipped, never guessed)
+  default, a variable assigned earlier in the same command is resolved; a path
+  holding any other shell variable is skipped, never guessed)
   and ships them as `recentNotes` on each
   agent; the `L` list names the same notes under each agent.
 - **The hub.** The Zentrale's centre tile is a zoomable live map: an orbit of

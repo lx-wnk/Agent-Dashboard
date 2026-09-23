@@ -57,6 +57,13 @@ func TestCurlNoteTouches(t *testing.T) {
 			[]NoteTouch{touch("claude-memory/x.md", read, zero)}},
 		{"no vault URL", `ls -la`, nil},
 		{"a backslash continuation keeps the method with its URL", "curl -sk -X PUT \\\n  \"$B/vault/claude-memory/work/x.md\"", []NoteTouch{touch("claude-memory/work/x.md", write, zero)}},
+		{"a write through a variable assigned earlier is a write", `F="$OBSIDIAN_BASE_URL/vault/${OBSIDIAN_ROOT:-claude-memory}/private/kontor/sessions/hub.md"; curl -sk -X PUT --data-binary @n.md "$F"`,
+			[]NoteTouch{touch("claude-memory/private/kontor/sessions/hub.md", write, zero)}},
+		{"a variable built from another resolves", "ROOT=\"${OBSIDIAN_ROOT:-claude-memory}\"\nBASE=\"$OBSIDIAN_BASE_URL/vault/$ROOT/private/sessions\"\ncurl -sk \"${BASE}/_index.md\"",
+			[]NoteTouch{touch("claude-memory/private/sessions/_index.md", read, zero)}},
+		{"an assignment alone touches nothing", `URL="$B/vault/claude-memory/x.md"`, nil},
+		{"a single-quoted value stays literal", `R='$HOME'; curl "$B/vault/$R/x.md"`, nil},
+		{"an unassigned variable is still dropped", `F="$B/vault/claude-memory/x.md"; curl "$G"`, nil},
 		{"a path over the length cap is dropped", `curl "$B/vault/` + strings.Repeat("a", 600) + `.md"`, nil},
 	}
 	for _, tt := range tests {

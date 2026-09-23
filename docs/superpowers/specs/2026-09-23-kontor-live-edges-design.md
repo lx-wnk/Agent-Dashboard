@@ -80,9 +80,10 @@ kept per session, newest first, so a loop of PUTs cannot bloat the SSE payload.
 
 Known gap: an agent that sets `OBSIDIAN_ROOT` to something other than the
 default yields paths outside the configured root. They fail normalisation below
-and are omitted — never drawn to a wrong note. A write whose URL was assigned
-to a shell variable in an earlier segment (`URL=…; curl -X PUT "$URL"`) is
-drawn as a read, since the method and the URL sit in different segments. An
+and are omitted — never drawn to a wrong note. A variable assigned in the same command (`URL=…; curl -X PUT "$URL"`, also
+chained as `BASE=…/vault/$ROOT/dir`) is resolved before segments are split, and
+the assignment itself counts as no touch; a variable set in an earlier Bash
+call or by `export` in a sourced file stays unknown and its path is dropped. An
 edge is drawn when the call is issued, not when it succeeds, so a denied or
 still-pending write still shows as written.
 

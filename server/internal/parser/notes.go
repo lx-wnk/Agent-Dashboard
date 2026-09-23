@@ -39,6 +39,8 @@ var (
 	shellSegmentRe = regexp.MustCompile(`&&|\|\||[;|\n]`)
 	vaultURLRe     = regexp.MustCompile("/vault/([^\\s\"'`?#\\\\]+)")
 	writeMethodRe  = regexp.MustCompile(`(?:-X|--request)\s*['"]?(?:PUT|POST|PATCH)\b`)
+	shellAssignRe  = regexp.MustCompile(`(^|[\s;&|(])([A-Za-z_][A-Za-z0-9_]*)=(?:"([^"]*)"|'([^']*)'|([^\s;&|"']*))`)
+	shellVarRe     = regexp.MustCompile(`\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))`)
 )
 
 func noteTouchesOf(m Message) []NoteTouch {
@@ -95,6 +97,7 @@ func curlNoteTouches(command string) []NoteTouch {
 	}
 	expanded := shellDefaultRe.ReplaceAllString(command, "$1")
 	expanded = strings.ReplaceAll(expanded, "\\\n", " ")
+	expanded = expandShellAssignments(expanded)
 	var out []NoteTouch
 	for _, segment := range shellSegmentRe.Split(expanded, -1) {
 		kind := sdk.NoteTouchKindRead
@@ -110,6 +113,37 @@ func curlNoteTouches(command string) []NoteTouch {
 		}
 	}
 	return out
+}
+
+// Assignments are dropped so a URL counts where it is used, not where it is named.
+func expandShellAssignments(command string) string {
+	vars := map[string]string{}
+	substitute := func(s string) string {
+		return shellVarRe.ReplaceAllStringFunc(s, func(ref string) string {
+			m := shellVarRe.FindStringSubmatch(ref)
+			if v, ok := vars[m[1]+m[2]]; ok {
+				return v
+			}
+			return ref
+		})
+	}
+	var b strings.Builder
+	last := 0
+	for _, loc := range shellAssignRe.FindAllStringSubmatchIndex(command, -1) {
+		b.WriteString(substitute(command[last:loc[3]]))
+		name := command[loc[4]:loc[5]]
+		switch {
+		case loc[6] >= 0:
+			vars[name] = substitute(command[loc[6]:loc[7]])
+		case loc[8] >= 0:
+			vars[name] = command[loc[8]:loc[9]]
+		default:
+			vars[name] = substitute(command[loc[10]:loc[11]])
+		}
+		last = loc[1]
+	}
+	b.WriteString(substitute(command[last:]))
+	return b.String()
 }
 
 // maxNotePathLen keeps a truncation from ever pointing at the wrong note.
