@@ -361,7 +361,6 @@ type fullScanUsage struct {
 	notes []NoteTouch
 }
 
-// addMessageUsage adds one assistant message's per-message usage to dst.
 func addMessageUsage(dst *sdk.TokenUsage, m Message) {
 	if m.Role != "assistant" || m.Usage == nil {
 		return

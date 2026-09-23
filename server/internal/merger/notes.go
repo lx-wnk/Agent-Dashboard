@@ -13,9 +13,7 @@ func WithNotePathFn(fn func(vaultPath string) (string, bool)) Option {
 	return func(m *Merger) { m.notePath = fn }
 }
 
-// agentNotes turns a session's note touches into an agent's recentNotes. The
-// parser prunes its window only when the file changes, so an idle session's
-// touches must age out here, against now.
+// The parser prunes only when the file changes, so an idle session's touches age out here.
 func agentNotes(touches []parser.NoteTouch, notePath func(string) (string, bool), now time.Time) []sdk.NoteTouch {
 	if notePath == nil {
 		return nil

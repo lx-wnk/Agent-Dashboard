@@ -13,8 +13,7 @@ export function edgeAlpha(ageMs: number): number {
   return ALPHA_FRESH + (ALPHA_OLD - ALPHA_FRESH) * t
 }
 
-// The server applies the window too; this re-applies it on the client's clock so an edge still
-// expires between SSE ticks. An unparsable `at` yields NaN, which fails the comparison and drops.
+// Re-applies the window on the client clock; an unparsable `at` is NaN and drops.
 function notesOnMap(agent: Agent, byPath: ReadonlyMap<string, HubNote>, now: number) {
   return (agent.recentNotes ?? []).flatMap((touch: NoteTouch) => {
     const note = byPath.get(touch.path)

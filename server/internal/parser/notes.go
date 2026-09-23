@@ -15,7 +15,7 @@ import (
 // NoteWindow is how far back an agent's note touches are kept.
 const NoteWindow = 10 * time.Minute
 
-// maxNoteTouches caps one session's touches so a loop of writes cannot bloat the SSE payload.
+// maxNoteTouches caps one session's touches.
 const maxNoteTouches = 50
 
 // NoteTouch is a vault note an agent's tool call read or wrote. Path is
@@ -88,9 +88,7 @@ func toolNoteTouches(name string, input json.RawMessage) []NoteTouch {
 	return curlNoteTouches(in.Command)
 }
 
-// curlNoteTouches reads note paths out of a shell command's vault REST URLs.
-// Only ${NAME:-default} is knowable without the agent's environment; a path
-// still holding a variable after that is dropped rather than guessed.
+// Only ${NAME:-default} is knowable without the agent's environment; any other variable drops the URL.
 func curlNoteTouches(command string) []NoteTouch {
 	if !strings.Contains(command, "/vault/") {
 		return nil
@@ -114,7 +112,10 @@ func curlNoteTouches(command string) []NoteTouch {
 	return out
 }
 
-func isNotePath(p string) bool { return strings.HasSuffix(p, ".md") }
+// maxNotePathLen keeps a truncation from ever pointing at the wrong note.
+const maxNotePathLen = 512
+
+func isNotePath(p string) bool { return len(p) <= maxNotePathLen && strings.HasSuffix(p, ".md") }
 
 // mergeNoteTouches folds add into touches: one entry per (path, kind) at its
 // newest time, nothing older than NoteWindow before now, newest first, capped.

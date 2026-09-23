@@ -3,6 +3,7 @@ package parser
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -56,6 +57,7 @@ func TestCurlNoteTouches(t *testing.T) {
 			[]NoteTouch{touch("claude-memory/x.md", read, zero)}},
 		{"no vault URL", `ls -la`, nil},
 		{"a backslash continuation keeps the method with its URL", "curl -sk -X PUT \\\n  \"$B/vault/claude-memory/work/x.md\"", []NoteTouch{touch("claude-memory/work/x.md", write, zero)}},
+		{"a path over the length cap is dropped", `curl "$B/vault/` + strings.Repeat("a", 600) + `.md"`, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -80,6 +82,7 @@ func TestNoteTouchesOf(t *testing.T) {
 			[]NoteTouch{touch("claude-memory/a.md", write, at)}},
 		{"MCP search is ignored", toolMessage(t, at, "mcp__obsidian__obsidian_search_vault", map[string]string{"query": "x", "path": "claude-memory/a.md"}), nil},
 		{"the Read tool is ignored", toolMessage(t, at, "Read", map[string]string{"file_path": "/vault/claude-memory/a.md"}), nil},
+		{"a path over the length cap is dropped", toolMessage(t, at, "mcp__obsidian__obsidian_read_note", map[string]string{"path": strings.Repeat("a", 600) + ".md"}), nil},
 		{"Bash carries the message time", toolMessage(t, at, "Bash", map[string]string{"command": `curl "$B/vault/claude-memory/a.md"`}),
 			[]NoteTouch{touch("claude-memory/a.md", read, at)}},
 		{"a user message is ignored", Message{Role: "user", Timestamp: at, Content: json.RawMessage(`[{"type":"tool_result","tool_use_id":"t1"}]`)}, nil},
