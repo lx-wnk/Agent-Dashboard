@@ -1,5 +1,6 @@
-import type { APIRequestContext, APIResponse, Locator, Page } from '@playwright/test'
+import type { APIRequestContext, Locator, Page } from '@playwright/test'
 import { expect } from '@playwright/test'
+import { APP_BASE_URL } from './servers'
 
 /**
  * Mock /api/me so the app never redirects to the LoginPage — mirrors the
@@ -22,28 +23,17 @@ export async function parkPointerOffNav(page: Page): Promise<void> {
   await page.mouse.move(640, 360)
 }
 
-// The server's per-IP limiter is shared with the browser under test, so a resend here is safe even for a POST.
-export async function retryRateLimited(send: () => Promise<APIResponse>): Promise<APIResponse> {
-  let res = await send()
-  for (let attempt = 1; attempt < 5 && res.status() === 429; attempt++) {
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    res = await send()
-  }
-  return res
-}
-
 export async function storeLayout(request: APIRequestContext, baseURL: string | undefined, value: string): Promise<void> {
-  const res = await retryRateLimited(() => request.patch('/api/settings/workspace.layout', {
-    headers: { Origin: baseURL ?? 'http://localhost:13199' },
+  const res = await request.patch('/api/settings/workspace.layout', {
+    headers: { Origin: baseURL ?? APP_BASE_URL },
     data: { value },
-  }))
+  })
   expect(res.ok(), `store layout request (HTTP ${res.status()})`).toBe(true)
 }
 
-// The client itself retries a 429, so skip an in-between one and wait for the response that settles the save.
 export function waitForLayoutPatch(page: Page) {
   return page.waitForResponse(resp =>
-    resp.url().includes('/api/settings/workspace.layout') && resp.request().method() === 'PATCH' && resp.status() !== 429)
+    resp.url().includes('/api/settings/workspace.layout') && resp.request().method() === 'PATCH')
 }
 
 /** Stubs a GET endpoint to return a fixed JSON body. */

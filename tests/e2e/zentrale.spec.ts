@@ -51,7 +51,7 @@ test('pages are offered in the command palette on a view that holds no workspace
   }
   await storeLayout(request, baseURL, JSON.stringify(layout))
 
-  // One boot, straight into the Dashboard: a second boot's burst drains the shared per-IP rate limiter.
+  // Set the view before the first boot: the Dashboard has to be the view the app opens on, not one it navigates to.
   await page.addInitScript(() => localStorage.setItem('agent-active-view', 'dashboard'))
   await page.goto('/', { waitUntil: 'domcontentloaded' })
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Dashboard')
@@ -59,8 +59,7 @@ test('pages are offered in the command palette on a view that holds no workspace
 
   await page.keyboard.press('ControlOrMeta+k')
   await page.getByPlaceholder('Search tasks and agents…').fill('Morning')
-  // The load retries a 429 up to 3 times, up to 5 s apart (useWorkspace), so the entry may land late.
-  await expect(page.getByTestId('spotlight-command-view:page:p-morning')).toContainText('Go to Morning', { timeout: 20_000 })
+  await expect(page.getByTestId('spotlight-command-view:page:p-morning')).toContainText('Go to Morning')
 })
 
 test('a moved tile stays moved after a reload', async ({ page }) => {

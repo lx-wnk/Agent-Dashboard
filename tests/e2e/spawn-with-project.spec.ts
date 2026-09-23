@@ -1,6 +1,7 @@
 import process from 'node:process'
 import { expect, test } from '@playwright/test'
-import { openListboxOptions, retryRateLimited, selectListboxOption } from './helpers'
+import { openListboxOptions, selectListboxOption } from './helpers'
+import { APP_BASE_URL } from './servers'
 
 // Allow the dev environment to override the dashboard URL — e.g. point at the
 // Vite dev server (`http://localhost:5173`) when the Go backend on 13199 has
@@ -27,13 +28,13 @@ test('spawn dialog shows project picker and hydrates cwd from default folder', a
   // header (`missing Origin header`, 403). Browser requests get this header
   // for free; APIRequestContext does not, so we set it explicitly for every
   // mutating call.
-  const csrfHeaders = { Origin: baseURL ?? 'http://localhost:13199' }
+  const csrfHeaders = { Origin: baseURL ?? APP_BASE_URL }
 
   // 1. Pre-seed a project.
-  const projectRes = await retryRateLimited(() => request.post('/api/projects', {
+  const projectRes = await request.post('/api/projects', {
     headers: csrfHeaders,
     data: { name: `E2E ${slug}`, slug },
-  }))
+  })
   // toBeOK() includes the response body in failure messages — surfaces the
   // server's actual error text instead of a bare `expected true, got false`.
   await expect(projectRes).toBeOK()
@@ -41,10 +42,10 @@ test('spawn dialog shows project picker and hydrates cwd from default folder', a
 
   // 2. Pre-seed a default folder. /tmp is safe (exists on every dev box) and
   //    must be an absolute path per the server's folder validator.
-  const folderRes = await retryRateLimited(() => request.post(`/api/projects/${project.id}/folders`, {
+  const folderRes = await request.post(`/api/projects/${project.id}/folders`, {
     headers: csrfHeaders,
     data: { path: '/tmp', isDefault: true },
-  }))
+  })
   await expect(folderRes).toBeOK()
 
   try {
@@ -103,7 +104,7 @@ test('spawn dialog shows project picker and hydrates cwd from default folder', a
   }
   finally {
     // 13. Cleanup, even if an assertion above failed.
-    await retryRateLimited(() => request.delete(`/api/projects/${project.id}`, { headers: csrfHeaders }))
+    await request.delete(`/api/projects/${project.id}`, { headers: csrfHeaders })
   }
 })
 
@@ -123,19 +124,19 @@ test('spawn dialog shows project picker and hydrates cwd from default folder', a
 
 test('spawn dialog submits payload with project cwd, permission mode, and prompt', async ({ page, request, baseURL }) => {
   const slug = `e2e-${Date.now()}`
-  const csrfHeaders = { Origin: baseURL ?? 'http://localhost:13199' }
+  const csrfHeaders = { Origin: baseURL ?? APP_BASE_URL }
 
-  const projectRes = await retryRateLimited(() => request.post('/api/projects', {
+  const projectRes = await request.post('/api/projects', {
     headers: csrfHeaders,
     data: { name: `E2E ${slug}`, slug },
-  }))
+  })
   await expect(projectRes).toBeOK()
   const project = await projectRes.json() as { id: string }
 
-  const folderRes = await retryRateLimited(() => request.post(`/api/projects/${project.id}/folders`, {
+  const folderRes = await request.post(`/api/projects/${project.id}/folders`, {
     headers: csrfHeaders,
     data: { path: '/tmp', isDefault: true },
-  }))
+  })
   await expect(folderRes).toBeOK()
 
   try {
@@ -178,6 +179,6 @@ test('spawn dialog submits payload with project cwd, permission mode, and prompt
     expect(payload.spawnerId).toBeUndefined()
   }
   finally {
-    await retryRateLimited(() => request.delete(`/api/projects/${project.id}`, { headers: csrfHeaders }))
+    await request.delete(`/api/projects/${project.id}`, { headers: csrfHeaders })
   }
 })
