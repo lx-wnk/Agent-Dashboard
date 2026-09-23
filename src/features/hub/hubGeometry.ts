@@ -62,7 +62,9 @@ export function sectorFloorDeg(agentsInSector: number, agentsTotal: number): num
   return Math.max(SECTOR_FLOOR_DEG, 360 * needPx / (2 * Math.PI * agentRingPx(agentsTotal)))
 }
 
-export interface SectorInput { key: string, label: string, weight: number, agents?: number }
+// `projects` counts the distinct agent projects and feeds the weight; `agents` counts the running
+// instances and feeds only the floor, which is the one thing their labels really need room for.
+export interface SectorInput { key: string, label: string, weight: number, projects?: number, agents?: number }
 export interface Sector extends SectorInput { start: number, end: number }
 
 export function buildSectors(inputs: SectorInput[]): Sector[] {
@@ -71,9 +73,10 @@ export function buildSectors(inputs: SectorInput[]): Sector[] {
   if (n === 0)
     return []
   const spans = Array.from({ length: n }).fill(360 / n) as number[]
+  const projectsOf = sorted.map(s => Math.max(s.projects ?? 0, 0))
   const agentsOf = sorted.map(s => Math.max(s.agents ?? 0, 0))
   const agentsTotal = agentsOf.reduce((sum, a) => sum + a, 0)
-  const roots = sorted.map((s, i) => Math.sqrt(Math.max(s.weight + agentsOf[i], 0)))
+  const roots = sorted.map((s, i) => Math.sqrt(Math.max(s.weight + projectsOf[i], 0)))
   const floors = agentsOf.map(a => sectorFloorDeg(a, agentsTotal))
   if (floors.reduce((sum, f) => sum + f, 0) < 360 && roots.some(r => r > 0)) {
     const floored = new Set<number>()
@@ -191,7 +194,8 @@ export function sectorKeyFor(path: string, projects: readonly string[]): { key: 
 
 export interface SectorPlan { sectors: Sector[], sectorOfNote: Map<string, string>, sectorOfProject: Map<string, string> }
 
-// `agentProjects` holds one entry per running agent, repeats included: a sector's arc counts its agents.
+// `agentProjects` holds one entry per running agent, repeats included: a sector's weight counts the
+// distinct projects among them, its floor the instances.
 export function planSectors(notePaths: readonly string[], agentProjects: readonly string[]): SectorPlan {
   const distinct = [...new Set(agentProjects)]
   const sectorOfNote = new Map<string, string>()
@@ -200,7 +204,7 @@ export function planSectors(notePaths: readonly string[], agentProjects: readonl
   for (const p of agentProjects) agentsOfProject.set(p, (agentsOfProject.get(p) ?? 0) + 1)
   if (notePaths.length === 0) {
     for (const p of distinct) sectorOfProject.set(p, p)
-    return { sectors: buildSectors(distinct.map(p => ({ key: p, label: p, weight: 1, agents: agentsOfProject.get(p) }))), sectorOfNote, sectorOfProject }
+    return { sectors: buildSectors(distinct.map(p => ({ key: p, label: p, weight: 1, projects: 1, agents: agentsOfProject.get(p) }))), sectorOfNote, sectorOfProject }
   }
   const wanted = new Set(distinct.map(p => p.toLowerCase()))
   const inputs = new Map<string, SectorInput>()
@@ -220,6 +224,7 @@ export function planSectors(notePaths: readonly string[], agentProjects: readonl
     inputs.set(OTHER_SECTOR_KEY, { key: OTHER_SECTOR_KEY, label: 'Other', weight: 1 })
   for (const [project, count] of agentsOfProject) {
     const sector = inputs.get(sectorOfProject.get(project)!)!
+    sector.projects = (sector.projects ?? 0) + 1
     sector.agents = (sector.agents ?? 0) + count
   }
   return { sectors: buildSectors([...inputs.values()]), sectorOfNote, sectorOfProject }

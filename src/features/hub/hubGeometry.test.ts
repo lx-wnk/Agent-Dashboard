@@ -24,6 +24,7 @@ import {
   SECTOR_FLOOR_DEG,
   SECTOR_LABEL_AGENT_CLEARANCE_PX,
   SECTOR_LABEL_RADIUS,
+  sectorFloorDeg,
   sectorKeyFor,
   sectorLabelRadius,
   sectorTiers,
@@ -79,6 +80,24 @@ describe('buildSectors', () => {
   })
   it('returns nothing for no input', () => {
     expect(buildSectors([])).toEqual([])
+  })
+})
+
+describe('buildSectors weight and floor inputs', () => {
+  it('weights a sector by its agent projects, never by its running instances', () => {
+    const quiet = { key: 'b', label: 'b', weight: 100 }
+    const instances = buildSectors([{ key: 'a', label: 'a', weight: 100, projects: 0, agents: 1 }, quiet])
+    const projects = buildSectors([{ key: 'a', label: 'a', weight: 100, projects: 60, agents: 0 }, quiet])
+    expect(span(instances[0])).toBeCloseTo(180)
+    expect(span(projects[0])).toBeGreaterThan(span(instances[0]))
+  })
+
+  it('floors a sector by its running instances, which is what their labels need room for', () => {
+    const rich = { key: 'b', label: 'b', weight: 400, projects: 1, agents: 1 }
+    const crowded = buildSectors([{ key: 'a', label: 'a', weight: 1, projects: 1, agents: 6 }, rich])
+    const alone = buildSectors([{ key: 'a', label: 'a', weight: 1, projects: 1, agents: 1 }, rich])
+    expect(span(crowded[0])).toBeCloseTo(sectorFloorDeg(6, 7))
+    expect(span(alone[0])).toBeCloseTo(SECTOR_FLOOR_DEG)
   })
 })
 
@@ -310,8 +329,41 @@ describe('planSectors', () => {
   it('adds no Other sector when every agent has one', () => {
     expect(planSectors(['kontor/a.md'], ['kontor']).sectors.map(s => s.key)).toEqual(['kontor'])
   })
-  it('counts one agent per repeated project name, so a crowded sector outgrows a quiet one', () => {
+  it('gives a sector crowded with agents more arc than a quiet one', () => {
     const p = planSectors(['Privat/a.md'], Array.from({ length: 7 }).fill('shop') as string[])
     expect(span(p.sectors.find(s => s.key === OTHER_SECTOR_KEY)!)).toBeGreaterThan(span(p.sectors.find(s => s.key === 'Privat')!))
+  })
+})
+
+describe('planSectors on a roster change', () => {
+  const geometry = (p: ReturnType<typeof planSectors>) => p.sectors.map(s => [s.key, s.start, s.end])
+  const vault = Array.from({ length: 6 }, (_, f) => Array.from({ length: 20 }, (_, i) => `folder${f}/n${i}.md`)).flat()
+  const oneEach = ['folder0', 'folder1', 'folder3', 'folder4', 'folder5']
+
+  it('leaves every sector exactly where it was when a second agent joins a project already on the map', () => {
+    const notes = [...Array.from({ length: 100 }, (_, i) => `Privat/n${i}.md`), 'Misc/x.md']
+    const one = planSectors(notes, ['privat'])
+    expect(geometry(planSectors(notes, ['privat', 'privat']))).toEqual(geometry(one))
+    expect(notePoint('Privat/n7.md', planSectors(notes, ['privat', 'privat']).sectors[0], 30))
+      .toEqual(notePoint('Privat/n7.md', one.sectors[0], 30))
+  })
+
+  it('re-lays out the map for a genuinely new project', () => {
+    const notes = [...Array.from({ length: 100 }, (_, i) => `Privat/n${i}.md`), 'Misc/x.md']
+    expect(geometry(planSectors(notes, ['privat', 'shop']))).not.toEqual(geometry(planSectors(notes, ['privat'])))
+  })
+
+  // The cost of floating the floor on instances: a sector already at that floor still widens. The
+  // audit measured 279–414 world units when the instance count fed the weight; this is what is left.
+  it('widens a sector already at its agent floor by a fraction of what the weighting moved', () => {
+    const seven = Array.from({ length: 7 }).fill('folder2') as string[]
+    const before = planSectors(vault, [...seven, ...oneEach])
+    const after = planSectors(vault, [...seven, 'folder2', ...oneEach])
+    const crowded = (p: ReturnType<typeof planSectors>) => p.sectors.find(s => s.key === 'folder2')!
+    expect(span(crowded(after))).toBeGreaterThan(span(crowded(before)))
+
+    const at = (p: ReturnType<typeof planSectors>, path: string) => notePoint(path, p.sectors.find(s => s.key === p.sectorOfNote.get(path))!, 300)
+    const worst = Math.max(...vault.map(path => Math.hypot(...at(after, path).map((v, i) => v - at(before, path)[i]) as [number, number])))
+    expect(worst).toBeLessThan(12)
   })
 })

@@ -300,18 +300,19 @@ describe('hubWidget', () => {
 
   // Defect 1 (found by the coordinator's real-vault measurement): a label's box was taken from the
   // project name alone, while the rendered label also shows the status word. Four agents share one
-  // project, three fillers fill out the circle. The test proves its own fixture: at these positions, in the directions the
+  // project, four fillers fill out the circle. The test proves its own fixture: at these positions, in the directions the
   // hub placed them, the bare-name boxes all clear each other while the rendered ones do not, so the
   // cull can only come from measuring what is really rendered.
   it('culls a label whose bare name would clear its neighbour but whose name+status does not (defect 1)', async () => {
     agents.value = [
-      { pid: 300, status: 'idle', projectName: 'target-project', working: false },
-      { pid: 301, status: 'active', projectName: 'target-project', working: true },
-      { pid: 302, status: 'waiting', projectName: 'target-project', working: false, pendingPermissions: [{}] },
-      { pid: 303, status: 'idle', projectName: 'target-project', working: false },
+      { pid: 300, status: 'idle', projectName: 'target-proj', working: false },
+      { pid: 301, status: 'active', projectName: 'target-proj', working: true },
+      { pid: 302, status: 'waiting', projectName: 'target-proj', working: false, pendingPermissions: [{}] },
+      { pid: 303, status: 'idle', projectName: 'target-proj', working: false },
       { pid: 310, status: 'idle', projectName: 'filler-a', working: false },
       { pid: 311, status: 'idle', projectName: 'filler-b', working: false },
       { pid: 312, status: 'idle', projectName: 'filler-c', working: false },
+      { pid: 313, status: 'idle', projectName: 'filler-d', working: false },
     ] as unknown as Agent[]
     const w = await mountHub()
 
@@ -321,7 +322,7 @@ describe('hubWidget', () => {
       return agentLabelBox({ index: pid, ...screenOf(w, pid), text: key, priority: 0 }, labelSize(key), labelDirectionOf(w, pid))
     })
     const anyOverlap = (boxes: ReturnType<typeof boxesOf>) => boxes.some((a, i) => boxes.some((b, j) => i !== j && boxesOverlap(a, b)))
-    expect(anyOverlap(boxesOf('Target Project')), 'bare-name boxes clear each other at these positions').toBe(false)
+    expect(anyOverlap(boxesOf('Target Proj')), 'bare-name boxes clear each other at these positions').toBe(false)
     expect(anyOverlap(boxesOf()), 'name+status boxes collide at the same positions').toBe(true)
 
     expect(shared.filter(pid => labelHidden(w, pid)).length).toBeGreaterThan(0)
