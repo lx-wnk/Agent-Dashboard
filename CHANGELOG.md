@@ -12,6 +12,10 @@ from [Conventional Commits](https://www.conventionalcommits.org/) by GoReleaser.
 
 Preparing the first public release.
 
+### Changed
+
+- **Obsidian status now tells you why the vault is unreachable, not just that it's configured.** `GET /api/obsidian/status` probes the vault with a cheap unauthenticated ping and reports `reachable` plus a short error and an actionable hint (self-signed certificate, wrong API key, Obsidian not running); the settings panel shows that hint under the Index button and disables it until the vault is reachable. A denied "Index now" run now links straight to the Grants settings instead of leaving you to find them yourself.
+
 ### Fixed
 
 - **A half-filled Obsidian setup no longer stops the server from starting.**

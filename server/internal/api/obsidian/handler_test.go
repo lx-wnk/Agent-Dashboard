@@ -74,6 +74,9 @@ func newFakeVault(t *testing.T) (*httptest.Server, *bool) {
 	t.Helper()
 	called := false
 	mux := http.NewServeMux()
+	mux.HandleFunc("/{$}", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
 	mux.HandleFunc("/search/simple/", func(w http.ResponseWriter, r *http.Request) {
 		called = true
 		w.Header().Set("Content-Type", "application/json")
@@ -459,7 +462,61 @@ func TestStatus_ReportsWhetherTheVaultIsConfigured(t *testing.T) {
 	clients.Set(newTestClient(t, ts))
 	rec = serve(h, http.MethodGet, "/api/obsidian/status", "")
 	require.Equal(t, http.StatusOK, rec.Code)
-	assert.JSONEq(t, `{"configured":true}`, rec.Body.String())
+	assert.JSONEq(t, `{"configured":true,"reachable":true}`, rec.Body.String())
+}
+
+// TestStatus_UntrustedCertificateReportsTheSelfSignedHint pins the actual
+// failure mode of a freshly configured vault: the Local REST API's
+// self-signed certificate under TLSVerify, which index/graph/open all fail
+// with a raw x509 error today. status must turn that into a hint the user
+// can act on, never the raw error text (it can carry the vault URL).
+func TestStatus_UntrustedCertificateReportsTheSelfSignedHint(t *testing.T) {
+	mem, gate, spaceID := testDeps(t)
+	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(ts.Close)
+	client, err := obsidianapp.NewClient(obsidianapp.Config{
+		BaseURL:   "https://" + ts.Listener.Addr().String(),
+		APIKey:    "secret",
+		VaultRoot: "root",
+		TLSMode:   obsidianapp.TLSVerify,
+	})
+	require.NoError(t, err)
+
+	h := apiobsidian.NewHandler(obsidianapp.NewClientHolder(client), mem, gate, spaceID)
+	rec := serve(h, http.MethodGet, "/api/obsidian/status", "")
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	assert.Equal(t, true, body["configured"])
+	assert.Equal(t, false, body["reachable"])
+	assert.NotContains(t, rec.Body.String(), ts.URL)
+	hint, _ := body["hint"].(string)
+	assert.Contains(t, hint, "self-signed certificate")
+	assert.Contains(t, hint, "insecure-loopback")
+}
+
+// TestStatus_UnauthorizedReportsTheApiKeyHint pins the 401 branch: a wrong
+// or revoked API key, which is otherwise indistinguishable from a network
+// failure to the person reading the panel.
+func TestStatus_UnauthorizedReportsTheApiKeyHint(t *testing.T) {
+	mem, gate, spaceID := testDeps(t)
+	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	t.Cleanup(ts.Close)
+	client := newTestClient(t, ts)
+
+	h := apiobsidian.NewHandler(obsidianapp.NewClientHolder(client), mem, gate, spaceID)
+	rec := serve(h, http.MethodGet, "/api/obsidian/status", "")
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	assert.Equal(t, false, body["reachable"])
+	assert.Contains(t, body["hint"], "API key")
 }
 
 // TestGraph_ClientSwapInvalidatesTheCache pins that ClientHolder.Set — a live

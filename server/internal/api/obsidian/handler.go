@@ -2,6 +2,8 @@
 package obsidian
 
 import (
+	"context"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -10,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -20,6 +23,11 @@ import (
 	"github.com/lx-wnk/kontor/server/internal/db/repo"
 	"github.com/lx-wnk/kontor/server/internal/memory"
 )
+
+// statusPingTimeout bounds the reachability probe status makes on every
+// call — short because it blocks the settings panel's render, not because
+// the vault is normally slow.
+const statusPingTimeout = 3 * time.Second
 
 // Handler serves the Obsidian HTTP routes registered by Mount.
 type Handler struct {
@@ -67,11 +75,49 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Get("/api/obsidian/status", apierr.ErrorMiddleware(h.status))
 }
 
-// status reports only whether a vault client is configured — no vault
-// content, so unlike index/graph/open it needs no capability check.
+// status reports whether a vault client is configured and, if so, whether it
+// is actually reachable — no vault content crosses this handler, so unlike
+// index/graph/open it needs no capability check. The reachability probe is a
+// plain Client.Ping, never routed through h.gate: a gate failure here would
+// misreport a working vault as unreachable for a reason that has nothing to
+// do with the network.
 func (h *Handler) status(w http.ResponseWriter, r *http.Request) error {
-	apierr.WriteJSON(w, http.StatusOK, map[string]bool{"configured": h.clients.Get() != nil})
+	client := h.clients.Get()
+	if client == nil {
+		apierr.WriteJSON(w, http.StatusOK, map[string]bool{"configured": false})
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), statusPingTimeout)
+	defer cancel()
+
+	resp := map[string]any{"configured": true, "reachable": true}
+	if err := client.Ping(ctx); err != nil {
+		slog.Warn("obsidian status ping failed", "err", err)
+		cause, hint := classifyPingError(err)
+		resp["reachable"] = false
+		resp["error"] = cause
+		resp["hint"] = hint
+	}
+	apierr.WriteJSON(w, http.StatusOK, resp)
 	return nil
+}
+
+// classifyPingError maps a Client.Ping failure to a short cause and an
+// actionable hint. It never returns err.Error() verbatim: that text can
+// carry the vault's URL, the same leak upstreamGraph guards against.
+func classifyPingError(err error) (cause, hint string) {
+	var uaErr x509.UnknownAuthorityError
+	switch {
+	case errors.As(err, &uaErr):
+		return "certificate not trusted", `The vault uses a self-signed certificate: set TLS mode to "insecure-loopback" (127.0.0.1 only) or "pinned".`
+	case errors.Is(err, obsidianapp.ErrUnauthorized):
+		return "unauthorized", "Check the API key."
+	case errors.Is(err, syscall.ECONNREFUSED):
+		return "connection refused", "Is Obsidian running with the Local REST API plugin enabled?"
+	default:
+		return "vault unreachable", "Check that Obsidian is running and the settings above are correct."
+	}
 }
 
 // invalidateGraphCacheOnSwap drops the cached graph when client differs from

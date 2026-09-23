@@ -7,6 +7,8 @@ import { toast } from '@/composables/useToast'
 import { useSettings } from '@/features/settings/composables/useSettings'
 import { errorMessage } from '@/utils/errorMessage'
 
+const emit = defineEmits<{ openGrants: [] }>()
+
 const KEY_BASE_URL = 'obsidian.baseURL'
 const KEY_VAULT_ROOT = 'obsidian.vaultRoot'
 const KEY_API_KEY = 'obsidian.apiKey'
@@ -69,14 +71,20 @@ const trioComplete = computed(() => {
 })
 
 const configured = ref(false)
+const reachable = ref<boolean | null>(null)
+const statusError = ref<string | null>(null)
+const statusHint = ref<string | null>(null)
 
 async function fetchStatus() {
   try {
     const res = await fetch('/api/obsidian/status')
     if (!res.ok)
       return
-    const data = await res.json() as { configured: boolean }
+    const data = await res.json() as { configured: boolean, reachable?: boolean, error?: string, hint?: string }
     configured.value = data.configured
+    reachable.value = data.reachable ?? null
+    statusError.value = data.error ?? null
+    statusHint.value = data.hint ?? null
   }
   catch {
     // Status is advisory (only gates the Index now button); a network hiccup
@@ -122,6 +130,7 @@ async function save() {
 
 const indexing = ref(false)
 const indexMessage = ref<string | null>(null)
+const indexDenied = ref(false)
 
 // All three are readable, expected states, not errors: a missing grant, an
 // unconfigured vault, and a run already in flight (server-side single-flight
@@ -136,11 +145,13 @@ const INDEX_STATUS_MESSAGES: Record<number, string> = {
 async function runIndex() {
   indexing.value = true
   indexMessage.value = null
+  indexDenied.value = false
   try {
     const res = await fetch('/api/obsidian/index', { method: 'POST' })
     const knownMessage = INDEX_STATUS_MESSAGES[res.status]
     if (knownMessage) {
       indexMessage.value = knownMessage
+      indexDenied.value = res.status === 403
       return
     }
     if (!res.ok) {
@@ -237,11 +248,19 @@ async function runIndex() {
       </div>
 
       <div class="flex items-center gap-3 pt-3 border-t border-line">
-        <AppButton variant="secondary" data-testid="obsidian-index" :disabled="indexing || !configured" @click="runIndex">
+        <AppButton variant="secondary" data-testid="obsidian-index" :disabled="indexing || !configured || reachable === false" @click="runIndex">
           {{ indexing ? 'Indexing…' : 'Index now' }}
         </AppButton>
         <span v-if="!configured" data-testid="obsidian-index-unconfigured-hint" class="text-xs text-fg-mute">Save a base URL, vault root and API key first.</span>
-        <span v-else-if="indexMessage" data-testid="obsidian-index-result" class="text-xs text-fg-mute">{{ indexMessage }}</span>
+        <span v-else-if="reachable === false" data-testid="obsidian-unreachable-hint" class="text-xs text-danger-text">
+          {{ statusError }} — {{ statusHint }}
+        </span>
+        <span v-else-if="indexMessage" data-testid="obsidian-index-result" class="text-xs text-fg-mute flex items-center gap-2">
+          {{ indexMessage }}
+          <AppButton v-if="indexDenied" variant="ghost" size="sm" data-testid="obsidian-open-grants" @click="emit('openGrants')">
+            Open grants
+          </AppButton>
+        </span>
       </div>
     </template>
   </div>

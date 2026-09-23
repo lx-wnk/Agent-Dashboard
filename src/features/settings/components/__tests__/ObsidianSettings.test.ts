@@ -236,6 +236,40 @@ describe('obsidianSettings', () => {
     expect(text.toLowerCase()).toContain('already')
   })
 
+  it('shows the unreachable error and hint, and disables Index now, when status reports reachable: false', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        configured: true,
+        reachable: false,
+        error: 'certificate not trusted',
+        hint: 'The vault uses a self-signed certificate: set TLS mode to "insecure-loopback" (127.0.0.1 only) or "pinned".',
+      }),
+    }))
+    const wrapper = mount(ObsidianSettings, { attachTo: document.body })
+    await flushPromises()
+
+    const indexButton = wrapper.get('[data-testid="obsidian-index"]').element as HTMLButtonElement
+    expect(indexButton.disabled).toBe(true)
+    const hint = wrapper.get('[data-testid="obsidian-unreachable-hint"]').text()
+    expect(hint).toContain('certificate not trusted')
+    expect(hint).toContain('insecure-loopback')
+  })
+
+  it('renders a grants link on a 403 denial and clicking it emits open-grants', async () => {
+    stubIndexFetch({ ok: false, status: 403, json: async () => ({ error: 'capability denied' }) })
+    const wrapper = mount(ObsidianSettings, { attachTo: document.body })
+    await flushPromises()
+
+    await wrapper.get('[data-testid="obsidian-index"]').trigger('click')
+    await flushPromises()
+
+    const grantsLink = wrapper.get('[data-testid="obsidian-open-grants"]')
+    await grantsLink.trigger('click')
+    expect(wrapper.emitted('openGrants')).toHaveLength(1)
+  })
+
   it('disables Index now and shows a hint when GET /api/obsidian/status reports the vault is not configured', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ configured: false }) }))
     const wrapper = mount(ObsidianSettings, { attachTo: document.body })
