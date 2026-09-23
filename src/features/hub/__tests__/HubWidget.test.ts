@@ -932,6 +932,27 @@ describe('hubWidget', () => {
     w.unmount()
   })
 
+  // A revoked memory.read keeps `notes` — so a failed refetch never blanks the brain — while the map
+  // drops them, so a request made while the vault was readable resolves to a note the map has not got.
+  it('drops a focus request for a note the denied vault no longer shows', async () => {
+    graph.status.value = 'ready'
+    graph.notes.value = [vaultNote(0, 'alpha/one.md'), vaultNote(1, 'beta/two.md')]
+    const w = await mountHub()
+    graph.status.value = 'denied'
+    graph.message.value = 'memory.read denied'
+    await flushPromises()
+
+    hubFocusRequest.value = { kind: 'note', path: 'beta/two.md' }
+    await flushPromises()
+    expect(w.find('[role="dialog"]').exists()).toBe(false)
+    expect(hubFocusRequest.value).toBeNull()
+    expect(scale(w)).toBeCloseTo(1)
+    expect(w.get('[data-testid="hub-graph-notice"]').text()).toContain('Memory reads are not granted')
+    await press(w, '+')
+    expect(scale(w), 'the hub still answers').toBeCloseTo(1.4)
+    w.unmount()
+  })
+
   it('consumes a focus request already pending when the widget mounts', async () => {
     graph.status.value = 'ready'
     graph.notes.value = [vaultNote(0, 'alpha/one.md')]

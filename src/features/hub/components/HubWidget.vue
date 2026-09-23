@@ -108,13 +108,20 @@ function sectorLabel(path: string): string {
 
 const listNotes = computed(() => vaultNotes.value.length ? recentNotes(LIST_NOTE_COUNT).map(n => ({ ...n, sector: sectorLabel(n.path) })) : [])
 
+// A denied refetch keeps `notes` but drops them from the map, so an index resolved through `notes`
+// can miss; the request is dropped and the graph notice says why.
 function openNote(index: number) {
-  openCard.value = { kind: 'note', path: vaultNotes.value[index].path }
+  const note = vaultNotes.value[index]
+  if (note)
+    openCard.value = { kind: 'note', path: note.path }
 }
 
 function flyToNote(index: number, relTarget: number) {
+  const point = brain.value.points[index]
+  if (!point)
+    return
   openNote(index)
-  flyTo(...brain.value.points[index], relTarget)
+  flyTo(...point, relTarget)
 }
 
 function tapNote(sx: number, sy: number) {
@@ -346,7 +353,9 @@ function pickFromList(agent: Agent) {
 
 function pickNoteFromList(path: string) {
   listOpen.value = false
-  flyToNote(noteByPath(path)!.index, LIST_NOTE_FLY_REL)
+  const note = noteByPath(path)
+  if (note)
+    flyToNote(note.index, LIST_NOTE_FLY_REL)
 }
 
 function launchFromList(launcher: Launcher) {
