@@ -174,6 +174,12 @@ Preparing the first public release.
 - **Pipeline stages renamed: `concept` is now `backlog`, `backlog` is now `ready`.** The holding pen where refinement chat runs is now called `backlog`, and the starting gun that auto-advances to implementation is now called `ready`. A one-shot data migration rewrites existing rows in `tasks.current_stage` and `stage_runs.stage` in collision-safe order (backlog→ready first, concept→backlog second). It also rewrote `task_schedules.current_stage` until that column was dropped — a routine never chose a stage, and nothing read the column. It runs exactly once, recorded in a new `applied_migrations` table, and it has to: the rename is chained, so a second pass would take the rows the first pass wrote as `backlog` and push them on to `ready` — every task parked in the refinement holding pen would start running by itself after a restart. The stored data cannot settle the question either, because a database holding no `concept` row is indistinguishable from a migrated one. `stage_runs.stage` is rewritten for all rows including terminal runs, because `GetLatestByTaskAndStage` lookups on non-terminal runs would break otherwise, and the rename is name normalization, not history falsification. The `refine.Concept` domain type, `inject_concept` tool name, and `conceptOutput`/`conceptJSON` variables are unchanged — they describe the domain object, not the pipeline stage.
 
 ### Added
+- **Live edges in the hub.** A dashed line runs from an agent to each vault
+  note it read in the last ten minutes, a dotted one to each note it wrote,
+  fading as the touch ages. The server reads them from the agent's Obsidian MCP
+  calls and its `curl …/vault/…` commands (a path still holding a shell
+  variable is skipped, never guessed) and ships them as `recentNotes` on each
+  agent; the `L` list names the same notes under each agent.
 - **The hub.** The Zentrale's centre tile is a zoomable live map: an orbit of
   every running agent grouped into sectors by project, and the Obsidian vault
   drawn alongside it as the hub's *brain* — notes and links on the same
