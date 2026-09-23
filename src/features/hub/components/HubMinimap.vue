@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Camera } from '../hubCamera'
 import type { Sector } from '../hubGeometry'
+import type { Agent } from '@/types'
 import type { AgentDisplayStatus, ChipTone } from '@/utils/statusColors'
 import { computed } from 'vue'
 import { agentStatusTone } from '@/utils/statusColors'
@@ -10,7 +11,7 @@ const props = defineProps<{
   cam: Camera
   size: { width: number, height: number }
   sectors: Sector[]
-  agents: ReadonlyArray<{ x: number, y: number, state: AgentDisplayStatus }>
+  agents: ReadonlyArray<{ agent: Agent, x: number, y: number, state: AgentDisplayStatus }>
 }>()
 
 const emit = defineEmits<{ fly: [wx: number, wy: number] }>()
@@ -56,7 +57,7 @@ function onClick(e: MouseEvent) {
       fill-opacity="0.12"
       :style="{ fill: `var(--sector-${sectorColour(sector.key)})` }"
     />
-    <circle v-for="(agent, i) in agents" :key="i" :cx="agent.x" :cy="agent.y" :r="AGENT_DOT_R" :class="fillClass(agent.state)" />
+    <circle v-for="{ agent, x, y, state } in agents" :key="agent.pid" :cx="x" :cy="y" :r="AGENT_DOT_R" :class="fillClass(state)" />
     <rect v-bind="viewport" stroke-width="6" class="fill-accent/10 stroke-accent" />
   </svg>
 </template>
