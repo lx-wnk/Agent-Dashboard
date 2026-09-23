@@ -446,6 +446,46 @@ func TestOpen_RefusesAHeadingMarkerInThePath(t *testing.T) {
 	assert.Empty(t, vault.requests())
 }
 
+func TestStatus_ReportsWhetherTheVaultIsConfigured(t *testing.T) {
+	mem, gate, spaceID := testDeps(t)
+	clients := obsidianapp.NewClientHolder(nil)
+	h := apiobsidian.NewHandler(clients, mem, gate, spaceID)
+
+	rec := serve(h, http.MethodGet, "/api/obsidian/status", "")
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.JSONEq(t, `{"configured":false}`, rec.Body.String())
+
+	ts, _ := newFakeVault(t)
+	clients.Set(newTestClient(t, ts))
+	rec = serve(h, http.MethodGet, "/api/obsidian/status", "")
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.JSONEq(t, `{"configured":true}`, rec.Body.String())
+}
+
+// TestGraph_ClientSwapInvalidatesTheCache pins that ClientHolder.Set — a live
+// settings save mid-session — drops the cached graph immediately, instead of
+// serving the previous vault's graph for up to graphTTL.
+func TestGraph_ClientSwapInvalidatesTheCache(t *testing.T) {
+	mem, gate, spaceID := testDeps(t)
+	grantCapability(t, gate.Grants, repo.CapabilityMemoryRead)
+	vaultA := newGraphVault(t, http.StatusOK)
+	vaultB := newGraphVault(t, http.StatusOK)
+	vaultB.setMtimes(`[{"filename":"root/c.md","result":1700000002000}]`)
+
+	clients := obsidianapp.NewClientHolder(newTestClient(t, vaultA.Server))
+	h := apiobsidian.NewHandler(clients, mem, gate, spaceID)
+
+	first := serve(h, http.MethodGet, "/api/obsidian/graph", "")
+	require.Equal(t, http.StatusOK, first.Code)
+	assert.Contains(t, first.Body.String(), `"a.md"`)
+
+	clients.Set(newTestClient(t, vaultB.Server))
+	second := serve(h, http.MethodGet, "/api/obsidian/graph", "")
+	require.Equal(t, http.StatusOK, second.Code)
+	assert.JSONEq(t, `{"configured":true,"notes":[["c.md",1700000002000]],"links":[]}`, second.Body.String(),
+		"a graph fetched right after a client swap must not still serve the previous vault's cached graph")
+}
+
 func TestGraph_ReadsTheClientPerRequest(t *testing.T) {
 	mem, gate, spaceID := testDeps(t)
 	grantCapability(t, gate.Grants, repo.CapabilityMemoryRead)

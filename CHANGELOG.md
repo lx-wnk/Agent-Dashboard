@@ -14,6 +14,15 @@ Preparing the first public release.
 
 ### Fixed
 
+- **A half-filled Obsidian setup no longer stops the server from starting.**
+  Boot used to fail outright when only some of `obsidian.baseURL`,
+  `obsidian.vaultRoot` and `obsidian.apiKey` were set; it now logs a warning
+  and starts with the vault off, the same tolerance a broken GitHub
+  configuration already has.
+- **The hub graph no longer shows the previous vault after switching.** The
+  cached graph survived a live Obsidian settings save because it was keyed
+  only by time, not by which vault built it; swapping vaults now drops the
+  cache immediately instead of serving the old vault's notes for up to 60s.
 - **GitHub tile rows no longer overflow the tile.** The pull request title
   shared one row with its checks, `repo#number` and the Merge button, so a
   long title or a wide checks label pushed the row past the tile's width and
@@ -135,6 +144,10 @@ Preparing the first public release.
 
 ### Changed
 
+- **Index now is disabled until the vault works.** The button used to be
+  clickable regardless of whether Obsidian was configured; the settings panel
+  now fetches `GET /api/obsidian/status` on load and after every save, and
+  disables the button with a hint until the vault is reachable.
 - **The GitHub tile lists open pull requests you are involved in, up to 20.**
   `GET /api/github/summary` now merges each configured repository's own open
   pull requests with whatever the `involves:@me` search finds across every

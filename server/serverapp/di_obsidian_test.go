@@ -128,6 +128,29 @@ func TestBuildObsidianClient_ClearingTheTrioTurnsTheVaultOff(t *testing.T) {
 		"the panel re-reads this after the save — a cleared key that still shows the mask reads as configured")
 }
 
+// TestBootObsidianClient_PartialTrioLogsAndLeavesTheVaultOff pins the boot
+// tolerance a half-filled Obsidian setup must have: the same "optional
+// integration, never a boot failure" rule buildGitHubClient's caller already
+// applies (see di.go's githubClient assignment).
+func TestBootObsidianClient_PartialTrioLogsAndLeavesTheVaultOff(t *testing.T) {
+	svc := newSettingsServiceForTest(t)
+	require.NoError(t, svc.Set(t.Context(), "obsidian.baseURL", "https://127.0.0.1:27124"))
+	// vaultRoot and apiKey deliberately left unset: a partial trio.
+
+	client := bootObsidianClient(t.Context(), svc)
+	assert.Nil(t, client, "a partial trio must start the server with the vault off, not fail the boot")
+}
+
+func TestBootObsidianClient_FullTrioBuildsAClient(t *testing.T) {
+	svc := newSettingsServiceForTest(t)
+	require.NoError(t, svc.Set(t.Context(), "obsidian.baseURL", "https://127.0.0.1:27124"))
+	require.NoError(t, svc.Set(t.Context(), "obsidian.vaultRoot", "notes"))
+	require.NoError(t, svc.Set(t.Context(), "obsidian.apiKey", "secret-key"))
+
+	client := bootObsidianClient(t.Context(), svc)
+	assert.NotNil(t, client)
+}
+
 func TestWatchObsidianSettings_AppliesACompleteTrioWithoutARestart(t *testing.T) {
 	svc := newSettingsServiceForTest(t)
 	clients := obsidian.NewClientHolder(nil)

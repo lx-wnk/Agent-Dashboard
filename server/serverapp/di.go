@@ -426,14 +426,10 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 
 		// Construct the vault client from settings so it exists once the
 		// operator configures it, rather than only once something reads
-		// obsidian.IndexNotes. buildObsidianClient returns nil, nil when
-		// unconfigured; a half-configured vault fails the boot instead of
-		// silently disabling itself (see its own doc comment for why).
-		obsidianClient, err := buildObsidianClient(ctx, settingsSvc)
-		if err != nil {
-			return nil, fmt.Errorf("obsidian: build client: %w", err)
-		}
-		obsidianClients.Set(obsidianClient)
+		// obsidian.IndexNotes. A read-only integration does not get to take
+		// the server down: a half-configured vault logs a warning and starts
+		// with the vault off, the same tolerance githubClient gets below.
+		obsidianClients.Set(bootObsidianClient(ctx, settingsSvc))
 		watchObsidianSettings(settingsSvc, obsidianClients)
 
 		// A read-only integration does not get to take the server down. The

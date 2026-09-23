@@ -68,6 +68,24 @@ const trioComplete = computed(() => {
   return setCount === 0 || setCount === 3
 })
 
+const configured = ref(false)
+
+async function fetchStatus() {
+  try {
+    const res = await fetch('/api/obsidian/status')
+    if (!res.ok)
+      return
+    const data = await res.json() as { configured: boolean }
+    configured.value = data.configured
+  }
+  catch {
+    // Status is advisory (only gates the Index now button); a network hiccup
+    // leaves it at its previous value instead of surfacing a toast.
+  }
+}
+
+onMounted(fetchStatus)
+
 async function save() {
   if (!trioComplete.value)
     return
@@ -92,6 +110,7 @@ async function save() {
         applied = 'restart'
     }
     toast.success(applied === 'restart' ? 'Saved — applies after a server restart.' : 'Saved.')
+    await fetchStatus()
   }
   catch (e) {
     toast.error(errorMessage(e, 'Failed to save Obsidian settings'))
@@ -218,10 +237,11 @@ async function runIndex() {
       </div>
 
       <div class="flex items-center gap-3 pt-3 border-t border-line">
-        <AppButton variant="secondary" data-testid="obsidian-index" :disabled="indexing" @click="runIndex">
+        <AppButton variant="secondary" data-testid="obsidian-index" :disabled="indexing || !configured" @click="runIndex">
           {{ indexing ? 'Indexing…' : 'Index now' }}
         </AppButton>
-        <span v-if="indexMessage" data-testid="obsidian-index-result" class="text-xs text-fg-mute">{{ indexMessage }}</span>
+        <span v-if="!configured" data-testid="obsidian-index-unconfigured-hint" class="text-xs text-fg-mute">Save a base URL, vault root and API key first.</span>
+        <span v-else-if="indexMessage" data-testid="obsidian-index-result" class="text-xs text-fg-mute">{{ indexMessage }}</span>
       </div>
     </template>
   </div>

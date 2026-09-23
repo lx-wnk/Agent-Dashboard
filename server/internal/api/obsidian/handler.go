@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -41,6 +42,13 @@ type Handler struct {
 	// server process against the same vault.
 	running atomic.Bool
 	graphs  graphCache
+
+	// graphMu guards graphClient, the client the cached graph was last built
+	// from. ClientHolder.Set can swap in a different vault at any time (a live
+	// settings save); without this check a request right after a swap would
+	// still serve the previous vault's graph until graphTTL passed.
+	graphMu     sync.Mutex
+	graphClient *obsidianapp.Client
 }
 
 // NewHandler creates a Handler. clients holds nil while the vault is
@@ -56,6 +64,25 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Post("/api/obsidian/index", apierr.ErrorMiddleware(h.index))
 	r.Get("/api/obsidian/graph", apierr.ErrorMiddleware(h.graph))
 	r.Post("/api/obsidian/open", apierr.ErrorMiddleware(h.open))
+	r.Get("/api/obsidian/status", apierr.ErrorMiddleware(h.status))
+}
+
+// status reports only whether a vault client is configured — no vault
+// content, so unlike index/graph/open it needs no capability check.
+func (h *Handler) status(w http.ResponseWriter, r *http.Request) error {
+	apierr.WriteJSON(w, http.StatusOK, map[string]bool{"configured": h.clients.Get() != nil})
+	return nil
+}
+
+// invalidateGraphCacheOnSwap drops the cached graph when client differs from
+// the one it was last built from.
+func (h *Handler) invalidateGraphCacheOnSwap(client *obsidianapp.Client) {
+	h.graphMu.Lock()
+	defer h.graphMu.Unlock()
+	if h.graphClient != client {
+		h.graphClient = client
+		h.graphs.reset()
+	}
 }
 
 // index runs one obsidianapp.IndexNotes pass and reports how many new
@@ -122,6 +149,7 @@ func (h *Handler) graph(w http.ResponseWriter, r *http.Request) error {
 	if err := h.authorizeRead(r); err != nil {
 		return err
 	}
+	h.invalidateGraphCacheOnSwap(client)
 	g, err := upstreamGraph(h.graphs.get(r.Context(), client.Graph))
 	if err != nil {
 		return err
@@ -161,6 +189,7 @@ func (h *Handler) open(w http.ResponseWriter, r *http.Request) error {
 	if err := h.authorizeRead(r); err != nil {
 		return err
 	}
+	h.invalidateGraphCacheOnSwap(client)
 	g, err := upstreamGraph(h.graphs.refresh(r.Context(), client.Graph))
 	if err != nil {
 		return err

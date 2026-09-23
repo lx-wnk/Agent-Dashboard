@@ -17,6 +17,17 @@ vi.mock('@/features/settings/composables/useSettings', async () => {
 
 const MASK = '********'
 
+// The Index now button is gated on GET /api/obsidian/status, fetched on
+// mount — every test that exercises the button must answer that call too, or
+// the button stays disabled and the click this test wants never fires.
+function stubIndexFetch(indexResponse: { ok: boolean, status: number, json: () => Promise<unknown> }) {
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url === '/api/obsidian/status')
+      return { ok: true, status: 200, json: async () => ({ configured: true }) }
+    return indexResponse
+  }))
+}
+
 function settingsFixture(overrides: Partial<Record<string, string>> = {}): SettingView[] {
   const values: Record<string, string> = {
     'obsidian.baseURL': 'https://127.0.0.1:27124',
@@ -175,8 +186,9 @@ describe('obsidianSettings', () => {
   })
 
   it('reports the indexed count on success', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ indexed: 7 }) }))
+    stubIndexFetch({ ok: true, status: 200, json: async () => ({ indexed: 7 }) })
     const wrapper = mount(ObsidianSettings, { attachTo: document.body })
+    await flushPromises()
 
     await wrapper.get('[data-testid="obsidian-index"]').trigger('click')
     await flushPromises()
@@ -186,8 +198,9 @@ describe('obsidianSettings', () => {
   })
 
   it('turns a 403 denial into a readable message, not a raw status code', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 403, json: async () => ({ error: 'capability denied' }) }))
+    stubIndexFetch({ ok: false, status: 403, json: async () => ({ error: 'capability denied' }) })
     const wrapper = mount(ObsidianSettings, { attachTo: document.body })
+    await flushPromises()
 
     await wrapper.get('[data-testid="obsidian-index"]').trigger('click')
     await flushPromises()
@@ -198,8 +211,9 @@ describe('obsidianSettings', () => {
   })
 
   it('turns a 503 unconfigured-vault response into a readable message, not a raw status code', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 503, json: async () => ({ error: 'obsidian vault not configured' }) }))
+    stubIndexFetch({ ok: false, status: 503, json: async () => ({ error: 'obsidian vault not configured' }) })
     const wrapper = mount(ObsidianSettings, { attachTo: document.body })
+    await flushPromises()
 
     await wrapper.get('[data-testid="obsidian-index"]').trigger('click')
     await flushPromises()
@@ -210,8 +224,9 @@ describe('obsidianSettings', () => {
   })
 
   it('turns a 409 in-progress response into a readable message, not a raw status code', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 409, json: async () => ({ error: 'an obsidian index run is already in progress' }) }))
+    stubIndexFetch({ ok: false, status: 409, json: async () => ({ error: 'an obsidian index run is already in progress' }) })
     const wrapper = mount(ObsidianSettings, { attachTo: document.body })
+    await flushPromises()
 
     await wrapper.get('[data-testid="obsidian-index"]').trigger('click')
     await flushPromises()
@@ -219,5 +234,31 @@ describe('obsidianSettings', () => {
     const text = wrapper.get('[data-testid="obsidian-index-result"]').text()
     expect(text).not.toContain('409')
     expect(text.toLowerCase()).toContain('already')
+  })
+
+  it('disables Index now and shows a hint when GET /api/obsidian/status reports the vault is not configured', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ configured: false }) }))
+    const wrapper = mount(ObsidianSettings, { attachTo: document.body })
+    await flushPromises()
+
+    expect(fetch).toHaveBeenCalledWith('/api/obsidian/status')
+    const indexButton = wrapper.get('[data-testid="obsidian-index"]').element as HTMLButtonElement
+    expect(indexButton.disabled).toBe(true)
+    expect(wrapper.get('[data-testid="obsidian-index-unconfigured-hint"]').text()).toContain('Save a base URL, vault root and API key first.')
+  })
+
+  it('enables Index now once a save flips the status to configured', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ configured: false }) })
+    vi.stubGlobal('fetch', fetchMock)
+    const wrapper = mount(ObsidianSettings, { attachTo: document.body })
+    await flushPromises()
+    expect((wrapper.get('[data-testid="obsidian-index"]').element as HTMLButtonElement).disabled).toBe(true)
+
+    fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({ configured: true }) })
+    await wrapper.get('[data-testid="obsidian-save"]').trigger('click')
+    await flushPromises()
+
+    expect((wrapper.get('[data-testid="obsidian-index"]').element as HTMLButtonElement).disabled).toBe(false)
+    expect(wrapper.find('[data-testid="obsidian-index-unconfigured-hint"]').exists()).toBe(false)
   })
 })

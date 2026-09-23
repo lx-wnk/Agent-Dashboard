@@ -61,6 +61,20 @@ func buildObsidianClient(ctx context.Context, settingsSvc *settings.Service) (*o
 	return client, nil
 }
 
+// bootObsidianClient builds the vault client for boot, tolerating a partial
+// trio the same way buildGitHubClient's caller (di.go) tolerates a broken
+// GitHub configuration: log at Warn and start with the vault off instead of
+// failing the whole server. A read-only integration does not get to take the
+// server down over a typo in its own settings.
+func bootObsidianClient(ctx context.Context, settingsSvc *settings.Service) *obsidian.Client {
+	client, err := buildObsidianClient(ctx, settingsSvc)
+	if err != nil {
+		slog.Warn("obsidian: integration disabled", "err", err)
+		return nil
+	}
+	return client
+}
+
 // watchObsidianSettings rebuilds the vault client whenever an obsidian.* setting
 // is saved. The Settings panel saves the keys one at a time, so a partial trio
 // is a normal intermediate state: it turns the vault off instead of failing the save.
