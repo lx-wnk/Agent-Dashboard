@@ -14,8 +14,8 @@ const notes: HubNote[] = [
   { index: 2, path: 'Journal/Heute.md', title: 'Heute', mtimeMs: 0, links: [0], backlinks: [0] },
 ]
 
-function mountCard(kontorReachable = true) {
-  return mount(HubNoteCard, { props: { note: notes[0], notes, sectorLabel: 'Privat', kontorReachable } })
+function mountCard(kontorBlocked?: string) {
+  return mount(HubNoteCard, { props: { note: notes[0], notes, sectorLabel: 'Privat', kontorBlocked } })
 }
 
 describe('hubNoteCard', () => {
@@ -44,10 +44,10 @@ describe('hubNoteCard', () => {
     expect(w.emitted('ask')).toEqual([['[[Privat/Reise]] ']])
   })
 
-  it('disables Ask Kontor with a reason when no page holds the Kontor tile', () => {
-    const button = mountCard(false).findAll('button').find(b => b.text() === 'Ask Kontor about this')!
+  it('disables Ask Kontor with the reason the hub gave', () => {
+    const button = mountCard('Kontor could not load — reload the app').findAll('button').find(b => b.text() === 'Ask Kontor about this')!
     expect(button.attributes('disabled')).toBeDefined()
-    expect(button.attributes('title')).toBe('Add the Kontor tile to a page to ask Kontor here')
+    expect(button.attributes('title')).toBe('Kontor could not load — reload the app')
   })
 
   it('opens the note in Obsidian and shows a failure inline', async () => {

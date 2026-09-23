@@ -11,7 +11,7 @@ import { useSidebar } from '@/composables/useSidebar'
 import { pageView, useViewState } from '@/composables/useViewState'
 import { useAgents } from '@/features/agents'
 import { NeedsYouQueue, useKontorAgent, useKontorSession } from '@/features/mission'
-import { HUB_WIDGET, pageWithWidget, useWorkspace, ZENTRALE_PAGE_ID } from '@/features/workspace'
+import { failedWidgets, HUB_WIDGET, pageWithWidget, useWorkspace, ZENTRALE_PAGE_ID } from '@/features/workspace'
 import { attentionFor } from '@/utils/attention'
 import { isTypingTarget } from '@/utils/isTypingTarget'
 import { NAV_ITEMS } from '@/utils/navConfig'
@@ -228,7 +228,15 @@ const running = computed(() => placed.value.filter(p => p.state === 'working' ||
 const waiting = computed(() => placed.value.filter(p => p.needsOperator).length)
 const kontorState = computed(() => kontorAgent.value ? agentDisplayStatus(kontorAgent.value) : 'off')
 const kontorPage = computed(() => pageWithWidget(layout.value, KONTOR_WIDGET))
-const coreTitle = computed(() => kontorPage.value ? `Open Kontor (${kontorState.value})` : 'Add the Kontor tile to a page to open it here')
+// Why Kontor cannot be reached, or undefined when it can. A 404'd chunk (the server was rebuilt
+// under an open tab) renders PageLoadError where the tile is and can take no prompt, so every
+// control that would send one says so instead of handing it to no-one.
+const kontorBlocked = computed(() => {
+  if (failedWidgets.has(KONTOR_WIDGET))
+    return 'Kontor could not load — reload the app'
+  return kontorPage.value ? undefined : 'Add the Kontor tile to a page to open it here'
+})
+const coreTitle = computed(() => kontorBlocked.value ?? `Open Kontor (${kontorState.value})`)
 
 const cardAgent = computed(() => {
   const card = openCard.value
@@ -242,7 +250,7 @@ watch(() => openCard.value !== null && !cardAgent.value && !cardNote.value, (gon
 })
 
 function openKontor(prefill?: string) {
-  if (!kontorPage.value)
+  if (!kontorPage.value || kontorBlocked.value)
     return
   const current = layout.value.pages.find(p => pageView(p.id) === activeView.value)
   if (!current?.tiles.some(t => t.widget === KONTOR_WIDGET))
@@ -442,7 +450,7 @@ watch(hubFocusRequest, (target) => {
         :waiting="waiting"
         :needs-you="needsYou.length"
         :core-title="coreTitle"
-        :core-disabled="!kontorPage"
+        :core-disabled="!!kontorBlocked"
         :agent-ring-px="ringOnScreenPx"
         :sector-name-radius="sectorNameRadius"
         :show-sector-names="showSectorNames"
@@ -523,7 +531,7 @@ watch(hubFocusRequest, (target) => {
       :note="cardNote"
       :notes="vaultNotes"
       :sector-label="sectorLabel(cardNote.path)"
-      :kontor-reachable="!!kontorPage"
+      :kontor-blocked="kontorBlocked"
       @fly="index => flyToNote(index, Math.max(rel, CHIP_FLY_MIN_REL))"
       @ask="openKontor"
       @close="openCard = null"

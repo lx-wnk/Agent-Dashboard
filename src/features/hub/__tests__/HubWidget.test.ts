@@ -6,7 +6,7 @@ import { computed, ref, shallowRef } from 'vue'
 import { NEEDS_YOU, OPEN_SETTINGS, OPEN_TASK, PENDING_PERMISSIONS } from '@/composables/openTask'
 import { useSidebar } from '@/composables/useSidebar'
 import { useViewState } from '@/composables/useViewState'
-import { DEFAULT_LAYOUT, useWorkspace } from '@/features/workspace'
+import { DEFAULT_LAYOUT, failedWidgets, useWorkspace } from '@/features/workspace'
 import HubBrainCanvas from '../components/HubBrainCanvas.vue'
 import { hubFocusRequest } from '../composables/useHubFocus'
 import { fitScale } from '../hubCamera'
@@ -100,6 +100,7 @@ afterEach(() => {
   useWorkspace().layout.value = DEFAULT_LAYOUT
   useWorkspace().wide.value = null
   hubFocusRequest.value = null
+  failedWidgets.clear()
 })
 
 // The hub tile as the default layout draws it on a 1512-wide screen; the roomier default stage
@@ -752,6 +753,29 @@ describe('hubWidget', () => {
     await w.get('[data-testid="hub-core"]').trigger('click')
     expect(useViewState().activeView.value).toBe('zentrale')
     expect(ask).toHaveBeenCalledOnce()
+    w.unmount()
+  })
+
+  // The chunk 404s when the server is rebuilt under an open tab: PageLoadError takes the tile's place
+  // and nothing is left to receive a prompt, so both controls that send one say why instead.
+  it('blocks the core and Ask Kontor with a reason when the Kontor chunk failed to load', async () => {
+    failedWidgets.add('kontor')
+    graph.status.value = 'ready'
+    graph.notes.value = [vaultNote(0, 'alpha/one.md')]
+    const w = await mountHub()
+    const core = w.get('[data-testid="hub-core"]')
+    expect(core.attributes('title')).toBe('Kontor could not load — reload the app')
+    expect(core.attributes('aria-disabled')).toBe('true')
+    await core.trigger('click')
+
+    await press(w, 'L')
+    await w.get('[data-testid="hub-list-note"]').trigger('click')
+    const askButton = w.findAll('button').find(b => b.text() === 'Ask Kontor about this')!
+    expect(askButton.attributes('disabled')).toBeDefined()
+    expect(askButton.attributes('title')).toBe('Kontor could not load — reload the app')
+    await askButton.trigger('click')
+
+    expect(ask).not.toHaveBeenCalled()
     w.unmount()
   })
 

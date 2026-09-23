@@ -9,7 +9,8 @@ const props = defineProps<{
   note: HubNote
   notes: ReadonlyArray<HubNote>
   sectorLabel: string
-  kontorReachable: boolean
+  // Why Kontor cannot be asked, straight from the hub; undefined means it can.
+  kontorBlocked?: string
 }>()
 
 const emit = defineEmits<{ fly: [index: number], ask: [prefill: string], close: [] }>()
@@ -88,8 +89,8 @@ async function openNote() {
       <AppButton
         variant="primary"
         size="sm"
-        :disabled="!kontorReachable"
-        :title="kontorReachable ? undefined : 'Add the Kontor tile to a page to ask Kontor here'"
+        :disabled="!!kontorBlocked"
+        :title="kontorBlocked"
         @click="askKontor"
       >
         Ask Kontor about this

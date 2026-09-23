@@ -110,6 +110,13 @@ Preparing the first public release.
   flight fixed its target scale at launch, so a stage that changed size during
   the 480 ms left the camera off the requested zoom level until the next
   "fit"; a resize now cancels the flight and settles on its destination.
+- **The hub says so when the Kontor tile could not load, instead of
+  swallowing the question.** If the Kontor chunk 404s — the server was rebuilt
+  while the tab stayed open — the tile renders the page-load error and nothing
+  is left to receive a prompt. The hub's core and a note card's
+  "Ask Kontor about this" used to send one anyway and it vanished without a
+  trace; both are now disabled and name the reason, the same way they already
+  handle a layout with no Kontor tile at all.
 
 ### Changed
 
