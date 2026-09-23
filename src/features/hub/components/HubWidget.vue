@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { HubLevel } from '../hubCamera'
 import type { LabelBox, LabelSize } from '../hubCanvas'
+import type { Sector } from '../hubGeometry'
 import type { Launcher } from '../hubLaunchers'
 import type { WidgetId } from '@/features/workspace'
 import type { Agent } from '@/types'
@@ -83,16 +84,23 @@ const vaultNotes = computed(() => graphStatus.value === 'ready' || graphStatus.v
 const plan = computed(() => planSectors(vaultNotes.value.map(n => n.path), liveProjectNames.value))
 const graphNotice = computed(() => GRAPH_NOTICES[graphStatus.value])
 
+// A note the sector plan does not place is drawn nowhere: off stage, so the canvas skips it and it
+// cannot be hit. A gap in the brain, rather than a TypeError inside a render function.
+const OFF_MAP: [number, number] = [Number.NaN, Number.NaN]
+
 const brain = computed(() => {
   const { sectors, sectorOfNote } = plan.value
-  const slotOf = new Map(sectors.map(sector => [sector.key, { sector, colour: sectorColour(sector.key) }]))
+  const slotOf = new Map<string | undefined, { sector: Sector, colour: number }>(sectors.map(sector => [sector.key, { sector, colour: sectorColour(sector.key) }]))
   const now = Date.now()
-  const slots = vaultNotes.value.map(n => slotOf.get(sectorOfNote.get(n.path)!)!)
+  const slots = vaultNotes.value.map(n => slotOf.get(sectorOfNote.get(n.path)))
   return {
-    points: vaultNotes.value.map((n, i) => notePoint(n.path, slots[i].sector, (now - n.mtimeMs) / DAY_MS)),
-    colours: slots.map(s => s.colour),
+    points: vaultNotes.value.map((n, i) => {
+      const slot = slots[i]
+      return slot ? notePoint(n.path, slot.sector, (now - n.mtimeMs) / DAY_MS) : OFF_MAP
+    }),
+    colours: slots.map(s => s?.colour ?? 0),
     links: vaultNotes.value.flatMap(n => n.links.map((to): [number, number] => [n.index, to])),
-    hubNotes: hubNoteSet(vaultNotes.value, n => sectorOfNote.get(n.path)!),
+    hubNotes: hubNoteSet(vaultNotes.value, n => sectorOfNote.get(n.path) ?? ''),
   }
 })
 
@@ -101,9 +109,10 @@ const cardNote = computed(() => {
   return card?.kind === 'note' ? vaultNotes.value.find(n => n.path === card.path) ?? null : null
 })
 
+// Empty when the plan has no sector for the note: a blank label beside it, not a throw.
 function sectorLabel(path: string): string {
   const { sectors, sectorOfNote } = plan.value
-  return sectors.find(s => s.key === sectorOfNote.get(path))!.label
+  return sectors.find(s => s.key === sectorOfNote.get(path))?.label ?? ''
 }
 
 const listNotes = computed(() => vaultNotes.value.length ? recentNotes(LIST_NOTE_COUNT).map(n => ({ ...n, sector: sectorLabel(n.path) })) : [])
