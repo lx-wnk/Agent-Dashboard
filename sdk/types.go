@@ -396,13 +396,15 @@ type Agent struct {
 	// ClaudeConfigDir alone, and the difference between attributing a session
 	// to a profile and having no idea which profile it runs on. Server-side
 	// only (the client has no use for it), hence no JSON field.
-	ClaudeConfigDirKnown      bool           `json:"-"`
-	Entrypoint                Entrypoint     `json:"entrypoint"`
-	Status                    AgentStatus    `json:"status"`
-	Uptime                    int64          `json:"uptime"`
-	LastActivity              string         `json:"lastActivity"`
-	CurrentAction             *string        `json:"currentAction"`
-	LastTools                 []RecentTool   `json:"lastTools"`
+	ClaudeConfigDirKnown bool         `json:"-"`
+	Entrypoint           Entrypoint   `json:"entrypoint"`
+	Status               AgentStatus  `json:"status"`
+	Uptime               int64        `json:"uptime"`
+	LastActivity         string       `json:"lastActivity"`
+	CurrentAction        *string      `json:"currentAction"`
+	LastTools            []RecentTool `json:"lastTools"`
+	// RecentNotes are the vault notes this agent read or wrote in the last ten minutes, newest first.
+	RecentNotes               []NoteTouch    `json:"recentNotes,omitempty"`
 	Tasks                     []TaskInfo     `json:"tasks"`
 	Subagents                 []SubAgent     `json:"subagents"`
 	TokenUsage                TokenUsage     `json:"tokenUsage"`
