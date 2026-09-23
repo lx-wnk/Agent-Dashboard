@@ -53,7 +53,9 @@ const { activeView } = useViewState()
 const { layout, wide } = useWorkspace()
 const { requestNewPage } = useSidebar()
 const listOpen = ref(false)
-const openCard = ref<{ kind: 'agent', pid: number } | { kind: 'note', path: string } | null>(null)
+type HubCard = { kind: 'agent', pid: number } | { kind: 'note', path: string }
+const openCard = ref<HubCard | null>(null)
+let cameraBeforeCard: [number, number, number] | null = null
 
 const SECTOR_FLY_RADIUS = 260
 const SECTOR_FLY_REL = 2.6
@@ -133,7 +135,20 @@ const listNotes = computed(() => vaultNotes.value.length ? recentNotes(LIST_NOTE
 function openNote(index: number) {
   const note = vaultNotes.value[index]
   if (note)
-    openCard.value = { kind: 'note', path: note.path }
+    showCard({ kind: 'note', path: note.path })
+}
+
+function showCard(card: HubCard) {
+  if (!openCard.value)
+    cameraBeforeCard = [...centreWorld(), rel.value]
+  openCard.value = card
+}
+
+function closeCard() {
+  openCard.value = null
+  if (cameraBeforeCard)
+    flyTo(...cameraBeforeCard)
+  cameraBeforeCard = null
 }
 
 function flyToNote(index: number, relTarget: number) {
@@ -322,7 +337,7 @@ watch([listOpen, openCard], () => {
 
 function escape() {
   if (openCard.value)
-    openCard.value = null
+    closeCard()
   else if (listOpen.value)
     toggleList()
   else
@@ -377,7 +392,7 @@ function onEscape(e: KeyboardEvent) {
 }
 
 function flyToAgent(agent: Agent) {
-  openCard.value = { kind: 'agent', pid: agent.pid }
+  showCard({ kind: 'agent', pid: agent.pid })
   const hit = placed.value.find(p => p.agent.pid === agent.pid)
   if (hit)
     flyTo(hit.x, hit.y, AGENT_FLY_REL)
@@ -554,7 +569,7 @@ watch(hubFocusRequest, (target) => {
       @launch="launchFromList"
       @close="listOpen = false"
     />
-    <HubAgentCard v-if="cardAgent" :agent="cardAgent" @close="openCard = null" />
+    <HubAgentCard v-if="cardAgent" :agent="cardAgent" @close="closeCard" />
     <HubNoteCard
       v-if="cardNote"
       :key="cardNote.path"
@@ -564,7 +579,7 @@ watch(hubFocusRequest, (target) => {
       :kontor-blocked="askBlocked"
       @fly="index => flyToNote(index, Math.max(rel, CHIP_FLY_MIN_REL))"
       @ask="openKontor"
-      @close="openCard = null"
+      @close="closeCard"
     />
   </section>
 </template>

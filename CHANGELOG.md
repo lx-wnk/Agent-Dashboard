@@ -129,6 +129,8 @@ Preparing the first public release.
 
 ### Changed
 
+- The hub returns to its previous zoom and position after closing a card or
+  coming back from a module.
 - The project is called **Kontor**. The binary is `kontor`, the Homebrew cask is
   `lx-wnk/tap/kontor`, the container image is `ghcr.io/lx-wnk/kontor`, the macOS
   bundle identifier is `com.lxwnk.kontor`, and the Go modules are
