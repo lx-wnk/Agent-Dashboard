@@ -127,10 +127,17 @@ start. Without a configured root `RootRelative` rejects every path, so
 
 ### Exposure
 
-`/api/agents/stream` is not behind `memory.read`; the graph is
-(`server/internal/api/obsidian/handler.go:99`). This adds no new exposure: the
-same paths are already visible in `lastTools[].detail`, which carries the curl
-command. A client without `memory.read` has no graph, so no edge can be drawn.
+`Agent.recentNotes` rides `/api/agents/stream`, which sits behind the normal auth
+(loopback host + JWT) but not `memory.read`, unlike the graph and open routes
+(`server/internal/api/obsidian/handler.go:99`). This is new exposure:
+`toolArgument` (`server/internal/parser/parser.go`, `pendingToolInput{Command,
+FilePath}`) never read the Obsidian MCP tools' `input.path`, so those note paths
+never reached the stream before, and curl paths that did were previously visible
+only while among the last five `lastTools`, not for ten minutes. It ships
+ungated: `memory.read` grants are scoped (global/project), not per viewer, so
+gating a shared broadcast frame would exclude nobody who can already see the
+stream's full shell commands. Worth revisiting once Kontor serves several people
+with different rights.
 
 ## Client
 
