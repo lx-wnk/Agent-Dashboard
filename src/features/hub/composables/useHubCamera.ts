@@ -33,6 +33,7 @@ export function useHubCamera(stage: Ref<HTMLElement | null>, options?: HubCamera
   const size = ref({ width: 0, height: 0 })
   const dragging = ref(false)
   let sized = false
+  // The destination of a flight that has not landed — before the first measure there is nothing to fly through, and a resize mid-flight settles on it rather than finishing against the old stage.
   let pendingFlight: { wx: number, wy: number, rel: number } | null = null
 
   const rel = computed(() => cam.value.k / k0.value)
@@ -42,6 +43,7 @@ export function useHubCamera(stage: Ref<HTMLElement | null>, options?: HubCamera
   let rafId: number | null = null
 
   function cancelFlight() {
+    pendingFlight = null
     if (rafId !== null) {
       cancelAnimationFrame(rafId)
       rafId = null
@@ -64,14 +66,14 @@ export function useHubCamera(stage: Ref<HTMLElement | null>, options?: HubCamera
 
   function flyTo(wx: number, wy: number, relTarget: number) {
     cancelFlight()
+    pendingFlight = { wx, wy, rel: relTarget }
     // Before the first measure k0 and the stage centre are placeholders; the first resize lands it.
-    if (!sized) {
-      pendingFlight = { wx, wy, rel: relTarget }
+    if (!sized)
       return
-    }
     const from = cam.value
     const to = { wx, wy, k: clampScale(k0.value * relTarget, k0.value) }
     if (reducedMotion.value === 'reduce') {
+      pendingFlight = null
       cam.value = flyFrame(from, to, size.value.width, size.value.height, 1)
       return
     }
@@ -80,6 +82,8 @@ export function useHubCamera(stage: Ref<HTMLElement | null>, options?: HubCamera
       const p = (now - start) / FLY_MS
       cam.value = flyFrame(from, to, size.value.width, size.value.height, p)
       rafId = p < 1 ? requestAnimationFrame(step) : null
+      if (rafId === null)
+        pendingFlight = null
     }
     rafId = requestAnimationFrame(step)
   }
@@ -97,7 +101,7 @@ export function useHubCamera(stage: Ref<HTMLElement | null>, options?: HubCamera
     k0.value = fitScale(width, height)
     if (pendingFlight) {
       const { wx, wy, rel: relTarget } = pendingFlight
-      pendingFlight = null
+      cancelFlight()
       cam.value = centredOn(wx, wy, clampScale(k0.value * relTarget, k0.value), width, height)
       return
     }

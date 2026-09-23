@@ -149,6 +149,20 @@ describe('useHubCamera', () => {
     expect(sy).toBeCloseTo(350)
   })
 
+  it('settles on the target when the stage resizes mid-flight', async () => {
+    const { api } = await mountCamera()
+    resize(1090, 1130)
+
+    api.flyTo(100, 0, 5)
+    resize(700, 700)
+    await new Promise(resolve => requestAnimationFrame(resolve))
+
+    expect(api.rel.value).toBeCloseTo(5)
+    const [sx, sy] = toScreen(api.cam.value, 100, 0)
+    expect(sx).toBeCloseTo(350)
+    expect(sy).toBeCloseTo(350)
+  })
+
   it('keeps the centre world point and rel across a later resize', async () => {
     const { api } = await mountCamera()
     resize(1090, 1130)
