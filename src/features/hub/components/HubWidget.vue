@@ -66,6 +66,16 @@ const ZOOM_STEP = 1.4
 const PAN_STEP_PX = 60
 const SLOT_KEY = /^\d$/
 const KONTOR_WIDGET: WidgetId = 'kontor'
+const KONTOR_LOAD_FAILED = 'Kontor could not load — reload the app'
+// One condition, one wording per control: each names the action it would have taken, so a tooltip
+// never describes something other than the button it sits on.
+const KONTOR_BLOCKED: Record<'failed' | 'absent', { open: string, ask: string }> = {
+  failed: { open: KONTOR_LOAD_FAILED, ask: KONTOR_LOAD_FAILED },
+  absent: {
+    open: 'Add the Kontor tile to a page to open it here',
+    ask: 'Add the Kontor tile to a page to ask Kontor here',
+  },
+}
 
 // Only the blocking kinds: needsAttention() is also true for every non-working agent ('yourTurn').
 function blocksOnOperator(agent: Agent): boolean {
@@ -237,15 +247,16 @@ const running = computed(() => placed.value.filter(p => p.state === 'working' ||
 const waiting = computed(() => placed.value.filter(p => p.needsOperator).length)
 const kontorState = computed(() => kontorAgent.value ? agentDisplayStatus(kontorAgent.value) : 'off')
 const kontorPage = computed(() => pageWithWidget(layout.value, KONTOR_WIDGET))
-// Why Kontor cannot be reached, or undefined when it can. A 404'd chunk (the server was rebuilt
-// under an open tab) renders PageLoadError where the tile is and can take no prompt, so every
-// control that would send one says so instead of handing it to no-one.
-const kontorBlocked = computed(() => {
+// Why Kontor cannot be reached, or null when it can. A 404'd chunk (the server was rebuilt under an
+// open tab) renders PageLoadError where the tile is and can take no prompt, so every control that
+// would send one says so instead of handing it to no-one.
+const kontorBlock = computed<keyof typeof KONTOR_BLOCKED | null>(() => {
   if (failedWidgets.has(KONTOR_WIDGET))
-    return 'Kontor could not load — reload the app'
-  return kontorPage.value ? undefined : 'Add the Kontor tile to a page to open it here'
+    return 'failed'
+  return kontorPage.value ? null : 'absent'
 })
-const coreTitle = computed(() => kontorBlocked.value ?? `Open Kontor (${kontorState.value})`)
+const coreTitle = computed(() => kontorBlock.value ? KONTOR_BLOCKED[kontorBlock.value].open : `Open Kontor (${kontorState.value})`)
+const askBlocked = computed(() => kontorBlock.value ? KONTOR_BLOCKED[kontorBlock.value].ask : undefined)
 
 const cardAgent = computed(() => {
   const card = openCard.value
@@ -259,7 +270,7 @@ watch(() => openCard.value !== null && !cardAgent.value && !cardNote.value, (gon
 })
 
 function openKontor(prefill?: string) {
-  if (!kontorPage.value || kontorBlocked.value)
+  if (!kontorPage.value || kontorBlock.value)
     return
   const current = layout.value.pages.find(p => pageView(p.id) === activeView.value)
   if (!current?.tiles.some(t => t.widget === KONTOR_WIDGET))
@@ -459,7 +470,7 @@ watch(hubFocusRequest, (target) => {
         :waiting="waiting"
         :needs-you="needsYou.length"
         :core-title="coreTitle"
-        :core-disabled="!!kontorBlocked"
+        :core-disabled="!!kontorBlock"
         :agent-ring-px="ringOnScreenPx"
         :sector-name-radius="sectorNameRadius"
         :show-sector-names="showSectorNames"
@@ -540,7 +551,7 @@ watch(hubFocusRequest, (target) => {
       :note="cardNote"
       :notes="vaultNotes"
       :sector-label="sectorLabel(cardNote.path)"
-      :kontor-blocked="kontorBlocked"
+      :kontor-blocked="askBlocked"
       @fly="index => flyToNote(index, Math.max(rel, CHIP_FLY_MIN_REL))"
       @ask="openKontor"
       @close="openCard = null"

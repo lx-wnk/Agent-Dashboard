@@ -779,12 +779,23 @@ describe('hubWidget', () => {
     w.unmount()
   })
 
-  it('does nothing on the core when no page holds the Kontor tile', async () => {
+  // One condition, two wordings: each control names the action it would have taken.
+  it('does nothing on the core when no page holds the Kontor tile, and each control says so in its own words', async () => {
     useWorkspace().layout.value = { version: 1, pages: [{ id: 'zentrale', title: 'Zentrale', tiles: [] }] }
+    graph.status.value = 'ready'
+    graph.notes.value = [vaultNote(0, 'alpha/one.md')]
     const w = await mountHub()
     const core = w.get('[data-testid="hub-core"]')
     expect(core.attributes('title')).toBe('Add the Kontor tile to a page to open it here')
     await core.trigger('click')
+
+    await press(w, 'L')
+    await w.get('[data-testid="hub-list-note"]').trigger('click')
+    const askButton = w.findAll('button').find(b => b.text() === 'Ask Kontor about this')!
+    expect(askButton.attributes('disabled')).toBeDefined()
+    expect(askButton.attributes('title')).toBe('Add the Kontor tile to a page to ask Kontor here')
+    await askButton.trigger('click')
+
     expect(ask).not.toHaveBeenCalled()
     w.unmount()
   })
