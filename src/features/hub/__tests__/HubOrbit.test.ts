@@ -14,6 +14,11 @@ function agent(pid: number, projectName: string): Agent {
   return { pid, projectName, status: 'active', working: false } as Agent
 }
 
+const ORBIT_AGENTS = [
+  { agent: agent(1, 'kontor-hub'), x: 82, y: 0, state: 'working' as const, needsOperator: false },
+  { agent: agent(2, 'web-app'), x: -60, y: 0, state: 'waiting' as const, needsOperator: true },
+]
+
 interface OrbitOptions {
   showSectorNames?: boolean
   agentRingPx?: number
@@ -33,10 +38,7 @@ function mountOrbit(level: HubLevel, { showSectorNames = true, agentRingPx = 116
       sectorNameRadius,
       showSectorNames,
       sectors,
-      agents: [
-        { agent: agent(1, 'kontor-hub'), x: 82, y: 0, state: 'working', needsOperator: false },
-        { agent: agent(2, 'web-app'), x: -60, y: 0, state: 'waiting', needsOperator: true },
-      ],
+      agents: ORBIT_AGENTS,
       level,
       running: 3,
       waiting: 1,
@@ -227,6 +229,25 @@ describe('hubOrbit', () => {
     }
     expect(measureSpy.mock.calls.length).toBe(measured)
     expect(w.emitted('measure')).toHaveLength(1)
+    w.unmount()
+  })
+
+  // A zero box collides with nothing, so caching one would drop that text out of collision
+  // avoidance for the life of the component.
+  it('re-measures a label that first came back at zero instead of caching an empty box', async () => {
+    const key = agentLabelKey('web-app', 'waiting')
+    const blind = new Set([key])
+    stubLabelMeasurement(blind)
+    const w = mountOrbit(0)
+    await flushPromises()
+    const sizes = () => w.emitted('measure')!.at(-1)![0] as ReadonlyMap<string, LabelSize>
+    expect(sizes().has(key), 'a zero measurement is not cached').toBe(false)
+    expect(sizes().has(agentLabelKey('kontor-hub', 'working'))).toBe(true)
+
+    blind.clear()
+    await w.setProps({ agents: [...ORBIT_AGENTS, { agent: agent(3, 'api-server'), x: 0, y: -90, state: 'working' as const, needsOperator: false }] })
+    await flushPromises()
+    expect(sizes().get(key)).toEqual(labelSize(key))
     w.unmount()
   })
 

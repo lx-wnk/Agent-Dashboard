@@ -63,6 +63,10 @@ function measure() {
     if (grown.has(key))
       continue
     const { width, height } = el.getBoundingClientRect()
+    // A label without a layout box measures 0×0, and boxesOverlap reads an empty box as covering
+    // nothing: cached, that text would opt out of collision avoidance until the page reloads.
+    if (width <= 0 || height <= 0)
+      continue
     grown.set(key, { w: width, h: height })
   }
   if (grown.size === sizes.value.size)
