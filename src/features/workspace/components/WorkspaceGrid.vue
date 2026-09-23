@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { OpResult, PlacedTile, WorkspacePage } from '../layout'
 import type { WidgetDef } from '../widgetRegistry'
+import { useEventListener, useResizeObserver } from '@vueuse/core'
 import { computed, ref } from 'vue'
 import { cellAt } from '../gridGeometry'
 import { fitsMinimum, moveTile, readingOrder, removeTile, resizeTile, rowsUsed, swapTile, validatePlacement } from '../layout'
@@ -19,6 +20,20 @@ const gridEl = ref<HTMLElement | null>(null)
 const drag = ref<null | { index: number, mode: 'move' | 'resize', grabCol: number, grabRow: number, target: PlacedTile }>(null)
 let gridRect: DOMRect
 
+function measureGrid() {
+  gridRect = gridEl.value!.getBoundingClientRect()
+}
+
+// The rect is viewport-relative, so a resize (window or sidebar) and a scroll both invalidate it; re-measuring per pointermove would force a layout on every frame of the drag.
+useResizeObserver(gridEl, () => {
+  if (drag.value)
+    measureGrid()
+})
+useEventListener(window, 'scroll', () => {
+  if (drag.value)
+    measureGrid()
+}, { capture: true, passive: true })
+
 function cellOf(e: PointerEvent) {
   return cellAt(gridRect, e.clientX, e.clientY, rows.value, GAP)
 }
@@ -27,7 +42,7 @@ function startDrag(e: PointerEvent, index: number, mode: 'move' | 'resize') {
   if (!props.editing || e.button !== 0 || (e.target as HTMLElement).closest('select, button:not([data-resize])'))
     return
   const t = props.page.tiles[index]
-  gridRect = gridEl.value!.getBoundingClientRect()
+  measureGrid()
   const c = cellOf(e)
   drag.value = { index, mode, grabCol: c.col - t.col, grabRow: c.row - t.row, target: { ...t } }
   ;(e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId)
