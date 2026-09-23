@@ -44,7 +44,7 @@ if (!openSettings)
 
 const hub = ref<HTMLElement | null>(null)
 const stage = ref<HTMLElement | null>(null)
-const { cam, size, rel, level, dragging, zoomBy, panBy, flyTo, fit, centreWorld } = useHubCamera(stage, { onTap: tapNote })
+const { cam, k0, size, rel, level, dragging, zoomBy, panBy, flyTo, fit, centreWorld } = useHubCamera(stage, { onTap: tapNote })
 const { status: graphStatus, message: graphMessage, notes, refresh: refreshGraph, recentNotes, noteByPath } = useObsidianGraph()
 const { agents } = useAgents({ autoStart: false })
 const { ask, overlayOpen } = useKontorSession()
@@ -158,10 +158,11 @@ onMounted(() => refreshGraph())
 useEventListener(window, 'focus', () => refreshGraph())
 const stagePx = computed(() => Math.min(size.value.width, size.value.height))
 const ringPx = computed(() => agentRingPx(live.value.length, stagePx.value))
-const ringOnScreenPx = computed(() => agentRadius(cam.value.k, false, ringPx.value) * cam.value.k)
+const baseRingPx = computed(() => agentRadius(k0.value, false, ringPx.value) * k0.value)
+const ringOnScreenPx = computed(() => baseRingPx.value * rel.value)
 
 const placed = computed(() => {
-  const k = cam.value.k
+  const k = k0.value
   const { sectors, sectorOfProject } = plan.value
   return sectors.flatMap((sector) => {
     const members = live.value.filter(a => sectorOfProject.get(a.projectName) === sector.key)
@@ -177,14 +178,14 @@ const placed = computed(() => {
 
 // How far the agents actually reach: a sector's agents are staggered outward tier by tier, so the
 // legend and the launchers must clear the outermost tier in use, not the base ring.
-const outerRingOnScreenPx = computed(() => Math.max(ringOnScreenPx.value, ...placed.value.map(p => Math.hypot(p.x, p.y) * cam.value.k)))
-const sectorNameRadius = computed(() => sectorLabelRadius(cam.value.k, outerRingOnScreenPx.value))
-const docked = computed(() => launchersDocked(rel.value, cam.value.k, outerRingOnScreenPx.value, stagePx.value))
+const outerRingBasePx = computed(() => Math.max(baseRingPx.value, ...placed.value.map(p => Math.hypot(p.x, p.y) * k0.value)))
+const sectorNameRadius = computed(() => sectorLabelRadius(k0.value, outerRingBasePx.value))
+const docked = computed(() => launchersDocked(rel.value, k0.value, outerRingBasePx.value, stagePx.value))
 
 const otherPages = computed(() => layout.value.pages.filter(p => p.id !== ZENTRALE_PAGE_ID))
 const launchers = computed(() => launchersFor(NAV_ITEMS, otherPages.value, activeView.value))
 const listLaunchers = computed(() => launchersFor(NAV_ITEMS, otherPages.value, activeView.value, Infinity))
-const launcherBoxes = computed(() => launchers.value.map((_, i) => launcherBox(i, docked.value, cam.value, outerRingOnScreenPx.value)))
+const launcherBoxes = computed(() => launchers.value.map((_, i) => launcherBox(i, docked.value, cam.value, k0.value, outerRingBasePx.value)))
 // A launcher is opaque chrome. The ring clears the map by construction; the docked rail is fixed to
 // the screen while the map pans under it, so whatever it covers is unreachable and stays undrawn.
 function coveredByRail(box: LabelBox): boolean {
@@ -492,7 +493,7 @@ watch(hubFocusRequest, (target) => {
         @sector="sector => flyTo(...polar(SECTOR_FLY_RADIUS, sectorMid(sector)), SECTOR_FLY_REL)"
         @measure="sizes => labelSizes = sizes"
       />
-      <HubLaunchers :launchers="launchers" :cam="cam" :docked="docked" :agent-ring-px="outerRingOnScreenPx" @launch="launch" />
+      <HubLaunchers :launchers="launchers" :cam="cam" :k0="k0" :docked="docked" :agent-ring-px="outerRingBasePx" @launch="launch" />
       <HubControls
         :level="level"
         :wide="wide === HUB_WIDGET"

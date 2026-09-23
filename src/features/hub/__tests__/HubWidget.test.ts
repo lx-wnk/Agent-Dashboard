@@ -272,6 +272,21 @@ describe('hubWidget', () => {
     crowded.unmount()
   })
 
+  it('moves the agents and the launcher ring with the map when it zooms', async () => {
+    const w = await mountHub()
+    const launcherFromCore = () => {
+      const core = translateOf(w.get('[data-testid="hub-core"]'))
+      const { sx, sy } = translateOf(w.get('[data-testid^="hub-launcher-"]'))
+      return Math.hypot(sx - core.sx, sy - core.sy)
+    }
+    const agentBefore = distanceFromCore(w, 101)
+    const launcherBefore = launcherFromCore()
+    await press(w, '-')
+    expect(distanceFromCore(w, 101)).toBeCloseTo(agentBefore / 1.4)
+    expect(launcherFromCore()).toBeCloseTo(launcherBefore / 1.4)
+    w.unmount()
+  })
+
   it('draws no sector names without notes, where every sector is one agent\'s project', async () => {
     const w = await mountHub()
     expect(w.findAll('[data-testid^="hub-sector-"]')).toHaveLength(0)
