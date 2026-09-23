@@ -155,6 +155,12 @@ Preparing the first public release.
   recently updated, and capped at 20 instead of the previous 5-per-repository,
   8-shown limit.
 - Obsidian settings take effect as soon as they are saved; no restart.
+- **The four `obsidian_*` MCP tools follow the vault's live state, not a
+  startup snapshot.** Configuring a vault while the server is already running
+  used to leave the tools unlisted and uncallable until a restart; `tools/list`
+  and `tools/call` now re-check availability on every request, so the tools
+  appear the moment the vault is set and disappear the moment it is cleared —
+  with no server restart either way.
 - The hub returns to its previous zoom and position after closing a card or
   coming back from a module.
 - The project is called **Kontor**. The binary is `kontor`, the Homebrew cask is

@@ -36,15 +36,13 @@ type ObsidianDeps struct {
 // the memory tools.
 func obsidianScope() repo.Scope { return repo.GlobalScope() }
 
+func obsidianAvailable(d ObsidianDeps) func() bool {
+	return func() bool { return d.Clients.Get() != nil }
+}
+
 // RegisterObsidianTools registers the 4 Obsidian vault MCP tools into the
-// given registry. When d.Clients holds nil — the vault is unconfigured — no
-// tools are registered at all: an agent discovering a tool it can never use
-// is worse than not discovering it, and the registry supports conditional
-// registration trivially since this is just an ordinary function call.
+// given registry; each is listed only while a vault is configured.
 func RegisterObsidianTools(registry mcp.ToolRegistry, d ObsidianDeps) {
-	if d.Clients.Get() == nil {
-		return
-	}
 	registerObsidianRead(registry, d)
 	registerObsidianSearch(registry, d)
 	registerObsidianWrite(registry, d)
@@ -55,6 +53,7 @@ func registerObsidianRead(registry mcp.ToolRegistry, d ObsidianDeps) {
 	registry.Register(&mcp.ToolDef{
 		Name:        "obsidian_read",
 		Description: "Read the raw content of a note from the configured Obsidian vault.",
+		Available:   obsidianAvailable(d),
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -100,6 +99,7 @@ func registerObsidianSearch(registry mcp.ToolRegistry, d ObsidianDeps) {
 	registry.Register(&mcp.ToolDef{
 		Name:        "obsidian_search",
 		Description: "Search the whole Obsidian vault for notes matching a query.",
+		Available:   obsidianAvailable(d),
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -147,6 +147,7 @@ func registerObsidianWrite(registry mcp.ToolRegistry, d ObsidianDeps) {
 	registry.Register(&mcp.ToolDef{
 		Name:        "obsidian_write",
 		Description: "Create or overwrite a note in the configured Obsidian vault. Destructive: overwrites any existing content at the path.",
+		Available:   obsidianAvailable(d),
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -189,6 +190,7 @@ func registerObsidianDelete(registry mcp.ToolRegistry, d ObsidianDeps) {
 	registry.Register(&mcp.ToolDef{
 		Name:        "obsidian_delete",
 		Description: "Delete a note from the configured Obsidian vault. Irreversible.",
+		Available:   obsidianAvailable(d),
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
