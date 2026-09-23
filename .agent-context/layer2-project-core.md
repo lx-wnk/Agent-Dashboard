@@ -38,7 +38,7 @@
 | Widget catalogue (titles, spans, minimums) | `src/features/workspace/widgetSpecs.ts` | `WIDGET_SPECS`, `HUB_WIDGET` |
 | Widget components | `src/features/workspace/widgetRegistry.ts` | `WIDGETS`, `widgetIds()` |
 | Needs-you placement rule | `src/composables/needsYouPlacement.ts` | `needsYouPlacement` |
-| Hub geometry constants | `src/features/hub/hubGeometry.ts` | `R0`, `R_MAX`, `RINGS`, `agentRingPx`, `planSectors`, `DAY_MS`, `SECTOR_PALETTE_SIZE` |
+| Hub geometry constants | `src/features/hub/hubGeometry.ts` | `R0`, `R_MAX`, `RINGS`, `agentRingPx`, `planSectors`, `DAY_MS`, `SECTOR_PALETTE_SIZE`, `sectorColour` |
 | Hub camera thresholds | `src/features/hub/hubCamera.ts` | `LEVEL_TOPICS`, `LEVEL_NOTES`, `MIN_REL`, `MAX_REL`, `levelOf`, `launchersDocked` |
 | Hub graph notices | `src/features/hub/hubGraphNotices.ts` | `GRAPH_NOTICES`, `LIST_GRAPH_NOTICES` |
 | Hub launcher cap | `src/features/hub/hubLaunchers.ts` | `MAX_LAUNCHERS` |

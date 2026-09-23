@@ -24,6 +24,8 @@ import {
   SECTOR_FLOOR_DEG,
   SECTOR_LABEL_AGENT_CLEARANCE_PX,
   SECTOR_LABEL_RADIUS,
+  SECTOR_PALETTE_SIZE,
+  sectorColour,
   sectorFloorDeg,
   sectorKeyFor,
   sectorLabelRadius,
@@ -52,6 +54,29 @@ describe('hash01', () => {
       expect(hash01(p)).toBeGreaterThanOrEqual(0)
       expect(hash01(p)).toBeLessThan(1)
     }
+  })
+})
+
+describe('sectorColour', () => {
+  it('gives every key a stable slot inside the palette', () => {
+    for (const key of ['work', 'private', 'misc', 'archive', OTHER_SECTOR_KEY, '']) {
+      expect(sectorColour(key)).toBe(sectorColour(key))
+      expect(sectorColour(key)).toBeGreaterThanOrEqual(0)
+      expect(sectorColour(key)).toBeLessThan(SECTOR_PALETTE_SIZE)
+      expect(Number.isInteger(sectorColour(key))).toBe(true)
+    }
+  })
+
+  it('leaves the other sectors their slot when one appears before them in the list', () => {
+    const vault = ['misc', 'private', 'work']
+    const withOther = [OTHER_SECTOR_KEY, ...vault].sort((a, b) => a.localeCompare(b))
+    expect(withOther[0]).toBe(OTHER_SECTOR_KEY)
+    expect(withOther.slice(1).map(sectorColour)).toEqual(vault.map(sectorColour))
+  })
+
+  it('lets two keys share a slot rather than moving one off it', () => {
+    const slots = Array.from({ length: 40 }, (_, i) => sectorColour(`folder${i}`))
+    expect(new Set(slots).size).toBeLessThan(slots.length)
   })
 })
 

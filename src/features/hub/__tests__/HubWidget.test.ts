@@ -252,6 +252,26 @@ describe('hubWidget', () => {
     w.unmount()
   })
 
+  // An agent on a project that is no vault folder inserts `__other__`, which sorts first.
+  it('keeps every sector its colour when a catch-all sector appears before it', async () => {
+    graph.status.value = 'ready'
+    graph.notes.value = [vaultNote(0, 'misc/one.md'), vaultNote(1, 'private/two.md'), vaultNote(2, 'work/three.md')]
+    const colours = (w: Hub) => w.findAll('svg')[0].findAll('path').map(p => p.attributes('style'))
+
+    agents.value = [{ pid: 200, status: 'idle', projectName: 'misc', working: false }] as unknown as Agent[]
+    const vaultOnly = await mountHub(TILE)
+    const before = colours(vaultOnly)
+    expect(before).toHaveLength(3)
+    expect(new Set(before).size, 'the fixture discriminates: not every sector on one slot').toBeGreaterThan(1)
+    vaultOnly.unmount()
+
+    agents.value = [...agents.value, { pid: 201, status: 'idle', projectName: 'kontor', working: false }] as unknown as Agent[]
+    const withOther = await mountHub(TILE)
+    expect(colours(withOther)).toHaveLength(4)
+    expect(colours(withOther).slice(1)).toEqual(before)
+    withOther.unmount()
+  })
+
   it('keeps a minimum height while tiles stack in one column, and fills its tile from md up', async () => {
     const w = await mountHub()
     expect(w.get('[data-testid="hub"]').classes()).toEqual(expect.arrayContaining(['min-h-[34rem]', 'md:min-h-0']))

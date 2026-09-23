@@ -21,7 +21,7 @@ import { hubFocusRequest } from '../composables/useHubFocus'
 import { useObsidianGraph } from '../composables/useObsidianGraph'
 import { launchersDocked, LEVEL_TARGETS, toScreen } from '../hubCamera'
 import { agentDotBox, agentLabelBox, agentLabelDirection, agentLabelKey, agentPriority, boxesOverlap, cullLabels, hitNote, hubNoteSet, inwardUnit, sectorLabelBox, sectorLabelKey } from '../hubCanvas'
-import { agentAngles, agentRadius, agentRingPx, agentSectorRingPx, DAY_MS, notePoint, planSectors, polar, radiusForAge, RINGS, SECTOR_PALETTE_SIZE, sectorLabelRadius, sectorMid, wedgePath } from '../hubGeometry'
+import { agentAngles, agentRadius, agentRingPx, agentSectorRingPx, DAY_MS, notePoint, planSectors, polar, radiusForAge, RINGS, sectorColour, sectorLabelRadius, sectorMid, wedgePath } from '../hubGeometry'
 import { GRAPH_NOTICES } from '../hubGraphNotices'
 import { launcherBox, launchersFor } from '../hubLaunchers'
 import HubAgentCard from './HubAgentCard.vue'
@@ -85,7 +85,7 @@ const graphNotice = computed(() => GRAPH_NOTICES[graphStatus.value])
 
 const brain = computed(() => {
   const { sectors, sectorOfNote } = plan.value
-  const slotOf = new Map(sectors.map((sector, i) => [sector.key, { sector, colour: i % SECTOR_PALETTE_SIZE }]))
+  const slotOf = new Map(sectors.map(sector => [sector.key, { sector, colour: sectorColour(sector.key) }]))
   const now = Date.now()
   const slots = vaultNotes.value.map(n => slotOf.get(sectorOfNote.get(n.path)!)!)
   return {
@@ -380,11 +380,11 @@ watch(hubFocusRequest, (target) => {
       <svg class="pointer-events-none absolute inset-0 size-full" aria-hidden="true">
         <g :transform="`translate(${cam.tx},${cam.ty}) scale(${cam.k})`">
           <path
-            v-for="(sector, i) in plan.sectors"
+            v-for="sector in plan.sectors"
             :key="sector.key"
             :d="wedgePath(sector.start, sector.end)"
             fill-opacity="0.035"
-            :style="{ fill: `var(--sector-${i % SECTOR_PALETTE_SIZE})` }"
+            :style="{ fill: `var(--sector-${sectorColour(sector.key)})` }"
           />
           <circle
             v-for="ring in RINGS"

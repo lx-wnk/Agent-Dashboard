@@ -47,6 +47,12 @@ export function hash01(text: string): number {
   return (h >>> 0) / 4294967296
 }
 
+// A sector's palette slot belongs to its key, not to its place in the sorted list: a sector that
+// appears or disappears before it must never recolour it. Two keys may share a slot.
+export function sectorColour(key: string): number {
+  return Math.floor(hash01(key) * SECTOR_PALETTE_SIZE)
+}
+
 // Agents of one sector sit on sectorTiers(count) rings, so only every tiers-th of them shares a radius.
 export function sectorTiers(agentsInSector: number): number {
   return Math.min(Math.max(agentsInSector, 1), AGENT_SECTOR_TIERS_MAX)
