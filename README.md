@@ -194,7 +194,9 @@ narrows what is *stored*, not what an agent on this machine can *reach* — an a
 the same OS user and can invoke `gh` itself either way.
 
 Once configured, the **GitHub** tile reads open pull requests from
-`GET /api/github/summary`. `GET /api/github/search`, `POST /api/github/comment`, and
+`GET /api/github/summary`: each allow-listed repository's own open pull requests, merged with
+whatever the `involves:@me` search finds you across every repository your token can see, deduped,
+sorted by most recently updated, and capped at 20. `GET /api/github/search`, `POST /api/github/comment`, and
 `POST /api/github/merge` reach the same allow-listed repositories — every route bounded to
 `github.repos` before it is bounded by a capability at all. Each route, and its matching `github_*`
 MCP tool, is gated by one of four capabilities. A fresh install denies all four by default:

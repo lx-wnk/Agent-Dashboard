@@ -14,6 +14,12 @@ Preparing the first public release.
 
 ### Fixed
 
+- **GitHub tile rows no longer overflow the tile.** The pull request title
+  shared one row with its checks, `repo#number` and the Merge button, so a
+  long title or a wide checks label pushed the row past the tile's width and
+  turned the whole panel's `overflow-y-auto` into a horizontal scrollbar too.
+  Each row is now two lines: the title truncates with an ellipsis on its own
+  line, `repo#number` and the checks/merge controls sit on the line below.
 - **Token totals no longer double-count under concurrent refreshes.** When the
   agent stream, a hook-triggered rescan and an HTTP read refreshed the same
   active session at once, each added the newly appended messages, inflating
@@ -129,6 +135,12 @@ Preparing the first public release.
 
 ### Changed
 
+- **The GitHub tile lists open pull requests you are involved in, up to 20.**
+  `GET /api/github/summary` now merges each configured repository's own open
+  pull requests with whatever the `involves:@me` search finds across every
+  repository the token can see, deduped by repo#number, sorted by most
+  recently updated, and capped at 20 instead of the previous 5-per-repository,
+  8-shown limit.
 - Obsidian settings take effect as soon as they are saved; no restart.
 - The hub returns to its previous zoom and position after closing a card or
   coming back from a module.
