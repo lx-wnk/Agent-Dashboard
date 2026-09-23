@@ -13,6 +13,8 @@ export const SECTOR_LABEL_RADIUS = 392
 export const LAUNCHER_PX = 40 // HubLaunchers.vue's `size-10` button, centred on its slot.
 export const LAUNCHER_SECTOR_CLEARANCE_PX = 56
 export const SECTOR_FLOOR_DEG = 24
+// All floors together never claim more than this, so the weighting always keeps a quarter of the circle.
+export const SECTOR_FLOOR_BUDGET_DEG = 270
 export const AGENT_FLOOR_PX = 116
 export const AGENT_WAITING_FLOOR_PX = 88
 export const AGENT_SPACING_PX = 112
@@ -83,8 +85,12 @@ export function buildSectors(inputs: SectorInput[]): Sector[] {
   const agentsOf = sorted.map(s => Math.max(s.agents ?? 0, 0))
   const agentsTotal = agentsOf.reduce((sum, a) => sum + a, 0)
   const roots = sorted.map((s, i) => Math.sqrt(Math.max(s.weight + projectsOf[i], 0)))
-  const floors = agentsOf.map(a => sectorFloorDeg(a, agentsTotal))
-  if (floors.reduce((sum, f) => sum + f, 0) < 360 && roots.some(r => r > 0)) {
+  const wanted = agentsOf.map(a => sectorFloorDeg(a, agentsTotal))
+  const wantedSum = wanted.reduce((sum, f) => sum + f, 0)
+  // A floor is a best-effort minimum, never a claim on the circle: unscaled, fifteen of them fill it
+  // and the weighting silently stops. Shrinking them together keeps it alive, and keeps their order.
+  const floors = wantedSum > SECTOR_FLOOR_BUDGET_DEG ? wanted.map(f => f * SECTOR_FLOOR_BUDGET_DEG / wantedSum) : wanted
+  if (roots.some(r => r > 0)) {
     const floored = new Set<number>()
     // One sector per pass, the hungriest first: floors differ, so flooring several at once could
     // hand out more than the 360° left.

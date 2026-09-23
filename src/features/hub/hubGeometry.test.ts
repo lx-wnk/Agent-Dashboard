@@ -21,6 +21,7 @@ import {
   R_MAX,
   radiusForAge,
   RINGS,
+  SECTOR_FLOOR_BUDGET_DEG,
   SECTOR_FLOOR_DEG,
   SECTOR_LABEL_AGENT_CLEARANCE_PX,
   SECTOR_LABEL_RADIUS,
@@ -96,9 +97,20 @@ describe('buildSectors', () => {
     const s = buildSectors([{ key: 'a', label: 'a', weight: 400 }, { key: 'b', label: 'b', weight: 100 }])
     expect(span(s[0]) / span(s[1])).toBeCloseTo(2)
   })
-  it('splits evenly when the floor cannot hold', () => {
-    const s = buildSectors(Array.from({ length: 20 }, (_, i) => ({ key: `k${i}`, label: `k${i}`, weight: i + 1 })))
-    for (const x of s) expect(span(x)).toBeCloseTo(18)
+  it('keeps honouring the note counts at the folder counts where the floors no longer fit', () => {
+    for (const n of [15, 20, 40]) {
+      const s = buildSectors(Array.from({ length: n }, (_, i) => ({ key: `k${String(i).padStart(2, '0')}`, label: `k${i}`, weight: i === 0 ? 10000 : 1 })))
+      expect(s.reduce((sum, x) => sum + span(x), 0), `n=${n} spends the circle`).toBeCloseTo(360)
+      expect(span(s[0]), `n=${n} keeps the big folder bigger`).toBeGreaterThan(4 * span(s[1]))
+      expect(span(s[1]), `n=${n} leaves the small folders a share`).toBeGreaterThan(0)
+    }
+  })
+
+  it('shrinks the floors together rather than letting them eat the circle', () => {
+    const s = buildSectors(Array.from({ length: 20 }, (_, i) => ({ key: `k${String(i).padStart(2, '0')}`, label: `k${i}`, weight: i === 0 ? 10000 : 1 })))
+    const floored = s.slice(1).map(span)
+    for (const x of floored) expect(x).toBeCloseTo(SECTOR_FLOOR_BUDGET_DEG / 20)
+    expect(SECTOR_FLOOR_BUDGET_DEG).toBeLessThan(360)
   })
   it('orders sectors by key, so a weight change never reorders them', () => {
     expect(buildSectors([{ key: 'b', label: 'b', weight: 1 }, { key: 'a', label: 'a', weight: 50 }]).map(x => x.key)).toEqual(['a', 'b'])
