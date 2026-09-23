@@ -22,7 +22,7 @@ import { hubFocusRequest } from '../composables/useHubFocus'
 import { useObsidianGraph } from '../composables/useObsidianGraph'
 import { launchersDocked, LEVEL_TARGETS, toScreen } from '../hubCamera'
 import { agentDotBox, agentLabelBox, agentLabelDirection, agentLabelKey, agentPriority, boxesOverlap, cullLabels, hitNote, hubNoteSet, inwardUnit, sectorLabelBox, sectorLabelKey } from '../hubCanvas'
-import { liveEdges } from '../hubEdges'
+import { agentNoteRows, liveEdges } from '../hubEdges'
 import { agentAngles, agentRadius, agentRingPx, agentSectorRingPx, DAY_MS, notePoint, planSectors, polar, radiusForAge, RINGS, sectorColour, sectorLabelRadius, sectorMid, wedgePath } from '../hubGeometry'
 import { GRAPH_NOTICES } from '../hubGraphNotices'
 import { launcherBox, launchersFor } from '../hubLaunchers'
@@ -204,6 +204,7 @@ const EDGE_CLOCK_MS = 30_000
 const edgeNow = useNow({ interval: EDGE_CLOCK_MS })
 const notesByPath = computed(() => new Map(vaultNotes.value.map(n => [n.path, n])))
 const edges = computed(() => liveEdges(placed.value, drawnAgents.value, notesByPath.value, edgeNow.value.getTime()))
+const listAgents = computed(() => placed.value.map(p => ({ ...p, notes: agentNoteRows(p.agent, notesByPath.value, edgeNow.value.getTime()) })))
 
 const showSectorNames = computed(() => vaultNotes.value.length > 0)
 
@@ -542,7 +543,7 @@ watch(hubFocusRequest, (target) => {
     </div>
     <HubList
       v-if="listOpen"
-      :agents="placed"
+      :agents="listAgents"
       :notes="listNotes"
       :graph-status="graphStatus"
       :graph-message="graphMessage"
