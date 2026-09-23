@@ -6,7 +6,7 @@ import type { Launcher } from '../hubLaunchers'
 import type { WidgetId } from '@/features/workspace'
 import type { Agent } from '@/types'
 import { useEventListener, useNow } from '@vueuse/core'
-import { computed, inject, onMounted, ref, shallowRef, watch } from 'vue'
+import { computed, inject, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { NEEDS_YOU, OPEN_SETTINGS } from '@/composables/openTask'
 import { useSidebar } from '@/composables/useSidebar'
 import { pageView, useViewState } from '@/composables/useViewState'
@@ -17,7 +17,7 @@ import { attentionFor } from '@/utils/attention'
 import { isTypingTarget } from '@/utils/isTypingTarget'
 import { NAV_ITEMS } from '@/utils/navConfig'
 import { agentDisplayStatus } from '@/utils/statusColors'
-import { useHubCamera } from '../composables/useHubCamera'
+import { lastHubView, useHubCamera } from '../composables/useHubCamera'
 import { hubFocusRequest } from '../composables/useHubFocus'
 import { useObsidianGraph } from '../composables/useObsidianGraph'
 import { launchersDocked, LEVEL_TARGETS, toScreen } from '../hubCamera'
@@ -56,6 +56,13 @@ const listOpen = ref(false)
 type HubCard = { kind: 'agent', pid: number } | { kind: 'note', path: string }
 const openCard = ref<HubCard | null>(null)
 let cameraBeforeCard: [number, number, number] | null = null
+// Runs after useHubCamera's own unmount hook, so it overrides the zoomed-in card view it saved.
+onUnmounted(() => {
+  if (cameraBeforeCard) {
+    const [wx, wy, r] = cameraBeforeCard
+    lastHubView.value = { wx, wy, rel: r }
+  }
+})
 
 const SECTOR_FLY_RADIUS = 260
 const SECTOR_FLY_REL = 2.6

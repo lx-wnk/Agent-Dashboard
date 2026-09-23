@@ -634,6 +634,20 @@ describe('hubWidget', () => {
     w.unmount()
   })
 
+  it('comes back to the camera from before the card when the hub is left with a card open', async () => {
+    const w = await mountHub()
+    await press(w, '+')
+    await dragBy(w, 40, -30)
+    const before = camera(w)
+    await w.get('[data-testid="hub-agent-101"]').trigger('click')
+    w.unmount()
+
+    const again = await mountHub()
+
+    camera(again).forEach((v, i) => expect(v).toBeCloseTo(before[i]))
+    again.unmount()
+  })
+
   it('closes the card on Escape pressed inside it, hands focus back to the stage and flies back', async () => {
     const w = await mountHub()
     await w.get('[data-testid="hub-agent-101"]').trigger('click')
