@@ -189,7 +189,16 @@ Preparing the first public release.
   minimum; and the launcher ring is derived from the legend's radius so the
   two never share a band. Where the launcher rail is docked it is fixed to the
   screen while the map pans beneath it, so a sector name it would cover is
-  left undrawn rather than half-hidden.
+  left undrawn rather than half-hidden, as is an agent's dot — it keeps its
+  row in the `L` list and its place on the minimap rather than being drawn
+  under opaque chrome that would swallow the click. The map holds still while
+  you read it: a sector's share of the circle is set by its notes and by the
+  distinct projects running in it, not by how many agents happen to be alive,
+  and a sector's colour comes from its own name rather than its position in
+  the list, so starting or stopping an agent no longer shifts the notes under
+  the camera or recolours the whole map. The legend stays clear of the
+  outermost ring of agents, and a vault of fifteen or more top-level folders
+  still gets a layout weighted by size rather than fifteen equal slices.
 - **Capability decisions answer from the needs-you queue.** A pending
   capability decision now ranks between a question and a plan review instead
   of being silently skipped, rendering the same Allow/Deny card the agent
