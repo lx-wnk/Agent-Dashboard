@@ -271,6 +271,23 @@ type RecentTool struct {
 	Elided int    `json:"elided,omitempty"`
 }
 
+// NoteTouchKind says whether an agent read or wrote a vault note.
+type NoteTouchKind string
+
+const (
+	NoteTouchKindRead  NoteTouchKind = "read"
+	NoteTouchKindWrite NoteTouchKind = "write"
+)
+
+// NoteTouch is one vault note an agent read or wrote recently.
+type NoteTouch struct {
+	// Path is relative to obsidian.vaultRoot, the form the vault graph lists.
+	Path string        `json:"path"`
+	Kind NoteTouchKind `json:"kind"`
+	// At is RFC 3339, like Agent.LastActivity.
+	At string `json:"at"`
+}
+
 // PendingToolUse is the last assistant tool_use block that has no matching
 // tool_result yet. It indicates the agent is currently executing or blocked on
 // that tool call.
