@@ -107,7 +107,7 @@ test('edit mode ends on navigation and does not survive coming back', async ({ p
   await page.getByTestId('workspace-edit-toggle').click()
   await expect(page.getByTestId('workspace-edit-bar')).toBeVisible()
 
-  await page.getByRole('button', { name: 'Dashboard' }).click()
+  await page.getByTestId('nav-item-dashboard').click()
   await expect(page.getByTestId('workspace-edit-bar')).toHaveCount(0)
 
   await page.locator('[data-testid^="nav-page-"]', { hasText: 'Morning' }).click()
