@@ -81,8 +81,12 @@ beforeEach(() => {
   ask.mockClear()
   overlayOpen.value = false
   useViewState().activeView.value = 'zentrale'
-  // jsdom has no canvas; the brain layer only needs a context that accepts every call.
-  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(new Proxy({}, { get: () => () => {}, set: () => true }) as never)
+  // jsdom has no canvas; the brain layer only needs a context that accepts every call, plus the
+  // metrics measureText owes its callers.
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(new Proxy({}, {
+    get: (_, key) => key === 'measureText' ? (text: string) => ({ width: text.length * 7 }) : () => {},
+    set: () => true,
+  }) as never)
   stubLabelMeasurement()
 })
 

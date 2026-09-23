@@ -15,9 +15,14 @@ export interface LabelSize { w: number, h: number }
 
 const UNMEASURED: LabelSize = { w: 0, h: 0 }
 
-// A note's label sits to the right of its point (HubBrainCanvas.vue's drawLabels offset).
-function noteLabelBox(c: LabelCandidate): LabelBox {
-  return { x: c.sx + 6, y: c.sy - 8, w: c.text.length * 6.3 + 10, h: 16 }
+// Where HubBrainCanvas.vue's drawLabels puts a note's label: to the right of its point, and
+// vertically centred on it (textBaseline 'middle').
+export const NOTE_LABEL_OFFSET_PX = 8.8
+const NOTE_LABEL_H = 16
+
+// The width is measured with the canvas' own measureText, never counted off the characters.
+export function noteLabelBox(c: LabelCandidate, width: number): LabelBox {
+  return { x: c.sx + NOTE_LABEL_OFFSET_PX, y: c.sy - NOTE_LABEL_H / 2, w: width, h: NOTE_LABEL_H }
 }
 
 export function boxesOverlap(a: LabelBox, b: LabelBox): boolean {
@@ -37,7 +42,7 @@ export interface LabelObstacle { box: LabelBox, ownerIndex?: number }
 
 // Greedy placement: highest priority first, skip a candidate whose box overlaps one already placed
 // or a pre-seeded obstacle (own obstacle, if any, excluded).
-export function cullLabels(candidates: LabelCandidate[], boxOf: (c: LabelCandidate) => LabelBox = noteLabelBox, obstacles: readonly LabelObstacle[] = []): Set<number> {
+export function cullLabels(candidates: LabelCandidate[], boxOf: (c: LabelCandidate) => LabelBox, obstacles: readonly LabelObstacle[] = []): Set<number> {
   const kept = new Set<number>()
   const placed: LabelBox[] = []
   for (const c of [...candidates].sort((a, b) => b.priority - a.priority)) {

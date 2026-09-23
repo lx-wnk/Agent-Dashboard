@@ -2,10 +2,11 @@ import type { HubNote } from './composables/useObsidianGraph'
 import type { LabelCandidate } from './hubCanvas'
 import { describe, expect, it } from 'vitest'
 import { labelSize } from './__tests__/labelMeasurement'
-import { agentDotBox, agentLabelBox, agentLabelDirection, agentLabelKey, agentLabelOffset, agentPriority, boxesOverlap, cullLabels, hitNote, hubNoteSet, inwardUnit, isToday, notePriority, sectorLabelBox, sectorLabelKey } from './hubCanvas'
+import { agentDotBox, agentLabelBox, agentLabelDirection, agentLabelKey, agentLabelOffset, agentPriority, boxesOverlap, cullLabels, hitNote, hubNoteSet, inwardUnit, isToday, NOTE_LABEL_OFFSET_PX, noteLabelBox, notePriority, sectorLabelBox, sectorLabelKey } from './hubCanvas'
 import { polar } from './hubGeometry'
 
 const measured = (c: LabelCandidate) => agentLabelBox(c, labelSize(c.text))
+const measuredNote = (c: LabelCandidate) => noteLabelBox(c, labelSize(c.text).w)
 
 describe('notePriority', () => {
   it('orders hub > touched > fresh > links', () => {
@@ -24,7 +25,7 @@ describe('cullLabels', () => {
     const kept = cullLabels([
       { index: 0, sx: 100, sy: 100, text: 'a', priority: 10 },
       { index: 1, sx: 102, sy: 100, text: 'b', priority: 20 },
-    ])
+    ], measuredNote)
     expect(kept).toEqual(new Set([1]))
   })
 
@@ -32,7 +33,7 @@ describe('cullLabels', () => {
     const kept = cullLabels([
       { index: 0, sx: 0, sy: 0, text: 'a', priority: 10 },
       { index: 1, sx: 500, sy: 500, text: 'b', priority: 20 },
-    ])
+    ], measuredNote)
     expect(kept).toEqual(new Set([0, 1]))
   })
 
@@ -61,6 +62,15 @@ describe('cullLabels', () => {
     const boxOf = (c: LabelCandidate) => c.index === 1 ? agentLabelBox(c) : measured(c)
     expect(cullLabels([unmeasured, neighbour], boxOf)).toEqual(new Set([1, 2]))
     expect(cullLabels([unmeasured], boxOf, [{ box: agentDotBox(100, 112) }])).toEqual(new Set([1]))
+  })
+})
+
+describe('noteLabelBox', () => {
+  it('takes the measured width and centres on the point the canvas draws from', () => {
+    const box = noteLabelBox({ index: 0, sx: 100, sy: 100, text: 'Alpha', priority: 0 }, 42)
+    expect(box.x).toBe(100 + NOTE_LABEL_OFFSET_PX)
+    expect(box.y + box.h / 2).toBe(100)
+    expect(box.w).toBe(42)
   })
 })
 

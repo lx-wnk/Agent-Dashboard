@@ -10,11 +10,25 @@ interface Call { name: string, args: unknown[], state: Record<string | symbol, u
 const FRAME_MS = 16
 let calls: Call[]
 
+// Stands in for a real font: wide enough that two labels a few pixels apart collide.
+const MEASURED_PX_PER_CHAR = 7
+
 // Records every method call with the style state at that moment; property writes are kept as plain values.
 function recordingContext(): CanvasRenderingContext2D {
   const state: Record<string | symbol, unknown> = {}
+  const record = (key: string | symbol) => (...args: unknown[]) => calls.push({ name: String(key), args, state: { ...state } })
   return new Proxy(state, {
-    get: (_, key) => key in state ? state[key] : (...args: unknown[]) => calls.push({ name: String(key), args, state: { ...state } }),
+    get: (_, key) => {
+      if (key in state)
+        return state[key]
+      if (key === 'measureText') {
+        return (text: string) => {
+          record(key)(text)
+          return { width: text.length * MEASURED_PX_PER_CHAR }
+        }
+      }
+      return record(key)
+    },
     set: (_, key, value) => {
       state[key] = value
       return true
@@ -82,6 +96,25 @@ describe('hubBrainCanvas', () => {
     await w.setProps({ level: 2 })
     await nextFrame()
     expect(texts()).toEqual(['Alpha', 'Gamma'])
+  })
+
+  // The width used to be counted off the characters, the estimate that twice misplaced the agent
+  // labels next door. Here it is the canvas' own measurement, and one per distinct text.
+  it('culls on measured widths and measures each text once, however many frames it draws', async () => {
+    // 30px apart: inside 'Alpha' at the measured width, clear of it at a width of zero.
+    const w = mountBrain({ level: 2, points: [[100, 100], [130, 100], [400, 100]] })
+    await nextFrame()
+    expect(texts()).toEqual(['Alpha', 'Gamma'])
+    expect(named('measureText').map(c => c.args[0])).toEqual(['Alpha', 'Beta', 'Gamma'])
+    expect(named('measureText').every(c => c.state.font === '11px system-ui, sans-serif')).toBe(true)
+
+    calls = []
+    for (const tx of [5, 10, 15]) {
+      await w.setProps({ cam: { k: 1, tx, ty: 0 } })
+      await nextFrame()
+    }
+    expect(named('measureText')).toHaveLength(0)
+    expect(new Set(texts())).toEqual(new Set(['Alpha', 'Gamma']))
   })
 
   it('skips notes outside the viewport', async () => {

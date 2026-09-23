@@ -5,7 +5,7 @@ import type { LabelCandidate } from '../hubCanvas'
 import { useMutationObserver } from '@vueuse/core'
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { toScreen } from '../hubCamera'
-import { cullLabels, isToday, notePriority } from '../hubCanvas'
+import { cullLabels, isToday, NOTE_LABEL_OFFSET_PX, noteLabelBox, notePriority } from '../hubCanvas'
 import { DAY_MS } from '../hubGeometry'
 
 const props = defineProps<{
@@ -34,7 +34,6 @@ const VIEWPORT_MARGIN_PX = 20
 const LABEL_FONT = '11px system-ui, sans-serif'
 const HUB_LABEL_FONT = `600 ${LABEL_FONT}`
 const LABEL_STROKE_PX = 3
-const LABEL_OFFSET_PX = 8.8
 const FULL_CIRCLE = Math.PI * 2
 
 interface Scene {
@@ -124,6 +123,26 @@ function labelCandidate(i: number, [sx, sy]: [number, number], now: number): Lab
   }
 }
 
+function fontFor(index: number): string {
+  return props.hubNotes.has(index) ? HUB_LABEL_FONT : LABEL_FONT
+}
+
+// A width depends on the text and the font only, and the notes level can offer over a thousand
+// candidates per frame: each pair is measured once and reused for as long as the canvas lives.
+const labelWidths = new Map<string, number>()
+
+function labelWidth(ctx: CanvasRenderingContext2D, index: number, text: string): number {
+  const font = fontFor(index)
+  const key = `${font}\n${text}`
+  const known = labelWidths.get(key)
+  if (known !== undefined)
+    return known
+  ctx.font = font
+  const { width } = ctx.measureText(text)
+  labelWidths.set(key, width)
+  return width
+}
+
 // Topics level labels the hub notes only; the notes level labels whatever cullLabels keeps.
 function drawLabels({ ctx, screen, visible, now, token }: Scene) {
   if (props.level === 0)
@@ -131,7 +150,7 @@ function drawLabels({ ctx, screen, visible, now, token }: Scene) {
   const candidates = visible
     .filter(i => props.level === 2 || props.hubNotes.has(i))
     .map(i => labelCandidate(i, screen[i], now))
-  const kept = props.level === 2 ? cullLabels(candidates) : null
+  const kept = props.level === 2 ? cullLabels(candidates, c => noteLabelBox(c, labelWidth(ctx, c.index, c.text))) : null
   ctx.globalAlpha = 1
   ctx.textBaseline = 'middle'
   ctx.lineJoin = 'round'
@@ -141,9 +160,9 @@ function drawLabels({ ctx, screen, visible, now, token }: Scene) {
   for (const c of candidates) {
     if (kept && !kept.has(c.index))
       continue
-    ctx.font = props.hubNotes.has(c.index) ? HUB_LABEL_FONT : LABEL_FONT
-    ctx.strokeText(c.text, c.sx + LABEL_OFFSET_PX, c.sy)
-    ctx.fillText(c.text, c.sx + LABEL_OFFSET_PX, c.sy)
+    ctx.font = fontFor(c.index)
+    ctx.strokeText(c.text, c.sx + NOTE_LABEL_OFFSET_PX, c.sy)
+    ctx.fillText(c.text, c.sx + NOTE_LABEL_OFFSET_PX, c.sy)
   }
 }
 
