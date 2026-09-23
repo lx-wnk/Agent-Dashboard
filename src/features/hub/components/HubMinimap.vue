@@ -4,7 +4,7 @@ import type { Sector } from '../hubGeometry'
 import type { AgentDisplayStatus, ChipTone } from '@/utils/statusColors'
 import { computed } from 'vue'
 import { agentStatusTone } from '@/utils/statusColors'
-import { sectorColour, wedgePath } from '../hubGeometry'
+import { MINIMAP_HALF, sectorColour, wedgePath } from '../hubGeometry'
 
 const props = defineProps<{
   cam: Camera
@@ -15,7 +15,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{ fly: [wx: number, wy: number] }>()
 
-const HALF = 540
 const AGENT_DOT_R = 16
 
 // Tailwind needs the full literal class name, so the tone still maps to a fixed string per component.
@@ -37,14 +36,14 @@ const viewport = computed(() => {
 
 function onClick(e: MouseEvent) {
   const r = (e.currentTarget as SVGSVGElement).getBoundingClientRect()
-  emit('fly', (e.clientX - r.left) / r.width * 2 * HALF - HALF, (e.clientY - r.top) / r.height * 2 * HALF - HALF)
+  emit('fly', (e.clientX - r.left) / r.width * 2 * MINIMAP_HALF - MINIMAP_HALF, (e.clientY - r.top) / r.height * 2 * MINIMAP_HALF - MINIMAP_HALF)
 }
 </script>
 
 <template>
   <svg
     data-hub-layer
-    :viewBox="`${-HALF} ${-HALF} ${2 * HALF} ${2 * HALF}`"
+    :viewBox="`${-MINIMAP_HALF} ${-MINIMAP_HALF} ${2 * MINIMAP_HALF} ${2 * MINIMAP_HALF}`"
     aria-label="Overview map"
     aria-hidden="true"
     class="absolute bottom-2.5 right-2.5 z-[2] size-[108px] cursor-crosshair rounded-lg border border-line-strong bg-card/90"

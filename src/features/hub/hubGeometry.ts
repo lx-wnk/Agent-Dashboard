@@ -7,6 +7,9 @@ export const R0 = 110
 export const R_MAX = 410
 export const MAX_AGE_DAYS = 730
 export const WORLD_RADIUS = 520
+// The overview map frames the whole world plus a rim, so the outermost ring is never flush against its border.
+export const MINIMAP_RIM = 20
+export const MINIMAP_HALF = WORLD_RADIUS + MINIMAP_RIM
 export const WEDGE_INNER = 100
 export const WEDGE_OUTER = 440
 export const SECTOR_LABEL_RADIUS = 392

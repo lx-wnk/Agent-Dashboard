@@ -39,6 +39,7 @@
 | Widget components | `src/features/workspace/widgetRegistry.ts` | `WIDGETS`, `widgetIds()` |
 | Needs-you placement rule | `src/composables/needsYouPlacement.ts` | `needsYouPlacement` |
 | Hub geometry constants | `src/features/hub/hubGeometry.ts` | `R0`, `R_MAX`, `RINGS`, `agentRingPx`, `planSectors`, `DAY_MS`, `SECTOR_PALETTE_SIZE`, `sectorColour` |
+| Hub world extent, incl. the minimap's own frame | `src/features/hub/hubGeometry.ts` | `WORLD_RADIUS`, `MINIMAP_RIM`, `MINIMAP_HALF` — the minimap derives its viewBox, never a second radius |
 | Hub camera thresholds | `src/features/hub/hubCamera.ts` | `LEVEL_TOPICS`, `LEVEL_NOTES`, `MIN_REL`, `MAX_REL`, `levelOf`, `launchersDocked` |
 | Hub graph notices | `src/features/hub/hubGraphNotices.ts` | `GRAPH_NOTICES`, `LIST_GRAPH_NOTICES` |
 | Hub launcher cap | `src/features/hub/hubLaunchers.ts` | `MAX_LAUNCHERS` |
