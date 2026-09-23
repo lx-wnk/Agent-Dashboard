@@ -338,9 +338,9 @@ func TestSummaryMergesInvolvedPullRequestsDedupedAndCapped(t *testing.T) {
 			for i := range 24 {
 				items = append(items, map[string]any{
 					"number": 100 + i, "title": fmt.Sprintf("involved %d", i),
-					"html_url":        fmt.Sprintf("https://example.test/other/%d", i),
-					"repository_url":  "https://api.github.com/repos/other/repo",
-					"updated_at":      fmt.Sprintf("2026-09-01T00:%02d:00Z", i),
+					"html_url":       fmt.Sprintf("https://example.test/other/%d", i),
+					"repository_url": "https://api.github.com/repos/other/repo",
+					"updated_at":     fmt.Sprintf("2026-09-01T00:%02d:00Z", i),
 				})
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"items": items})
