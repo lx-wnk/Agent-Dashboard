@@ -302,3 +302,37 @@ func TestParseSessionFile_CarriesRecentNotes(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"claude-memory/a.md"}, notePaths(data.RecentNotes))
 }
+
+// TestTokenUsageForFile_ConcurrentCallersCountAppendOnce pins that callers
+// scanning the same session file at the same moment — the broadcast loop and
+// an HTTP read both missing the session cache — add an appended region once.
+func TestTokenUsageForFile_ConcurrentCallersCountAppendOnce(t *testing.T) {
+	resetTokenOffsetCache(t)
+	path := writeIncrementalSession(t, t.TempDir(), 1)
+	_, err := tokenUsageForFile(path)
+	require.NoError(t, err)
+
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o640)
+	require.NoError(t, err)
+	appendIncrementalLines(t, f, 5000)
+	require.NoError(t, f.Close())
+
+	const callers = 8
+	start := make(chan struct{})
+	errs := make(chan error, callers)
+	for range callers {
+		go func() {
+			<-start
+			_, err := tokenUsageForFile(path)
+			errs <- err
+		}()
+	}
+	close(start)
+	for range callers {
+		require.NoError(t, <-errs)
+	}
+
+	got, err := tokenUsageForFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, expectedUsage(5001), got.TokenUsage)
+}
