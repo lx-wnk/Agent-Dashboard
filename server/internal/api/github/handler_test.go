@@ -355,6 +355,7 @@ func TestSummaryMergesInvolvedPullRequestsDedupedAndCapped(t *testing.T) {
 	var body struct {
 		Repos []struct {
 			Repo         string `json:"repo"`
+			Mergeable    bool   `json:"mergeable"`
 			PullRequests []struct {
 				Number int    `json:"number"`
 				Title  string `json:"title"`
@@ -367,6 +368,7 @@ func TestSummaryMergesInvolvedPullRequestsDedupedAndCapped(t *testing.T) {
 	foundOtherRepo := false
 	for _, repo := range body.Repos {
 		total += len(repo.PullRequests)
+		require.Equal(t, repo.Repo == testRepo, repo.Mergeable, "only an allow-listed repository offers a merge: %s", repo.Repo)
 		if repo.Repo == "other/repo" {
 			foundOtherRepo = true
 		}

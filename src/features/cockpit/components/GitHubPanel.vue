@@ -8,7 +8,9 @@ import CockpitPanel from './CockpitPanel.vue'
 const { repos, loading, error, denied, unconfigured, fetchSummary } = useGitHubSummary()
 onMounted(() => void fetchSummary())
 
-const pullRequests = computed(() => repos.value.flatMap(r => r.pullRequests.map(pr => ({ ...pr, repo: r.repo }))))
+const pullRequests = computed(() => repos.value
+  .flatMap(r => r.pullRequests.map(pr => ({ ...pr, repo: r.repo, mergeable: r.mergeable !== false })))
+  .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)))
 
 // The route answers 200 with what it could reach and names what it could not,
 // so one rate-limited repository does not blank the others. A repository that
@@ -153,7 +155,7 @@ const message = computed(() => {
             >{{ CHECK_MARKS[pr.checks.state] }} {{ checkLabel(pr.checks) }}</span>
           </div>
           <button
-            v-if="pending !== `${pr.repo}#${pr.number}`"
+            v-if="pr.mergeable && pending !== `${pr.repo}#${pr.number}`"
             type="button"
             :data-testid="`cockpit-github-merge-${pr.number}`"
             class="shrink-0 rounded-md border border-line px-2 py-0.5 text-[11px] text-fg-mute hover:text-fg hover:border-accent"
@@ -161,15 +163,15 @@ const message = computed(() => {
           >
             Merge
           </button>
-          <span v-else class="shrink-0 flex items-center gap-1.5">
-            <span :data-testid="`cockpit-github-merge-confirm-text-${pr.number}`" class="text-[11px] text-fg">
+          <span v-else-if="pr.mergeable" class="min-w-0 flex items-center gap-1.5">
+            <span :data-testid="`cockpit-github-merge-confirm-text-${pr.number}`" class="min-w-0 truncate text-[11px] text-fg">
               Merge {{ pr.repo }}#{{ pr.number }} “{{ pr.title }}”?
             </span>
             <button
               type="button"
               :data-testid="`cockpit-github-merge-confirm-${pr.number}`"
               :disabled="merging !== null"
-              class="rounded-md border border-danger px-2 py-0.5 text-[11px] text-danger-text hover:brightness-110 disabled:opacity-60"
+              class="shrink-0 rounded-md border border-danger px-2 py-0.5 text-[11px] text-danger-text hover:brightness-110 disabled:opacity-60"
               @click="confirmMerge(pr)"
             >
               {{ merging === `${pr.repo}#${pr.number}` ? 'Merging…' : 'Confirm' }}
@@ -177,7 +179,7 @@ const message = computed(() => {
             <button
               type="button"
               :data-testid="`cockpit-github-merge-cancel-${pr.number}`"
-              class="rounded-md border border-line px-2 py-0.5 text-[11px] text-fg-mute hover:text-fg"
+              class="shrink-0 rounded-md border border-line px-2 py-0.5 text-[11px] text-fg-mute hover:text-fg"
               @click="pending = null"
             >
               Cancel

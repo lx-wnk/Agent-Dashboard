@@ -172,6 +172,8 @@ type repoSummary struct {
 	Repo         string            `json:"repo"`
 	PullRequests []pullRequestView `json:"pullRequests"`
 	Error        string            `json:"error,omitempty"`
+	// False for a repository only the involves:@me search reached: merge refuses it.
+	Mergeable bool `json:"mergeable"`
 }
 
 type summaryResponse struct {
@@ -302,7 +304,7 @@ func (h *Handler) summary(w http.ResponseWriter, r *http.Request) error {
 		if views == nil {
 			views = []pullRequestView{}
 		}
-		out.Repos = append(out.Repos, repoSummary{Repo: name, PullRequests: views, Error: repoErrors[name]})
+		out.Repos = append(out.Repos, repoSummary{Repo: name, PullRequests: views, Error: repoErrors[name], Mergeable: h.client.AllowsRepo(name)})
 	}
 	apierr.WriteJSON(w, http.StatusOK, out)
 	return nil
