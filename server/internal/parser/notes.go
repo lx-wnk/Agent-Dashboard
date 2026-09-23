@@ -96,6 +96,7 @@ func curlNoteTouches(command string) []NoteTouch {
 		return nil
 	}
 	expanded := shellDefaultRe.ReplaceAllString(command, "$1")
+	expanded = strings.ReplaceAll(expanded, "\\\n", " ")
 	var out []NoteTouch
 	for _, segment := range shellSegmentRe.Split(expanded, -1) {
 		kind := sdk.NoteTouchKindRead

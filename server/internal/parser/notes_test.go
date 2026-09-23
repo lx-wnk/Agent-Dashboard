@@ -55,6 +55,7 @@ func TestCurlNoteTouches(t *testing.T) {
 		{"a query string is cut", `curl "$B/vault/claude-memory/x.md?raw=1"`,
 			[]NoteTouch{touch("claude-memory/x.md", read, zero)}},
 		{"no vault URL", `ls -la`, nil},
+		{"a backslash continuation keeps the method with its URL", "curl -sk -X PUT \\\n  \"$B/vault/claude-memory/work/x.md\"", []NoteTouch{touch("claude-memory/work/x.md", write, zero)}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

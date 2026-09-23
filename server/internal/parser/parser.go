@@ -358,6 +358,18 @@ type fullScanUsage struct {
 	// Used only for diagnostics — the token total does not depend on it.
 	hasCompaction bool
 	sdk.TokenUsage
+	notes []NoteTouch
+}
+
+// addMessageUsage adds one assistant message's per-message usage to dst.
+func addMessageUsage(dst *sdk.TokenUsage, m Message) {
+	if m.Role != "assistant" || m.Usage == nil {
+		return
+	}
+	dst.InputTokens += m.Usage.InputTokens
+	dst.OutputTokens += m.Usage.OutputTokens
+	dst.CacheCreationTokens += m.Usage.CacheCreationTokens
+	dst.CacheReadTokens += m.Usage.CacheReadTokens
 }
 
 // scanFullFileTokenUsage does a single linear pass over path and sums every
@@ -373,6 +385,7 @@ type fullScanUsage struct {
 // the tail parse in ParseSessionFile.
 func scanFullFileTokenUsage(path string) (fullScanUsage, error) {
 	var total fullScanUsage
+	var touches []NoteTouch
 	err := ScanMessages(path, 0, func(m Message) error {
 		if isCompactBoundaryType(m.Type, m.Subtype) {
 			// Record that compaction happened (diagnostics only). The token total
@@ -381,18 +394,14 @@ func scanFullFileTokenUsage(path string) (fullScanUsage, error) {
 			total.hasCompaction = true
 			return nil
 		}
-		if m.Role != "assistant" || m.Usage == nil {
-			return nil
-		}
-		total.InputTokens += m.Usage.InputTokens
-		total.OutputTokens += m.Usage.OutputTokens
-		total.CacheCreationTokens += m.Usage.CacheCreationTokens
-		total.CacheReadTokens += m.Usage.CacheReadTokens
+		addMessageUsage(&total.TokenUsage, m)
+		touches = append(touches, noteTouchesOf(m)...)
 		return nil
 	})
 	if err != nil {
 		return fullScanUsage{}, fmt.Errorf("scan %s: %w", path, err)
 	}
+	total.notes = mergeNoteTouches(nil, touches, time.Now())
 	return total, nil
 }
 
@@ -407,6 +416,7 @@ type tokenOffsetCacheEntry struct {
 	inode   uint64
 	offset  int64
 	running sdk.TokenUsage
+	notes   []NoteTouch
 }
 
 var (
@@ -420,12 +430,13 @@ var (
 // in normal operation.
 const tokenOffsetCacheMaxEntries = 4096
 
-// tokenUsageForFile returns the lifetime token total for the session file at
-// path, scanning only the bytes appended since the previous call when the
-// file's inode is unchanged and has not shrunk. Falls back to a full rescan
-// (scanFullFileTokenUsage) — and reseeds the cache entry — on first sighting,
-// an inode change, a truncation (size < cached offset), or any incremental-
-// scan error: a partial delta is never trusted, per CI-4 / PERF-HOT1.
+// tokenUsageForFile returns the lifetime token total and the session's
+// note-touch window for the session file at path, scanning only the bytes
+// appended since the previous call when the file's inode is unchanged and has
+// not shrunk. Falls back to a full rescan (scanFullFileTokenUsage) — and
+// reseeds the cache entry — on first sighting, an inode change, a truncation
+// (size < cached offset), or any incremental-scan error: a partial delta is
+// never trusted, per CI-4 / PERF-HOT1.
 func tokenUsageForFile(path string) (fullScanUsage, error) {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -444,17 +455,23 @@ func tokenUsageForFile(path string) (fullScanUsage, error) {
 	tokenOffsetCacheMu.Unlock()
 
 	if ok && entry.inode == inode && size >= entry.offset {
-		usage, newOffset, scanErr := ScanMessagesFrom(path, entry.offset)
+		var usage sdk.TokenUsage
+		var added []NoteTouch
+		newOffset, scanErr := ScanMessagesFrom(path, entry.offset, func(m Message) {
+			addMessageUsage(&usage, m)
+			added = append(added, noteTouchesOf(m)...)
+		})
 		if scanErr == nil {
 			tokenOffsetCacheMu.Lock()
 			entry.running.InputTokens += usage.InputTokens
 			entry.running.OutputTokens += usage.OutputTokens
 			entry.running.CacheCreationTokens += usage.CacheCreationTokens
 			entry.running.CacheReadTokens += usage.CacheReadTokens
+			entry.notes = mergeNoteTouches(entry.notes, added, time.Now())
 			entry.offset = newOffset
-			running := entry.running
+			running, notes := entry.running, entry.notes
 			tokenOffsetCacheMu.Unlock()
-			return fullScanUsage{TokenUsage: running}, nil
+			return fullScanUsage{TokenUsage: running, notes: notes}, nil
 		}
 		slog.Warn("parser: incremental token scan failed — falling back to full rescan", "path", path, "err", scanErr)
 	}
@@ -467,7 +484,7 @@ func tokenUsageForFile(path string) (fullScanUsage, error) {
 	if !ok && len(tokenOffsetCache) >= tokenOffsetCacheMaxEntries {
 		tokenOffsetCache = make(map[string]*tokenOffsetCacheEntry, tokenOffsetCacheMaxEntries)
 	}
-	tokenOffsetCache[path] = &tokenOffsetCacheEntry{inode: inode, offset: size, running: full.TokenUsage}
+	tokenOffsetCache[path] = &tokenOffsetCacheEntry{inode: inode, offset: size, running: full.TokenUsage, notes: full.notes}
 	tokenOffsetCacheMu.Unlock()
 	return full, nil
 }
@@ -481,6 +498,7 @@ type SessionData struct {
 	LastActivity        time.Time
 	CurrentAction       string
 	LastTools           []sdk.RecentTool
+	RecentNotes         []NoteTouch
 	Tasks               []sdk.TaskInfo
 	TokenUsage          sdk.TokenUsage
 	Model               string
@@ -938,6 +956,7 @@ func ParseSessionFile(path string) (*SessionData, error) {
 				"output", full.OutputTokens)
 		}
 		data.TokenUsage = full.TokenUsage
+		data.RecentNotes = full.notes
 	}
 
 	kept := recentTools
