@@ -19,8 +19,8 @@ func Watch(ctx context.Context, onChange func()) error {
 		return err
 	}
 
+	last := fingerprint(path)
 	go func() {
-		last := fingerprint(path)
 		poll := time.NewTicker(WatchDebounce / 2)
 		defer poll.Stop()
 		timer := time.NewTimer(WatchDebounce)
