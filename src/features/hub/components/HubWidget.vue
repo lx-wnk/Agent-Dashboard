@@ -5,7 +5,7 @@ import type { Sector } from '../hubGeometry'
 import type { Launcher } from '../hubLaunchers'
 import type { WidgetId } from '@/features/workspace'
 import type { Agent } from '@/types'
-import { useEventListener } from '@vueuse/core'
+import { useEventListener, useNow } from '@vueuse/core'
 import { computed, inject, onMounted, ref, shallowRef, watch } from 'vue'
 import { NEEDS_YOU, OPEN_SETTINGS } from '@/composables/openTask'
 import { useSidebar } from '@/composables/useSidebar'
@@ -22,6 +22,7 @@ import { hubFocusRequest } from '../composables/useHubFocus'
 import { useObsidianGraph } from '../composables/useObsidianGraph'
 import { launchersDocked, LEVEL_TARGETS, toScreen } from '../hubCamera'
 import { agentDotBox, agentLabelBox, agentLabelDirection, agentLabelKey, agentPriority, boxesOverlap, cullLabels, hitNote, hubNoteSet, inwardUnit, sectorLabelBox, sectorLabelKey } from '../hubCanvas'
+import { liveEdges } from '../hubEdges'
 import { agentAngles, agentRadius, agentRingPx, agentSectorRingPx, DAY_MS, notePoint, planSectors, polar, radiusForAge, RINGS, sectorColour, sectorLabelRadius, sectorMid, wedgePath } from '../hubGeometry'
 import { GRAPH_NOTICES } from '../hubGraphNotices'
 import { launcherBox, launchersFor } from '../hubLaunchers'
@@ -197,6 +198,12 @@ const placedScreen = computed(() => placed.value.map(p => ({ p, screen: toScreen
 const drawnAgents = computed(() => new Set(placedScreen.value
   .filter(({ screen: [sx, sy] }) => !coveredByRail(agentDotBox(sx, sy)))
   .map(({ p }) => p.agent.pid)))
+
+const EDGE_CLOCK_MS = 30_000
+// Edges fade and expire on this clock too: an idle agent sends no SSE tick to redraw them.
+const edgeNow = useNow({ interval: EDGE_CLOCK_MS })
+const notesByPath = computed(() => new Map(vaultNotes.value.map(n => [n.path, n])))
+const edges = computed(() => liveEdges(placed.value, drawnAgents.value, notesByPath.value, edgeNow.value.getTime()))
 
 const showSectorNames = computed(() => vaultNotes.value.length > 0)
 
@@ -458,6 +465,7 @@ watch(hubFocusRequest, (target) => {
         :colours="brain.colours"
         :notes="vaultNotes"
         :links="brain.links"
+        :edges="edges"
         :hub-notes="brain.hubNotes"
         :selected="cardNote?.index ?? null"
       />
