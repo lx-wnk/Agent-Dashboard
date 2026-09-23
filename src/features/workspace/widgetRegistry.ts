@@ -21,12 +21,16 @@ const LOADERS: Record<WidgetId, () => Promise<Component>> = {
 
 // Read by App.vue's pageHasHub: a chunk that 404s (e.g. the server was rebuilt
 // while a tab stayed open) must not leave the needs-you strip hidden behind a
-// hub tile that never rendered.
+// hub tile that never rendered. A remounted tile retries its loader, so a later
+// success clears the entry again.
 export const failedWidgets: Set<WidgetId> = reactive(new Set<WidgetId>())
 
 function widgetComponent(id: WidgetId): Component {
   return defineAsyncComponent({
-    loader: () => LOADERS[id]().catch((err) => {
+    loader: () => LOADERS[id]().then((component) => {
+      failedWidgets.delete(id)
+      return component
+    }, (err) => {
       failedWidgets.add(id)
       throw err
     }),

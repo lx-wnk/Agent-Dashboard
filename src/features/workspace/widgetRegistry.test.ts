@@ -2,11 +2,14 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import { defineComponent, h } from 'vue'
 
-// hub is a genuine failing chunk here (the real @/features/hub is not mocked),
-// so this doubles as the "hub loader failed" precondition App.vue's pageHasHub reads.
+// hub's chunk fails until a test flips hubChunk.fails — the "hub loader failed"
+// precondition App.vue's pageHasHub reads, and the later successful retry.
+const hubChunk = vi.hoisted(() => ({ fails: true }))
 vi.mock('@/features/hub', () => ({
-  get HubWidget(): never {
-    throw new Error('chunk 404')
+  get HubWidget() {
+    if (hubChunk.fails)
+      throw new Error('chunk 404')
+    return { render: () => null }
   },
 }))
 
@@ -44,6 +47,17 @@ describe('widget registry', () => {
     await flushPromises()
     expect(w.find('[data-testid="page-load-error"]').exists()).toBe(true)
     expect(failedWidgets.has('hub')).toBe(true)
+  })
+
+  it('forgets the failure once a remounted tile loads its chunk', async () => {
+    hubChunk.fails = false
+    const host = defineComponent({ render: () => h(WIDGETS.hub.component) })
+    const w = mount(host)
+    await flushPromises()
+    await flushPromises()
+    expect(w.find('[data-testid="page-load-error"]').exists()).toBe(false)
+    expect(failedWidgets.has('hub')).toBe(false)
+    w.unmount()
   })
 })
 

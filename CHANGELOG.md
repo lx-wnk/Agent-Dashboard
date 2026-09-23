@@ -14,6 +14,11 @@ Preparing the first public release.
 
 ### Fixed
 
+- **A widget whose chunk failed once recovers after a successful reload.**
+  A tile that failed to load stayed recorded as failed even after a remount
+  loaded its chunk, so the hub kept the needs-you strip visible beside it and
+  kept refusing to open the Kontor tile. A successful load now clears the
+  record.
 - **The entry chunk cleared its bundle budget again.** The workspace widget
   registry statically imported all nine widgets — and the cockpit, mission and
   analytics code they pull in — so `App.vue`'s own static import of
