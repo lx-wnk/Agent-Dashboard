@@ -62,7 +62,9 @@ Every other tool, including search, list, move and delete, is ignored.
 Rules for Bash commands:
 
 1. Split the command into segments on `&&`, `||`, `;`, `|` and newlines. A
-   method flag applies only to URLs in its own segment.
+   method flag applies only to URLs in its own segment. A backslash-newline
+   continuation is folded into a space first, so a wrapped line stays one
+   segment.
 2. Expand `${NAME:-default}` to `default`. The server cannot see the agent's
    environment, so the default is the only knowable value.
 3. After expansion, a path that still contains `$` (a bare variable or a
@@ -78,7 +80,11 @@ kept per session, newest first, so a loop of PUTs cannot bloat the SSE payload.
 
 Known gap: an agent that sets `OBSIDIAN_ROOT` to something other than the
 default yields paths outside the configured root. They fail normalisation below
-and are omitted — never drawn to a wrong note.
+and are omitted — never drawn to a wrong note. A write whose URL was assigned
+to a shell variable in an earlier segment (`URL=…; curl -X PUT "$URL"`) is
+drawn as a read, since the method and the URL sit in different segments. An
+edge is drawn when the call is issued, not when it succeeds, so a denied or
+still-pending write still shows as written.
 
 ### Contract
 
