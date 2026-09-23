@@ -124,8 +124,12 @@ async function mountHub(size = { width: 1090, height: 1130 }) {
 
 type Hub = Awaited<ReturnType<typeof mountHub>>
 
+function agentButton(w: Hub, pid: number) {
+  return w.get(`[data-testid="hub-agent-${pid}"]`)
+}
+
 function label(w: Hub, pid: number) {
-  return w.get(`[data-testid="hub-agent-${pid}"]`).get('[data-testid="hub-label"]')
+  return agentButton(w, pid).get('[data-testid="hub-label"]')
 }
 
 // A culled label is `invisible` (visibility: hidden), which keeps the box HubOrbit measures.
@@ -139,7 +143,15 @@ function translateOf(el: { attributes: (name: string) => string | undefined }): 
 }
 
 function screenOf(w: Hub, pid: number): { sx: number, sy: number } {
-  return translateOf(w.get(`[data-testid="hub-agent-${pid}"]`))
+  return translateOf(agentButton(w, pid))
+}
+
+// Drags the map by an exact offset; the camera pans by the pointer delta, so the dots move with it.
+async function dragBy(w: Hub, dx: number, dy: number) {
+  const stage = w.get('[data-testid="hub-stage"]').element
+  for (const [type, x, y] of [['pointerdown', 0, 0], ['pointermove', dx, dy], ['pointerup', dx, dy]] as const)
+    stage.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 1, clientX: x, clientY: y }))
+  await flushPromises()
 }
 
 // The direction the hub placed this label in, read back from the offset it rendered.
@@ -173,6 +185,14 @@ function vaultAgents(): Agent[] {
     projectName: i < 7 ? 'folder2' : `folder${i - 7 + (i - 7 >= 2 ? 1 : 0)}`,
     working: i % 3 === 0,
   })) as unknown as Agent[]
+}
+
+// Five agents in one note folder: three radial tiers in use, the middle one exactly on the sector's
+// mid angle — where its name is drawn.
+const TIERED_PIDS = Array.from({ length: 5 }, (_, i) => 700 + i)
+
+function tieredAgents(): Agent[] {
+  return TIERED_PIDS.map(pid => ({ pid, status: 'idle', projectName: 'folder2', working: false })) as unknown as Agent[]
 }
 
 // The core sits at the world origin, so its rendered point is the centre every radius is read from.
@@ -398,8 +418,8 @@ describe('hubWidget', () => {
   it('never lets an agent on the outermost tier cover a sector name', async () => {
     graph.status.value = 'ready'
     graph.notes.value = vaultFolders()
-    const pids = Array.from({ length: 5 }, (_, i) => 700 + i)
-    agents.value = pids.map(pid => ({ pid, status: 'idle', projectName: 'folder2', working: false })) as unknown as Agent[]
+    const pids = TIERED_PIDS
+    agents.value = tieredAgents()
     const w = await mountHub(TILE)
 
     const base = agentRingPx(pids.length, TILE.width)
@@ -449,6 +469,36 @@ describe('hubWidget', () => {
           expect(boxesOverlap(box, sectorBox), `${launcher.attributes('data-testid')} at zoom ${presses}`).toBe(false)
       }
     }
+    w.unmount()
+  })
+
+  // The docked rail is fixed to the screen while the map pans under it, so a dot that ends up
+  // beneath it can be neither hovered nor clicked.
+  it('leaves an agent the docked launcher rail covers undrawn', async () => {
+    graph.status.value = 'ready'
+    graph.notes.value = vaultFolders()
+    agents.value = tieredAgents()
+    const w = await mountHub(TILE)
+
+    const rail = translateOf(w.get('[data-testid^="hub-launcher-"]'))
+    expect(rail.sx, 'the rail is docked').toBe(30)
+    const target = TIERED_PIDS[0]
+    const from = screenOf(w, target)
+    await dragBy(w, rail.sx - from.sx, rail.sy - from.sy)
+    expect(screenOf(w, target).sy, 'the dot sits on the first launcher').toBeCloseTo(rail.sy)
+
+    const railBoxes = w.findAll('[data-testid^="hub-launcher-"]').map((l) => {
+      const { sx, sy } = translateOf(l)
+      return { x: sx - LAUNCHER_PX / 2, y: sy - LAUNCHER_PX / 2, w: LAUNCHER_PX, h: LAUNCHER_PX }
+    })
+    const undrawn = TIERED_PIDS.filter((pid) => {
+      const { sx, sy } = screenOf(w, pid)
+      const covered = railBoxes.some(b => boxesOverlap(agentDotBox(sx, sy), b))
+      expect(agentButton(w, pid).classes().includes('invisible'), `agent ${pid}`).toBe(covered)
+      return covered
+    })
+    expect(undrawn).toContain(target)
+    expect(undrawn.length, 'the rail does not swallow the whole crowd').toBeLessThan(TIERED_PIDS.length)
     w.unmount()
   })
 

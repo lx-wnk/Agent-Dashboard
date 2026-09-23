@@ -21,10 +21,11 @@ interface OrbitOptions {
   coreDisabled?: boolean
   labelledAgents?: ReadonlySet<number>
   namedSectors?: ReadonlySet<string>
+  drawnAgents?: ReadonlySet<number>
   labelDirections?: ReadonlyMap<number, readonly [number, number]>
 }
 
-function mountOrbit(level: HubLevel, { showSectorNames = true, agentRingPx = 116, sectorNameRadius = sectorLabelRadius(1, agentRingPx), coreDisabled = false, labelledAgents, namedSectors, labelDirections }: OrbitOptions = {}) {
+function mountOrbit(level: HubLevel, { showSectorNames = true, agentRingPx = 116, sectorNameRadius = sectorLabelRadius(1, agentRingPx), coreDisabled = false, labelledAgents, namedSectors, drawnAgents, labelDirections }: OrbitOptions = {}) {
   return mount(HubOrbit, {
     props: {
       cam: { k: 1, tx: 500, ty: 500 },
@@ -44,6 +45,7 @@ function mountOrbit(level: HubLevel, { showSectorNames = true, agentRingPx = 116
       coreDisabled,
       labelledAgents,
       namedSectors,
+      drawnAgents,
       labelDirections,
     },
   })
@@ -190,6 +192,17 @@ describe('hubOrbit', () => {
     expect(w.get('[data-testid="hub-sector-0"]').classes()).toContain('invisible')
     expect(w.get('[data-testid="hub-sector-1"]').classes()).not.toContain('invisible')
     expect(w.get('[data-testid="hub-sector-0"]').element.getBoundingClientRect().width).toBeGreaterThan(0)
+    w.unmount()
+  })
+
+  // A dot under the docked rail still looks interactive while the rail swallows the press.
+  it('leaves an agent the caller cannot place undrawn, without dropping its box', async () => {
+    const w = mountOrbit(0, { drawnAgents: new Set([2]) })
+    await flushPromises()
+    const undrawn = w.get('[data-testid="hub-agent-1"]')
+    expect(undrawn.classes()).toContain('invisible')
+    expect(w.get('[data-testid="hub-agent-2"]').classes()).not.toContain('invisible')
+    expect(undrawn.get('[data-testid="hub-label"]').element.getBoundingClientRect().width).toBeGreaterThan(0)
     w.unmount()
   })
 

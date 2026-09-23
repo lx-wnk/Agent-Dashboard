@@ -30,6 +30,9 @@ const props = defineProps<{
   labelledAgents?: ReadonlySet<number>
   // Sector keys whose name is drawable; omitted draws them all.
   namedSectors?: ReadonlySet<string>
+  // Pids whose dot is reachable; omitted draws them all. One the docked rail covers is left
+  // undrawn instead of drawn under opaque chrome that swallows its clicks.
+  drawnAgents?: ReadonlySet<number>
   // The direction the culler placed each label in; omitted hangs every label toward the core.
   labelDirections?: ReadonlyMap<number, readonly [number, number]>
 }>()
@@ -101,6 +104,10 @@ function showsSectorName(key: string): boolean {
   return !props.namedSectors || props.namedSectors.has(key)
 }
 
+function showsAgent(pid: number): boolean {
+  return !props.drawnAgents || props.drawnAgents.has(pid)
+}
+
 // Centred on the dot, then pushed along the radial line — the offset the culler's box uses.
 function labelStyle(pid: number, x: number, y: number, key: string) {
   const [dx, dy] = agentLabelOffset(props.labelDirections?.get(pid) ?? inwardUnit(x, y), sizes.value.get(key))
@@ -162,6 +169,7 @@ function labelStyle(pid: number, x: number, y: number, key: string) {
       :aria-label="`${friendlyProjectName(agent.projectName)}, ${statusLabel(state)}${needsOperator ? ', needs you' : ''}`"
       :title="friendlyProjectName(agent.projectName)"
       class="group pointer-events-auto relative flex -translate-x-1/2 -translate-y-[9px] cursor-pointer"
+      :class="!showsAgent(agent.pid) && 'invisible'"
       :style="at(x, y)"
       @click="$emit('agent', agent)"
     >

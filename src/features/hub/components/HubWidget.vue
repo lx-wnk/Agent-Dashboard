@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { HubLevel } from '../hubCamera'
-import type { LabelSize } from '../hubCanvas'
+import type { LabelBox, LabelSize } from '../hubCanvas'
 import type { Launcher } from '../hubLaunchers'
 import type { WidgetId } from '@/features/workspace'
 import type { Agent } from '@/types'
@@ -154,6 +154,24 @@ const outerRingOnScreenPx = computed(() => Math.max(ringOnScreenPx.value, ...pla
 const sectorNameRadius = computed(() => sectorLabelRadius(cam.value.k, outerRingOnScreenPx.value))
 const docked = computed(() => launchersDocked(rel.value, cam.value.k, outerRingOnScreenPx.value, stagePx.value))
 
+const otherPages = computed(() => layout.value.pages.filter(p => p.id !== ZENTRALE_PAGE_ID))
+const launchers = computed(() => launchersFor(NAV_ITEMS, otherPages.value, activeView.value))
+const listLaunchers = computed(() => launchersFor(NAV_ITEMS, otherPages.value, activeView.value, Infinity))
+const launcherBoxes = computed(() => launchers.value.map((_, i) => launcherBox(i, docked.value, cam.value, outerRingOnScreenPx.value)))
+// A launcher is opaque chrome. The ring clears the map by construction; the docked rail is fixed to
+// the screen while the map pans under it, so whatever it covers is unreachable and stays undrawn.
+function coveredByRail(box: LabelBox): boolean {
+  return launcherBoxes.value.some(b => boxesOverlap(box, b))
+}
+
+const placedScreen = computed(() => placed.value.map(p => ({ p, screen: toScreen(cam.value, p.x, p.y) })))
+// An agent under the rail is left undrawn rather than drawn unclickable: the dot would look
+// interactive and swallow every press. It keeps its row in the list view (L) and its dot on the
+// minimap, neither of which the rail covers.
+const drawnAgents = computed(() => new Set(placedScreen.value
+  .filter(({ screen: [sx, sy] }) => !coveredByRail(agentDotBox(sx, sy)))
+  .map(({ p }) => p.agent.pid)))
+
 const showSectorNames = computed(() => vaultNotes.value.length > 0)
 
 // Measured by HubOrbit from the rendered DOM, keyed by label text; a text not in here yet has no
@@ -177,21 +195,24 @@ const sectorNames = computed(() => level.value >= 2 || !showSectorNames.value
       return { key: sector.key, box: sectorLabelBox(sx, sy, labelSizes.value.get(sectorLabelKey(sector.label, sector.weight))) }
     }))
 
+// Half a sector name reads as a shorter, wrong one, so the legend yields to the rail as well.
+const namedSectors = computed(() => new Set(sectorNames.value.filter(s => !coveredByRail(s.box)).map(s => s.key)))
+
 const labels = computed(() => {
   const sizes = labelSizes.value
-  const placedScreen = placed.value.map(p => ({ p, screen: toScreen(cam.value, p.x, p.y) }))
-  const candidates = placedScreen.map(({ p, screen: [sx, sy] }) => ({
+  const drawn = placedScreen.value.filter(({ p }) => drawnAgents.value.has(p.agent.pid))
+  const candidates = drawn.map(({ p, screen: [sx, sy] }) => ({
     index: p.agent.pid,
     sx,
     sy,
     text: agentLabelKey(p.agent.projectName, p.state),
     priority: agentPriority(p.needsOperator, p.state === 'working'),
   }))
-  const dotObstacles = placedScreen.map(({ p, screen: [sx, sy] }) => ({ box: agentDotBox(sx, sy), ownerIndex: p.agent.pid }))
+  const dotObstacles = drawn.map(({ p, screen: [sx, sy] }) => ({ box: agentDotBox(sx, sy), ownerIndex: p.agent.pid }))
   const obstacles = [...dotObstacles, ...sectorNames.value]
   const directions = new Map(candidates.map((c, i) => [
     c.index,
-    agentLabelDirection(c, sizes.get(c.text), inwardUnit(placedScreen[i].p.x, placedScreen[i].p.y), obstacles),
+    agentLabelDirection(c, sizes.get(c.text), inwardUnit(drawn[i].p.x, drawn[i].p.y), obstacles),
   ]))
   return { directions, kept: cullLabels(candidates, c => agentLabelBox(c, sizes.get(c.text), directions.get(c.index)), obstacles) }
 })
@@ -212,16 +233,6 @@ watch(() => openCard.value !== null && !cardAgent.value && !cardNote.value, (gon
   if (gone)
     openCard.value = null
 })
-
-const otherPages = computed(() => layout.value.pages.filter(p => p.id !== ZENTRALE_PAGE_ID))
-const launchers = computed(() => launchersFor(NAV_ITEMS, otherPages.value, activeView.value))
-// A launcher is opaque chrome, and half a sector name reads as a shorter, wrong one. The ring clears
-// the legend by construction; the docked rail is fixed to the screen and cannot, so the name yields.
-const namedSectors = computed(() => {
-  const boxes = launchers.value.map((_, i) => launcherBox(i, docked.value, cam.value, outerRingOnScreenPx.value))
-  return new Set(sectorNames.value.filter(s => !boxes.some(b => boxesOverlap(s.box, b))).map(s => s.key))
-})
-const listLaunchers = computed(() => launchersFor(NAV_ITEMS, otherPages.value, activeView.value, Infinity))
 
 function openKontor(prefill?: string) {
   if (!kontorPage.value)
@@ -429,6 +440,7 @@ watch(hubFocusRequest, (target) => {
         :labelled-agents="labels.kept"
         :label-directions="labels.directions"
         :named-sectors="namedSectors"
+        :drawn-agents="drawnAgents"
         @core="openKontor"
         @agent="flyToAgent"
         @sector="sector => flyTo(...polar(SECTOR_FLY_RADIUS, sectorMid(sector)), SECTOR_FLY_REL)"
