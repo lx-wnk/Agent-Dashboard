@@ -65,8 +65,9 @@ const TOUCH_VERB: Record<NoteTouchKind, string> = { read: 'read', write: 'wrote'
     <p v-if="agents.length === 0" class="px-2 text-[13px] text-fg-mute">
       No agents running.
     </p>
-    <template v-for="{ agent, state, notes: agentNotes } in agents" :key="agent.pid">
+    <div v-for="{ agent, state, notes: agentNotes } in agents" :key="agent.pid" role="group" :aria-labelledby="`hub-list-agent-${agent.pid}`">
       <button
+        :id="`hub-list-agent-${agent.pid}`"
         type="button"
         data-testid="hub-list-agent"
         :aria-label="`${friendlyProjectName(agent.projectName)}, ${statusLabel(state)}`"
@@ -90,7 +91,7 @@ const TOUCH_VERB: Record<NoteTouchKind, string> = { read: 'read', write: 'wrote'
         <span>{{ n.title }}</span>
         <span class="text-fg-mute">{{ TOUCH_VERB[n.kind] }} · {{ formatRelativeThenDate(n.at) }}</span>
       </button>
-    </template>
+    </div>
 
     <h3 :class="HEADING">
       Recently touched
