@@ -132,7 +132,6 @@ useEventListener(window, 'focus', () => refreshGraph())
 const stagePx = computed(() => Math.min(size.value.width, size.value.height))
 const ringPx = computed(() => agentRingPx(live.value.length, stagePx.value))
 const ringOnScreenPx = computed(() => agentRadius(cam.value.k, false, ringPx.value) * cam.value.k)
-const docked = computed(() => launchersDocked(rel.value, cam.value.k, ringOnScreenPx.value, stagePx.value))
 
 const placed = computed(() => {
   const k = cam.value.k
@@ -148,6 +147,12 @@ const placed = computed(() => {
     })
   })
 })
+
+// How far the agents actually reach: a sector's agents are staggered outward tier by tier, so the
+// legend and the launchers must clear the outermost tier in use, not the base ring.
+const outerRingOnScreenPx = computed(() => Math.max(ringOnScreenPx.value, ...placed.value.map(p => Math.hypot(p.x, p.y) * cam.value.k)))
+const sectorNameRadius = computed(() => sectorLabelRadius(cam.value.k, outerRingOnScreenPx.value))
+const docked = computed(() => launchersDocked(rel.value, cam.value.k, outerRingOnScreenPx.value, stagePx.value))
 
 const showSectorNames = computed(() => vaultNotes.value.length > 0)
 
@@ -167,7 +172,7 @@ const labelSizes = shallowRef<ReadonlyMap<string, LabelSize>>(new Map())
 const sectorNames = computed(() => level.value >= 2 || !showSectorNames.value
   ? []
   : plan.value.sectors.map((sector) => {
-      const [wx, wy] = polar(sectorLabelRadius(cam.value.k, ringOnScreenPx.value), sectorMid(sector))
+      const [wx, wy] = polar(sectorNameRadius.value, sectorMid(sector))
       const [sx, sy] = toScreen(cam.value, wx, wy)
       return { key: sector.key, box: sectorLabelBox(sx, sy, labelSizes.value.get(sectorLabelKey(sector.label, sector.weight))) }
     }))
@@ -213,7 +218,7 @@ const launchers = computed(() => launchersFor(NAV_ITEMS, otherPages.value, activ
 // A launcher is opaque chrome, and half a sector name reads as a shorter, wrong one. The ring clears
 // the legend by construction; the docked rail is fixed to the screen and cannot, so the name yields.
 const namedSectors = computed(() => {
-  const boxes = launchers.value.map((_, i) => launcherBox(i, docked.value, cam.value, ringOnScreenPx.value))
+  const boxes = launchers.value.map((_, i) => launcherBox(i, docked.value, cam.value, outerRingOnScreenPx.value))
   return new Set(sectorNames.value.filter(s => !boxes.some(b => boxesOverlap(s.box, b))).map(s => s.key))
 })
 const listLaunchers = computed(() => launchersFor(NAV_ITEMS, otherPages.value, activeView.value, Infinity))
@@ -419,6 +424,7 @@ watch(hubFocusRequest, (target) => {
         :core-title="coreTitle"
         :core-disabled="!kontorPage"
         :agent-ring-px="ringOnScreenPx"
+        :sector-name-radius="sectorNameRadius"
         :show-sector-names="showSectorNames"
         :labelled-agents="labels.kept"
         :label-directions="labels.directions"
@@ -428,7 +434,7 @@ watch(hubFocusRequest, (target) => {
         @sector="sector => flyTo(...polar(SECTOR_FLY_RADIUS, sectorMid(sector)), SECTOR_FLY_REL)"
         @measure="sizes => labelSizes = sizes"
       />
-      <HubLaunchers :launchers="launchers" :cam="cam" :docked="docked" :agent-ring-px="ringOnScreenPx" @launch="launch" />
+      <HubLaunchers :launchers="launchers" :cam="cam" :docked="docked" :agent-ring-px="outerRingOnScreenPx" @launch="launch" />
       <HubControls
         :level="level"
         :wide="wide === HUB_WIDGET"

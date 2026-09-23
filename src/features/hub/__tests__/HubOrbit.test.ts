@@ -5,7 +5,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it } from 'vitest'
 import HubOrbit from '../components/HubOrbit.vue'
 import { agentLabelKey, agentLabelOffset, inwardUnit, sectorLabelKey } from '../hubCanvas'
-import { buildSectors } from '../hubGeometry'
+import { buildSectors, sectorLabelRadius } from '../hubGeometry'
 import { labelSize, stubLabelMeasurement } from './labelMeasurement'
 
 const sectors = buildSectors([{ key: 'kontor-hub', label: 'kontor-hub', weight: 1 }, { key: 'web-app', label: 'web-app', weight: 1 }])
@@ -17,17 +17,19 @@ function agent(pid: number, projectName: string): Agent {
 interface OrbitOptions {
   showSectorNames?: boolean
   agentRingPx?: number
+  sectorNameRadius?: number
   coreDisabled?: boolean
   labelledAgents?: ReadonlySet<number>
   namedSectors?: ReadonlySet<string>
   labelDirections?: ReadonlyMap<number, readonly [number, number]>
 }
 
-function mountOrbit(level: HubLevel, { showSectorNames = true, agentRingPx = 116, coreDisabled = false, labelledAgents, namedSectors, labelDirections }: OrbitOptions = {}) {
+function mountOrbit(level: HubLevel, { showSectorNames = true, agentRingPx = 116, sectorNameRadius = sectorLabelRadius(1, agentRingPx), coreDisabled = false, labelledAgents, namedSectors, labelDirections }: OrbitOptions = {}) {
   return mount(HubOrbit, {
     props: {
       cam: { k: 1, tx: 500, ty: 500 },
       agentRingPx,
+      sectorNameRadius,
       showSectorNames,
       sectors,
       agents: [

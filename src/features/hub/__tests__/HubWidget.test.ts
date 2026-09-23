@@ -12,7 +12,7 @@ import { hubFocusRequest } from '../composables/useHubFocus'
 import { fitScale } from '../hubCamera'
 import { agentDotBox, agentLabelBox, boxesOverlap, sectorLabelBox } from '../hubCanvas'
 import * as hubGeometry from '../hubGeometry'
-import { AGENT_SPACING_PX, AGENT_STAGE_MARGIN_PX, DAY_MS, LAUNCHER_PX, notePoint, planSectors } from '../hubGeometry'
+import { AGENT_SECTOR_STAGGER_PX, AGENT_SECTOR_TIERS_MAX, AGENT_SPACING_PX, AGENT_STAGE_MARGIN_PX, agentRingPx, DAY_MS, LAUNCHER_PX, notePoint, planSectors } from '../hubGeometry'
 import { labelSize, stubLabelMeasurement } from './labelMeasurement'
 
 const NOTE_AGE_DAYS = 30
@@ -175,10 +175,11 @@ function vaultAgents(): Agent[] {
   })) as unknown as Agent[]
 }
 
-// The core sits at the centre of the 1090×1130 stage; at fit one world unit is one pixel.
+// The core sits at the world origin, so its rendered point is the centre every radius is read from.
 function distanceFromCore(w: Hub, pid: number): number {
+  const core = translateOf(w.get('[data-testid="hub-core"]'))
   const { sx, sy } = screenOf(w, pid)
-  return Math.hypot(sx - 545, sy - 565)
+  return Math.hypot(sx - core.sx, sy - core.sy)
 }
 
 function scale(w: Awaited<ReturnType<typeof mountHub>>): number {
@@ -387,6 +388,32 @@ describe('hubWidget', () => {
       }
       for (const sectorBox of sectorBoxes)
         expect(boxesOverlap(box, sectorBox)).toBe(false)
+    }
+    w.unmount()
+  })
+
+  // A sector's agents are staggered outward across three tiers, and with five of them the middle
+  // one lands exactly on the sector's mid angle — where its name is drawn. The legend used to clear
+  // the base ring only, so that dot sat on the name's first letters.
+  it('never lets an agent on the outermost tier cover a sector name', async () => {
+    graph.status.value = 'ready'
+    graph.notes.value = vaultFolders()
+    const pids = Array.from({ length: 5 }, (_, i) => 700 + i)
+    agents.value = pids.map(pid => ({ pid, status: 'idle', projectName: 'folder2', working: false })) as unknown as Agent[]
+    const w = await mountHub(TILE)
+
+    const base = agentRingPx(pids.length, TILE.width)
+    expect(Math.max(...pids.map(pid => distanceFromCore(w, pid))), 'the fixture reaches the outermost tier')
+      .toBeCloseTo(base + (AGENT_SECTOR_TIERS_MAX - 1) * AGENT_SECTOR_STAGGER_PX)
+    const crowded = w.findAll('[data-testid^="hub-sector-"]').find(s => s.attributes('data-label-key')!.startsWith('folder2'))!
+    expect(crowded.classes(), 'the crowded sector still shows its name').not.toContain('invisible')
+
+    const sectorBoxes = drawnSectorNames(w)
+    expect(sectorBoxes.length).toBeGreaterThan(0)
+    for (const pid of pids) {
+      const { sx, sy } = screenOf(w, pid)
+      for (const sectorBox of sectorBoxes)
+        expect(boxesOverlap(agentDotBox(sx, sy), sectorBox), `agent ${pid}`).toBe(false)
     }
     w.unmount()
   })

@@ -9,7 +9,7 @@ import { friendlyProjectName } from '@/utils/friendlyProjectName'
 import { agentStatusTone, statusLabel } from '@/utils/statusColors'
 import { toScreen } from '../hubCamera'
 import { agentLabelKey, agentLabelOffset, inwardUnit, sectorLabelKey } from '../hubCanvas'
-import { polar, radiusForAge, sectorColour, sectorLabelRadius, sectorMid, visibleRingLabels } from '../hubGeometry'
+import { polar, radiusForAge, sectorColour, sectorMid, visibleRingLabels } from '../hubGeometry'
 
 const props = defineProps<{
   cam: Camera
@@ -22,6 +22,9 @@ const props = defineProps<{
   coreTitle: string
   coreDisabled: boolean
   agentRingPx: number
+  // World radius the caller placed the legend on; it clears the outermost agent tier, which the
+  // base ring above does not, and the culler judges the sector-name boxes at this same radius.
+  sectorNameRadius: number
   showSectorNames: boolean
   // Omitted shows every label (used by callers that don't cull, e.g. tests); the dot is never gated.
   labelledAgents?: ReadonlySet<number>
@@ -37,7 +40,6 @@ const RING_LABEL_DEG = -128
 
 const root = ref<HTMLElement | null>(null)
 const ringLabels = computed(() => visibleRingLabels(props.cam.k, props.agentRingPx))
-const sectorNameRadius = computed(() => sectorLabelRadius(props.cam.k, props.agentRingPx))
 const sectorNamesShown = computed(() => props.level < 2 && props.showSectorNames)
 
 // Label sizes come from the DOM, never from a character count: an estimate has twice placed labels
