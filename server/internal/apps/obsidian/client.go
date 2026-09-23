@@ -515,3 +515,23 @@ func pathUnderRoot(root, fullPath string) (string, bool) {
 	}
 	return strings.TrimPrefix(fullClean, prefix), true
 }
+
+// ClientHolder hands out the current vault client; nil means the vault is unconfigured.
+type ClientHolder struct {
+	mu sync.RWMutex
+	c  *Client
+}
+
+func NewClientHolder(c *Client) *ClientHolder { return &ClientHolder{c: c} }
+
+func (h *ClientHolder) Get() *Client {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.c
+}
+
+func (h *ClientHolder) Set(c *Client) {
+	h.mu.Lock()
+	h.c = c
+	h.mu.Unlock()
+}

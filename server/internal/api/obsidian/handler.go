@@ -22,7 +22,7 @@ import (
 
 // Handler serves the Obsidian HTTP routes registered by Mount.
 type Handler struct {
-	client  *obsidianapp.Client
+	clients *obsidianapp.ClientHolder
 	mem     repo.MemoryRepo
 	gate    memory.Gate
 	spaceID string
@@ -43,12 +43,12 @@ type Handler struct {
 	graphs  graphCache
 }
 
-// NewHandler creates a Handler. client is nil when the vault is unconfigured
-// (see serverapp.buildObsidianClient's own doc comment) — index then answers
-// 503 rather than reaching a nil client, the same "optional integration,
-// never a boot failure" rule that function follows.
-func NewHandler(client *obsidianapp.Client, mem repo.MemoryRepo, gate memory.Gate, spaceID string) *Handler {
-	return &Handler{client: client, mem: mem, gate: gate, spaceID: spaceID, graphs: graphCache{now: time.Now}}
+// NewHandler creates a Handler. clients holds nil while the vault is
+// unconfigured (see serverapp.buildObsidianClient's own doc comment) — index
+// then answers 503 rather than reaching a nil client, the same "optional
+// integration, never a boot failure" rule that function follows.
+func NewHandler(clients *obsidianapp.ClientHolder, mem repo.MemoryRepo, gate memory.Gate, spaceID string) *Handler {
+	return &Handler{clients: clients, mem: mem, gate: gate, spaceID: spaceID, graphs: graphCache{now: time.Now}}
 }
 
 // Mount registers the /api/obsidian/* routes on r.
@@ -76,7 +76,8 @@ func (h *Handler) Mount(r chi.Router) {
 // forbidden — so both map to 403, never the default 500 ErrorMiddleware
 // would otherwise give an unrecognised error.
 func (h *Handler) index(w http.ResponseWriter, r *http.Request) error {
-	if h.client == nil {
+	client := h.clients.Get()
+	if client == nil {
 		return apierr.NewAppError(http.StatusServiceUnavailable, "obsidian vault not configured")
 	}
 	if !h.running.CompareAndSwap(false, true) {
@@ -84,7 +85,7 @@ func (h *Handler) index(w http.ResponseWriter, r *http.Request) error {
 	}
 	defer h.running.Store(false)
 
-	count, err := obsidianapp.IndexNotes(r.Context(), h.client, h.mem, h.gate, h.spaceID)
+	count, err := obsidianapp.IndexNotes(r.Context(), client, h.mem, h.gate, h.spaceID)
 	if err != nil {
 		if errors.Is(err, capability.ErrDenied) || errors.Is(err, capability.ErrAskRequired) {
 			return apierr.NewAppError(http.StatusForbidden, err.Error())
@@ -113,14 +114,15 @@ func upstreamGraph(g obsidianapp.Graph, err error) (obsidianapp.Graph, error) {
 }
 
 func (h *Handler) graph(w http.ResponseWriter, r *http.Request) error {
-	if h.client == nil {
+	client := h.clients.Get()
+	if client == nil {
 		apierr.WriteJSON(w, http.StatusOK, map[string]bool{"configured": false})
 		return nil
 	}
 	if err := h.authorizeRead(r); err != nil {
 		return err
 	}
-	g, err := upstreamGraph(h.graphs.get(r.Context(), h.client.Graph))
+	g, err := upstreamGraph(h.graphs.get(r.Context(), client.Graph))
 	if err != nil {
 		return err
 	}
@@ -140,7 +142,8 @@ const maxOpenBodyBytes = 4 << 10
 
 // open passes on only a note a freshly built graph lists, because Obsidian's /open creates a missing note.
 func (h *Handler) open(w http.ResponseWriter, r *http.Request) error {
-	if h.client == nil {
+	client := h.clients.Get()
+	if client == nil {
 		return apierr.NewAppError(http.StatusServiceUnavailable, "obsidian vault not configured")
 	}
 	var body struct {
@@ -158,14 +161,14 @@ func (h *Handler) open(w http.ResponseWriter, r *http.Request) error {
 	if err := h.authorizeRead(r); err != nil {
 		return err
 	}
-	g, err := upstreamGraph(h.graphs.refresh(r.Context(), h.client.Graph))
+	g, err := upstreamGraph(h.graphs.refresh(r.Context(), client.Graph))
 	if err != nil {
 		return err
 	}
 	if !slices.ContainsFunc(g.Notes, func(n obsidianapp.GraphNote) bool { return n.Path == body.Path }) {
 		return apierr.NewAppError(http.StatusNotFound, "note is not in the vault graph")
 	}
-	if err := h.client.OpenNote(r.Context(), body.Path); err != nil {
+	if err := client.OpenNote(r.Context(), body.Path); err != nil {
 		slog.Warn("obsidian open failed", "err", err)
 		return apierr.NewAppError(http.StatusBadGateway, "obsidian open failed")
 	}

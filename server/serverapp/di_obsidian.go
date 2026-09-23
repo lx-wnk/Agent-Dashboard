@@ -61,6 +61,22 @@ func buildObsidianClient(ctx context.Context, settingsSvc *settings.Service) (*o
 	return client, nil
 }
 
+// watchObsidianSettings rebuilds the vault client whenever an obsidian.* setting
+// is saved. The Settings panel saves the keys one at a time, so a partial trio
+// is a normal intermediate state: it turns the vault off instead of failing the save.
+func watchObsidianSettings(settingsSvc *settings.Service, clients *obsidian.ClientHolder) {
+	settingsSvc.OnChange(func(ctx context.Context, key string) {
+		if !strings.HasPrefix(key, "obsidian.") {
+			return
+		}
+		client, err := buildObsidianClient(ctx, settingsSvc)
+		if err != nil {
+			slog.Info("obsidian: vault off until its settings are complete", "err", err)
+		}
+		clients.Set(client)
+	})
+}
+
 // obsidianSpaceSlug is the fixed slug of the memory space IndexNotes writes
 // its pointer entries into. Global scope: the vault is one machine-wide
 // resource, not scoped to any single project.

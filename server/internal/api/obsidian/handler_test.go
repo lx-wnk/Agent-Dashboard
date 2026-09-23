@@ -122,7 +122,7 @@ func TestIndex_MissingGrantIsForbiddenNotServerError(t *testing.T) {
 	ts, called := newFakeVault(t)
 	client := newTestClient(t, ts)
 
-	h := apiobsidian.NewHandler(client, mem, gate, spaceID)
+	h := apiobsidian.NewHandler(obsidianapp.NewClientHolder(client), mem, gate, spaceID)
 	rec := doPost(h)
 
 	assert.Equal(t, http.StatusForbidden, rec.Code)
@@ -148,7 +148,7 @@ func TestIndex_VaultUnconfiguredIsServiceUnavailableNotServerError(t *testing.T)
 	grantCapability(t, gate.Grants, obsidianapp.CapabilitySearch)
 	grantCapability(t, gate.Grants, obsidianapp.CapabilityRead)
 
-	h := apiobsidian.NewHandler(nil, mem, gate, spaceID)
+	h := apiobsidian.NewHandler(obsidianapp.NewClientHolder(nil), mem, gate, spaceID)
 	rec := doPost(h)
 
 	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
@@ -164,7 +164,7 @@ func TestIndex_GrantedRunReturnsIndexedCount(t *testing.T) {
 	grantCapability(t, grantsRepo, obsidianapp.CapabilitySearch)
 	grantCapability(t, grantsRepo, obsidianapp.CapabilityRead)
 
-	h := apiobsidian.NewHandler(client, mem, gate, spaceID)
+	h := apiobsidian.NewHandler(obsidianapp.NewClientHolder(client), mem, gate, spaceID)
 	rec := doPost(h)
 
 	require.Equal(t, http.StatusOK, rec.Code)
@@ -206,7 +206,7 @@ func TestIndex_ConcurrentRunsAreSerialized(t *testing.T) {
 	t.Cleanup(ts.Close)
 	client := newTestClient(t, ts)
 
-	h := apiobsidian.NewHandler(client, mem, gate, spaceID)
+	h := apiobsidian.NewHandler(obsidianapp.NewClientHolder(client), mem, gate, spaceID)
 
 	firstDone := make(chan *httptest.ResponseRecorder, 1)
 	go func() { firstDone <- doPost(h) }()
@@ -307,7 +307,7 @@ func serve(h *apiobsidian.Handler, method, target, body string) *httptest.Respon
 func TestGraphAndOpen_UnconfiguredVault(t *testing.T) {
 	mem, gate, spaceID := testDeps(t)
 	grantCapability(t, gate.Grants, repo.CapabilityMemoryRead)
-	h := apiobsidian.NewHandler(nil, mem, gate, spaceID)
+	h := apiobsidian.NewHandler(obsidianapp.NewClientHolder(nil), mem, gate, spaceID)
 
 	graph := serve(h, http.MethodGet, "/api/obsidian/graph", "")
 	assert.Equal(t, http.StatusOK, graph.Code)
@@ -320,7 +320,7 @@ func TestGraphAndOpen_UnconfiguredVault(t *testing.T) {
 func TestGraphAndOpen_MissingMemoryReadIsForbiddenAndNeverReachesTheVault(t *testing.T) {
 	mem, gate, spaceID := testDeps(t)
 	vault := newGraphVault(t, http.StatusOK)
-	h := apiobsidian.NewHandler(newTestClient(t, vault.Server), mem, gate, spaceID)
+	h := apiobsidian.NewHandler(obsidianapp.NewClientHolder(newTestClient(t, vault.Server)), mem, gate, spaceID)
 
 	assert.Equal(t, http.StatusForbidden, serve(h, http.MethodGet, "/api/obsidian/graph", "").Code)
 	assert.Equal(t, http.StatusForbidden, serve(h, http.MethodPost, "/api/obsidian/open", `{"path":"a.md"}`).Code)
@@ -331,7 +331,7 @@ func TestGraph_ServesTheConfinedGraphAndCachesIt(t *testing.T) {
 	mem, gate, spaceID := testDeps(t)
 	grantCapability(t, gate.Grants, repo.CapabilityMemoryRead)
 	vault := newGraphVault(t, http.StatusOK)
-	h := apiobsidian.NewHandler(newTestClient(t, vault.Server), mem, gate, spaceID)
+	h := apiobsidian.NewHandler(obsidianapp.NewClientHolder(newTestClient(t, vault.Server)), mem, gate, spaceID)
 
 	first := serve(h, http.MethodGet, "/api/obsidian/graph", "")
 	require.Equal(t, http.StatusOK, first.Code)
@@ -348,7 +348,7 @@ func TestOpen_OpensOnlyNotesTheGraphLists(t *testing.T) {
 	mem, gate, spaceID := testDeps(t)
 	grantCapability(t, gate.Grants, repo.CapabilityMemoryRead)
 	vault := newGraphVault(t, http.StatusOK)
-	h := apiobsidian.NewHandler(newTestClient(t, vault.Server), mem, gate, spaceID)
+	h := apiobsidian.NewHandler(obsidianapp.NewClientHolder(newTestClient(t, vault.Server)), mem, gate, spaceID)
 
 	assert.Equal(t, http.StatusNoContent, serve(h, http.MethodPost, "/api/obsidian/open", `{"path":"a.md"}`).Code)
 	assert.Contains(t, vault.requests(), "POST /open/root/a.md")
@@ -363,7 +363,7 @@ func TestGraph_UpstreamFailureIsBadGatewayWithoutTheVaultURL(t *testing.T) {
 	mem, gate, spaceID := testDeps(t)
 	grantCapability(t, gate.Grants, repo.CapabilityMemoryRead)
 	vault := newGraphVault(t, http.StatusInternalServerError)
-	h := apiobsidian.NewHandler(newTestClient(t, vault.Server), mem, gate, spaceID)
+	h := apiobsidian.NewHandler(obsidianapp.NewClientHolder(newTestClient(t, vault.Server)), mem, gate, spaceID)
 
 	rec := serve(h, http.MethodGet, "/api/obsidian/graph", "")
 	assert.Equal(t, http.StatusBadGateway, rec.Code)
@@ -374,7 +374,7 @@ func TestGraphAndOpen_GateFailureIsServerErrorNotForbidden(t *testing.T) {
 	mem, gate, spaceID := testDeps(t)
 	gate.Grants = failingGrants{}
 	vault := newGraphVault(t, http.StatusOK)
-	h := apiobsidian.NewHandler(newTestClient(t, vault.Server), mem, gate, spaceID)
+	h := apiobsidian.NewHandler(obsidianapp.NewClientHolder(newTestClient(t, vault.Server)), mem, gate, spaceID)
 
 	for _, rec := range []*httptest.ResponseRecorder{
 		serve(h, http.MethodGet, "/api/obsidian/graph", ""),
@@ -390,7 +390,7 @@ func TestOpen_RefusesANoteDeletedSinceTheCachedGraph(t *testing.T) {
 	mem, gate, spaceID := testDeps(t)
 	grantCapability(t, gate.Grants, repo.CapabilityMemoryRead)
 	vault := newGraphVault(t, http.StatusOK)
-	h := apiobsidian.NewHandler(newTestClient(t, vault.Server), mem, gate, spaceID)
+	h := apiobsidian.NewHandler(obsidianapp.NewClientHolder(newTestClient(t, vault.Server)), mem, gate, spaceID)
 
 	require.Equal(t, http.StatusOK, serve(h, http.MethodGet, "/api/obsidian/graph", "").Code)
 	vault.setMtimes(`[{"filename":"root/b.md","result":1700000000000}]`)
@@ -408,7 +408,7 @@ func TestOpen_RefusesABodyOver4KiB(t *testing.T) {
 	mem, gate, spaceID := testDeps(t)
 	grantCapability(t, gate.Grants, repo.CapabilityMemoryRead)
 	vault := newGraphVault(t, http.StatusOK)
-	h := apiobsidian.NewHandler(newTestClient(t, vault.Server), mem, gate, spaceID)
+	h := apiobsidian.NewHandler(obsidianapp.NewClientHolder(newTestClient(t, vault.Server)), mem, gate, spaceID)
 
 	body := `{"path":"` + strings.Repeat("a", 4<<10) + `"}`
 	assert.Equal(t, http.StatusBadRequest, serve(h, http.MethodPost, "/api/obsidian/open", body).Code)
@@ -418,7 +418,7 @@ func TestOpen_RefusesAnUnknownField(t *testing.T) {
 	mem, gate, spaceID := testDeps(t)
 	grantCapability(t, gate.Grants, repo.CapabilityMemoryRead)
 	vault := newGraphVault(t, http.StatusOK)
-	h := apiobsidian.NewHandler(newTestClient(t, vault.Server), mem, gate, spaceID)
+	h := apiobsidian.NewHandler(obsidianapp.NewClientHolder(newTestClient(t, vault.Server)), mem, gate, spaceID)
 
 	assert.Equal(t, http.StatusBadRequest,
 		serve(h, http.MethodPost, "/api/obsidian/open", `{"path":"a.md","extra":true}`).Code)
@@ -429,7 +429,7 @@ func TestGraph_ConfiguredVaultWithNoNotesReturnsEmptyArrays(t *testing.T) {
 	grantCapability(t, gate.Grants, repo.CapabilityMemoryRead)
 	vault := newGraphVault(t, http.StatusOK)
 	vault.setMtimes(`[]`)
-	h := apiobsidian.NewHandler(newTestClient(t, vault.Server), mem, gate, spaceID)
+	h := apiobsidian.NewHandler(obsidianapp.NewClientHolder(newTestClient(t, vault.Server)), mem, gate, spaceID)
 
 	rec := serve(h, http.MethodGet, "/api/obsidian/graph", "")
 	require.Equal(t, http.StatusOK, rec.Code)
@@ -440,8 +440,23 @@ func TestOpen_RefusesAHeadingMarkerInThePath(t *testing.T) {
 	mem, gate, spaceID := testDeps(t)
 	grantCapability(t, gate.Grants, repo.CapabilityMemoryRead)
 	vault := newGraphVault(t, http.StatusOK)
-	h := apiobsidian.NewHandler(newTestClient(t, vault.Server), mem, gate, spaceID)
+	h := apiobsidian.NewHandler(obsidianapp.NewClientHolder(newTestClient(t, vault.Server)), mem, gate, spaceID)
 
 	assert.Equal(t, http.StatusBadRequest, serve(h, http.MethodPost, "/api/obsidian/open", `{"path":"a.md#Heading"}`).Code)
 	assert.Empty(t, vault.requests())
+}
+
+func TestGraph_ReadsTheClientPerRequest(t *testing.T) {
+	mem, gate, spaceID := testDeps(t)
+	grantCapability(t, gate.Grants, repo.CapabilityMemoryRead)
+	vault := newGraphVault(t, http.StatusOK)
+	clients := obsidianapp.NewClientHolder(nil)
+	h := apiobsidian.NewHandler(clients, mem, gate, spaceID)
+
+	assert.JSONEq(t, `{"configured":false}`, serve(h, http.MethodGet, "/api/obsidian/graph", "").Body.String())
+
+	clients.Set(newTestClient(t, vault.Server))
+	rec := serve(h, http.MethodGet, "/api/obsidian/graph", "")
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), `"configured":true`)
 }

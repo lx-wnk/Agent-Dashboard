@@ -147,7 +147,7 @@ async function runIndex() {
         Obsidian
       </h3>
       <p class="text-xs text-fg-mute">
-        Connect a local Obsidian vault via its Local REST API plugin. All four settings apply after a server restart.
+        Connect a local Obsidian vault via its Local REST API plugin. All four settings apply as soon as they are saved.
       </p>
     </div>
 

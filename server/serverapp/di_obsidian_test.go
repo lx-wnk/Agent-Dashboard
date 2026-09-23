@@ -3,6 +3,7 @@ package serverapp
 import (
 	"testing"
 
+	"github.com/lx-wnk/kontor/server/internal/apps/obsidian"
 	"github.com/lx-wnk/kontor/server/internal/db"
 	"github.com/lx-wnk/kontor/server/internal/db/repo"
 	"github.com/lx-wnk/kontor/server/internal/secretbox"
@@ -125,4 +126,20 @@ func TestBuildObsidianClient_ClearingTheTrioTurnsTheVaultOff(t *testing.T) {
 	assert.Nil(t, client)
 	assert.Empty(t, svc.Effective()["obsidian.apiKey"],
 		"the panel re-reads this after the save — a cleared key that still shows the mask reads as configured")
+}
+
+func TestWatchObsidianSettings_AppliesACompleteTrioWithoutARestart(t *testing.T) {
+	svc := newSettingsServiceForTest(t)
+	clients := obsidian.NewClientHolder(nil)
+	watchObsidianSettings(svc, clients)
+
+	require.NoError(t, svc.Set(t.Context(), "obsidian.baseURL", "https://127.0.0.1:27124"))
+	assert.Nil(t, clients.Get(), "a partial trio leaves the vault off without failing the save")
+
+	require.NoError(t, svc.Set(t.Context(), "obsidian.vaultRoot", "notes"))
+	require.NoError(t, svc.Set(t.Context(), "obsidian.apiKey", "secret-key"))
+	assert.NotNil(t, clients.Get())
+
+	require.NoError(t, svc.Set(t.Context(), "obsidian.apiKey", ""))
+	assert.Nil(t, clients.Get(), "breaking the trio turns the vault off again")
 }

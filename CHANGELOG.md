@@ -129,6 +129,7 @@ Preparing the first public release.
 
 ### Changed
 
+- Obsidian settings take effect as soon as they are saved; no restart.
 - The hub returns to its previous zoom and position after closing a card or
   coming back from a module.
 - The project is called **Kontor**. The binary is `kontor`, the Homebrew cask is

@@ -118,7 +118,7 @@ func newObsidianDepsForTest(t *testing.T) (ObsidianDeps, repo.GrantRepo, repo.Ca
 
 	ts, called := newFakeObsidianVault(t)
 	deps := ObsidianDeps{
-		Client: newTestObsidianClient(t, ts),
+		Clients: obsidianapp.NewClientHolder(newTestObsidianClient(t, ts)),
 		Gate: memory.Gate{
 			Capabilities: capabilities,
 			Grants:       grants,
@@ -147,7 +147,7 @@ func obsidianTestDepsWithCatalogue(t *testing.T) (ObsidianDeps, repo.GrantRepo, 
 	grants := repo.NewGrantRepo(bundle.Client)
 	ts, called := newFakeObsidianVault(t)
 	deps := ObsidianDeps{
-		Client: newTestObsidianClient(t, ts),
+		Clients: obsidianapp.NewClientHolder(newTestObsidianClient(t, ts)),
 		// No Asker: proves the ask-effect path fails closed
 		// (capability.ErrAskRequired) at the unit-test level, the same way
 		// memory's equivalent test does. Production wiring (di_mcp.go)
@@ -175,7 +175,7 @@ func newObsidianDepsWithCaller(t *testing.T) (ObsidianDeps, repo.GrantRepo, *db.
 	grants := repo.NewGrantRepo(bundle.Client)
 	ts, called := newFakeObsidianVault(t)
 	deps := ObsidianDeps{
-		Client: newTestObsidianClient(t, ts),
+		Clients: obsidianapp.NewClientHolder(newTestObsidianClient(t, ts)),
 		Caller: mcp.CallerResolver{
 			StageRuns: repo.NewStageRunRepo(bundle.Client),
 			Tasks:     repo.NewTaskRepo(bundle.Client),
@@ -347,7 +347,7 @@ func TestObsidianWriteDeniedWithoutGrantEvenWhenCapabilityCatalogued(t *testing.
 // discovering it.
 func TestObsidianToolsNotRegisteredWhenClientNil(t *testing.T) {
 	registry := mcp.ToolRegistry{}
-	RegisterObsidianTools(registry, ObsidianDeps{Client: nil})
+	RegisterObsidianTools(registry, ObsidianDeps{Clients: obsidianapp.NewClientHolder(nil)})
 
 	for _, name := range []string{"obsidian_read", "obsidian_search", "obsidian_write", "obsidian_delete"} {
 		_, ok := registry[name]
