@@ -96,6 +96,20 @@ Preparing the first public release.
   One bad value aborted the graph request entirely; that note is now skipped
   and logged by path (never the raw value), the same handling a malformed
   `links` value already got.
+- **A slash command installed mid-session appears without a reload.** The
+  prompt's command list was cached per session id for the life of the tab, so
+  a newly installed or enabled command stayed invisible and the cache kept one
+  entry per session id forever. Entries now expire after 60 seconds — the
+  lifetime the neighbouring graph caches already use — and writing one prunes
+  the expired ones.
+- **A tile dropped after the window changed size lands under the pointer.**
+  The workspace grid measured its rectangle once per drag, so a window resize,
+  an expanding sidebar or a scroll while a tile was held placed every
+  subsequent drop against the old geometry.
+- **Resizing the hub mid-flight still centres what was clicked.** A camera
+  flight fixed its target scale at launch, so a stage that changed size during
+  the 480 ms left the camera off the requested zoom level until the next
+  "fit"; a resize now cancels the flight and settles on its destination.
 
 ### Changed
 
