@@ -14,6 +14,10 @@ Preparing the first public release.
 
 ### Fixed
 
+- **Token totals no longer double-count under concurrent refreshes.** When the
+  agent stream, a hook-triggered rescan and an HTTP read refreshed the same
+  active session at once, each added the newly appended messages, inflating
+  that agent's tokens and cost. An appended region is now counted once.
 - **A widget whose chunk failed once recovers after a successful reload.**
   A tile that failed to load stayed recorded as failed even after a remount
   loaded its chunk, so the hub kept the needs-you strip visible beside it and

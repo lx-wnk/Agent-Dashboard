@@ -444,24 +444,32 @@ func tokenUsageForFile(path string) (fullScanUsage, error) {
 	inode := inodeOf(info)
 	size := info.Size()
 
-	// The read-offset/modify-scan/write-running sequence below releases the lock
-	// during the scan, so it is only safe against double-counting because callers
-	// guarantee one goroutine per inode per tick (the merger partitions scans by
-	// directory group and claims each session file exactly once). The map itself
-	// is fully mutex-guarded; only concurrent scans of the same path would race.
+	// Concurrent GetAgents callers (broadcast tick, hook rescan, HTTP reads) can
+	// scan the same path at once. The scan runs unlocked, so a delta is applied
+	// only if no other caller advanced the entry meanwhile; the loser returns the
+	// winner's total instead of adding the same bytes a second time.
 	tokenOffsetCacheMu.Lock()
 	entry, ok := tokenOffsetCache[path]
+	var startOffset int64
+	if ok {
+		startOffset = entry.offset
+	}
 	tokenOffsetCacheMu.Unlock()
 
-	if ok && entry.inode == inode && size >= entry.offset {
+	if ok && entry.inode == inode && size >= startOffset {
 		var usage sdk.TokenUsage
 		var added []NoteTouch
-		newOffset, scanErr := ScanMessagesFrom(path, entry.offset, func(m Message) {
+		newOffset, scanErr := ScanMessagesFrom(path, startOffset, func(m Message) {
 			addMessageUsage(&usage, m)
 			added = append(added, noteTouchesOf(m)...)
 		})
 		if scanErr == nil {
 			tokenOffsetCacheMu.Lock()
+			if tokenOffsetCache[path] != entry || entry.offset != startOffset {
+				running, notes := entry.running, entry.notes
+				tokenOffsetCacheMu.Unlock()
+				return fullScanUsage{TokenUsage: running, notes: notes}, nil
+			}
 			entry.running.InputTokens += usage.InputTokens
 			entry.running.OutputTokens += usage.OutputTokens
 			entry.running.CacheCreationTokens += usage.CacheCreationTokens
