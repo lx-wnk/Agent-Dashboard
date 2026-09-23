@@ -70,8 +70,9 @@ Rules for Bash commands:
 4. URL-decode the path. A path that does not end in `.md` (a directory
    listing) is dropped.
 
-Output per session: `[]NoteTouch{Path, Kind, At}`, paths vault-relative as they
-appeared in the URL or MCP argument. Per `(path, kind)` only the newest touch is
+Output per session: `[]parser.NoteTouch{Path, Kind, At time.Time}` on
+`SessionData.RecentNotes`, paths vault-relative as they appeared in the URL or
+MCP argument. Per `(path, kind)` only the newest touch is
 kept; touches older than ten minutes are pruned on every read; at most 50 are
 kept per session, newest first, so a loop of PUTs cannot bloat the SSE payload.
 
@@ -96,23 +97,26 @@ type NoteTouch struct {
 RecentNotes []NoteTouch `json:"recentNotes,omitempty"`
 ```
 
-The client keeps `NOTE_TOUCH_KINDS` in `src/types.ts`, next to
-`AGENT_STATUSES`.
+`src/types.ts` re-exports `NoteTouch` and `NoteTouchKind`; no kinds list is
+needed, the client keys its per-kind maps by the union type.
 
 ### Path normalisation
 
 The graph lists paths relative to `obsidian.vaultRoot`; the parser emits
 vault-relative ones. `server/internal/apps/obsidian` gains
-`RootRelative(vaultPath string) (string, bool)` next to `NormalizeNotePath`
+`RootRelative(root, vaultPath string) (string, bool)` next to `NormalizeNotePath`
 (`client.go:233`): it strips `vaultRoot/`, collapses `..` with the same logic as
 `resolveVaultPath`, and rejects the root itself and anything outside it.
 
-The merger receives it as `WithNotePathFn`, following `ScreenProbeFn` and
-`WithRegistry` (`server/internal/merger/merger.go:264-282`), wired in
-`server/serverapp/di.go`. `obsidian.vaultRoot` is `ApplyRestart`
+`RootRelative(root, vaultPath)` is a plain function, since the merger is built
+before the Obsidian client exists in `server/serverapp/di.go`. The merger
+receives it as `WithNotePathFn`, following `ScreenProbeFn` and `WithRegistry`
+(`server/internal/merger/merger.go:264-282`). The window is re-applied there
+against the current time, because the parser prunes only when a file changes
+and an idle session's touches must still age out. `obsidian.vaultRoot` is `ApplyRestart`
 (`server/internal/settings/registry.go:141`), so the function is fixed at
-start. Without Obsidian configured the option is absent and `recentNotes` stays
-empty. It is applied at both places that copy session data onto an agent today:
+start. Without a configured root `RootRelative` rejects every path, so
+`recentNotes` stays empty. It is applied at both places that copy session data onto an agent today:
 `merger.go` (live) and `stale.go` (stale).
 
 ### Exposure
@@ -128,13 +132,13 @@ command. A client without `memory.read` has no graph, so no edge can be drawn.
 
 `src/features/hub/hubEdges.ts` (new) holds a pure
 `liveEdges(placedAgents, drawnAgents, pathIndex, now)` returning
-`{ key, from: [wx, wy], to: noteIndex, kind, alpha }[]`:
+`{ from: [wx, wy], to: noteIndex, kind, alpha }[]`:
 
 - An agent not in `drawnAgents` (under the docked rail,
   `src/features/hub/components/HubWidget.vue:197`) gets no edge.
 - A path missing from the graph gets no edge.
-- `key` is `pid + path + kind`, never array identity: every SSE tick delivers
-  new arrays.
+- Nothing is keyed by array identity: every SSE tick delivers new arrays, and
+  the canvas redraws every edge from scratch each frame.
 - `alpha` falls linearly from 0.9 at age 0 to 0.2 at ten minutes.
 
 ### Drawing
@@ -143,7 +147,9 @@ command. A client without `memory.read` has no graph, so no edge can be drawn.
 `fillNotes`, so note dots sit on top of edges and the DOM agents above both.
 Read: `setLineDash([4, 3])`. Write: `setLineDash([1, 3])` with round caps.
 Colour from a theme token. Edges draw at every zoom level. The canvas redraws
-on the existing triggers only (camera, props, theme); no animation frame loop.
+on the existing triggers only (camera, props, theme) plus a 30-second clock
+(`useNow`) that lets edges fade and expire between SSE ticks; no animation frame
+loop.
 
 Deliberately not built: hit-testing edges, edges on the minimap, note chips on
 `HubAgentCard`.
@@ -166,12 +172,11 @@ as focusable rows that fly to the note like the existing note rows.
   rejected.
 - **Merger:** the note function applies on the live and the stale path; absent
   function yields no notes.
-- **`hubEdges.ts`:** undrawn agent, missing note, alpha curve, key stable across
-  new SSE arrays.
+- **`hubEdges.ts`:** undrawn agent, missing note, expired or unparsable
+  timestamp, clock skew, alpha curve.
 - **`HubBrainCanvas`:** a recording fake context sees `[4, 3]` for read and
   `[1, 3]` for write.
-- **`HubList`:** sub-rows focusable and flying to their note; mounted at the
-  real tile size 584×734.
+- **`HubList`:** sub-rows focusable and flying to their note.
 - **E2E:** a complete agent fixture carrying `recentNotes` plus a mocked graph;
   asserts the list view rows.
 - **In the app:** build, stop the running dashboard and desktop processes,
