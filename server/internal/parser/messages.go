@@ -24,8 +24,8 @@ type Message struct {
 	Model       string
 	Usage       *sdk.TokenUsage
 	Content     json.RawMessage
-	CustomTitle string // set on type=="custom-title" lines (a /rename)
-	AiTitle     string // set on type=="ai-title" lines (Claude's generated title)
+	CustomTitle string
+	AiTitle     string
 }
 
 // decodeMessageLine decodes one JSONL line into a Message. ok is false for a

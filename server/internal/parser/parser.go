@@ -358,21 +358,27 @@ type fullScanUsage struct {
 	// Used only for diagnostics — the token total does not depend on it.
 	hasCompaction bool
 	sdk.TokenUsage
-	notes []NoteTouch
-	// customTitle/aiTitle hold the newest occurrence of each title line seen in
-	// the scan (JSONL is append-only, so "last seen" is "newest"). The custom
-	// title wins over the AI one when both are present — see sessionTitle.
+	notes       []NoteTouch
 	customTitle string
 	aiTitle     string
 }
 
-// sessionTitle applies the custom-beats-ai precedence rule shared by every
-// scan path (full and incremental).
+// A /rename title beats Claude's generated one.
 func (f fullScanUsage) sessionTitle() string {
 	if f.customTitle != "" {
 		return f.customTitle
 	}
 	return f.aiTitle
+}
+
+// The JSONL is append-only, so the last title line seen is the newest.
+func keepTitles(m Message, custom, ai *string) {
+	if m.CustomTitle != "" {
+		*custom = m.CustomTitle
+	}
+	if m.AiTitle != "" {
+		*ai = m.AiTitle
+	}
 }
 
 func addMessageUsage(dst *sdk.TokenUsage, m Message) {
@@ -407,16 +413,7 @@ func scanFullFileTokenUsage(path string) (fullScanUsage, error) {
 			total.hasCompaction = true
 			return nil
 		}
-		switch m.Type {
-		case "custom-title":
-			if m.CustomTitle != "" {
-				total.customTitle = m.CustomTitle
-			}
-		case "ai-title":
-			if m.AiTitle != "" {
-				total.aiTitle = m.AiTitle
-			}
-		}
+		keepTitles(m, &total.customTitle, &total.aiTitle)
 		addMessageUsage(&total.TokenUsage, m)
 		touches = append(touches, noteTouchesOf(m)...)
 		return nil
@@ -489,16 +486,7 @@ func tokenUsageForFile(path string) (fullScanUsage, error) {
 		newOffset, scanErr := ScanMessagesFrom(path, startOffset, func(m Message) {
 			addMessageUsage(&usage, m)
 			added = append(added, noteTouchesOf(m)...)
-			switch m.Type {
-			case "custom-title":
-				if m.CustomTitle != "" {
-					newCustomTitle = m.CustomTitle
-				}
-			case "ai-title":
-				if m.AiTitle != "" {
-					newAiTitle = m.AiTitle
-				}
-			}
+			keepTitles(m, &newCustomTitle, &newAiTitle)
 		})
 		if scanErr == nil {
 			tokenOffsetCacheMu.Lock()
