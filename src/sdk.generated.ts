@@ -429,6 +429,11 @@ export interface Agent {
   currentAction?: string
   lastTools: RecentTool[]
   /**
+   * SessionTitle is the newest /rename custom title, else the newest
+   * Claude-generated title, else empty.
+   */
+  sessionTitle?: string
+  /**
    * RecentNotes are the vault notes this agent read or wrote in the last ten minutes, newest first.
    */
   recentNotes?: NoteTouch[]

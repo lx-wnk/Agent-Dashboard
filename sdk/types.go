@@ -403,6 +403,9 @@ type Agent struct {
 	LastActivity         string       `json:"lastActivity"`
 	CurrentAction        *string      `json:"currentAction"`
 	LastTools            []RecentTool `json:"lastTools"`
+	// SessionTitle is the newest /rename custom title, else the newest
+	// Claude-generated title, else empty.
+	SessionTitle string `json:"sessionTitle,omitempty"`
 	// RecentNotes are the vault notes this agent read or wrote in the last ten minutes, newest first.
 	RecentNotes               []NoteTouch    `json:"recentNotes,omitempty"`
 	Tasks                     []TaskInfo     `json:"tasks"`

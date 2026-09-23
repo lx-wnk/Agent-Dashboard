@@ -359,6 +359,20 @@ type fullScanUsage struct {
 	hasCompaction bool
 	sdk.TokenUsage
 	notes []NoteTouch
+	// customTitle/aiTitle hold the newest occurrence of each title line seen in
+	// the scan (JSONL is append-only, so "last seen" is "newest"). The custom
+	// title wins over the AI one when both are present — see sessionTitle.
+	customTitle string
+	aiTitle     string
+}
+
+// sessionTitle applies the custom-beats-ai precedence rule shared by every
+// scan path (full and incremental).
+func (f fullScanUsage) sessionTitle() string {
+	if f.customTitle != "" {
+		return f.customTitle
+	}
+	return f.aiTitle
 }
 
 func addMessageUsage(dst *sdk.TokenUsage, m Message) {
@@ -393,6 +407,16 @@ func scanFullFileTokenUsage(path string) (fullScanUsage, error) {
 			total.hasCompaction = true
 			return nil
 		}
+		switch m.Type {
+		case "custom-title":
+			if m.CustomTitle != "" {
+				total.customTitle = m.CustomTitle
+			}
+		case "ai-title":
+			if m.AiTitle != "" {
+				total.aiTitle = m.AiTitle
+			}
+		}
 		addMessageUsage(&total.TokenUsage, m)
 		touches = append(touches, noteTouchesOf(m)...)
 		return nil
@@ -412,10 +436,12 @@ func scanFullFileTokenUsage(path string) (fullScanUsage, error) {
 // the JSONL is append-only (CI-4), so a lifetime total is an exact running sum
 // of appended bytes and never needs to re-read history.
 type tokenOffsetCacheEntry struct {
-	inode   uint64
-	offset  int64
-	running sdk.TokenUsage
-	notes   []NoteTouch
+	inode       uint64
+	offset      int64
+	running     sdk.TokenUsage
+	notes       []NoteTouch
+	customTitle string
+	aiTitle     string
 }
 
 var (
@@ -459,26 +485,45 @@ func tokenUsageForFile(path string) (fullScanUsage, error) {
 	if ok && entry.inode == inode && size >= startOffset {
 		var usage sdk.TokenUsage
 		var added []NoteTouch
+		var newCustomTitle, newAiTitle string
 		newOffset, scanErr := ScanMessagesFrom(path, startOffset, func(m Message) {
 			addMessageUsage(&usage, m)
 			added = append(added, noteTouchesOf(m)...)
+			switch m.Type {
+			case "custom-title":
+				if m.CustomTitle != "" {
+					newCustomTitle = m.CustomTitle
+				}
+			case "ai-title":
+				if m.AiTitle != "" {
+					newAiTitle = m.AiTitle
+				}
+			}
 		})
 		if scanErr == nil {
 			tokenOffsetCacheMu.Lock()
 			if tokenOffsetCache[path] != entry || entry.offset != startOffset {
 				running, notes := entry.running, entry.notes
+				customTitle, aiTitle := entry.customTitle, entry.aiTitle
 				tokenOffsetCacheMu.Unlock()
-				return fullScanUsage{TokenUsage: running, notes: notes}, nil
+				return fullScanUsage{TokenUsage: running, notes: notes, customTitle: customTitle, aiTitle: aiTitle}, nil
 			}
 			entry.running.InputTokens += usage.InputTokens
 			entry.running.OutputTokens += usage.OutputTokens
 			entry.running.CacheCreationTokens += usage.CacheCreationTokens
 			entry.running.CacheReadTokens += usage.CacheReadTokens
 			entry.notes = mergeNoteTouches(entry.notes, added, time.Now())
+			if newCustomTitle != "" {
+				entry.customTitle = newCustomTitle
+			}
+			if newAiTitle != "" {
+				entry.aiTitle = newAiTitle
+			}
 			entry.offset = newOffset
 			running, notes := entry.running, entry.notes
+			customTitle, aiTitle := entry.customTitle, entry.aiTitle
 			tokenOffsetCacheMu.Unlock()
-			return fullScanUsage{TokenUsage: running, notes: notes}, nil
+			return fullScanUsage{TokenUsage: running, notes: notes, customTitle: customTitle, aiTitle: aiTitle}, nil
 		}
 		slog.Warn("parser: incremental token scan failed — falling back to full rescan", "path", path, "err", scanErr)
 	}
@@ -491,7 +536,14 @@ func tokenUsageForFile(path string) (fullScanUsage, error) {
 	if !ok && len(tokenOffsetCache) >= tokenOffsetCacheMaxEntries {
 		tokenOffsetCache = make(map[string]*tokenOffsetCacheEntry, tokenOffsetCacheMaxEntries)
 	}
-	tokenOffsetCache[path] = &tokenOffsetCacheEntry{inode: inode, offset: size, running: full.TokenUsage, notes: full.notes}
+	tokenOffsetCache[path] = &tokenOffsetCacheEntry{
+		inode:       inode,
+		offset:      size,
+		running:     full.TokenUsage,
+		notes:       full.notes,
+		customTitle: full.customTitle,
+		aiTitle:     full.aiTitle,
+	}
 	tokenOffsetCacheMu.Unlock()
 	return full, nil
 }
@@ -506,6 +558,7 @@ type SessionData struct {
 	CurrentAction       string
 	LastTools           []sdk.RecentTool
 	RecentNotes         []NoteTouch
+	SessionTitle        string
 	Tasks               []sdk.TaskInfo
 	TokenUsage          sdk.TokenUsage
 	Model               string
@@ -964,6 +1017,7 @@ func ParseSessionFile(path string) (*SessionData, error) {
 		}
 		data.TokenUsage = full.TokenUsage
 		data.RecentNotes = full.notes
+		data.SessionTitle = full.sessionTitle()
 	}
 
 	kept := recentTools

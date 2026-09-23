@@ -17,13 +17,15 @@ import (
 // ScanMessages yields one Message per successfully decoded line; malformed lines
 // are silently skipped.
 type Message struct {
-	Type      string
-	Subtype   string
-	Timestamp time.Time
-	Role      string
-	Model     string
-	Usage     *sdk.TokenUsage
-	Content   json.RawMessage
+	Type        string
+	Subtype     string
+	Timestamp   time.Time
+	Role        string
+	Model       string
+	Usage       *sdk.TokenUsage
+	Content     json.RawMessage
+	CustomTitle string // set on type=="custom-title" lines (a /rename)
+	AiTitle     string // set on type=="ai-title" lines (Claude's generated title)
 }
 
 // decodeMessageLine decodes one JSONL line into a Message. ok is false for a
@@ -32,10 +34,12 @@ type Message struct {
 // shared by ScanMessages and ScanMessagesFrom so the two scans can never diverge.
 func decodeMessageLine(line []byte) (Message, bool) {
 	var outer struct {
-		Type      string          `json:"type"`
-		Subtype   string          `json:"subtype"`
-		Timestamp string          `json:"timestamp"`
-		Message   json.RawMessage `json:"message"`
+		Type        string          `json:"type"`
+		Subtype     string          `json:"subtype"`
+		Timestamp   string          `json:"timestamp"`
+		Message     json.RawMessage `json:"message"`
+		CustomTitle string          `json:"customTitle"`
+		AiTitle     string          `json:"aiTitle"`
 	}
 	if err := json.Unmarshal(line, &outer); err != nil {
 		return Message{}, false
@@ -67,13 +71,15 @@ func decodeMessageLine(line []byte) (Message, bool) {
 	}
 
 	return Message{
-		Type:      outer.Type,
-		Subtype:   outer.Subtype,
-		Timestamp: ts,
-		Role:      inner.Role,
-		Model:     inner.Model,
-		Usage:     usage,
-		Content:   inner.Content,
+		Type:        outer.Type,
+		Subtype:     outer.Subtype,
+		Timestamp:   ts,
+		Role:        inner.Role,
+		Model:       inner.Model,
+		Usage:       usage,
+		Content:     inner.Content,
+		CustomTitle: outer.CustomTitle,
+		AiTitle:     outer.AiTitle,
 	}, true
 }
 
