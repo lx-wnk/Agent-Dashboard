@@ -401,10 +401,14 @@ func (o *PipelineOrchestrator) decideCompletedTransition(ctx context.Context, ta
 	}
 	// After ready, enter plan_review only when the task opted into plan mode.
 	if run.Stage == "ready" {
-		if task.PlanMode {
-			return NextTransition{Stage: "plan_review", Output: output}
-		}
-		return NextTransition{Stage: "implementation", Output: output}
+		return NextTransition{Stage: stageAfterReady(task), Output: output}
 	}
 	return NextTransition{Stage: NextStageForKind(task.Kind, run.Stage), Output: output}
+}
+
+func stageAfterReady(task *ent.Task) string {
+	if task.PlanMode {
+		return "plan_review"
+	}
+	return "implementation"
 }
