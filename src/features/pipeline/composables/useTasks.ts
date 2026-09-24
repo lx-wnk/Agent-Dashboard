@@ -115,7 +115,13 @@ export async function refreshTask(taskId: string): Promise<void> {
   const task = await res.json() as PipelineTask
   if (!task?.id)
     return
-  tasks.value = tasks.value.map(t => t.id === task.id ? task : t)
+  const exists = tasks.value.some(t => t.id === task.id)
+  if (exists) {
+    tasks.value = tasks.value.map(t => t.id === task.id ? task : t)
+  }
+  else {
+    tasks.value = [task, ...tasks.value]
+  }
   if (selectedTask.value?.id === task.id)
     selectedTask.value = task
 }
