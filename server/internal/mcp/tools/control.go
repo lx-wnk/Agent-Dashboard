@@ -358,6 +358,7 @@ func registerGrantPermission(registry mcp.ToolRegistry, d ControlDeps) {
 			if err != nil {
 				return nil, mcp.Fail("grant_permission: " + err.Error())
 			}
+			safeBroadcast(d.Broadcast, ctx, "task_updated", taskID)
 			return mcp.OK(perm)
 		},
 	})

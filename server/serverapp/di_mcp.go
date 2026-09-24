@@ -22,6 +22,29 @@ import (
 	"github.com/lx-wnk/kontor/server/internal/sse"
 )
 
+// newMCPTaskBroadcast publishes task events with the same enriched payload the HTTP task handler sends.
+func newMCPTaskBroadcast(
+	taskRepo repo.TaskRepo,
+	srRepo repo.StageRunRepo,
+	permRepo repo.PermissionRepo,
+	srBulkRepo rawrepo.StageRunBulkRepo,
+	tb *sse.TaskBroadcaster,
+) func(ctx context.Context, eventType, taskID string) {
+	return func(ctx context.Context, eventType, taskID string) {
+		task, err := taskRepo.GetByID(ctx, taskID)
+		if err != nil {
+			slog.Warn("mcp broadcast: GetByID failed", "taskID", taskID, "event", eventType, "err", err)
+			return
+		}
+		enriched, err := tasksapi.EnrichTask(ctx, task, srRepo, permRepo, srBulkRepo)
+		if err != nil {
+			slog.Warn("mcp broadcast: EnrichTask failed", "taskID", taskID, "event", eventType, "err", err)
+			return
+		}
+		tb.Broadcast(sse.TaskEvent{Type: eventType, TaskID: taskID, Payload: enriched})
+	}
+}
+
 func provideMCPHandler(
 	client *ent.Client,
 	db *sql.DB,
@@ -57,18 +80,7 @@ func provideMCPHandler(
 
 	caller := mcp.CallerResolver{StageRuns: srRepo, Tasks: taskRepo}
 
-	broadcast := func(ctx context.Context, eventType, taskID string) {
-		task, err := taskRepo.GetByID(ctx, taskID)
-		if err != nil {
-			return
-		}
-		enriched, err := tasksapi.EnrichTask(ctx, task, srRepo, permRepo, srBulkRepo)
-		if err != nil {
-			slog.Warn("mcp broadcast: EnrichTask failed", "taskID", taskID, "event", eventType, "err", err)
-			return
-		}
-		tb.Broadcast(sse.TaskEvent{Type: eventType, TaskID: taskID, Payload: enriched})
-	}
+	broadcast := newMCPTaskBroadcast(taskRepo, srRepo, permRepo, srBulkRepo, tb)
 	broadcastDeleted := func(taskID string) {
 		tb.Broadcast(sse.TaskEvent{Type: "task_deleted", TaskID: taskID, Payload: map[string]string{}})
 	}
