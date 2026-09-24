@@ -3,6 +3,7 @@ package serverapp
 import (
 	"context"
 	"database/sql"
+	"log/slog"
 	"net/http"
 
 	tasksapi "github.com/lx-wnk/kontor/server/internal/api/tasks"
@@ -61,7 +62,11 @@ func provideMCPHandler(
 		if err != nil {
 			return
 		}
-		enriched, _ := tasksapi.EnrichTask(ctx, task, srRepo, permRepo, srBulkRepo)
+		enriched, err := tasksapi.EnrichTask(ctx, task, srRepo, permRepo, srBulkRepo)
+		if err != nil {
+			slog.Warn("mcp broadcast: EnrichTask failed", "taskID", taskID, "event", eventType, "err", err)
+			return
+		}
 		tb.Broadcast(sse.TaskEvent{Type: eventType, TaskID: taskID, Payload: enriched})
 	}
 	broadcastDeleted := func(taskID string) {
@@ -117,7 +122,8 @@ func provideMCPHandler(
 			_, err := orch.ProgressTask(ctx, taskID, nil)
 			return err
 		},
-		Revoke: mcp.StageKeyIssuer{Keys: apiKeyRepo}.Revoke,
+		Revoke:    mcp.StageKeyIssuer{Keys: apiKeyRepo}.Revoke,
+		Broadcast: broadcast,
 	})
 	mcptools.RegisterPlanTools(registry, mcptools.PlanDeps{
 		Turns:     turnsRepo,
@@ -131,7 +137,8 @@ func provideMCPHandler(
 			_, err := orch.RequeueForUser(ctx, taskID, prompt)
 			return err
 		},
-		Revoke: mcp.StageKeyIssuer{Keys: apiKeyRepo}.Revoke,
+		Revoke:    mcp.StageKeyIssuer{Keys: apiKeyRepo}.Revoke,
+		Broadcast: broadcast,
 	})
 	mcptools.RegisterScheduleTools(registry, mcptools.ScheduleDeps{
 		Repo:       repo.NewTaskScheduleRepo(client),
