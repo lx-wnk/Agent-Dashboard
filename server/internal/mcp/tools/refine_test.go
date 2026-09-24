@@ -267,3 +267,40 @@ func TestApproveSpec_BroadcastsTaskUpdated(t *testing.T) {
 	require.Equal(t, "task_updated", gotEventType)
 	require.Equal(t, task.ID, gotTaskID)
 }
+
+func TestInjectConcept_BroadcastsTaskUpdated(t *testing.T) {
+	bundle, err := db.Open(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+
+	ctx := context.Background()
+	taskRepo := repo.NewTaskRepo(bundle.Client)
+	srRepo := repo.NewStageRunRepo(bundle.Client)
+	turnsRepo := repo.NewRefinementTurnRepo(bundle.Client)
+	task := seedBacklogTask(t, ctx, taskRepo, srRepo)
+
+	var calls int
+	var gotEventType, gotTaskID string
+	registry := mcp.ToolRegistry{}
+	RegisterRefineTools(registry, RefineDeps{
+		Turns:     turnsRepo,
+		Tasks:     taskRepo,
+		StageRuns: srRepo,
+		Runner:    refine.NewRunner(turnsRepo, nil),
+		Broadcast: func(_ context.Context, eventType, taskID string) {
+			calls++
+			gotEventType = eventType
+			gotTaskID = taskID
+		},
+	})
+
+	_, err = registry["inject_concept"].Handler(ctx, map[string]any{
+		"task_id": task.ID,
+		"concept": map[string]any{"spec": "Add a foo endpoint"},
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, 1, calls, "Broadcast must be called exactly once")
+	require.Equal(t, "task_updated", gotEventType)
+	require.Equal(t, task.ID, gotTaskID)
+}
