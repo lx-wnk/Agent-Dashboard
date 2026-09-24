@@ -187,8 +187,8 @@ func TestApprovePlan_BroadcastsTaskUpdated(t *testing.T) {
 		Turns:     turnsRepo,
 		Tasks:     taskRepo,
 		StageRuns: srRepo,
-		Advance: func(_ context.Context, _ string) error { return nil },
-		Revoke:  func(_ context.Context, _ string) error { return nil },
+		Advance:   func(_ context.Context, _ string) error { return nil },
+		Revoke:    func(_ context.Context, _ string) error { return nil },
 		Broadcast: func(_ context.Context, eventType, taskID string) {
 			calls++
 			gotEventType = eventType
@@ -222,7 +222,7 @@ func TestRejectPlan_BroadcastsTaskUpdated(t *testing.T) {
 		Turns:     turnsRepo,
 		Tasks:     taskRepo,
 		StageRuns: srRepo,
-		Requeue: func(_ context.Context, _, _ string) error { return nil },
+		Requeue:   func(_ context.Context, _, _ string) error { return nil },
 		Broadcast: func(_ context.Context, eventType, _ string) {
 			calls++
 			gotEventType = eventType
