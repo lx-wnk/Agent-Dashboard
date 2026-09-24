@@ -306,6 +306,7 @@ func TestAgentStageHandler_IssueTaskAPIKeySuccessReachesSpawnOptions(t *testing.
 	ctx := &pipeline.StageContext{
 		Ctx:               context.Background(),
 		Task:              &ent.Task{Title: "Fix the retry loop", Cwd: "/tmp/proj-key-ok", StageTimeoutSeconds: 1800},
+		StageTimeout:      1800 * time.Second,
 		StageRun:          &ent.StageRun{Stage: "implementation", ID: "sr-key-ok"},
 		RecordAudit:       func(string, map[string]any) {},
 		RequestPermission: func(string, string, string) *ent.PermissionRequest { return nil },
@@ -320,11 +321,42 @@ func TestAgentStageHandler_IssueTaskAPIKeySuccessReachesSpawnOptions(t *testing.
 	require.NoError(t, err)
 	require.Equal(t, "tok", captured.TaskAPIToken)
 	require.Equal(t, "sr-key-ok", gotStageRunID)
-	// StageTimeoutSeconds is an int count of SECONDS: taking the duration as
-	// `_` here let the unit on the conversion drift unnoticed, and a key
-	// minted with a millisecond TTL dies before its agent's first call.
 	require.Equal(t, 1800*time.Second, gotTimeout,
-		"the stage timeout must reach the issuer as seconds, not as raw units")
+		"the stage timeout must reach the issuer as a duration")
+}
+
+// TestAgentStageHandler_IssueTaskAPIKeyUsesStageTimeoutNotTaskColumn proves the
+// fix: the key TTL is derived from ctx.StageTimeout (the orchestrator's global
+// stageTimeoutSeconds config read), not from Task.StageTimeoutSeconds — which
+// is 0 for tasks created via MCP and would otherwise mint a near-instantly
+// expiring credential.
+func TestAgentStageHandler_IssueTaskAPIKeyUsesStageTimeoutNotTaskColumn(t *testing.T) {
+	var captured pipeline.SpawnAgentOptions
+	spawnFn := func(opts pipeline.SpawnAgentOptions) (pipeline.SpawnResult, error) {
+		captured = opts
+		return pipeline.SpawnResult{PID: 123}, nil
+	}
+	handler := pipeline.NewAgentStageHandlerForTest("implementation", spawnFn)
+
+	var gotTimeout time.Duration
+	ctx := &pipeline.StageContext{
+		Ctx:               context.Background(),
+		Task:              &ent.Task{Title: "MCP-created task", Cwd: "/tmp/proj-key-global", StageTimeoutSeconds: 0},
+		StageTimeout:      3600 * time.Second,
+		StageRun:          &ent.StageRun{Stage: "implementation", ID: "sr-key-global"},
+		RecordAudit:       func(string, map[string]any) {},
+		RequestPermission: func(string, string, string) *ent.PermissionRequest { return nil },
+		IssueTaskAPIKey: func(_ context.Context, _ string, timeout time.Duration) (string, error) {
+			gotTimeout = timeout
+			return "tok", nil
+		},
+	}
+
+	_, err := handler.Execute(ctx)
+	require.NoError(t, err)
+	require.Equal(t, "tok", captured.TaskAPIToken)
+	require.Equal(t, 3600*time.Second, gotTimeout,
+		"the global stage timeout must reach the issuer even when Task.StageTimeoutSeconds is 0")
 }
 
 // TestAgentStageHandler_MemoryBlockInNativeUserPromptNotSystemPrompt is the

@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"maps"
 	"strings"
-	"time"
 
 	"github.com/lx-wnk/kontor/server/internal/db/ent"
 	"github.com/lx-wnk/kontor/server/internal/db/repo"
@@ -189,8 +188,7 @@ func (h *agentStageHandler) Execute(ctx *StageContext) (StageTransition, error) 
 	// strict-scoped to its own MCP config.
 	taskAPIToken := ""
 	if ctx.IssueTaskAPIKey != nil {
-		timeout := time.Duration(ctx.Task.StageTimeoutSeconds) * time.Second
-		if tok, err := ctx.IssueTaskAPIKey(ctx.Ctx, ctx.StageRun.ID, timeout); err != nil {
+		if tok, err := ctx.IssueTaskAPIKey(ctx.Ctx, ctx.StageRun.ID, ctx.StageTimeout); err != nil {
 			slog.Warn("pipeline: issuing the stage-run MCP credential failed — agent runs without task API access",
 				"stageRun", ctx.StageRun.ID, "err", err)
 		} else {
