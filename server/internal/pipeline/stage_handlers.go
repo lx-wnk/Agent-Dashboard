@@ -397,7 +397,7 @@ var readyHandler StageHandler = &staticHandler{
 	stage: "ready",
 	executeFn: func(ctx *StageContext) (StageTransition, error) {
 		ctx.RecordAudit("ready_entered", nil)
-		return NextTransition{Stage: "implementation"}, nil
+		return NextTransition{Stage: stageAfterReady(ctx.Task)}, nil
 	},
 }
 

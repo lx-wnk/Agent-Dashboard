@@ -42,6 +42,26 @@ func TestReadyHandler_TransitionsToImplementation(t *testing.T) {
 	require.True(t, audited)
 }
 
+func TestReadyHandler_TransitionsToPlanReviewWhenPlanMode(t *testing.T) {
+	h := pipeline.GetHandlerForStage("ready")
+	require.NotNil(t, h)
+	require.False(t, h.RequiresAgent())
+
+	ctx := &pipeline.StageContext{
+		Ctx:      context.Background(),
+		Task:     &ent.Task{Slug: "my-task", CurrentStage: "ready", PlanMode: true},
+		StageRun: &ent.StageRun{Stage: "ready"},
+		RecordAudit: func(action string, _ map[string]any) {
+		},
+		RequestPermission: func(tool, pattern, reason string) *ent.PermissionRequest { return nil },
+	}
+	transition, err := h.Execute(ctx)
+	require.NoError(t, err)
+	next, ok := transition.(pipeline.NextTransition)
+	require.True(t, ok)
+	require.Equal(t, "plan_review", next.Stage)
+}
+
 func TestBacklogHandler_WaitsUser(t *testing.T) {
 	h := pipeline.GetHandlerForStage("backlog")
 	require.NotNil(t, h)
