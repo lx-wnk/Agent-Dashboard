@@ -4,6 +4,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppSelect from '@/components/ui/AppSelect.vue'
 import { toast } from '@/composables/useToast'
+import { useGrants } from '@/features/settings/composables/useGrants'
 import { useSettings } from '@/features/settings/composables/useSettings'
 import { errorMessage } from '@/utils/errorMessage'
 
@@ -142,6 +143,57 @@ const INDEX_STATUS_MESSAGES: Record<number, string> = {
   409: 'An index run is already in progress — try again shortly.',
 }
 
+const REQUIRED_CAPABILITIES = ['obsidian.search', 'obsidian.read', 'memory.write'] as const
+const GRANT_REASON = 'Obsidian indexing (created from the Obsidian settings)'
+
+const { grants, loading: grantsLoading, error: grantsError, createGrant } = useGrants()
+
+const missingCapabilities = computed(() =>
+  REQUIRED_CAPABILITIES.filter(cap => !grants.value.some(g =>
+    g.capabilityName === cap && g.contextKind === 'global' && g.mode === 'allow' && !g.revokedAt,
+  )),
+)
+
+// Reactive to the 403 path (indexDenied) as well as the proactive path (a
+// missing grant found on mount) — a failed grants fetch falls back to 403-only
+// rather than guessing the panel into a false positive or negative.
+const showAllowButton = computed(() =>
+  indexDenied.value || (!grantsLoading.value && !grantsError.value && missingCapabilities.value.length > 0),
+)
+const grantHintTitle = computed(() => `Grants ${missingCapabilities.value.join(', ')} as a global, unlimited allow.`)
+
+const granting = ref(false)
+const grantConfirmation = ref<string | null>(null)
+const grantErrorMessage = ref<string | null>(null)
+
+async function allowIndexing() {
+  granting.value = true
+  grantErrorMessage.value = null
+  try {
+    for (const capabilityName of missingCapabilities.value) {
+      await createGrant({
+        capabilityName,
+        contextKind: 'global',
+        contextRef: '',
+        pattern: '',
+        mode: 'allow',
+        limitCount: 0,
+        limitWindowSeconds: 0,
+        reason: GRANT_REASON,
+      })
+    }
+    indexDenied.value = false
+    indexMessage.value = null
+    grantConfirmation.value = 'Indexing allowed. Run Index now.'
+  }
+  catch (e) {
+    grantErrorMessage.value = errorMessage(e, 'Failed to allow indexing')
+  }
+  finally {
+    granting.value = false
+  }
+}
+
 async function runIndex() {
   indexing.value = true
   indexMessage.value = null
@@ -247,9 +299,20 @@ async function runIndex() {
         </AppButton>
       </div>
 
-      <div class="flex items-center gap-3 pt-3 border-t border-line">
+      <div class="flex items-center gap-3 pt-3 border-t border-line flex-wrap">
         <AppButton variant="secondary" data-testid="obsidian-index" :disabled="indexing || !configured || reachable === false" @click="runIndex">
           {{ indexing ? 'Indexing…' : 'Index now' }}
+        </AppButton>
+        <AppButton
+          v-if="showAllowButton"
+          variant="secondary"
+          size="sm"
+          data-testid="obsidian-grant-indexing"
+          :disabled="granting"
+          :title="grantHintTitle"
+          @click="allowIndexing"
+        >
+          {{ granting ? 'Allowing…' : 'Allow indexing' }}
         </AppButton>
         <span v-if="!configured" data-testid="obsidian-index-unconfigured-hint" class="text-xs text-fg-mute">Save a base URL, vault root and API key first.</span>
         <span v-else-if="reachable === false" data-testid="obsidian-unreachable-hint" class="text-xs text-danger-text">
@@ -261,6 +324,12 @@ async function runIndex() {
             Open grants
           </AppButton>
         </span>
+      </div>
+      <div v-if="grantConfirmation" data-testid="obsidian-grant-confirmation" class="text-xs text-success-text">
+        {{ grantConfirmation }}
+      </div>
+      <div v-if="grantErrorMessage" data-testid="obsidian-grant-error" class="text-xs text-danger-text">
+        {{ grantErrorMessage }}
       </div>
     </template>
   </div>

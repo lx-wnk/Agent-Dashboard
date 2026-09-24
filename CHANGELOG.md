@@ -12,6 +12,10 @@ from [Conventional Commits](https://www.conventionalcommits.org/) by GoReleaser.
 
 Preparing the first public release.
 
+### Added
+
+- **Allow Obsidian indexing with one click from its settings.** The Obsidian panel now shows an "Allow indexing" button — on a denied "Index now" run, or proactively whenever `obsidian.search`, `obsidian.read`, or `memory.write` is missing a global allow grant — that creates exactly the missing grants and confirms once indexing is unblocked, without a detour through Settings → Grants.
+
 ### Changed
 
 - **Obsidian status now tells you why the vault is unreachable, not just that it's configured.** `GET /api/obsidian/status` probes the vault with a cheap unauthenticated ping and reports `reachable` plus a short error and an actionable hint (self-signed certificate, wrong API key, Obsidian not running); the settings panel shows that hint under the Index button and disables it until the vault is reachable. A denied "Index now" run now links straight to the Grants settings instead of leaving you to find them yourself.

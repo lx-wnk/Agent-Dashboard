@@ -1,9 +1,11 @@
 import type { Ref } from 'vue'
+import type { Grant } from '@/features/settings/composables/useGrants'
 import type { SettingView } from '@/features/settings/composables/useSettings'
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 import ObsidianSettings from '@/features/settings/components/ObsidianSettings.vue'
+import { useGrants } from '@/features/settings/composables/useGrants'
 import { useSettings } from '@/features/settings/composables/useSettings'
 import { selectByLabel } from '@/utils/testSelect'
 
@@ -15,7 +17,33 @@ vi.mock('@/features/settings/composables/useSettings', async () => {
   }
 })
 
+vi.mock('@/features/settings/composables/useGrants', async () => {
+  const actual = await vi.importActual<typeof import('@/features/settings/composables/useGrants')>('@/features/settings/composables/useGrants')
+  return {
+    ...actual,
+    useGrants: vi.fn(),
+  }
+})
+
 const MASK = '********'
+
+const baseGrant: Grant = {
+  id: 'g1',
+  capabilityName: 'obsidian.search',
+  contextKind: 'global',
+  contextRef: '',
+  pattern: '',
+  mode: 'allow',
+  limitCount: 0,
+  limitWindowSeconds: 0,
+  expiresAt: null,
+  grantedBy: 'alex',
+  grantedAt: '2026-01-01T00:00:00Z',
+  revokedAt: null,
+  revokedBy: '',
+  reason: '',
+  nodeId: '',
+}
 
 // The Index now button is gated on GET /api/obsidian/status, fetched on
 // mount — every test that exercises the button must answer that call too, or
@@ -52,6 +80,8 @@ afterEach(() => {
 describe('obsidianSettings', () => {
   let items: Ref<SettingView[]>
   let update: ReturnType<typeof vi.fn>
+  let grants: Ref<Grant[]>
+  let createGrant: ReturnType<typeof vi.fn>
 
   beforeEach(() => {
     items = ref(settingsFixture())
@@ -67,6 +97,30 @@ describe('obsidianSettings', () => {
       refetch: vi.fn(),
       update,
     } as unknown as ReturnType<typeof useSettings>)
+
+    // Full trio present by default — most tests exercise Index now, not the
+    // grant-creation flow, and a missing grant would show the Allow indexing
+    // button unasked in those.
+    grants = ref([
+      { ...baseGrant, id: 'g1', capabilityName: 'obsidian.search' },
+      { ...baseGrant, id: 'g2', capabilityName: 'obsidian.read' },
+      { ...baseGrant, id: 'g3', capabilityName: 'memory.write' },
+    ])
+    createGrant = vi.fn(async (input: Record<string, unknown>) => {
+      const created = { ...baseGrant, id: 'g-new', capabilityName: input.capabilityName as string }
+      grants.value = [created, ...grants.value]
+      return created
+    })
+
+    vi.mocked(useGrants).mockReturnValue({
+      grants,
+      capabilities: ref([]),
+      loading: ref(false),
+      error: ref(null),
+      fetchGrants: vi.fn(),
+      createGrant,
+      revokeGrant: vi.fn(),
+    } as unknown as ReturnType<typeof useGrants>)
   })
 
   it('never renders a real API key — only the server-supplied mask', () => {
@@ -294,5 +348,84 @@ describe('obsidianSettings', () => {
 
     expect((wrapper.get('[data-testid="obsidian-index"]').element as HTMLButtonElement).disabled).toBe(false)
     expect(wrapper.find('[data-testid="obsidian-index-unconfigured-hint"]').exists()).toBe(false)
+  })
+
+  it('shows Allow indexing on a 403 denial', async () => {
+    stubIndexFetch({ ok: false, status: 403, json: async () => ({ error: 'capability denied' }) })
+    const wrapper = mount(ObsidianSettings, { attachTo: document.body })
+    await flushPromises()
+
+    await wrapper.get('[data-testid="obsidian-index"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="obsidian-grant-indexing"]').exists()).toBe(true)
+  })
+
+  it('shows Allow indexing proactively when a required grant is missing, without a 403', async () => {
+    grants.value = grants.value.filter(g => g.capabilityName !== 'memory.write')
+    stubIndexFetch({ ok: true, status: 200, json: async () => ({ indexed: 0 }) })
+    const wrapper = mount(ObsidianSettings, { attachTo: document.body })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="obsidian-grant-indexing"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="obsidian-grant-indexing"]').attributes('title')).toBe('Grants memory.write as a global, unlimited allow.')
+  })
+
+  it('hides Allow indexing when all three required grants already exist', () => {
+    const wrapper = mount(ObsidianSettings, { attachTo: document.body })
+    expect(wrapper.find('[data-testid="obsidian-grant-indexing"]').exists()).toBe(false)
+  })
+
+  it('clicking Allow indexing POSTs exactly the missing grants with the right body, then confirms', async () => {
+    grants.value = grants.value.filter(g => g.capabilityName === 'obsidian.search')
+    stubIndexFetch({ ok: false, status: 403, json: async () => ({ error: 'capability denied' }) })
+    const wrapper = mount(ObsidianSettings, { attachTo: document.body })
+    await flushPromises()
+
+    await wrapper.get('[data-testid="obsidian-index"]').trigger('click')
+    await flushPromises()
+
+    await wrapper.get('[data-testid="obsidian-grant-indexing"]').trigger('click')
+    await flushPromises()
+
+    expect(createGrant).toHaveBeenCalledTimes(2)
+    expect(createGrant).toHaveBeenCalledWith({
+      capabilityName: 'obsidian.read',
+      contextKind: 'global',
+      contextRef: '',
+      pattern: '',
+      mode: 'allow',
+      limitCount: 0,
+      limitWindowSeconds: 0,
+      reason: 'Obsidian indexing (created from the Obsidian settings)',
+    })
+    expect(createGrant).toHaveBeenCalledWith({
+      capabilityName: 'memory.write',
+      contextKind: 'global',
+      contextRef: '',
+      pattern: '',
+      mode: 'allow',
+      limitCount: 0,
+      limitWindowSeconds: 0,
+      reason: 'Obsidian indexing (created from the Obsidian settings)',
+    })
+    expect(createGrant).not.toHaveBeenCalledWith(expect.objectContaining({ capabilityName: 'obsidian.search' }))
+
+    expect(wrapper.find('[data-testid="obsidian-grant-indexing"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="obsidian-grant-confirmation"]').text()).toContain('Indexing allowed')
+    expect(wrapper.find('[data-testid="obsidian-index-result"]').exists()).toBe(false)
+  })
+
+  it('renders an inline error when creating a grant fails', async () => {
+    grants.value = grants.value.filter(g => g.capabilityName !== 'memory.write')
+    createGrant.mockRejectedValueOnce(new Error('server exploded'))
+    stubIndexFetch({ ok: true, status: 200, json: async () => ({ indexed: 0 }) })
+    const wrapper = mount(ObsidianSettings, { attachTo: document.body })
+    await flushPromises()
+
+    await wrapper.get('[data-testid="obsidian-grant-indexing"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="obsidian-grant-error"]').text()).toContain('server exploded')
   })
 })
