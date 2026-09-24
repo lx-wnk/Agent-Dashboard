@@ -2,6 +2,7 @@ package serverapp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -79,6 +80,7 @@ func bootObsidianClient(ctx context.Context, settingsSvc *settings.Service) *obs
 // is saved. The Settings panel saves the keys one at a time, so a partial trio
 // is a normal intermediate state: it turns the vault off instead of failing the save.
 func watchObsidianSettings(settingsSvc *settings.Service, clients *obsidian.ClientHolder) {
+	validateVaultRootOnSave(settingsSvc, clients)
 	settingsSvc.OnChange(func(ctx context.Context, key string) {
 		if !strings.HasPrefix(key, "obsidian.") {
 			return
@@ -88,6 +90,33 @@ func watchObsidianSettings(settingsSvc *settings.Service, clients *obsidian.Clie
 			slog.Info("obsidian: vault off until its settings are complete", "err", err)
 		}
 		clients.Set(client)
+	})
+}
+
+// validateVaultRootOnSave registers a pre-save hook that probes the vault when
+// obsidian.vaultRoot is being set. A non-existent folder is rejected; an
+// unreachable vault is allowed through (status/ping already reports
+// reachability separately).
+func validateVaultRootOnSave(settingsSvc *settings.Service, clients *obsidian.ClientHolder) {
+	settingsSvc.OnPreSave(func(ctx context.Context, key, value string) error {
+		if key != "obsidian.vaultRoot" || value == "" {
+			return nil
+		}
+		client := clients.Get()
+		if client == nil {
+			// Vault not configured yet — can't probe, don't block.
+			return nil
+		}
+		err := client.ProbeFolder(ctx, value)
+		if err == nil {
+			return nil
+		}
+		if errors.Is(err, obsidian.ErrNotFound) {
+			return fmt.Errorf("folder %q not found in vault", value)
+		}
+		// Network/TLS error: vault unreachable — don't block the save.
+		slog.Warn("obsidian: could not verify vault root", "root", value, "err", err)
+		return nil
 	})
 }
 

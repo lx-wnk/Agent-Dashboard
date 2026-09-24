@@ -329,6 +329,39 @@ func (c *Client) Ping(ctx context.Context) error {
 	return nil
 }
 
+// ProbeFolder checks whether a folder exists at the given vault-absolute path
+// by issuing GET /vault/{folderPath}/ against the Obsidian REST API.
+// Returns nil on success, ErrNotFound if the folder doesn't exist, or a
+// wrapped network/HTTP error otherwise. Unlike newRequest, folderPath is not
+// resolved against c.vaultRoot: this checks a candidate vault root itself,
+// before it is adopted, so there is no existing root to resolve it against.
+func (c *Client) ProbeFolder(ctx context.Context, folderPath string) error {
+	cleanPath := strings.TrimPrefix(path.Clean("/"+folderPath), "/")
+	if cleanPath == "" || cleanPath == "." {
+		return errors.New("obsidian: folder path must not be empty")
+	}
+	u := *c.baseURL
+	u.Path = "/vault/" + cleanPath + "/"
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return fmt.Errorf("obsidian: probe folder: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("obsidian: probe folder: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode == http.StatusNotFound {
+		return fmt.Errorf("obsidian: probe folder: %w", ErrNotFound)
+	}
+	if resp.StatusCode/100 != 2 {
+		return fmt.Errorf("obsidian: probe folder: unexpected status %d", resp.StatusCode)
+	}
+	return nil
+}
+
 // Read returns the raw content of the note at notePath.
 func (c *Client) Read(ctx context.Context, notePath string) (string, error) {
 	req, err := c.newRequest(ctx, http.MethodGet, notePath, nil)

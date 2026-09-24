@@ -41,9 +41,10 @@ type Service struct {
 	repo Repo
 	box  *secretbox.Box
 
-	mu       sync.RWMutex
-	snapshot map[string]string // key -> raw DB value (present only if a row exists)
-	onChange []func(ctx context.Context, key string)
+	mu        sync.RWMutex
+	snapshot  map[string]string // key -> raw DB value (present only if a row exists)
+	onChange  []func(ctx context.Context, key string)
+	onPreSave []func(ctx context.Context, key, value string) error
 }
 
 // New builds a Service. box may be nil when no database is configured; in
@@ -195,6 +196,17 @@ func (s *Service) OnChange(fn func(ctx context.Context, key string)) {
 	s.mu.Unlock()
 }
 
+// OnPreSave registers fn to run after def.Validate succeeds but before the
+// value is persisted, for non-secret keys only. Returning an error aborts the
+// Set as a *ValidationError, before repo.Set is ever called. This is the seam
+// a caller needing an HTTP probe (e.g. obsidian.vaultRoot) hooks into, since
+// Definition.Validate is synchronous and cannot make a network call itself.
+func (s *Service) OnPreSave(fn func(ctx context.Context, key, value string) error) {
+	s.mu.Lock()
+	s.onPreSave = append(s.onPreSave, fn)
+	s.mu.Unlock()
+}
+
 func (s *Service) set(ctx context.Context, key, value string) error {
 	def, ok := Lookup(key)
 	if !ok {
@@ -230,6 +242,14 @@ func (s *Service) set(ctx context.Context, key, value string) error {
 	}
 	if err := def.Validate(value); err != nil {
 		return &ValidationError{Err: fmt.Errorf("settings.Set: %w", err)}
+	}
+	s.mu.RLock()
+	preSaveHooks := s.onPreSave
+	s.mu.RUnlock()
+	for _, fn := range preSaveHooks {
+		if err := fn(ctx, key, value); err != nil {
+			return &ValidationError{Err: fmt.Errorf("settings.Set: %w", err)}
+		}
 	}
 	if err := s.repo.Set(ctx, key, value); err != nil {
 		return fmt.Errorf("settings.Set: %w", err)
