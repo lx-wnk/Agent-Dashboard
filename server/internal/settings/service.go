@@ -248,7 +248,7 @@ func (s *Service) set(ctx context.Context, key, value string) error {
 	s.mu.RUnlock()
 	for _, fn := range preSaveHooks {
 		if err := fn(ctx, key, value); err != nil {
-			return &ValidationError{Err: fmt.Errorf("settings.Set: %w", err)}
+			return &ValidationError{Err: err}
 		}
 	}
 	if err := s.repo.Set(ctx, key, value); err != nil {

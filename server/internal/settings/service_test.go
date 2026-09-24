@@ -200,6 +200,25 @@ func TestService_OnPreSaveBlocksSave(t *testing.T) {
 	require.NoError(t, svc.Set(t.Context(), "obsidian.baseURL", "https://127.0.0.1:27124"))
 }
 
+// TestService_OnPreSaveErrorReachesValidationErrorUnprefixed pins that a
+// hook's error message is what the client sees, not wrapped behind
+// "settings.Set: " — that internal prefix leaked into the HTTP response
+// obsidian.vaultRoot validation returns.
+func TestService_OnPreSaveErrorReachesValidationErrorUnprefixed(t *testing.T) {
+	svc := New(newFakeRepo(), nil)
+	require.NoError(t, svc.Load(t.Context()))
+
+	svc.OnPreSave(func(_ context.Context, _, _ string) error {
+		return fmt.Errorf("folder %q not found in vault", "bad-root")
+	})
+
+	err := svc.Set(t.Context(), "obsidian.vaultRoot", "bad-root")
+	require.Error(t, err)
+	var verr *ValidationError
+	require.True(t, errors.As(err, &verr), "pre-save error must still be a ValidationError")
+	assert.Equal(t, `folder "bad-root" not found in vault`, err.Error())
+}
+
 func TestService_OnPreSaveDoesNotFireOnValidationFailure(t *testing.T) {
 	svc := New(newFakeRepo(), nil)
 	require.NoError(t, svc.Load(t.Context()))

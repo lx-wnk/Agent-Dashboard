@@ -329,12 +329,7 @@ func (c *Client) Ping(ctx context.Context) error {
 	return nil
 }
 
-// ProbeFolder checks whether a folder exists at the given vault-absolute path
-// by issuing GET /vault/{folderPath}/ against the Obsidian REST API.
-// Returns nil on success, ErrNotFound if the folder doesn't exist, or a
-// wrapped network/HTTP error otherwise. Unlike newRequest, folderPath is not
-// resolved against c.vaultRoot: this checks a candidate vault root itself,
-// before it is adopted, so there is no existing root to resolve it against.
+// ProbeFolder reports whether folderPath exists, unresolved against c.vaultRoot since it checks a candidate root itself.
 func (c *Client) ProbeFolder(ctx context.Context, folderPath string) error {
 	cleanPath := strings.TrimPrefix(path.Clean("/"+folderPath), "/")
 	if cleanPath == "" || cleanPath == "." {

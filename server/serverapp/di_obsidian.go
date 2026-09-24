@@ -93,10 +93,7 @@ func watchObsidianSettings(settingsSvc *settings.Service, clients *obsidian.Clie
 	})
 }
 
-// validateVaultRootOnSave registers a pre-save hook that probes the vault when
-// obsidian.vaultRoot is being set. A non-existent folder is rejected; an
-// unreachable vault is allowed through (status/ping already reports
-// reachability separately).
+// validateVaultRootOnSave rejects a non-existent folder; an unreachable vault is allowed through.
 func validateVaultRootOnSave(settingsSvc *settings.Service, clients *obsidian.ClientHolder) {
 	settingsSvc.OnPreSave(func(ctx context.Context, key, value string) error {
 		if key != "obsidian.vaultRoot" || value == "" {

@@ -206,6 +206,31 @@ func TestValidateVaultRootOnSave_RejectsNonExistentRoot(t *testing.T) {
 	require.NoError(t, svc.Set(t.Context(), "obsidian.vaultRoot", ""))
 }
 
+func TestValidateVaultRootOnSave_UnreachableVaultDoesNotBlock(t *testing.T) {
+	// Stub an HTTP server that fails every request with a 500, simulating a
+	// vault that is reachable but broken (a refused connection hits the same
+	// non-ErrNotFound branch in validateVaultRootOnSave).
+	vault := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(vault.Close)
+
+	svc := newSettingsServiceForTest(t)
+	client, err := obsidian.NewClient(obsidian.Config{
+		BaseURL:   vault.URL,
+		APIKey:    "test-key",
+		VaultRoot: "placeholder",
+		TLSMode:   "insecure-loopback",
+	})
+	require.NoError(t, err)
+	clients := obsidian.NewClientHolder(client)
+
+	validateVaultRootOnSave(svc, clients)
+
+	require.NoError(t, svc.Set(t.Context(), "obsidian.vaultRoot", "some-root"),
+		"a probe failure other than ErrNotFound must not block the save")
+}
+
 func TestValidateVaultRootOnSave_NoClientDoesNotBlock(t *testing.T) {
 	svc := newSettingsServiceForTest(t)
 	clients := obsidian.NewClientHolder(nil)
