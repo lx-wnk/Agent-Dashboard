@@ -11,12 +11,6 @@ import (
 	"github.com/lx-wnk/kontor/server/internal/pipeline"
 )
 
-// TestSpawn_StageKeyTTLUsesGlobalConfigEvenWhenTaskColumnIsZero proves the
-// orchestrator populates StageContext.StageTimeout from the same global
-// stageTimeoutSeconds config the kill-check reads, so a task whose own
-// stage_timeout_seconds column is 0 (e.g. created via MCP) still gets a
-// stage-run key bounded by the pipeline's real timeout instead of a
-// near-instantly expiring one.
 func TestSpawn_StageKeyTTLUsesGlobalConfigEvenWhenTaskColumnIsZero(t *testing.T) {
 	bundle := openBundle(t)
 	c := bundle.Client

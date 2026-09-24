@@ -37,10 +37,6 @@ func TestStageKeyIssuer_IssuedKeyResolvesAndCarriesAttribution(t *testing.T) {
 	require.WithinDuration(t, time.Now().Add(30*time.Minute+mcp.StageKeyTTLBuffer), *row.ExpiresAt, time.Minute)
 }
 
-// TestStageKeyIssuer_ZeroTimeoutStillExpires proves the fix for the bug where
-// a task with no per-task stage timeout (StageTimeoutSeconds == 0, e.g. tasks
-// created via MCP) minted a key with expires_at == now — dying immediately
-// instead of falling back to a bounded TTL.
 func TestStageKeyIssuer_ZeroTimeoutStillExpires(t *testing.T) {
 	issuer, keys, ctx := newIssuer(t)
 

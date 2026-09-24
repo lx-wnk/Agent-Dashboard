@@ -325,11 +325,6 @@ func TestAgentStageHandler_IssueTaskAPIKeySuccessReachesSpawnOptions(t *testing.
 		"the stage timeout must reach the issuer as a duration")
 }
 
-// TestAgentStageHandler_IssueTaskAPIKeyUsesStageTimeoutNotTaskColumn proves the
-// fix: the key TTL is derived from ctx.StageTimeout (the orchestrator's global
-// stageTimeoutSeconds config read), not from Task.StageTimeoutSeconds — which
-// is 0 for tasks created via MCP and would otherwise mint a near-instantly
-// expiring credential.
 func TestAgentStageHandler_IssueTaskAPIKeyUsesStageTimeoutNotTaskColumn(t *testing.T) {
 	var captured pipeline.SpawnAgentOptions
 	spawnFn := func(opts pipeline.SpawnAgentOptions) (pipeline.SpawnResult, error) {
