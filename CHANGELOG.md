@@ -18,6 +18,7 @@ Preparing the first public release.
 
 ### Changed
 
+- **Every select can be filtered by typing.** Opening a select (click, arrow key, or just typing while it has focus) turns it into a text field that narrows the list by label as you type; arrow keys and Enter pick from the filtered list, Escape restores the previous choice, and a "No matches" row says when nothing fits. Only listed options can be picked. The workspace "Add a tile" and tile "Swap" pickers now use the same select.
 - **Obsidian status now tells you why the vault is unreachable, not just that it's configured.** `GET /api/obsidian/status` probes the vault with a cheap unauthenticated ping and reports `reachable` plus a short error and an actionable hint (self-signed certificate, wrong API key, Obsidian not running); the settings panel shows that hint under the Index button and disables it until the vault is reachable. A denied "Index now" run now links straight to the Grants settings instead of leaving you to find them yourself.
 
 ### Fixed
