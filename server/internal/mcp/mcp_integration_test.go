@@ -1,6 +1,7 @@
 package mcp_test
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -8,7 +9,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lx-wnk/kontor/server/internal/mcp"
 	"github.com/stretchr/testify/assert"
@@ -116,28 +116,30 @@ func TestMCPEndpoint_InitializeDeclaresListChanged(t *testing.T) {
 
 func TestMCPEndpoint_GETStreamsToolsListChangedNotification(t *testing.T) {
 	notifier := mcp.NewNotifier()
-	h := mcp.MCPHandler(mcp.ToolRegistry{}, nil, nil, notifier)
+	srv := httptest.NewServer(mcp.MCPHandler(mcp.ToolRegistry{}, nil, nil, notifier))
+	defer srv.Close()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL, nil)
+	require.NoError(t, err)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/mcp", nil).WithContext(ctx)
-	rec := httptest.NewRecorder()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.True(t, strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream"))
 
-	done := make(chan struct{})
-	go func() {
-		h.ServeHTTP(rec, req)
-		close(done)
-	}()
-
-	// Give the handler a moment to subscribe
-	time.Sleep(50 * time.Millisecond)
+	// Headers arrive only after the handler subscribed, so no sleep is needed.
 	notifier.NotifyToolsChanged()
-	time.Sleep(50 * time.Millisecond)
-	cancel()
-	<-done
+	line, err := bufio.NewReader(resp.Body).ReadString('\n')
+	require.NoError(t, err)
+	assert.Contains(t, line, "notifications/tools/list_changed")
+}
 
-	assert.Equal(t, http.StatusOK, rec.Code)
-	assert.Equal(t, "text/event-stream", rec.Header().Get("Content-Type"))
-	assert.Contains(t, rec.Body.String(), "notifications/tools/list_changed")
+func TestMCPEndpoint_GETWithoutNotifierIs405WithAllow(t *testing.T) {
+	h := mcp.MCPHandler(mcp.ToolRegistry{}, nil, nil, nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/mcp", nil))
+
+	assert.Equal(t, http.StatusMethodNotAllowed, rec.Code)
+	assert.Equal(t, http.MethodPost, rec.Header().Get("Allow"))
 }

@@ -14,6 +14,8 @@ Preparing the first public release.
 
 ### Fixed
 
+- **"Index now" says how many notes the vault search found, not only how many it added.** `POST /api/obsidian/index` returns `matched` next to `indexed`, and the panel reports "Indexed X of Y notes", so a vault root that matches nothing (0 of 0) no longer looks the same as a vault that is already fully indexed.
+- **Settings validation errors no longer start with `settings.Set:`.** An unknown key or an invalid value reaches the `400` response as just the message, the same as a rejected Obsidian vault root already did.
 - The desktop app no longer hangs at start when opened from Finder. Watching Claude's config in the home directory opened every entry there, including `~/Desktop`, which waits on a macOS privacy prompt; the config file is now polled instead.
 - **A half-filled Obsidian setup no longer stops the server from starting.**
   Boot used to fail outright when only some of `obsidian.baseURL`,
@@ -216,6 +218,7 @@ Preparing the first public release.
 
 ### Added
 - Agents carry their session title (a /rename title, else Claude's generated one).
+- **Connected MCP clients learn when the Obsidian tools appear or disappear.** `GET /api/mcp` now opens a Server-Sent-Events stream, and `initialize` declares `capabilities.tools.listChanged: true`. Every `obsidian.*` settings save sends `notifications/tools/list_changed` on it, so a client re-reads `tools/list` instead of keeping a stale list until it reconnects. Module (plugin) tools do not send it yet.
 - **Allow Obsidian indexing with one click from its settings.** The Obsidian panel now shows an "Allow indexing" button — on a denied "Index now" run, or proactively whenever `obsidian.search`, `obsidian.read`, or `memory.write` is missing a global allow grant — that creates exactly the missing grants and confirms once indexing is unblocked, without a detour through Settings → Grants.
 - **Live edges in the hub.** A dashed line runs from an agent to each vault
   note it read in the last ten minutes, a dotted one to each note it wrote,

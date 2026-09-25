@@ -36,11 +36,8 @@ func TestNotifier_UnsubscribedChannelReceivesNothing(t *testing.T) {
 
 	n.NotifyToolsChanged()
 
-	select {
-	case frame := <-ch:
+	if frame, ok := <-ch; ok {
 		t.Fatalf("unsubscribed channel received: %s", frame)
-	case <-time.After(50 * time.Millisecond):
-		// expected
 	}
 }
 
@@ -49,12 +46,11 @@ func TestNotifier_SlowSubscriberDoesNotBlock(t *testing.T) {
 	ch, unsub := n.Subscribe()
 	defer unsub()
 
-	// Fill the buffer (capacity 4)
-	for i := 0; i < 4; i++ {
+	for i := 0; i < cap(ch); i++ {
 		n.NotifyToolsChanged()
 	}
 
-	// This 5th call must not block — it drops for the full subscriber.
+	// The buffer is full: this call must drop the frame, not block.
 	done := make(chan struct{})
 	go func() {
 		n.NotifyToolsChanged()
@@ -66,16 +62,5 @@ func TestNotifier_SlowSubscriberDoesNotBlock(t *testing.T) {
 		t.Fatal("NotifyToolsChanged blocked on a full subscriber channel")
 	}
 
-	// Drain and verify at least one was received.
-	var count int
-	for {
-		select {
-		case <-ch:
-			count++
-		default:
-			goto drained
-		}
-	}
-drained:
-	require.GreaterOrEqual(t, count, 4)
+	require.Len(t, ch, cap(ch), "the full buffer keeps its frames; only the overflow is dropped")
 }

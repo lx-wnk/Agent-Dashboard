@@ -132,7 +132,8 @@ func (h *Handler) invalidateGraphCacheOnSwap(client *obsidianapp.Client) {
 }
 
 // index runs one obsidianapp.IndexNotes pass and reports how many new
-// pointer entries it created. Only one run is allowed in flight at a time
+// pointer entries it created ("indexed") out of the notes the vault search
+// found under the root ("matched"). Only one run is allowed in flight at a time
 // (h.running) — a second POST while one is running gets 409, not a race
 // against the first (see h.running's own doc comment for why that race is
 // dangerous: permanent duplicate pointers, not just a wasted request).

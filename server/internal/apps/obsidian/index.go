@@ -56,7 +56,7 @@ func IndexNotes(
 	mem repo.MemoryRepo,
 	gate memory.Gate,
 	spaceID string,
-) (int, int, error) {
+) (indexed, matched int, err error) {
 	space, err := mem.GetSpaceByID(ctx, spaceID)
 	if err != nil {
 		return 0, 0, fmt.Errorf("obsidian.IndexNotes: resolve space: %w", err)
@@ -106,10 +106,9 @@ func IndexNotes(
 	if err != nil {
 		return 0, 0, fmt.Errorf("obsidian.IndexNotes: search: %w", err)
 	}
-	matched := len(results)
+	matched = len(results)
 
 	seen := make(map[string]bool, len(results))
-	indexed := 0
 	for _, r := range results {
 		notePath := r.Path
 		seen[notePath] = true

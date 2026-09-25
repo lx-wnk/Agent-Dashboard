@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"runtime/debug"
 	"sort"
+
+	"github.com/lx-wnk/kontor/server/internal/sse"
 )
 
 const protocolVersion = "2024-11-05"
@@ -140,38 +142,39 @@ func MCPHandler(registry ToolRegistry, modules ModuleTools, moduleGate ModuleToo
 			writeRPC(w, rpcResponse{JSONRPC: "2.0", ID: req.ID, Error: &rpcError{Code: -32601, Message: "method not found: " + req.Method}})
 		}
 	}
+	allow := http.MethodPost
+	if notifier != nil {
+		allow = http.MethodGet + ", " + http.MethodPost
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodPost:
+		switch {
+		case r.Method == http.MethodPost:
 			postHandler(w, r)
-		case http.MethodGet:
-			if notifier == nil {
-				http.Error(w, "SSE not available", http.StatusMethodNotAllowed)
-				return
-			}
+		case r.Method == http.MethodGet && notifier != nil:
 			flusher, ok := w.(http.Flusher)
 			if !ok {
 				http.Error(w, "streaming not supported", http.StatusInternalServerError)
 				return
 			}
-			w.Header().Set("Content-Type", "text/event-stream")
-			w.Header().Set("Cache-Control", "no-cache")
-			w.Header().Set("Connection", "keep-alive")
-			w.WriteHeader(http.StatusOK)
-			flusher.Flush()
-
+			// Subscribed before the headers flush, so a client holding its 200 misses no later change.
 			ch, unsub := notifier.Subscribe()
 			defer unsub()
+			sse.WriteHeaders(w)
+			flusher.Flush()
 			for {
 				select {
 				case <-r.Context().Done():
 					return
-				case frame := <-ch:
+				case frame, ok := <-ch:
+					if !ok {
+						return
+					}
 					_, _ = w.Write(frame)
 					flusher.Flush()
 				}
 			}
 		default:
+			w.Header().Set("Allow", allow)
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
 	})
