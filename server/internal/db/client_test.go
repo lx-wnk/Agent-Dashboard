@@ -672,7 +672,7 @@ func TestOpen_LegacyPreApprovedColumnSurvives(t *testing.T) {
 
 	raw, err := sql.Open("sqlite", "file:"+path+"?_pragma=foreign_keys(1)")
 	require.NoError(t, err)
-	_, err = raw.Exec("CREATE TABLE `tasks` (`id` text NOT NULL, `slug` text NOT NULL, `title` text NOT NULL, `cwd` text NOT NULL, `current_stage` text NOT NULL DEFAULT ('concept'), `priority` text NOT NULL DEFAULT ('medium'), `max_iterations` integer NOT NULL DEFAULT (20), `silver_bullet` bool NOT NULL DEFAULT (false), `created_at` datetime NOT NULL, `updated_at` datetime NOT NULL, PRIMARY KEY (`id`))")
+	_, err = raw.Exec("CREATE TABLE `tasks` (`id` text NOT NULL, `slug` text NOT NULL, `title` text NOT NULL, `cwd` text NOT NULL, `current_stage` text NOT NULL DEFAULT ('concept'), `priority` text NOT NULL DEFAULT ('medium'), `max_iterations` integer NOT NULL DEFAULT (20), `stage_timeout_seconds` integer NOT NULL DEFAULT (1800), `silver_bullet` bool NOT NULL DEFAULT (false), `created_at` datetime NOT NULL, `updated_at` datetime NOT NULL, PRIMARY KEY (`id`))")
 	require.NoError(t, err)
 	// Verbatim pre-drop DDL, as emitted by ent while the field still existed.
 	_, err = raw.Exec("CREATE TABLE `task_permissions` (`id` text NOT NULL, `tool` text NOT NULL, `pattern` text NULL, `granted` bool NOT NULL DEFAULT (false), `pre_approved` bool NOT NULL DEFAULT (false), `manual_override` bool NOT NULL DEFAULT (false), `decided_by` text NULL, `requested_at` datetime NOT NULL, `decided_at` datetime NULL, `expires_at` datetime NULL, `task_id` text NOT NULL, PRIMARY KEY (`id`), CONSTRAINT `task_permissions_tasks_permissions` FOREIGN KEY (`task_id`) REFERENCES `tasks` (`id`) ON DELETE CASCADE)")
@@ -906,7 +906,6 @@ func TestOpen_DropStageTimeoutColumns_Up(t *testing.T) {
 
 	bundle, err := db.Open(path)
 	require.NoError(t, err)
-	defer func() { _ = bundle.Close() }()
 
 	// Assert column is gone from tasks.
 	var tasksCol int

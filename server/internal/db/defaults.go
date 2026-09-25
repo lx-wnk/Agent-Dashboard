@@ -9,10 +9,7 @@ const (
 	DefaultStage         = "backlog"
 	DefaultPriority      = "medium"
 	DefaultMaxIterations = 20
-	// DefaultStageTimeoutSeconds is the global pipeline-config default, not
-	// a per-task column default — the per-task column is dropped. Kept for
-	// orchestrator.go and pipeline_config_routes.go which use it as the
-	// fallback when no stageTimeoutSeconds config row exists.
+	// Global stageTimeoutSeconds pipeline-config fallback; no task column mirrors it.
 	DefaultStageTimeoutSeconds = 1800
 	DefaultCostBudgetCents     = 500      // $5 per-task cost guardrail
 	DefaultTokenBudget         = 15000000 // 15M tokens per-task guardrail

@@ -360,7 +360,7 @@ func clampNegativeBudget(p *int) {
 
 // CreateTaskParams is the resolved input for creating a pipeline task, shared by
 // the HTTP create handler and the scheduler materializer. Defaults for priority,
-// stage, maxIterations, stageTimeoutSeconds, and budgets are applied inside
+// stage, maxIterations, and budgets are applied inside
 // CreateTaskFromInput when their zero value is passed.
 type CreateTaskParams struct {
 	Slug            string
