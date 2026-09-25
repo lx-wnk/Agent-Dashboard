@@ -43,7 +43,9 @@ func TokenFromGhCLI(ctx context.Context) (string, error) {
 
 	out, err := runGhAuthToken(ctx1)
 	if err != nil && ctx1.Err() == context.DeadlineExceeded {
-		// Retry once: a slow keychain unlock can exceed the first timeout.
+		// Retry once on timeout: a slow keychain unlock (macOS Secure Enclave
+		// prompt, FileVault) can exceed ghTokenTimeout. The retry doubles the
+		// effective ceiling to 2×ghTokenTimeout before returning an error.
 		ctx2, cancel2 := context.WithTimeout(ctx, ghTokenTimeout)
 		defer cancel2()
 		out, err = runGhAuthToken(ctx2)
