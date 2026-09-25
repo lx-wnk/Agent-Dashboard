@@ -2,12 +2,16 @@ package serverapp
 
 import (
 	"context"
+	"database/sql"
+	"log/slog"
 	"net/http"
 
+	tasksapi "github.com/lx-wnk/kontor/server/internal/api/tasks"
 	"github.com/lx-wnk/kontor/server/internal/apps/github"
 	"github.com/lx-wnk/kontor/server/internal/apps/obsidian"
 	"github.com/lx-wnk/kontor/server/internal/capability"
 	"github.com/lx-wnk/kontor/server/internal/db/ent"
+	"github.com/lx-wnk/kontor/server/internal/db/rawrepo"
 	"github.com/lx-wnk/kontor/server/internal/db/repo"
 	mcp "github.com/lx-wnk/kontor/server/internal/mcp"
 	mcptools "github.com/lx-wnk/kontor/server/internal/mcp/tools"
@@ -18,8 +22,32 @@ import (
 	"github.com/lx-wnk/kontor/server/internal/sse"
 )
 
+// newMCPTaskBroadcast publishes task events with the same enriched payload the HTTP task handler sends.
+func newMCPTaskBroadcast(
+	taskRepo repo.TaskRepo,
+	srRepo repo.StageRunRepo,
+	permRepo repo.PermissionRepo,
+	srBulkRepo rawrepo.StageRunBulkRepo,
+	tb *sse.TaskBroadcaster,
+) func(ctx context.Context, eventType, taskID string) {
+	return func(ctx context.Context, eventType, taskID string) {
+		task, err := taskRepo.GetByID(ctx, taskID)
+		if err != nil {
+			slog.Warn("mcp broadcast: GetByID failed", "taskID", taskID, "event", eventType, "err", err)
+			return
+		}
+		enriched, err := tasksapi.EnrichTask(ctx, task, srRepo, permRepo, srBulkRepo)
+		if err != nil {
+			slog.Warn("mcp broadcast: EnrichTask failed", "taskID", taskID, "event", eventType, "err", err)
+			return
+		}
+		tb.Broadcast(sse.TaskEvent{Type: eventType, TaskID: taskID, Payload: enriched})
+	}
+}
+
 func provideMCPHandler(
 	client *ent.Client,
+	db *sql.DB,
 	orch *pipeline.PipelineOrchestrator,
 	sched *scheduler.Scheduler,
 	tb *sse.TaskBroadcaster,
@@ -48,14 +76,18 @@ func provideMCPHandler(
 	scratchRepo := repo.NewScratchpadRepo(client)
 	lockRepo := repo.NewCoordLockRepo(client)
 	turnsRepo := repo.NewRefinementTurnRepo(client)
+	srBulkRepo := rawrepo.NewStageRunBulkRepo(db)
 
 	caller := mcp.CallerResolver{StageRuns: srRepo, Tasks: taskRepo}
 
-	broadcast := func(taskID string) {
-		tb.Broadcast(sse.TaskEvent{Type: "task_changed", TaskID: taskID, Payload: map[string]string{}})
-	}
+	broadcast := newMCPTaskBroadcast(taskRepo, srRepo, permRepo, srBulkRepo, tb)
 	broadcastDeleted := func(taskID string) {
 		tb.Broadcast(sse.TaskEvent{Type: "task_deleted", TaskID: taskID, Payload: map[string]string{}})
+	}
+	// ScheduleDeps.Broadcast is a separate func(string) type for schedule events,
+	// out of scope for the task event contract fix above — kept at its prior behavior.
+	scheduleBroadcast := func(scheduleID string) {
+		tb.Broadcast(sse.TaskEvent{Type: "task_changed", TaskID: scheduleID, Payload: map[string]string{}})
 	}
 
 	registry := mcp.ToolRegistry{}
@@ -102,7 +134,8 @@ func provideMCPHandler(
 			_, err := orch.ProgressTask(ctx, taskID, nil)
 			return err
 		},
-		Revoke: mcp.StageKeyIssuer{Keys: apiKeyRepo}.Revoke,
+		Revoke:    mcp.StageKeyIssuer{Keys: apiKeyRepo}.Revoke,
+		Broadcast: broadcast,
 	})
 	mcptools.RegisterPlanTools(registry, mcptools.PlanDeps{
 		Turns:     turnsRepo,
@@ -116,13 +149,14 @@ func provideMCPHandler(
 			_, err := orch.RequeueForUser(ctx, taskID, prompt)
 			return err
 		},
-		Revoke: mcp.StageKeyIssuer{Keys: apiKeyRepo}.Revoke,
+		Revoke:    mcp.StageKeyIssuer{Keys: apiKeyRepo}.Revoke,
+		Broadcast: broadcast,
 	})
 	mcptools.RegisterScheduleTools(registry, mcptools.ScheduleDeps{
 		Repo:       repo.NewTaskScheduleRepo(client),
 		Translator: scheduler.NewNLCron(nil),
 		Runner:     sched,
-		Broadcast:  broadcast,
+		Broadcast:  scheduleBroadcast,
 	})
 	mcptools.RegisterCoordTools(registry, mcptools.CoordDeps{Scratch: scratchRepo, Locks: lockRepo})
 	mcptools.RegisterMemoryTools(registry, mcptools.MemoryDeps{

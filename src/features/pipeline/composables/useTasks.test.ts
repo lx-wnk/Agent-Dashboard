@@ -1,5 +1,5 @@
 import type { PipelineTask } from '@/types'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { byActivityDesc } from '@/features/pipeline/composables/useTasks'
 
 function makeTask(id: string, updatedAt: string): PipelineTask {
@@ -55,5 +55,49 @@ describe('byActivityDesc', () => {
     const missing = makeTask('missing', undefined as unknown as string)
     expect(() => [missing, valid].sort(byActivityDesc)).not.toThrow()
     expect([missing, valid].sort(byActivityDesc).map(t => t.id)).toEqual(['valid', 'missing'])
+  })
+})
+
+function makeUpsertTask(id: string, title: string): PipelineTask {
+  return { ...makeTask(id, '2026-01-01T00:00:00Z'), title }
+}
+
+describe('refreshTask', () => {
+  let mod: typeof import('@/features/pipeline/composables/useTasks')
+
+  beforeEach(async () => {
+    vi.resetModules()
+    mod = await import('@/features/pipeline/composables/useTasks')
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('adds the task when its id is unknown', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(makeUpsertTask('new-1', 'New Task')),
+    }))
+
+    await mod.refreshTask('new-1')
+
+    const { tasks } = mod.useTasks({ autoStart: false })
+    expect(tasks.value.map(t => t.id)).toContain('new-1')
+  })
+
+  it('replaces the task when its id is already known', async () => {
+    const { tasks } = mod.useTasks({ autoStart: false })
+    tasks.value = [makeUpsertTask('existing-1', 'Old')]
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(makeUpsertTask('existing-1', 'Updated')),
+    }))
+
+    await mod.refreshTask('existing-1')
+
+    expect(tasks.value).toHaveLength(1)
+    expect(tasks.value[0].id).toBe('existing-1')
+    expect(tasks.value[0].title).toBe('Updated')
   })
 })

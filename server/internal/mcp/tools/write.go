@@ -21,7 +21,7 @@ type WriteDeps struct {
 	DepRepo          repo.DependencyRepo
 	ProjectRepo      repo.ProjectRepo
 	SpawnerRepo      repo.SpawnerRepo
-	Broadcast        func(taskID string)
+	Broadcast        func(ctx context.Context, eventType, taskID string)
 	BroadcastDeleted func(taskID string)
 	// May be nil — see safeBroadcastProject.
 	ProjectBroadcaster *sse.ProjectBroadcaster
@@ -136,7 +136,15 @@ func permInputsToGrantEntries(perms []permissionInput) ([]repo.GrantEntry, error
 }
 
 // safeCall wraps Broadcast/BroadcastDeleted so nil funcs don't panic in tests.
-func safeBroadcast(fn func(string), id string) {
+func safeBroadcast(fn func(context.Context, string, string), ctx context.Context, eventType, id string) {
+	if fn != nil {
+		fn(ctx, eventType, id)
+	}
+}
+
+// safeBroadcastDeleted wraps BroadcastDeleted, which keeps the simpler
+// func(taskID string) signature — it never needs an enriched payload.
+func safeBroadcastDeleted(fn func(string), id string) {
 	if fn != nil {
 		fn(id)
 	}
@@ -355,7 +363,7 @@ func registerCreateTask(registry mcp.ToolRegistry, d WriteDeps) {
 				seedSummary["inherited"] = map[string]any{"fromParent": parentTaskID, "granted": len(inherited)}
 			}
 
-			safeBroadcast(d.Broadcast, task.ID)
+			safeBroadcast(d.Broadcast, ctx, "task_created", task.ID)
 			return mcp.OK(map[string]any{"task": task, "permissions": seedSummary})
 		},
 	})
@@ -440,7 +448,7 @@ func registerUpdateTask(registry mcp.ToolRegistry, d WriteDeps) {
 			if err != nil {
 				return nil, mcp.Fail("update_task: " + err.Error())
 			}
-			safeBroadcast(d.Broadcast, updated.ID)
+			safeBroadcast(d.Broadcast, ctx, "task_updated", updated.ID)
 			return mcp.OK(updated)
 		},
 	})
@@ -470,7 +478,7 @@ func registerDeleteTask(registry mcp.ToolRegistry, d WriteDeps) {
 			if err := d.TaskRepo.Delete(ctx, id); err != nil {
 				return nil, mcp.Fail("delete_task: " + err.Error())
 			}
-			safeBroadcast(d.BroadcastDeleted, id)
+			safeBroadcastDeleted(d.BroadcastDeleted, id)
 			return mcp.OK(map[string]bool{"success": true})
 		},
 	})
@@ -581,7 +589,7 @@ func handleGrantPermissions(ctx context.Context, d WriteDeps, taskID string, arg
 	}
 	// Audit is best-effort: a failed append must not block the user-visible operation.
 	_ = d.AuditRepo.RecordTaskAudit(ctx, taskID, nil, "permissions_granted", "task:"+taskID, map[string]any{"summary": summary, "source": "mcp_manage_task"})
-	safeBroadcast(d.Broadcast, taskID)
+	safeBroadcast(d.Broadcast, ctx, "task_updated", taskID)
 	return mcp.OK(map[string]any{"action": "grant_permissions", "summary": summary})
 }
 
@@ -595,7 +603,7 @@ func handleRevokePermission(ctx context.Context, d WriteDeps, taskID string, arg
 	}
 	// Audit is best-effort: a failed append must not block the user-visible operation.
 	_ = d.AuditRepo.RecordTaskAudit(ctx, taskID, nil, "permission_revoked", "task:"+taskID, map[string]any{"permissionId": permID, "source": "mcp_manage_task"})
-	safeBroadcast(d.Broadcast, taskID)
+	safeBroadcast(d.Broadcast, ctx, "task_updated", taskID)
 	return mcp.OK(map[string]any{"action": "revoke_permission", "removed": permID})
 }
 
@@ -628,7 +636,7 @@ func handleInheritFromParent(ctx context.Context, d WriteDeps, task *ent.Task, a
 	}
 	// Audit is best-effort: a failed append must not block the user-visible operation.
 	_ = d.AuditRepo.RecordTaskAudit(ctx, taskID, nil, "permissions_inherited", "task:"+taskID, map[string]any{"fromParent": *task.ParentTaskID, "granted": len(inherited), "source": "mcp_manage_task"})
-	safeBroadcast(d.Broadcast, taskID)
+	safeBroadcast(d.Broadcast, ctx, "task_updated", taskID)
 	return mcp.OK(map[string]any{
 		"action": "inherit_from_parent", "from": *task.ParentTaskID, "granted": len(inherited),
 	})
@@ -678,7 +686,7 @@ func handleSetMetadata(ctx context.Context, d WriteDeps, task *ent.Task, args ma
 	}
 	// Audit is best-effort: a failed append must not block the user-visible operation.
 	_ = d.AuditRepo.RecordTaskAudit(ctx, taskID, nil, "metadata_patched", "task:"+taskID, map[string]any{"keys": mapKeys(patch), "source": "mcp_manage_task"})
-	safeBroadcast(d.Broadcast, taskID)
+	safeBroadcast(d.Broadcast, ctx, "task_updated", taskID)
 	return mcp.OK(map[string]any{"action": "set_metadata", "task": updated})
 }
 
@@ -710,7 +718,7 @@ func handleSetPriority(ctx context.Context, d WriteDeps, task *ent.Task, args ma
 	}
 	// Audit is best-effort: a failed append must not block the user-visible operation.
 	_ = d.AuditRepo.RecordTaskAudit(ctx, taskID, nil, "priority_changed", "task:"+taskID, details)
-	safeBroadcast(d.Broadcast, taskID)
+	safeBroadcast(d.Broadcast, ctx, "task_updated", taskID)
 	return mcp.OK(map[string]any{"action": "set_priority", "task": updated})
 }
 
@@ -742,7 +750,7 @@ func handleSetBudget(ctx context.Context, d WriteDeps, task *ent.Task, args map[
 	}
 	// Audit is best-effort: a failed append must not block the user-visible operation.
 	_ = d.AuditRepo.RecordTaskAudit(ctx, taskID, nil, "budget_changed", "task:"+taskID, map[string]any{"source": "mcp_manage_task"})
-	safeBroadcast(d.Broadcast, taskID)
+	safeBroadcast(d.Broadcast, ctx, "task_updated", taskID)
 	return mcp.OK(map[string]any{"action": "set_budget", "task": updated})
 }
 
@@ -800,7 +808,7 @@ func handleSetProject(ctx context.Context, d WriteDeps, task *ent.Task, args map
 	}
 	// Audit is best-effort: a failed append must not block the user-visible operation.
 	_ = d.AuditRepo.RecordTaskAudit(ctx, taskID, nil, "project_changed", "task:"+taskID, details)
-	safeBroadcast(d.Broadcast, taskID)
+	safeBroadcast(d.Broadcast, ctx, "task_updated", taskID)
 	return mcp.OK(map[string]any{"action": "set_project", "task": updated})
 }
 
@@ -834,7 +842,7 @@ func handleSetSpawner(ctx context.Context, d WriteDeps, task *ent.Task, args map
 	}
 	// Audit is best-effort: a failed append must not block the user-visible operation.
 	_ = d.AuditRepo.RecordTaskAudit(ctx, taskID, nil, "spawner_changed", "task:"+taskID, details)
-	safeBroadcast(d.Broadcast, taskID)
+	safeBroadcast(d.Broadcast, ctx, "task_updated", taskID)
 	return mcp.OK(map[string]any{"action": "set_spawner", "task": updated})
 }
 
@@ -886,7 +894,7 @@ func registerAddDependency(registry mcp.ToolRegistry, d WriteDeps) {
 				}
 				return nil, mcp.Fail("add_dependency: " + err.Error())
 			}
-			safeBroadcast(d.Broadcast, taskID)
+			safeBroadcast(d.Broadcast, ctx, "task_updated", taskID)
 			return mcp.OK(dep)
 		},
 	})
@@ -920,7 +928,7 @@ func registerRemoveDependency(registry mcp.ToolRegistry, d WriteDeps) {
 				return nil, mcp.Fail("remove_dependency: " + err.Error())
 			}
 			if removed {
-				safeBroadcast(d.Broadcast, taskID)
+				safeBroadcast(d.Broadcast, ctx, "task_updated", taskID)
 			}
 			return mcp.OK(map[string]bool{"removed": removed})
 		},

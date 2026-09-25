@@ -359,3 +359,67 @@ func TestUpdateTask_PlanMode_Persists(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, true, updated["plan_mode"], "plan_mode must be updated to true")
 }
+
+// --- broadcast contract ---
+
+func TestCreateTask_BroadcastsTaskCreated(t *testing.T) {
+	deps := newWriteDepsForTest(t)
+
+	var calls int
+	var gotEventType, gotTaskID string
+	deps.Broadcast = func(ctx context.Context, eventType, taskID string) {
+		calls++
+		gotEventType = eventType
+		gotTaskID = taskID
+	}
+
+	registry := mcp.ToolRegistry{}
+	RegisterWriteTools(registry, deps)
+
+	_, err := invokeCreateTask(t, registry, map[string]any{
+		"slug":  "broadcast-create",
+		"title": "Broadcast Create",
+		"cwd":   t.TempDir(),
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, 1, calls, "Broadcast must be called exactly once")
+	require.Equal(t, "task_created", gotEventType)
+	require.NotEmpty(t, gotTaskID)
+}
+
+func TestUpdateTask_BroadcastsTaskUpdated(t *testing.T) {
+	deps := newWriteDepsForTest(t)
+	ctx := context.Background()
+
+	task, err := deps.TaskRepo.Create(ctx, repo.CreateTaskInput{
+		Slug:          "broadcast-update",
+		Title:         "Broadcast Update",
+		Cwd:           t.TempDir(),
+		MaxIterations: 3,
+		Priority:      "normal",
+		CurrentStage:  "backlog",
+	})
+	require.NoError(t, err)
+
+	var calls int
+	var gotEventType, gotTaskID string
+	deps.Broadcast = func(ctx context.Context, eventType, taskID string) {
+		calls++
+		gotEventType = eventType
+		gotTaskID = taskID
+	}
+
+	registry := mcp.ToolRegistry{}
+	RegisterWriteTools(registry, deps)
+
+	_, err = invokeUpdateTask(t, registry, map[string]any{
+		"id":    task.ID,
+		"title": "New Title",
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, 1, calls, "Broadcast must be called exactly once")
+	require.Equal(t, "task_updated", gotEventType)
+	require.Equal(t, task.ID, gotTaskID)
+}
