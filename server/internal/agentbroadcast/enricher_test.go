@@ -492,6 +492,24 @@ func TestPipelineTaskEnricher_KeepsProjectNameWhenTaskHasNoProject(t *testing.T)
 	require.Equal(t, "my-worktree", agents[0].ProjectName, "ProjectName stays as cwd basename when task has no ProjectID")
 }
 
+func TestPipelineTaskEnricher_ProjectLookupErrorKeepsProjectName(t *testing.T) {
+	projectID := "proj-1"
+	stageRuns := fakeStageRuns{bySession: map[string]*ent.StageRun{
+		"sess-1": {TaskID: "task-1", SessionID: sessionPtr("sess-1")},
+	}}
+	tasks := fakeTasks{byID: map[string]*ent.Task{
+		"task-1": {ID: "task-1", Title: "Implement enricher", ProjectID: &projectID},
+	}}
+	projects := fakeProjects{err: errors.New("db down")}
+
+	enrich := NewPipelineTaskEnricher(stageRuns, tasks, nil, nil, nil, projects)
+	agents := []sdk.Agent{{SessionID: "sess-1", ProjectName: "my-worktree"}}
+	require.NotPanics(t, func() { enrich(context.Background(), agents) })
+
+	require.Equal(t, "my-worktree", agents[0].ProjectName, "a failed project lookup keeps the cwd basename")
+	require.Equal(t, "Implement enricher", agents[0].PipelineTaskTitle, "a failed project lookup must not drop the task annotation")
+}
+
 func TestPipelineTaskEnricher_KeepsProjectNameForNonPipelineAgent(t *testing.T) {
 	stageRuns := fakeStageRuns{bySession: map[string]*ent.StageRun{}}
 	tasks := fakeTasks{byID: map[string]*ent.Task{}}

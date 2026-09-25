@@ -31,15 +31,19 @@ import (
 // for the pass, so a burst of pending requests for the same tool costs one
 // lookup, not one per request.
 //
-// All three (or four, with grants) lookups are batched to one query each per
-// tick (session IDs → stage runs, resolved task IDs → tasks, resolved stage
-// run IDs → pending permissions) instead of per-agent round-trips, then
+// When projects is non-nil, an agent whose task belongs to a Kontor project
+// gets that project's name as ProjectName in place of the cwd basename (a
+// pipeline worktree's basename is the task slug, not the project).
+//
+// All lookups are batched to one query each per tick (session IDs → stage
+// runs, resolved task IDs → tasks, the tasks' project IDs → projects, resolved
+// stage run IDs → pending permissions) instead of per-agent round-trips, then
 // joined in-memory.
 //
 // The crossing is one-way (pipeline → agent annotation) and best-effort: nil
 // repos, a session with no stage_run (the common case for ad-hoc sessions), or
-// any query error leaves PipelineTaskID/Title/PendingPermissions empty without
-// failing the scan.
+// any query error leaves PipelineTaskID/Title/PendingPermissions empty and
+// ProjectName at the cwd basename without failing the scan.
 //
 // agentbroadcast is a peer of merger and may import db/repo, which keeps merger
 // itself free of any db dependency (Go layer direction).
@@ -98,33 +102,7 @@ func NewPipelineTaskEnricher(stageRuns repo.StageRunRepo, tasks repo.TaskRepo, p
 			}
 		}
 
-		// Batch-fetch Kontor projects for tasks that carry a ProjectID, then
-		// override each agent's ProjectName (initially cwd basename) with the
-		// canonical project name.
-		projectByID := make(map[string]*ent.Project)
-		if projects != nil {
-			projectIDs := make([]string, 0)
-			projectIDSeen := make(map[string]struct{})
-			for _, t := range taskByID {
-				if t.ProjectID != nil {
-					pid := *t.ProjectID
-					if _, ok := projectIDSeen[pid]; !ok {
-						projectIDSeen[pid] = struct{}{}
-						projectIDs = append(projectIDs, pid)
-					}
-				}
-			}
-			if len(projectIDs) > 0 {
-				projectList, perr := projects.ListByIDs(ctx, projectIDs)
-				if perr != nil {
-					slog.Debug("pipeline enricher: project batch lookup failed", "err", perr)
-				} else {
-					for _, p := range projectList {
-						projectByID[p.ID] = p
-					}
-				}
-			}
-		}
+		projectNameByID := projectNamesByID(ctx, projects, taskByID)
 
 		pendingByStageRun := make(map[string][]*ent.PermissionRequest)
 		if perms != nil {
@@ -152,8 +130,8 @@ func NewPipelineTaskEnricher(stageRuns repo.StageRunRepo, tasks repo.TaskRepo, p
 			if hasTask {
 				agents[i].PipelineTaskTitle = task.Title
 				if task.ProjectID != nil {
-					if proj, found := projectByID[*task.ProjectID]; found {
-						agents[i].ProjectName = proj.Name
+					if name, found := projectNameByID[*task.ProjectID]; found {
+						agents[i].ProjectName = name
 					}
 				}
 			}
@@ -176,6 +154,38 @@ func NewPipelineTaskEnricher(stageRuns repo.StageRunRepo, tasks repo.TaskRepo, p
 			}
 		}
 	}
+}
+
+// projectNamesByID batch-resolves the names of the projects taskByID's tasks
+// belong to. A nil repo or a lookup error yields an empty map.
+func projectNamesByID(ctx context.Context, projects repo.ProjectRepo, taskByID map[string]*ent.Task) map[string]string {
+	names := make(map[string]string)
+	if projects == nil {
+		return names
+	}
+	seen := make(map[string]struct{})
+	var ids []string
+	for _, t := range taskByID {
+		if t.ProjectID == nil {
+			continue
+		}
+		if _, ok := seen[*t.ProjectID]; !ok {
+			seen[*t.ProjectID] = struct{}{}
+			ids = append(ids, *t.ProjectID)
+		}
+	}
+	if len(ids) == 0 {
+		return names
+	}
+	list, err := projects.ListByIDs(ctx, ids)
+	if err != nil {
+		slog.Debug("pipeline enricher: project batch lookup failed", "err", err)
+		return names
+	}
+	for _, p := range list {
+		names[p.ID] = p.Name
+	}
+	return names
 }
 
 // isDeniedByDefault reports whether tool already resolves to a deny in task's
