@@ -184,10 +184,6 @@ func Open(path string) (*DBBundle, error) {
 		_ = client.Close()
 		return nil, fmt.Errorf("db: backfill grants: %w", err)
 	}
-	if err := migrateDropStageTimeoutColumns(sqlDB); err != nil {
-		_ = client.Close()
-		return nil, fmt.Errorf("db: drop stage_timeout_seconds columns: %w", err)
-	}
 	// Rename the "backlog"/"concept" pipeline stages to "ready"/"backlog" across
 	// every table that stores a stage name. Must run after ent auto-migrate
 	// (tasks, stage_runs, task_schedules all exist) and is safe to run on every
@@ -998,43 +994,4 @@ func migrateEnsureMemoryEntryIndexes(db *sql.DB) error {
 		}
 	}
 	return nil
-}
-
-// migrateDropStageTimeoutColumns drops the unread stage_timeout_seconds column
-// from tasks and task_schedules, once.
-//
-// Down path:
-//
-//	ALTER TABLE tasks ADD COLUMN stage_timeout_seconds INTEGER NOT NULL DEFAULT 1800
-//	ALTER TABLE task_schedules ADD COLUMN stage_timeout_seconds INTEGER NOT NULL DEFAULT 1800
-func migrateDropStageTimeoutColumns(db *sql.DB) error {
-	const marker = "drop-stage-timeout-columns"
-	ctx := context.Background()
-	markers := MarkerStore{DB: db}
-	done, err := markers.Has(ctx, marker)
-	if err != nil {
-		return err
-	}
-	if done {
-		return nil
-	}
-	for _, tbl := range []string{"tasks", "task_schedules"} {
-		var hasCol int
-		if err := db.QueryRow(
-			`SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = 'stage_timeout_seconds'`, tbl,
-		).Scan(&hasCol); err != nil {
-			return fmt.Errorf("check %s.stage_timeout_seconds: %w", tbl, err)
-		}
-		// A database created after the column left the schema never had it, and
-		// SQLite rejects DROP COLUMN on a missing column.
-		if hasCol == 0 {
-			continue
-		}
-		if _, err := db.Exec(
-			fmt.Sprintf(`ALTER TABLE %s DROP COLUMN stage_timeout_seconds`, tbl),
-		); err != nil {
-			return fmt.Errorf("drop %s.stage_timeout_seconds: %w", tbl, err)
-		}
-	}
-	return markers.Record(ctx, marker)
 }

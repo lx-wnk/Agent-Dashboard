@@ -728,6 +728,67 @@ func TestOpen_LegacyPreApprovedColumnSurvives(t *testing.T) {
 	defer func() { _ = bundle2.Close() }()
 }
 
+// TestOpen_LegacyStageTimeoutColumnsSurvive opens a DB in the current schema
+// plus the pre-removal stage_timeout_seconds columns, holding data; the columns
+// must survive auto-migrate and their DEFAULT must satisfy ent inserts that omit
+// them. The fixture comes from db.Open because a hand-written DDL that drifts
+// from the ent schema makes auto-migrate rebuild the table and lose the column.
+func TestOpen_LegacyStageTimeoutColumnsSurvive(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "stagetimeout.db")
+
+	seed, err := db.Open(path)
+	require.NoError(t, err)
+	for _, stmt := range []string{
+		`ALTER TABLE tasks ADD COLUMN stage_timeout_seconds integer NOT NULL DEFAULT (1800)`,
+		`ALTER TABLE task_schedules ADD COLUMN stage_timeout_seconds integer NOT NULL DEFAULT (1800)`,
+		`INSERT INTO tasks (id, slug, title, cwd, stage_timeout_seconds, created_at, updated_at)
+			VALUES ('t-legacy','legacy','Legacy','/repo',600,datetime('now'),datetime('now'))`,
+		`INSERT INTO task_schedules (id, name, cron_expr, slug_prefix, title, cwd, stage_timeout_seconds, created_at, updated_at)
+			VALUES ('s-legacy','Legacy','0 9 * * *','legacy','Legacy','/repo',600,datetime('now'),datetime('now'))`,
+	} {
+		_, err = seed.DB.Exec(stmt)
+		require.NoError(t, err)
+	}
+	require.NoError(t, seed.Close())
+
+	bundle, err := db.Open(path)
+	require.NoError(t, err)
+	defer func() { _ = bundle.Close() }()
+	ctx := t.Context()
+
+	legacy, err := bundle.Client.Task.Get(ctx, "t-legacy")
+	require.NoError(t, err)
+	require.Equal(t, "Legacy", legacy.Title)
+	legacySchedule, err := bundle.Client.TaskSchedule.Get(ctx, "s-legacy")
+	require.NoError(t, err)
+	require.Equal(t, "Legacy", legacySchedule.Name)
+
+	_, err = bundle.Client.Task.Create().SetID("t-new").SetSlug("new").SetTitle("New").SetCwd("/repo").Save(ctx)
+	require.NoError(t, err)
+	created, err := bundle.Client.Task.Get(ctx, "t-new")
+	require.NoError(t, err)
+	require.Equal(t, "New", created.Title)
+	_, err = bundle.Client.TaskSchedule.Create().SetID("s-new").SetName("New").SetCronExpr("0 9 * * *").
+		SetSlugPrefix("new").SetTitle("New").SetCwd("/repo").Save(ctx)
+	require.NoError(t, err)
+
+	for _, tc := range []struct{ table, id string }{
+		{"tasks", "t-legacy"}, {"tasks", "t-new"},
+		{"task_schedules", "s-legacy"}, {"task_schedules", "s-new"},
+	} {
+		var timeout int
+		err = bundle.DB.QueryRow(
+			fmt.Sprintf(`SELECT stage_timeout_seconds FROM %s WHERE id = ?`, tc.table), tc.id,
+		).Scan(&timeout)
+		require.NoError(t, err, "%s.stage_timeout_seconds must survive auto-migrate", tc.table)
+		want := 1800
+		if tc.id == "t-legacy" || tc.id == "s-legacy" {
+			want = 600
+		}
+		require.Equal(t, want, timeout, "%s/%s", tc.table, tc.id)
+	}
+}
+
 func TestOpen_AppSettingGainsSecretColumns(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "legacy.db")
 	raw, err := sql.Open("sqlite", path)
@@ -886,69 +947,6 @@ func TestOpen_RenameStagesRunsOnlyOnce(t *testing.T) {
 	require.Equal(t, "backlog", stageOf(t, path, "t-concept"),
 		"a second boot must not push the parked task on to 'ready'")
 	require.Equal(t, "ready", stageOf(t, path, "t-backlog"))
-}
-
-// TestOpen_DropStageTimeoutColumns_Up seeds a file DB with the old schema
-// containing stage_timeout_seconds on both tasks and task_schedules, then opens
-// it with the current code. Asserts the column is absent from both tables
-// after migration and that a second Open is a clean no-op.
-func TestOpen_DropStageTimeoutColumns_Up(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "drop-timeout.db")
-
-	raw, err := sql.Open("sqlite", "file:"+path+"?_pragma=foreign_keys(1)")
-	require.NoError(t, err)
-	_, err = raw.Exec("CREATE TABLE `tasks` (`id` text NOT NULL, `slug` text NOT NULL, `title` text NOT NULL, `cwd` text NOT NULL, `current_stage` text NOT NULL DEFAULT ('backlog'), `priority` text NOT NULL DEFAULT ('medium'), `max_iterations` integer NOT NULL DEFAULT (20), `stage_timeout_seconds` integer NOT NULL DEFAULT (1800), `silver_bullet` bool NOT NULL DEFAULT (false), `created_at` datetime NOT NULL, `updated_at` datetime NOT NULL, PRIMARY KEY (`id`))")
-	require.NoError(t, err)
-	_, err = raw.Exec("CREATE TABLE `task_schedules` (`id` text NOT NULL, `name` text NOT NULL, `enabled` bool NOT NULL DEFAULT (true), `cron_expr` text NOT NULL, `slug_prefix` text NOT NULL, `title` text NOT NULL, `cwd` text NOT NULL, `max_iterations` integer NOT NULL DEFAULT (20), `stage_timeout_seconds` integer NOT NULL DEFAULT (1800), `silver_bullet` bool NOT NULL DEFAULT (false), `created_at` datetime NOT NULL, `updated_at` datetime NOT NULL, PRIMARY KEY (`id`))")
-	require.NoError(t, err)
-	require.NoError(t, raw.Close())
-
-	bundle, err := db.Open(path)
-	require.NoError(t, err)
-
-	// Assert column is gone from tasks.
-	var tasksCol int
-	err = bundle.DB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('tasks') WHERE name = 'stage_timeout_seconds'`).Scan(&tasksCol)
-	require.NoError(t, err)
-	require.Equal(t, 0, tasksCol, "stage_timeout_seconds must be absent from tasks")
-
-	// Assert column is gone from task_schedules.
-	var schedCol int
-	err = bundle.DB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('task_schedules') WHERE name = 'stage_timeout_seconds'`).Scan(&schedCol)
-	require.NoError(t, err)
-	require.Equal(t, 0, schedCol, "stage_timeout_seconds must be absent from task_schedules")
-
-	// Second Open must be a clean no-op.
-	require.NoError(t, bundle.Close())
-	bundle2, err := db.Open(path)
-	require.NoError(t, err)
-	defer func() { _ = bundle2.Close() }()
-}
-
-// TestDropStageTimeoutColumns_Down proves the documented down-path SQL is valid:
-// on a fully migrated DB, both columns can be added back.
-func TestDropStageTimeoutColumns_Down(t *testing.T) {
-	bundle, err := db.Open(":memory:")
-	require.NoError(t, err)
-	defer func() { _ = bundle.Client.Close() }()
-
-	// Execute the down-path SQL.
-	_, err = bundle.DB.Exec(`ALTER TABLE tasks ADD COLUMN stage_timeout_seconds INTEGER NOT NULL DEFAULT 1800`)
-	require.NoError(t, err)
-	_, err = bundle.DB.Exec(`ALTER TABLE task_schedules ADD COLUMN stage_timeout_seconds INTEGER NOT NULL DEFAULT 1800`)
-	require.NoError(t, err)
-
-	// Verify the columns exist.
-	var tasksCol int
-	err = bundle.DB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('tasks') WHERE name = 'stage_timeout_seconds'`).Scan(&tasksCol)
-	require.NoError(t, err)
-	require.Equal(t, 1, tasksCol, "down-path must restore stage_timeout_seconds on tasks")
-
-	var schedCol int
-	err = bundle.DB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('task_schedules') WHERE name = 'stage_timeout_seconds'`).Scan(&schedCol)
-	require.NoError(t, err)
-	require.Equal(t, 1, schedCol, "down-path must restore stage_timeout_seconds on task_schedules")
 }
 
 func TestOpen_MCPApplicationTables(t *testing.T) {
