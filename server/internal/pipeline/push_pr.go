@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -27,6 +28,7 @@ func (o *PipelineOrchestrator) decideFinalizationTransition(ctx context.Context,
 	pushAllowed := IsGitPushAllowed(task, o.opts.AllowGitPush)
 	if o.opts.PushFn != nil && pushAllowed {
 		if err := o.opts.PushFn(ctx, task); err != nil {
+			slog.Warn("finalization: git push failed", "taskID", task.ID, "err", err)
 			return FailTransition{Reason: fmt.Sprintf("finalization: git push failed: %s", err), Output: output}
 		}
 	}
@@ -36,6 +38,7 @@ func (o *PipelineOrchestrator) decideFinalizationTransition(ctx context.Context,
 		if !pushAllowed {
 			note = "push is disabled for this task"
 		}
+		slog.Warn("finalization: worktree has unpushed work", "taskID", task.ID, "note", note)
 		return FailTransition{
 			Reason: fmt.Sprintf("finalization: worktree has unpushed work (%s)", note),
 			Output: output,
@@ -52,6 +55,7 @@ func (o *PipelineOrchestrator) decideFinalizationTransition(ctx context.Context,
 
 	prNumber, prURL, err := o.opts.CreateDraftPRFn(ctx, *task.WorktreePath, branch, base, title, prBody)
 	if err != nil {
+		slog.Warn("finalization: create draft PR failed", "taskID", task.ID, "err", err)
 		return FailTransition{Reason: fmt.Sprintf("finalization: create draft PR failed: %s", err), Output: output}
 	}
 

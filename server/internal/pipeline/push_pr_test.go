@@ -3,6 +3,9 @@ package pipeline_test
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -172,7 +175,9 @@ func TestDecideFinalization_ExistingPRIdempotent(t *testing.T) {
 		require.True(t, ok, "expected DoneTransition, got %T", transition)
 		require.Equal(t, 9, done.MetadataPatch["pr_number"])
 	}
-	require.Equal(t, 2, calls, "CreateDraftPRFn's own idempotency handles repeat calls; the pipeline just forwards each attempt")
+	// The pipeline always calls CreateDraftPRFn on each finalization; idempotency
+	// lives inside ProductionCreateDraftPRFn (findExistingPR), not the pipeline itself.
+	require.Equal(t, 2, calls, "pipeline delegates both calls; ProductionCreateDraftPRFn owns the idempotency guard")
 }
 
 func TestDecideFinalization_NoWorktree_Passthrough(t *testing.T) {
@@ -243,6 +248,34 @@ func TestBuildPRBody_Format(t *testing.T) {
 	require.NotContains(t, body, "minor naming nit", "low-severity findings must not appear in Known Issues")
 	require.Contains(t, body, "Kontor task: `my-task`")
 	require.Contains(t, body, "Generated with")
+}
+
+// TestProductionCreateDraftPRFn_ReusesExistingPR exercises the findExistingPR
+// code path inside ProductionCreateDraftPRFn using a PATH-injected fake gh
+// binary. The fake returns an existing open PR for pr list and fails for any
+// other subcommand, so the test asserts that pr create is never reached.
+func TestProductionCreateDraftPRFn_ReusesExistingPR(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake sh script not supported on windows")
+	}
+	dir := t.TempDir()
+	script := `#!/bin/sh
+if [ "$1" = "pr" ] && [ "$2" = "list" ]; then
+  echo '[{"number":7,"url":"https://github.com/lx-wnk/kontor/pull/7"}]'
+  exit 0
+fi
+echo "unexpected gh call: $*" >&2
+exit 1
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "gh"), []byte(script), 0700))
+	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
+
+	number, url, err := pipeline.ProductionCreateDraftPRFn(
+		context.Background(), dir, "feat/my-task", "develop", "feat: my task", "body",
+	)
+	require.NoError(t, err)
+	require.Equal(t, 7, number)
+	require.Equal(t, "https://github.com/lx-wnk/kontor/pull/7", url)
 }
 
 func TestDeriveConventionalTitle(t *testing.T) {
