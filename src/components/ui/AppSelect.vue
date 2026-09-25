@@ -37,6 +37,7 @@ const TRIGGER_CLASS = 'bg-card border border-line rounded-md text-fg focus-visib
 const panelId = useId()
 const buttonRef = ref<HTMLButtonElement | null>(null)
 const inputRef = ref<HTMLInputElement | null>(null)
+const openTriggerRef = ref<HTMLDivElement | null>(null)
 const panelRef = ref<HTMLDivElement | null>(null)
 
 const isOpen = ref(false)
@@ -45,8 +46,9 @@ const activeIndex = ref(-1)
 const inputSize = ref<{ width?: string, height?: string }>({})
 const panelPosition = ref<{ top?: string, bottom?: string, left: string, minWidth: string, maxWidth: string }>({ left: '0px', minWidth: '0px', maxWidth: '0px' })
 
+// While open, the trigger is the input plus its chevron, so a mousedown on the chevron is not an outside mousedown.
 function triggerEl(): HTMLElement | null {
-  return inputRef.value ?? buttonRef.value
+  return openTriggerRef.value ?? buttonRef.value
 }
 
 // One-shot suppression for the click that follows a dismissing outside
@@ -154,8 +156,8 @@ function updatePosition() {
     : { top: `${rect.bottom}px`, left: `${left}px`, minWidth: `${rect.width}px`, maxWidth: `${maxWidth}px` }
 }
 
-// The input stands in for the (hidden, still mounted) button while open,
-// sized to it so the surrounding layout does not jump.
+// The input and its chevron stand in for the (hidden, still mounted) button
+// while open, sized to it so the surrounding layout does not jump.
 async function openPanel(initialQuery = '') {
   if (props.disabled || isOpen.value)
     return
@@ -324,7 +326,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div v-if="isOpen" class="relative inline-flex" :style="inputSize">
+  <div v-if="isOpen" ref="openTriggerRef" class="relative inline-flex" :style="inputSize">
     <input
       :id="id"
       ref="inputRef"

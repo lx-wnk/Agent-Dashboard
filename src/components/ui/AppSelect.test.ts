@@ -455,11 +455,10 @@ describe('appSelect', () => {
     await w.get('button').trigger('click')
     await flushPromises()
     expect(panel()).not.toBeNull()
-    // The chevron toggle is a button inside the open-state wrapper div,
-    // next to the input — it's aria-hidden and tabindex=-1 (mouse-only).
-    const chevron = document.querySelector<HTMLButtonElement>('div.relative.inline-flex > button[aria-hidden="true"]')
-    expect(chevron).not.toBeNull()
-    chevron!.click()
+    const chevron = input().nextElementSibling as HTMLButtonElement
+    // A real click is preceded by a mousedown, which the outside-mousedown listener sees first.
+    chevron.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }))
+    chevron.click()
     await flushPromises()
     expect(panel()).toBeNull()
     expect(document.activeElement).toBe(w.get('button').element)

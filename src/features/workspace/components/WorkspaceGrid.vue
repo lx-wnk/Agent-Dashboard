@@ -132,12 +132,10 @@ function onKey(e: KeyboardEvent, index: number) {
 function swapOptions(index: number) {
   const t = props.page.tiles[index]
   const placed = new Set(props.page.tiles.map(p => p.widget))
-  return [
-    ...widgetIds().filter(id => !placed.has(id)).map((id) => {
-      const reason = fitsMinimum(id, t.colSpan, t.rowSpan)
-      return { value: id, label: reason ? `${WIDGETS[id].title} — ${reason}` : WIDGETS[id].title, disabled: !!reason }
-    }),
-  ]
+  return widgetIds().filter(id => !placed.has(id)).map((id) => {
+    const reason = fitsMinimum(id, t.colSpan, t.rowSpan)
+    return { value: id, label: reason ? `${WIDGETS[id].title} — ${reason}` : WIDGETS[id].title, disabled: !!reason }
+  })
 }
 </script>
 
