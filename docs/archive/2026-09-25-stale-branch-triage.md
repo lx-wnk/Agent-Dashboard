@@ -7,93 +7,66 @@ All git evidence collected from the `stale-branch-worktree-triage` worktree on `
 
 ## Decision Table
 
-| Item | Recommendation | Blocker |
-|---|---|---|
-| `feat/quick-wins-multi-provider-metrics` | Split into 2 PRs — strip superseded commit, module rename first | Module rename required before rebase |
-| `fix/tool-activity-detail` | Finish as standalone PR — rebase + module rename | Module rename required before rebase |
-| `test/all-fixes` + `local-test` worktree | Discard — all constituent branches already merged to develop | None |
-| `~/dashboard-worktrees/_freeze` | Nothing to do — directory does not exist | — |
-| `.claude/worktrees/agent-*` (4 dirs) | 3 stale harness workers, 1 broken foreign-repo link — safe to remove | Operator confirms no in-flight work |
+| # | Item | Recommendation | Evidence |
+|---|------|----------------|----------|
+| 1 | `feat/quick-wins-multi-provider-metrics` | **Discard** | All 3 concerns superseded on develop |
+| 2 | `fix/tool-activity-detail` | **Discard** | Both commits superseded on develop |
+| 3 | `test/all-fixes` + `local-test` worktree | **Discard** | All 6 commits merged to develop as PRs #312–#318 |
+| 4 | `~/dashboard-worktrees/_freeze` | **No action** | Directory absent |
+| 5 | `.claude/worktrees/agent-*` (4 dirs) | **Remove** | 3 stale harness workers + 1 broken foreign-repo link; operator confirms |
 
 ---
 
 ## Item 1 — `feat/quick-wins-multi-provider-metrics`
 
-### Evidence
+### Branch state
 
-```
+```text
 git log origin/develop..feat/quick-wins-multi-provider-metrics --oneline
 15be022d chore: checkpoint multi-provider metrics work
 00a32d5e feat(quick-wins): multi-provider detection, metrics panel, markdown utils, SDK types
 e6828507 feat: auto-create git worktrees for pipeline tasks with sourceBranch
-
-git cherry origin/develop feat/quick-wins-multi-provider-metrics
-+ e6828507...
-+ 00a32d5e...
-+ 15be022d...   # all 3 absent from develop by SHA
 ```
 
-All 3 commits use module path `github.com/lx-wnk/agent-dashboard`.
-Develop uses `github.com/lx-wnk/kontor` (renamed at commit `5b1c316d`).
+- Branched from: `f29c9b65` (2026-05-20)
+- Last commit: 2026-08-17
+- Module path: `github.com/lx-wnk/agent-dashboard` (pre-kontor rename)
 
-Diff stat (three-dot, vs develop): **34 files, 1228 insertions, 81 deletions**
+### Supersession evidence
 
-Key files added/changed:
-- `server/internal/parser/providers.go` — **NEW**, 134 lines, absent on develop
-- `server/internal/scanner/scanner.go` — +76 lines (provider detection injection)
-- `server/internal/merger/merger.go` — +47 lines (provider cost gating)
-- `src/components/ProviderBadge.vue` — branch uses `sdk.generated.Provider` type; develop has a different version using `Agent['provider']` inline type
-- `src/components/SystemMetricsPanel.vue` — +79/-20 lines
-- `src/composables/useSystemMetrics.ts` — +40 lines
-- `src/utils/markdown.ts` — +19 lines
-- `src/utils/format.ts` — +13 lines
-- `src/sdk.generated.ts` — +8 lines (Provider type)
+**e6828507 — worktree auto-creation:** develop has `server/internal/worktree/` with
+`BranchCheckedOutAt`, `DefaultRoot`, `PathFor`, `CreateBranch` across PRs #149, #201, #202,
+#250. The branch's inline `ensureTaskWorktree` (61 lines, direct git exec) is a prior
+generation.
 
-**Commit e6828507 is superseded.** Develop has a mature `server/internal/worktree/` package
-with dedicated runner, `BranchCheckedOutAt`, `DefaultRoot`, `PathFor`, `CreateBranch` — landed
-across PRs #201, #202, #228, #243, #250, #251. The branch's `pipeline/worktree.go` is a prior
-generation (61 lines, inline git exec, old module path). Also touches `server/internal/pipeline/types.go`,
-`server/cmd/serve/di_pipeline.go`, `server/internal/config/config.go`, `server/internal/sse/headers.go`,
-`src/sdk.generated.ts` (sourceBranch field) — these side-effects need review to see if they
-also landed separately on develop.
+**00a32d5e — multi-provider detection:** develop has `server/internal/provider/` with
+`adapter.go`, `descriptor.go`, `engine.go`, `embed.go`, `enabled.go`, `ollama.go` — a full
+registry with `ProviderDetector` interface injected into the scanner (PR #213 "pluggable
+opt-in agent providers"). The branch's `server/internal/parser/providers.go` (134 lines) does
+not exist on develop and is superseded by this package.
+
+`ProviderBadge.vue` already exists on develop (PR #77, updated in PR #194).
+
+**15be022d — checkpoint:** `SystemMetricsPanel.vue`, `useSystemMetrics.ts`, format/markdown
+utils and tests. Some overlap with develop's post-#376 tool history work.
 
 ### Recommendation
 
-1. Drop `e6828507` (superseded worktree implementation).
-2. Rename module path across all Go files in the branch before rebase.
-3. Split remaining 2 commits into two PRs:
-
-**PR-A — Frontend/types** (`ProviderBadge.vue` updated API, `SystemMetricsPanel.vue`,
-`useSystemMetrics.ts`, `format.ts`, `markdown.ts`, `sdk.generated.ts`, all tests).
-
-**PR-B — Backend provider detection** (`providers.go`, `scanner.go` additions, `merger.go`
-provider cost additions). Before opening: reconcile `providers.go` against
-`server/internal/provider/` registry on develop — the registry already provides a
-`ProviderDetector` interface injected into the scanner. Verify whether `providers.go`
-feeds into or duplicates that registry.
+**Discard.** All three commit scopes are covered by develop. Module rename (`5b1c316d`) makes
+mechanical rebase impractical. Clean reimplementation of any remaining gaps (if any) is
+cheaper.
 
 ### Operator commands (when ready to act)
 
 ```bash
 # ══ LOKAL ═════════════════════════════════════════
-cd ~/dashboard-worktrees/quick-wins-multi-provider-metrics
+# Remove worktree first
+git worktree remove --force \
+  /Users/alexanderwink/dashboard-worktrees/quick-wins-multi-provider-metrics
 
-# 1. Inspect the superseded commit before dropping
-git show e6828507 --stat
-
-# 2. Rebase interactively to drop e6828507
-#    (mark it 'd' for drop in the editor)
-git rebase -i origin/develop
-
-# 3. After rebase: rename module path across all Go files
-find . -name "*.go" -not -path "*/vendor/*" \
-  | xargs sed -i '' 's|github.com/lx-wnk/agent-dashboard/|github.com/lx-wnk/kontor/|g'
-sed -i '' 's|github.com/lx-wnk/agent-dashboard/server|github.com/lx-wnk/kontor/server|' server/go.mod
-sed -i '' 's|github.com/lx-wnk/agent-dashboard/sdk|github.com/lx-wnk/kontor/sdk|' sdk/go.mod
-
-# 4. Verify gates before splitting into PRs
-task test && go vet ./... && task lint
-pnpm lint && pnpm typecheck && pnpm test
+# Then delete branch
+git branch -D feat/quick-wins-multi-provider-metrics
+git push origin --delete feat/quick-wins-multi-provider-metrics 2>/dev/null || true
 # ══════════════════════════════════════════════════
 ```
 
@@ -101,95 +74,95 @@ pnpm lint && pnpm typecheck && pnpm test
 
 ## Item 2 — `fix/tool-activity-detail`
 
-### Evidence
+### Branch state
 
-```
+```text
 git log origin/develop..fix/tool-activity-detail --oneline
 74398cae feat(agents): show what each recent tool call actually did
 04572084 refactor(agents): remove the broken waterfall view from the agent modal
-
-git cherry origin/develop fix/tool-activity-detail
-+ 74398cae
-+ 04572084   # both absent from develop
-
-git merge-base fix/tool-activity-detail origin/develop
-22ac5a56  (2026-08-18)
 ```
 
-Module: `github.com/lx-wnk/agent-dashboard` — rename required before rebase.
+- Branched from: `22ac5a56` (2026-08-18)
+- Last commit: 2026-08-18
+- Module path: `github.com/lx-wnk/agent-dashboard` (pre-kontor rename)
 
-Diff stat:
-- `04572084`: 5 files, +5/-236 (deletes `ExecutionWaterfall.vue` 145 lines + 3 test files)
-- `74398cae`: 14 files, +144/-33 (parser tool-call detail + `ToolTimeline.vue` + tests)
+### Supersession evidence
+
+**04572084 — waterfall removal:** Commit `7c4e0cd2` on develop has the identical message
+("refactor(agents): remove the broken waterfall view from the agent modal") and identical
+date (2026-08-18 22:11:29). `ExecutionWaterfall.vue` does not exist on develop. Already done.
+
+**74398cae — tool-call detail:** Commit `0cda3670` on develop ("fix(agents): honest stalled
+cards, useful tool history, working desktop hot-reload", PR #376, 2026-08-25) addresses the
+same concern — making the tool history useful. `AgentModal.vue` has since been refactored
+into `src/features/agents/` (#297), and the modal body extracted into `AgentSessionPane`
+(`5a3bf2f2`). The branch targets files that no longer exist at those paths.
 
 ### Recommendation
 
-Finish as a standalone PR. Clean, bounded scope. No speculative content.
+**Discard.** Both commits are superseded. The waterfall removal already landed on develop.
+The tool-call detail concept was absorbed into PR #376.
 
 ### Operator commands (when ready to act)
 
 ```bash
 # ══ LOKAL ═════════════════════════════════════════
-cd ~/dashboard-worktrees/tool-activity
+git worktree remove --force \
+  /Users/alexanderwink/dashboard-worktrees/tool-activity
 
-# 1. Module rename
-find . -name "*.go" -not -path "*/vendor/*" \
-  | xargs sed -i '' 's|github.com/lx-wnk/agent-dashboard/|github.com/lx-wnk/kontor/|g'
-sed -i '' 's|github.com/lx-wnk/agent-dashboard/server|github.com/lx-wnk/kontor/server|' server/go.mod
-
-# 2. Rebase onto develop
-git rebase origin/develop
-
-# 3. Gates
-task test && go vet ./... && task lint
-pnpm lint && pnpm typecheck && pnpm test
-
-# 4. Open PR
-gh pr create --base develop --title "fix(agents): tool-call detail + remove waterfall view"
+git branch -D fix/tool-activity-detail
+git push origin --delete fix/tool-activity-detail 2>/dev/null || true
 # ══════════════════════════════════════════════════
 ```
 
 ---
 
-## Item 3 — `test/all-fixes` (integration branch) + `local-test` worktree
+## Item 3 — `test/all-fixes` + `local-test` worktree
 
-### Evidence
+### Branch state
 
-```
-git log origin/develop..test/all-fixes --oneline
-# 6 commits ahead by SHA, but:
-
-# All 4 constituent source branches are already on develop:
-git cherry origin/develop origin/fix/promptinput-fixes    # 0 unmerged
-git cherry origin/develop origin/chore/taskfile-desktop   # 0 unmerged
-git cherry origin/develop origin/chore/seo-launch-prep    # 0 unmerged
-git cherry origin/develop origin/fix/card-ux              # 0 unmerged
-
-# local-test worktree:
-ls ~/dashboard-worktrees/local-test   # → directory absent
+```text
+git cherry -v origin/develop test/all-fixes
++ da0faa72 feat(pwa): maskable manifest icon (SEO-P3-1b) + launch/discoverability playbook
++ 594a06e5 build(taskfile): rename desktop:build -> build:desktop, add to build:all, add dev:desktop
++ de39bf84 fix(channel): submit injected prompts by writing the CR separately (Bug 4)
++ 9a47c421 feat(ui): hover-reveal card prompt, status/badge clarity, output fade, MEM warning color
++ 768bf209 fix(prompt): image @-path attach + hide empty template picker (Bug 1/2/3)
++ 6261f057 fix(prompt): paste images from the clipboard (Cmd/Ctrl+V), not just the file picker
 ```
 
-The 6 commits appear as `+` in cherry because they are integration merge commits
-(different SHAs than the squash-merged originals on develop). The underlying content
-is already on develop. The `local-test` worktree was already cleaned up.
+- Last commit: 2026-07-15
+- All 6 show `+` (SHA not on develop) — but they were squash-merged with different SHAs
+
+### Supersession evidence (topic-by-topic)
+
+| Branch commit | Develop equivalent | PR |
+|---|---|---|
+| `da0faa72` maskable icon | `bdae87a3` | #312 |
+| `594a06e5` taskfile rename | `bc2ffb9e` | #315 |
+| `de39bf84` channel CR fix | `282ad6ee` | #316 |
+| `9a47c421` hover-reveal | `d854cebe` | #318 |
+| `768bf209` image @-path | `d1160402` | #317 |
+| `6261f057` clipboard paste | Present in develop's `PromptInput.vue` (same `onPaste` handler) | via #317 |
+
+The `local-test` worktree at `dashboard-worktrees/local-test` still exists in `git worktree
+list` (at `64c3dd13`).
 
 ### Recommendation
 
-Discard `test/all-fixes`. No content loss.
+**Discard.** All content on develop. Zero content loss.
 
 ### Operator commands (when ready to act)
 
 ```bash
 # ══ LOKAL ═════════════════════════════════════════
-# Verify one more time before deleting
-git cherry origin/develop test/all-fixes | grep '^+' | wc -l
-# Expected: 6 (integration merge commits only, all content merged)
+# Remove worktree
+git worktree remove --force \
+  /Users/alexanderwink/code/_privat/projects/agent-dashboard/dashboard-worktrees/local-test
 
-# Delete local branch
+# Delete branch
 git branch -D test/all-fixes
-
-# Delete remote if pushed
-git push origin --delete test/all-fixes 2>/dev/null || echo "(not on remote)"
+git push origin --delete test/all-fixes 2>/dev/null || true
 # ══════════════════════════════════════════════════
 ```
 
@@ -199,17 +172,18 @@ git push origin --delete test/all-fixes 2>/dev/null || echo "(not on remote)"
 
 ### Evidence
 
-```
+```text
 ls ~/dashboard-worktrees/_freeze
 # → No such file or directory
 ```
 
-The stalled-card investigation (recorded 2026-08-31) produced no surviving artifact.
-Directory never existed or was already removed.
+The stalled-card investigation (recorded 2026-08-31) produced commits `d015cb5c` ("freeze")
+and `71a460b2` ("archive") on develop itself — the artifacts were committed and the directory
+was removed. Investigation is closed.
 
 ### Recommendation
 
-Nothing to do. Investigation is closed by absence.
+**No action.** Investigation closed by absence — artifacts are in the git history.
 
 ---
 
@@ -219,32 +193,34 @@ Location: `/Users/alexanderwink/code/_privat/projects/agent-dashboard/.claude/wo
 
 ### Evidence
 
-| Worktree | Branch | Last Commit | Dirty Files | Live Process | Notes |
-|---|---|---|---|---|---|
-| `agent-a0ac1a8efd7b4611d` | `worktree-agent-a0ac1a8efd7b4611d` | 2026-09-02 `feat: make a routine grant decide something (#421)` | 782 modified, 1 untracked | None (`lsof` clean) | Kontor rename drift: 782 tracked files show as modified because branch predates the rename |
-| `agent-a3eec7efca2722403` | `worktree-agent-a3eec7efca2722403` | 2026-09-02 (same PR #421) | 781 modified | None | Same rename drift pattern |
-| `agent-af3438375a35d2185` | `worktree-agent-af3438375a35d2185` | 2026-09-02 (same PR #421) | 782 modified | None | Same rename drift pattern |
-| `agent-a87f91179028f8d97` | ERROR | — | 0 | None | Points to `/Users/alexanderwink/code/_privat/claude-agent-overview/.git/worktrees/agent-a87f91179028f8d97` — foreign-repo link, that repo's worktree entry is gone. Directory contains AGENTS.md, channel, CLAUDE.md (different project scaffold). |
+| Directory | Branch | Tip | Status | Notes |
+|---|---|---|---|---|
+| `agent-a0ac1a8efd7b4611d` | `worktree-agent-a0ac…` | `4729f24d` (#421, 2026-09-02) | No live process | Rename drift: 782 modified files |
+| `agent-a3eec7efca2722403` | `worktree-agent-a3ee…` | `4729f24d` (#421, 2026-09-02) | No live process | Rename drift: 781 modified files |
+| `agent-af3438375a35d2185` | `worktree-agent-af34…` | `4729f24d` (#421, 2026-09-02) | No live process | Rename drift: 782 modified files |
+| `agent-a87f91179028f8d97` | **ERROR** | — | Dead | Broken foreign-repo link to `claude-agent-overview` |
 
-All three active worktrees share the same pattern: last commit 2026-09-02 (PR #421), all
-782 files show as modified due to the kontor module rename landing after that date
-(kontor rename commits visible on develop: `b8133f9f` 2026-09-22, `f5b9788b` 2026-09-20).
-No active process holds any of these directories open.
+All three active worktrees share commit `4729f24d` (PR #421). The 782 modified files are the
+kontor module rename (`5b1c316d` on develop) showing as local diffs — no actual work was done
+after that rename. No `ps aux` match for any agent session ID.
+
+`agent-a87f91179028f8d97` is not registered in `git worktree list`. Its `.git` file points to
+`/Users/alexanderwink/code/_privat/claude-agent-overview/.git/worktrees/agent-a87f91179028f8d97`
+which no longer exists — a broken link from a different repository.
 
 ### Recommendation
 
-All four are safe to remove. The `worktree-agent-*` branches are purely local (never pushed).
+**Remove all four.** The `worktree-agent-*` branches are purely local (never pushed).
 
-Confirm no in-flight pipeline task references them:
+### Operator commands (when ready to act)
 
 ```bash
 # ══ LOKAL ═════════════════════════════════════════
-# Check if any task in the DB still references these paths
-# (run from a shell with DASHBOARD_DB_PATH set, or use the Kontor UI Tasks view)
+# 1. Verify no pipeline task references these paths
 sqlite3 "$DASHBOARD_DB_PATH" \
   "SELECT slug, worktree_path FROM tasks WHERE worktree_path LIKE '%agent-a%';"
 
-# If empty: remove worktrees
+# 2. If empty: remove registered worktrees
 git worktree remove --force \
   /Users/alexanderwink/code/_privat/projects/agent-dashboard/.claude/worktrees/agent-a0ac1a8efd7b4611d
 git worktree remove --force \
@@ -252,11 +228,11 @@ git worktree remove --force \
 git worktree remove --force \
   /Users/alexanderwink/code/_privat/projects/agent-dashboard/.claude/worktrees/agent-af3438375a35d2185
 
-# For the broken foreign-repo entry: plain rm (git worktree remove won't work)
+# 3. For the broken foreign-repo entry: plain rm
 rm -rf \
   /Users/alexanderwink/code/_privat/projects/agent-dashboard/.claude/worktrees/agent-a87f91179028f8d97
 
-# Clean up local worktree-agent-* branches
+# 4. Clean up local worktree-agent-* branches
 git branch -D worktree-agent-a0ac1a8efd7b4611d \
                worktree-agent-a3eec7efca2722403 \
                worktree-agent-af3438375a35d2185
