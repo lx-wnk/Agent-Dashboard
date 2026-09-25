@@ -142,6 +142,7 @@ Preparing the first public release.
   "Ask Kontor about this" used to send one anyway and it vanished without a
   trace; both are now disabled and name the reason, the same way they already
   handle a layout with no Kontor tile at all.
+- **Rate-limited (429/529) stage runs no longer advance the pipeline or count as reviews.** A run that aborts on the Claude usage limit is now classified as `rate_limited`, automatically re-queued after the reset backoff (default 600 s, configurable via `rateLimitBackoffSeconds`), and retried up to `maxRateLimitRetries` times (default 36) before parking the task. A `self_review` output that lacks the required `passed` boolean field is now a validation error rather than an implicit failure, preventing a rate-limited run with stale requeue metadata from burning a review cycle.
 
 ### Changed
 
