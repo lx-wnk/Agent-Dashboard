@@ -174,6 +174,30 @@ tasks:
       - rm -f "bin/Kontor.dmg"
       - hdiutil create -volname "Kontor" -srcfolder "bin/Kontor.app" -ov -format UDZO "bin/Kontor.dmg"
 
+  desktop:bundle:
+    desc: Replace the binary in bin/Kontor.app, stamp version and codesign (macOS; requires KONTOR_SIGN_IDENTITY)
+    platforms: [darwin]
+    vars:
+      APP: bin/Kontor.app
+      BINARY: bin/Kontor.app/Contents/MacOS/Kontor
+    cmds:
+      - task: build:desktop
+      - rm -f '{{.BINARY}}'
+      - cp bin/kontor-desktop '{{.BINARY}}'
+      - /usr/libexec/PlistBuddy -c 'Set :CFBundleShortVersionString {{.VERSION}}' '{{.APP}}/Contents/Info.plist'
+      - /usr/libexec/PlistBuddy -c 'Set :CFBundleVersion {{.VERSION}}' '{{.APP}}/Contents/Info.plist'
+      - |
+        if [ -z "$KONTOR_SIGN_IDENTITY" ]; then
+          echo "error: KONTOR_SIGN_IDENTITY is not set — see docs/code-signing.md" >&2
+          exit 1
+        fi
+        if ! security find-identity -v -p codesigning 2>/dev/null | grep -qF "$KONTOR_SIGN_IDENTITY"; then
+          echo "error: '$KONTOR_SIGN_IDENTITY' not found in keychain — run 'security find-identity -v -p codesigning', then see docs/code-signing.md" >&2
+          exit 1
+        fi
+      - codesign --force --deep --sign "$KONTOR_SIGN_IDENTITY" --identifier com.lxwnk.kontor '{{.APP}}'
+      - codesign --verify --deep --strict '{{.APP}}'
+
   test:
     desc: Run all tests (all modules)
     cmds:
