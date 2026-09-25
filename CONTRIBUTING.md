@@ -141,6 +141,7 @@ Two single sources feed CI, so neither has to be edited per module:
    - `task test` passes (race detector included)
    - `task lint` passes
    - `pnpm typecheck` passes
+   - `bash scripts/check-changelog-headings.sh` passes — add `CHANGELOG.md` entries to the existing `### Added` / `### Changed` / `### Fixed` subsections under `[Unreleased]`, never a second copy of a heading
 4. Write a clear PR description explaining what changed and why.
 
 ## Commit Convention

@@ -1,7 +1,6 @@
 #!/bin/sh
-# Guard against duplicate ### headings within a single release section of
-# CHANGELOG.md. Wired into CI so parallel agents that each open their own
-# ### Added (or any other KAC heading) are caught before merge.
+# Fails when CHANGELOG.md repeats a `## [release]` heading, or a `### ` heading
+# within one release section.
 #
 # Usage: check-changelog-headings.sh [FILE]
 #   FILE defaults to CHANGELOG.md in the current directory.
@@ -17,17 +16,21 @@ if [ ! -f "$file" ]; then
 fi
 
 awk '
+  { sub(/[ \t\r]+$/, "") }
   /^## \[/ {
     section = $0
-    # Reset the seen-headings map for each release section.
-    delete seen
+    if (section in sections) {
+      printf "duplicate: %s (lines %d and %d)\n", section, sections[section], NR > "/dev/stderr"
+      rc = 1
+    } else {
+      sections[section] = NR
+    }
     next
   }
   /^### / {
-    heading = $0
-    key = section SUBSEP heading
+    key = section SUBSEP $0
     if (key in seen) {
-      printf "duplicate: %s under %s (lines %d and %d)\n", heading, section, seen[key], NR > "/dev/stderr"
+      printf "duplicate: %s under %s (lines %d and %d)\n", $0, section, seen[key], NR > "/dev/stderr"
       rc = 1
     } else {
       seen[key] = NR
