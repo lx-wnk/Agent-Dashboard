@@ -85,3 +85,12 @@ func TestJSONPath_DefaultIsHomeLevel(t *testing.T) {
 	require.True(t, strings.HasSuffix(path, "/.claude.json"), "expected path to end with /.claude.json, got %s", path)
 	require.False(t, strings.Contains(path, "/.claude/.claude.json"), "path must not nest .claude.json inside .claude dir, got %s", path)
 }
+
+func TestJSONPath_ProviderTakesPrecedence(t *testing.T) {
+	t.Cleanup(claudeconfig.SetConfigDirProvider(func() string { return "/custom/claude-dir" }))
+	t.Setenv("CLAUDE_CONFIG_DIR", "/env-dir")
+
+	path, err := claudeconfig.JSONPath()
+	require.NoError(t, err)
+	require.Equal(t, "/custom/claude-dir/.claude.json", path)
+}

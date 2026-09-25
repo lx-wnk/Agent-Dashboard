@@ -81,6 +81,7 @@ import (
 	"github.com/lx-wnk/kontor/server/internal/memory"
 	"github.com/lx-wnk/kontor/server/internal/merger"
 	"github.com/lx-wnk/kontor/server/internal/parser"
+	"github.com/lx-wnk/kontor/server/internal/pathutil"
 	"github.com/lx-wnk/kontor/server/internal/permissions"
 	"github.com/lx-wnk/kontor/server/internal/pipeline"
 	"github.com/lx-wnk/kontor/server/internal/plugin"
@@ -281,9 +282,10 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		}
 	}
 
-	claudeconfig.SetConfigDirProvider(func() string {
-		return settingsSvc.String("claude.configDir")
-	})
+	// Read once (ApplyRestart): a live read would move session lookups and
+	// .claude.json writes on save, ahead of everything wired at startup.
+	claudeConfigDir := pathutil.ExpandLeadingTilde(settingsSvc.String("claude.configDir"))
+	claudeconfig.SetConfigDirProvider(func() string { return claudeConfigDir })
 
 	// Seed the spawner command allow-list from settings (ApplyRestart).
 	services.SetSpawnerAllowedCommands(settingsSvc.StringSlice("spawn.allowedCommands"))

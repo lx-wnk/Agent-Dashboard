@@ -115,8 +115,8 @@ var (
 // observability for the candidate-cache hit path (exposed via export_test.go).
 var statSessionFilesCalls atomic.Int64
 
-// claudeConfigDir returns the Claude config base directory.
-// Respects CLAUDE_CONFIG_DIR env var; falls back to ~/.claude.
+// claudeConfigDir returns the Claude config base directory: the
+// claude.configDir setting, else CLAUDE_CONFIG_DIR, else ~/.claude.
 func claudeConfigDir() string {
 	return claudeconfig.ConfigDir()
 }
@@ -124,7 +124,7 @@ func claudeConfigDir() string {
 // allClaudeConfigDirs returns all candidate Claude config directories to search.
 // Priority order:
 //  1. DASHBOARD_CLAUDE_CONFIG_DIRS — explicit comma-separated list (highest priority)
-//  2. CLAUDE_CONFIG_DIR from the server process environment
+//  2. claudeConfigDir() — the claude.configDir setting or the server's CLAUDE_CONFIG_DIR
 //  3. Default ~/.claude
 //  4. Common custom variants that exist on disk (~/.claude-personal, etc.)
 func allClaudeConfigDirs() []string {
@@ -143,7 +143,7 @@ func allClaudeConfigDirs() []string {
 			add(p)
 		}
 	}
-	// 2. Server process CLAUDE_CONFIG_DIR.
+	// 2. claude.configDir setting or server process CLAUDE_CONFIG_DIR.
 	add(claudeConfigDir())
 	// 3. Standard default.
 	home, _ := os.UserHomeDir()

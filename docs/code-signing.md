@@ -14,7 +14,11 @@ that hash — so every rebuild resets them and the app hangs on the first
 2. Name: pick something recognisable (e.g. `Kontor Dev`).
 3. Certificate Type: **Code Signing**.
 4. Leave "Let me override defaults" unchecked → **Create**.
-5. The name you chose is your `KONTOR_SIGN_IDENTITY`.
+5. Open the new certificate → **Trust** → **Code Signing: Always Trust**.
+   A self-signed certificate is untrusted until then, and
+   `security find-identity -v` (which the bundle task checks against) lists
+   only valid identities.
+6. The name you chose is your `KONTOR_SIGN_IDENTITY`.
 
 ## Using an Apple Development certificate
 
@@ -49,6 +53,8 @@ codesign --verify --deep --strict bin/Kontor.app
 
 ## How `task desktop:bundle` uses it
 
-The bundle task (`Taskfile.yml → desktop:bundle`) checks that
-`KONTOR_SIGN_IDENTITY` is set and present in the keychain before signing.
-If either check fails it prints an error pointing here and exits 1.
+The bundle task (`Taskfile.yml → desktop:bundle`) swaps a fresh build into an
+existing `bin/Kontor.app` (create it once with `task desktop:dist`). Before it
+builds anything it checks that the bundle exists and that
+`KONTOR_SIGN_IDENTITY` is set and present in the keychain; if a check fails
+it prints an error pointing here and leaves the bundle untouched.

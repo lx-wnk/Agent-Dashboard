@@ -31,9 +31,9 @@ func SetConfigDirProvider(fn func() string) func() {
 	}
 }
 
-// ConfigDir returns the Claude config base directory.
-// Precedence: provider (settings) → CLAUDE_CONFIG_DIR env → ~/.claude.
-func ConfigDir() string {
+// explicitDir returns the configured Claude config root — provider (settings)
+// first, then CLAUDE_CONFIG_DIR — or "" when neither is set.
+func explicitDir() string {
 	configDirMu.RLock()
 	fn := configDirProvider
 	configDirMu.RUnlock()
@@ -42,7 +42,13 @@ func ConfigDir() string {
 			return dir
 		}
 	}
-	if dir := os.Getenv("CLAUDE_CONFIG_DIR"); dir != "" {
+	return os.Getenv("CLAUDE_CONFIG_DIR")
+}
+
+// ConfigDir returns the Claude config base directory.
+// Precedence: provider (settings) → CLAUDE_CONFIG_DIR env → ~/.claude.
+func ConfigDir() string {
+	if dir := explicitDir(); dir != "" {
 		return dir
 	}
 	home, _ := os.UserHomeDir()
@@ -58,18 +64,9 @@ func ConfigDir() string {
 // no such override and .claude.json sits at ~/.claude.json — one level above
 // ~/.claude, not inside it. ConfigDir() is therefore not appropriate here.
 func JSONPath() (string, error) {
-	configDirMu.RLock()
-	fn := configDirProvider
-	configDirMu.RUnlock()
-	if fn != nil {
-		if dir := fn(); dir != "" {
-			return filepath.Join(dir, ".claude.json"), nil
-		}
-	}
-	if dir := os.Getenv("CLAUDE_CONFIG_DIR"); dir != "" {
+	if dir := explicitDir(); dir != "" {
 		return filepath.Join(dir, ".claude.json"), nil
 	}
-	// Default: ~/.claude.json lives at home level, not inside ~/.claude/.
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("claudeconfig: resolve home: %w", err)

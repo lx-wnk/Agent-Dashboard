@@ -14,6 +14,7 @@ Preparing the first public release.
 
 ### Fixed
 
+- **A slow keychain unlock no longer fails the GitHub CLI token read.** With `github.tokenSource = gh-cli`, a `gh auth token` that times out is tried once more before start fails, and the error now says it timed out instead of `signal: killed`.
 - The desktop app no longer hangs at start when opened from Finder. Watching Claude's config in the home directory opened every entry there, including `~/Desktop`, which waits on a macOS privacy prompt; the config file is now polled instead.
 - **A half-filled Obsidian setup no longer stops the server from starting.**
   Boot used to fail outright when only some of `obsidian.baseURL`,
@@ -215,6 +216,8 @@ Preparing the first public release.
 - **Pipeline stages renamed: `concept` is now `backlog`, `backlog` is now `ready`.** The holding pen where refinement chat runs is now called `backlog`, and the starting gun that auto-advances to implementation is now called `ready`. A one-shot data migration rewrites existing rows in `tasks.current_stage` and `stage_runs.stage` in collision-safe order (backlog→ready first, concept→backlog second). It also rewrote `task_schedules.current_stage` until that column was dropped — a routine never chose a stage, and nothing read the column. It runs exactly once, recorded in a new `applied_migrations` table, and it has to: the rename is chained, so a second pass would take the rows the first pass wrote as `backlog` and push them on to `ready` — every task parked in the refinement holding pen would start running by itself after a restart. The stored data cannot settle the question either, because a database holding no `concept` row is indistinguishable from a migrated one. `stage_runs.stage` is rewritten for all rows including terminal runs, because `GetLatestByTaskAndStage` lookups on non-terminal runs would break otherwise, and the rename is name normalization, not history falsification. The `refine.Concept` domain type, `inject_concept` tool name, and `conceptOutput`/`conceptJSON` variables are unchanged — they describe the domain object, not the pipeline stage.
 
 ### Added
+- **`claude.configDir` setting.** Names the Claude config directory (absolute or `~/…`) the dashboard reads sessions and `.claude.json` from, so an app opened from Finder — which inherits no shell `CLAUDE_CONFIG_DIR` — still finds them. It wins over `CLAUDE_CONFIG_DIR` and applies after a restart.
+- **`task desktop:bundle`.** Swaps a fresh build into an existing `bin/Kontor.app`, stamps the version and signs it with `KONTOR_SIGN_IDENTITY`, so macOS privacy grants survive rebuilds. See [docs/code-signing.md](docs/code-signing.md).
 - Agents carry their session title (a /rename title, else Claude's generated one).
 - **Allow Obsidian indexing with one click from its settings.** The Obsidian panel now shows an "Allow indexing" button — on a denied "Index now" run, or proactively whenever `obsidian.search`, `obsidian.read`, or `memory.write` is missing a global allow grant — that creates exactly the missing grants and confirms once indexing is unblocked, without a detour through Settings → Grants.
 - **Live edges in the hub.** A dashed line runs from an agent to each vault
