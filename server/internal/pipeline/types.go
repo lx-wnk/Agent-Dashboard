@@ -98,6 +98,9 @@ type StageContext struct {
 	MCPToken             string
 	MCPUrl               string
 
+	// StageTimeout is the global stageTimeoutSeconds the kill check enforces; 0 means none.
+	StageTimeout time.Duration
+
 	// AllowGitPush mirrors OrchestratorOptions.AllowGitPush for the current stage,
 	// gating whether spawned agents may run `git push`.
 	AllowGitPush bool
