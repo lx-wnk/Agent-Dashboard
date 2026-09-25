@@ -172,4 +172,11 @@ describe('applyEvent', () => {
     mod.applyEvent({ type: 'unexpected_future_event' as any, taskId: 'x' })
     expect(warnSpy).toHaveBeenCalledWith('[useTasks] unknown SSE event type:', 'unexpected_future_event')
   })
+
+  it('stays silent for events other composables own on the shared stream', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    for (const type of ['schedule_changed', 'applications_changed', 'eval_drift'] as const)
+      mod.applyEvent({ type, taskId: '' })
+    expect(warnSpy).not.toHaveBeenCalled()
+  })
 })

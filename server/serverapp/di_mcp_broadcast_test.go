@@ -8,10 +8,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	schedulesapi "github.com/lx-wnk/kontor/server/internal/api/schedules"
 	"github.com/lx-wnk/kontor/server/internal/api/tasks"
 	"github.com/lx-wnk/kontor/server/internal/db"
-	"github.com/lx-wnk/kontor/server/internal/db/ent"
 	"github.com/lx-wnk/kontor/server/internal/db/rawrepo"
 	"github.com/lx-wnk/kontor/server/internal/db/repo"
 	"github.com/lx-wnk/kontor/server/internal/refine"
@@ -94,13 +92,7 @@ func TestScheduleBroadcastEmitsScheduleChanged(t *testing.T) {
 	ch := tb.Subscribe()
 	t.Cleanup(func() { tb.Unsubscribe(ch) })
 
-	broadcast := func(ctx context.Context, id string, s *ent.TaskSchedule) {
-		var payload any
-		if s != nil {
-			payload = schedulesapi.ToView(s)
-		}
-		tb.Broadcast(sse.TaskEvent{Type: "schedule_changed", TaskID: id, Payload: payload})
-	}
+	broadcast := newMCPScheduleBroadcast(tb)
 
 	s, err := schedRepo.Create(ctx, repo.CreateTaskScheduleInput{
 		Name:       "test-sched",
@@ -112,7 +104,7 @@ func TestScheduleBroadcastEmitsScheduleChanged(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	broadcast(ctx, s.ID, s)
+	broadcast(s.ID, s)
 
 	var frame []byte
 	select {
@@ -131,4 +123,11 @@ func TestScheduleBroadcastEmitsScheduleChanged(t *testing.T) {
 	require.True(t, ok, "payload must be a JSON object")
 	require.Equal(t, s.ID, payload["id"])
 	require.Equal(t, "test-sched", payload["name"])
+
+	broadcast(s.ID, nil)
+	frame = bytes.TrimSuffix(bytes.TrimPrefix(<-ch, []byte("data: ")), []byte("\n\n"))
+	var deleted sse.TaskEvent
+	require.NoError(t, json.Unmarshal(frame, &deleted))
+	require.Equal(t, "schedule_changed", deleted.Type)
+	require.Nil(t, deleted.Payload, "a delete must send no payload so clients re-fetch")
 }

@@ -19,6 +19,12 @@ Preparing the first public release.
   agent created stayed invisible and opening it said "Task not found". They now
   send `task_created` and `task_updated` with the same enriched task the HTTP API
   sends, including its blocked and refine state.
+- **Routines changed through MCP show up without a reload.** `manage_schedule`
+  announced its changes as a task event the routines list ignored; it now
+  sends `schedule_changed` with the same routine view the HTTP API returns.
+- **Opening a task that is not in the loaded list fetches it.** Following a
+  link to a task the board had not loaded yet showed "Task not found"; the
+  task is now loaded from the server first.
 - The desktop app no longer hangs at start when opened from Finder. Watching Claude's config in the home directory opened every entry there, including `~/Desktop`, which waits on a macOS privacy prompt; the config file is now polled instead.
 - **A half-filled Obsidian setup no longer stops the server from starting.**
   Boot used to fail outright when only some of `obsidian.baseURL`,

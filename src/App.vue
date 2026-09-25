@@ -272,7 +272,9 @@ function handleKeydown(e: KeyboardEvent) {
 onMounted(() => window.addEventListener('keydown', handleKeydown))
 onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
 
+let navigationSeq = 0
 function navigateTo(target: { agent?: Agent, taskId?: string }) {
+  const seq = ++navigationSeq
   selectAgent(null)
   selectTask(null)
   nextTick(() => {
@@ -280,6 +282,9 @@ function navigateTo(target: { agent?: Agent, taskId?: string }) {
       selectAgent(target.agent)
     if (target.taskId) {
       void findOrFetchTask(target.taskId).then((task) => {
+        // A later navigation won while the fetch was in flight.
+        if (seq !== navigationSeq)
+          return
         if (task) {
           openTask(task)
         }
@@ -289,7 +294,7 @@ function navigateTo(target: { agent?: Agent, taskId?: string }) {
         }
       }).catch((err: unknown) => {
         console.warn('[navigateTo] refetch failed:', err)
-        toast.error('Task not found on this machine.')
+        toast.error('Could not load the task.')
       })
     }
   })

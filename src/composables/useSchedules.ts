@@ -67,7 +67,7 @@ export type UpdateScheduleBody = Partial<CreateScheduleBody>
 
 export interface ScheduleEvent {
   type: 'schedule_changed'
-  scheduleId?: string
+  taskId?: string
   payload?: unknown
 }
 
@@ -100,18 +100,11 @@ async function fetchSchedules(): Promise<void> {
 function applyEvent(event: ScheduleEvent): void {
   if (event.type === 'schedule_changed') {
     const payload = event.payload as ScheduleView | undefined
-    if (payload?.id) {
-      const idx = schedules.value.findIndex(s => s.id === payload.id)
-      if (idx >= 0) {
-        schedules.value = schedules.value.map(s => s.id === payload.id ? payload : s)
-      }
-      else {
-        schedules.value = [payload, ...schedules.value]
-      }
-    }
-    else {
+    // The stream reaches every user; only the user-scoped list may add a row.
+    if (payload?.id && schedules.value.some(s => s.id === payload.id))
+      schedules.value = schedules.value.map(s => s.id === payload.id ? payload : s)
+    else
       void fetchSchedules()
-    }
   }
 }
 
