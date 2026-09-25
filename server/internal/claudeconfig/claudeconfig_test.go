@@ -94,3 +94,15 @@ func TestJSONPath_ProviderTakesPrecedence(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "/custom/claude-dir/.claude.json", path)
 }
+
+func TestSessionDir(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Cleanup(claudeconfig.SetConfigDirProvider(func() string { return "/configured" }))
+
+	require.Equal(t, "/own", claudeconfig.SessionDir("/own", true), "a dir read from the process wins")
+	require.Equal(t, filepath.Join(home, ".claude"), claudeconfig.SessionDir("", true),
+		"read and unset runs on the CLI default, not the server's configured dir")
+	require.Equal(t, "/configured", claudeconfig.SessionDir("", false),
+		"an unreadable env falls back to the server's configured dir")
+}

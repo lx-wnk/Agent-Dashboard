@@ -31,9 +31,12 @@ func SetConfigDirProvider(fn func() string) func() {
 	}
 }
 
-// explicitDir returns the configured Claude config root — provider (settings)
+// EnvVar is the variable the Claude CLI reads its config root from.
+const EnvVar = "CLAUDE_CONFIG_DIR"
+
+// ExplicitDir returns the configured Claude config root — provider (settings)
 // first, then CLAUDE_CONFIG_DIR — or "" when neither is set.
-func explicitDir() string {
+func ExplicitDir() string {
 	configDirMu.RLock()
 	fn := configDirProvider
 	configDirMu.RUnlock()
@@ -42,17 +45,37 @@ func explicitDir() string {
 			return dir
 		}
 	}
-	return os.Getenv("CLAUDE_CONFIG_DIR")
+	return os.Getenv(EnvVar)
+}
+
+// DefaultDir is the root the Claude CLI uses when CLAUDE_CONFIG_DIR is unset.
+func DefaultDir() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".claude")
 }
 
 // ConfigDir returns the Claude config base directory.
 // Precedence: provider (settings) → CLAUDE_CONFIG_DIR env → ~/.claude.
 func ConfigDir() string {
-	if dir := explicitDir(); dir != "" {
+	if dir := ExplicitDir(); dir != "" {
 		return dir
 	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".claude")
+	return DefaultDir()
+}
+
+// SessionDir returns the config root a monitored claude process runs on, from
+// the CLAUDE_CONFIG_DIR read out of its environment (envKnown: the environment
+// was read at all). Read and unset means the CLI default, whatever the server
+// is configured for; unreadable falls back to the server's own ConfigDir.
+func SessionDir(envDir string, envKnown bool) string {
+	switch {
+	case envDir != "":
+		return envDir
+	case envKnown:
+		return DefaultDir()
+	default:
+		return ConfigDir()
+	}
 }
 
 // JSONPath resolves ~/.claude.json, honoring CLAUDE_CONFIG_DIR — which
@@ -64,7 +87,7 @@ func ConfigDir() string {
 // no such override and .claude.json sits at ~/.claude.json — one level above
 // ~/.claude, not inside it. ConfigDir() is therefore not appropriate here.
 func JSONPath() (string, error) {
-	if dir := explicitDir(); dir != "" {
+	if dir := ExplicitDir(); dir != "" {
 		return filepath.Join(dir, ".claude.json"), nil
 	}
 	home, err := os.UserHomeDir()

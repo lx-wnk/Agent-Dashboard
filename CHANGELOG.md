@@ -217,6 +217,7 @@ Preparing the first public release.
 
 ### Added
 - **`claude.configDir` setting.** Names the Claude config directory (absolute or `~/…`) the dashboard reads sessions and `.claude.json` from, so an app opened from Finder — which inherits no shell `CLAUDE_CONFIG_DIR` — still finds them. It wins over `CLAUDE_CONFIG_DIR` and applies after a restart.
+  Pipeline agents are started on the same directory unless their spawner names its own, and the slash-command and skill lists read from it. A running session whose environment shows no `CLAUDE_CONFIG_DIR` is still looked up under `~/.claude`, where the CLI writes it. The plugin secret key stays under `CLAUDE_CONFIG_DIR` or `~/.claude`, because it is loaded before settings can be read.
 - **`task desktop:bundle`.** Swaps a fresh build into an existing `bin/Kontor.app`, stamps the version and signs it with `KONTOR_SIGN_IDENTITY`, so macOS privacy grants survive rebuilds. See [docs/code-signing.md](docs/code-signing.md).
 - Agents carry their session title (a /rename title, else Claude's generated one).
 - **Allow Obsidian indexing with one click from its settings.** The Obsidian panel now shows an "Allow indexing" button — on a denied "Index now" run, or proactively whenever `obsidian.search`, `obsidian.read`, or `memory.write` is missing a global allow grant — that creates exactly the missing grants and confirms once indexing is unblocked, without a detour through Settings → Grants.
