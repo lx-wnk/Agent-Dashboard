@@ -985,7 +985,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	// the crossing is applied consistently.
 	var pipelineEnricher merger.Enricher
 	if entClient != nil {
-		pipelineEnricher = agentbroadcast.NewPipelineTaskEnricher(repo.NewStageRunRepo(entClient), taskRepoForResolver, repo.NewPermissionRepo(entClient), repo.NewGrantRepo(entClient), repo.NewCapabilityRepo(entClient))
+		pipelineEnricher = agentbroadcast.NewPipelineTaskEnricher(repo.NewStageRunRepo(entClient), taskRepoForResolver, repo.NewPermissionRepo(entClient), repo.NewGrantRepo(entClient), repo.NewCapabilityRepo(entClient), projectRepo)
 	}
 
 	// Hook-event store + enricher: the opt-in receiver records per-event hook

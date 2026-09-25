@@ -43,7 +43,7 @@ import (
 //
 // agentbroadcast is a peer of merger and may import db/repo, which keeps merger
 // itself free of any db dependency (Go layer direction).
-func NewPipelineTaskEnricher(stageRuns repo.StageRunRepo, tasks repo.TaskRepo, perms repo.PermissionRepo, grants repo.GrantRepo, caps repo.CapabilityRepo) merger.Enricher {
+func NewPipelineTaskEnricher(stageRuns repo.StageRunRepo, tasks repo.TaskRepo, perms repo.PermissionRepo, grants repo.GrantRepo, caps repo.CapabilityRepo, projects repo.ProjectRepo) merger.Enricher {
 	return func(ctx context.Context, agents []sdk.Agent) {
 		if stageRuns == nil || tasks == nil {
 			return
@@ -98,6 +98,34 @@ func NewPipelineTaskEnricher(stageRuns repo.StageRunRepo, tasks repo.TaskRepo, p
 			}
 		}
 
+		// Batch-fetch Kontor projects for tasks that carry a ProjectID, then
+		// override each agent's ProjectName (initially cwd basename) with the
+		// canonical project name.
+		projectByID := make(map[string]*ent.Project)
+		if projects != nil {
+			projectIDs := make([]string, 0)
+			projectIDSeen := make(map[string]struct{})
+			for _, t := range taskByID {
+				if t.ProjectID != nil {
+					pid := *t.ProjectID
+					if _, ok := projectIDSeen[pid]; !ok {
+						projectIDSeen[pid] = struct{}{}
+						projectIDs = append(projectIDs, pid)
+					}
+				}
+			}
+			if len(projectIDs) > 0 {
+				projectList, perr := projects.ListByIDs(ctx, projectIDs)
+				if perr != nil {
+					slog.Debug("pipeline enricher: project batch lookup failed", "err", perr)
+				} else {
+					for _, p := range projectList {
+						projectByID[p.ID] = p
+					}
+				}
+			}
+		}
+
 		pendingByStageRun := make(map[string][]*ent.PermissionRequest)
 		if perms != nil {
 			pendingReqs, perr := perms.ListPendingForStageRuns(ctx, stageRunIDs)
@@ -123,6 +151,11 @@ func NewPipelineTaskEnricher(stageRuns repo.StageRunRepo, tasks repo.TaskRepo, p
 			task, hasTask := taskByID[sr.TaskID]
 			if hasTask {
 				agents[i].PipelineTaskTitle = task.Title
+				if task.ProjectID != nil {
+					if proj, found := projectByID[*task.ProjectID]; found {
+						agents[i].ProjectName = proj.Name
+					}
+				}
 			}
 
 			if pendingReqs := pendingByStageRun[sr.ID]; len(pendingReqs) > 0 {
