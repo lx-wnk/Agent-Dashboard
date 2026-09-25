@@ -64,8 +64,8 @@ func TestOpen_DropsBareWebFetchGrants(t *testing.T) {
 
 	// Insert a task so the FK constraint on task_permissions is satisfied.
 	_, err = bundle1.DB.Exec(
-		`INSERT INTO tasks (id, slug, title, cwd, current_stage, priority, max_iterations, stage_timeout_seconds, silver_bullet, created_at, updated_at)
-		 VALUES ('t1','bare-wf-test','Test','','backlog','medium',20,1800,0,datetime('now'),datetime('now'))`,
+		`INSERT INTO tasks (id, slug, title, cwd, current_stage, priority, max_iterations, silver_bullet, created_at, updated_at)
+		 VALUES ('t1','bare-wf-test','Test','','backlog','medium',20,0,datetime('now'),datetime('now'))`,
 	)
 	require.NoError(t, err)
 
@@ -142,9 +142,9 @@ func TestOpen_FTS5TriggerRoundTrip(t *testing.T) {
 	defer func() { _ = bundle.Client.Close() }()
 
 	_, err = bundle.DB.Exec(
-		`INSERT INTO tasks (id, slug, title, cwd, current_stage, priority, max_iterations, stage_timeout_seconds, silver_bullet, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
-		"task-fts-1", "fts-roundtrip", "Observability Dashboard Feature", "/tmp/project", "backlog", "medium", 20, 1800, 0,
+		`INSERT INTO tasks (id, slug, title, cwd, current_stage, priority, max_iterations, silver_bullet, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+		"task-fts-1", "fts-roundtrip", "Observability Dashboard Feature", "/tmp/project", "backlog", "medium", 20, 0,
 	)
 	require.NoError(t, err)
 
@@ -352,8 +352,8 @@ func TestOpenTwiceWithResourceTable(t *testing.T) {
 func insertBackfillTask(t *testing.T, sqlDB *sql.DB, id string) {
 	t.Helper()
 	_, err := sqlDB.Exec(
-		`INSERT INTO tasks (id, slug, title, cwd, current_stage, priority, max_iterations, stage_timeout_seconds, silver_bullet, created_at, updated_at)
-		 VALUES (?, ?, 'Test', '', 'backlog', 'medium', 20, 1800, 0, datetime('now'), datetime('now'))`,
+		`INSERT INTO tasks (id, slug, title, cwd, current_stage, priority, max_iterations, silver_bullet, created_at, updated_at)
+		 VALUES (?, ?, 'Test', '', 'backlog', 'medium', 20, 0, datetime('now'), datetime('now'))`,
 		id, id,
 	)
 	require.NoError(t, err)
@@ -672,7 +672,7 @@ func TestOpen_LegacyPreApprovedColumnSurvives(t *testing.T) {
 
 	raw, err := sql.Open("sqlite", "file:"+path+"?_pragma=foreign_keys(1)")
 	require.NoError(t, err)
-	_, err = raw.Exec("CREATE TABLE `tasks` (`id` text NOT NULL, `slug` text NOT NULL, `title` text NOT NULL, `cwd` text NOT NULL, `current_stage` text NOT NULL DEFAULT ('concept'), `priority` text NOT NULL DEFAULT ('medium'), `max_iterations` integer NOT NULL DEFAULT (20), `stage_timeout_seconds` integer NOT NULL DEFAULT (1800), `silver_bullet` bool NOT NULL DEFAULT (false), `created_at` datetime NOT NULL, `updated_at` datetime NOT NULL, PRIMARY KEY (`id`))")
+	_, err = raw.Exec("CREATE TABLE `tasks` (`id` text NOT NULL, `slug` text NOT NULL, `title` text NOT NULL, `cwd` text NOT NULL, `current_stage` text NOT NULL DEFAULT ('concept'), `priority` text NOT NULL DEFAULT ('medium'), `max_iterations` integer NOT NULL DEFAULT (20), `silver_bullet` bool NOT NULL DEFAULT (false), `created_at` datetime NOT NULL, `updated_at` datetime NOT NULL, PRIMARY KEY (`id`))")
 	require.NoError(t, err)
 	// Verbatim pre-drop DDL, as emitted by ent while the field still existed.
 	_, err = raw.Exec("CREATE TABLE `task_permissions` (`id` text NOT NULL, `tool` text NOT NULL, `pattern` text NULL, `granted` bool NOT NULL DEFAULT (false), `pre_approved` bool NOT NULL DEFAULT (false), `manual_override` bool NOT NULL DEFAULT (false), `decided_by` text NULL, `requested_at` datetime NOT NULL, `decided_at` datetime NULL, `expires_at` datetime NULL, `task_id` text NOT NULL, PRIMARY KEY (`id`), CONSTRAINT `task_permissions_tasks_permissions` FOREIGN KEY (`task_id`) REFERENCES `tasks` (`id`) ON DELETE CASCADE)")
@@ -818,7 +818,7 @@ func TestOpen_ExistingRoutinesBecomePipelineOnce(t *testing.T) {
 	schedules := repo.NewTaskScheduleRepo(bundle0.Client)
 	old, err := schedules.Create(context.Background(), repo.CreateTaskScheduleInput{
 		Name: "old", CronExpr: "0 9 * * *", SlugPrefix: "old", Title: "Old",
-		Cwd: "/tmp", MaxIterations: 20, StageTimeoutSeconds: 1800,
+		Cwd: "/tmp", MaxIterations: 20,
 	})
 	require.NoError(t, err)
 	// The seeding Open already recorded the marker against the (then-empty)
@@ -836,7 +836,7 @@ func TestOpen_ExistingRoutinesBecomePipelineOnce(t *testing.T) {
 
 	newSched, err := repo.NewTaskScheduleRepo(bundle1.Client).Create(context.Background(), repo.CreateTaskScheduleInput{
 		Name: "new", CronExpr: "0 9 * * *", SlugPrefix: "new", Title: "New",
-		Cwd: "/tmp", MaxIterations: 20, StageTimeoutSeconds: 1800,
+		Cwd: "/tmp", MaxIterations: 20,
 	})
 	require.NoError(t, err)
 	require.NoError(t, bundle1.Close())
@@ -863,9 +863,9 @@ func TestOpen_RenameStagesRunsOnlyOnce(t *testing.T) {
 	bundle0, err := db.Open(path)
 	require.NoError(t, err)
 	_, err = bundle0.DB.Exec(
-		`INSERT INTO tasks (id, slug, title, cwd, current_stage, priority, max_iterations, stage_timeout_seconds, silver_bullet, created_at, updated_at)
-		 VALUES ('t-concept', 't-concept', 'Test', '', 'concept', 'medium', 20, 1800, 0, datetime('now'), datetime('now')),
-		        ('t-backlog', 't-backlog', 'Test', '', 'backlog', 'medium', 20, 1800, 0, datetime('now'), datetime('now'))`,
+		`INSERT INTO tasks (id, slug, title, cwd, current_stage, priority, max_iterations, silver_bullet, created_at, updated_at)
+		 VALUES ('t-concept', 't-concept', 'Test', '', 'concept', 'medium', 20, 0, datetime('now'), datetime('now')),
+		        ('t-backlog', 't-backlog', 'Test', '', 'backlog', 'medium', 20, 0, datetime('now'), datetime('now'))`,
 	)
 	require.NoError(t, err)
 	// The seeding Open already recorded the marker, so clear it: the rows above
@@ -886,6 +886,70 @@ func TestOpen_RenameStagesRunsOnlyOnce(t *testing.T) {
 	require.Equal(t, "backlog", stageOf(t, path, "t-concept"),
 		"a second boot must not push the parked task on to 'ready'")
 	require.Equal(t, "ready", stageOf(t, path, "t-backlog"))
+}
+
+// TestOpen_DropStageTimeoutColumns_Up seeds a file DB with the old schema
+// containing stage_timeout_seconds on both tasks and task_schedules, then opens
+// it with the current code. Asserts the column is absent from both tables
+// after migration and that a second Open is a clean no-op.
+func TestOpen_DropStageTimeoutColumns_Up(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "drop-timeout.db")
+
+	raw, err := sql.Open("sqlite", "file:"+path+"?_pragma=foreign_keys(1)")
+	require.NoError(t, err)
+	_, err = raw.Exec("CREATE TABLE `tasks` (`id` text NOT NULL, `slug` text NOT NULL, `title` text NOT NULL, `cwd` text NOT NULL, `current_stage` text NOT NULL DEFAULT ('backlog'), `priority` text NOT NULL DEFAULT ('medium'), `max_iterations` integer NOT NULL DEFAULT (20), `stage_timeout_seconds` integer NOT NULL DEFAULT (1800), `silver_bullet` bool NOT NULL DEFAULT (false), `created_at` datetime NOT NULL, `updated_at` datetime NOT NULL, PRIMARY KEY (`id`))")
+	require.NoError(t, err)
+	_, err = raw.Exec("CREATE TABLE `task_schedules` (`id` text NOT NULL, `name` text NOT NULL, `enabled` bool NOT NULL DEFAULT (true), `cron_expr` text NOT NULL, `slug_prefix` text NOT NULL, `title` text NOT NULL, `cwd` text NOT NULL, `max_iterations` integer NOT NULL DEFAULT (20), `stage_timeout_seconds` integer NOT NULL DEFAULT (1800), `silver_bullet` bool NOT NULL DEFAULT (false), `created_at` datetime NOT NULL, `updated_at` datetime NOT NULL, PRIMARY KEY (`id`))")
+	require.NoError(t, err)
+	require.NoError(t, raw.Close())
+
+	bundle, err := db.Open(path)
+	require.NoError(t, err)
+	defer func() { _ = bundle.Close() }()
+
+	// Assert column is gone from tasks.
+	var tasksCol int
+	err = bundle.DB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('tasks') WHERE name = 'stage_timeout_seconds'`).Scan(&tasksCol)
+	require.NoError(t, err)
+	require.Equal(t, 0, tasksCol, "stage_timeout_seconds must be absent from tasks")
+
+	// Assert column is gone from task_schedules.
+	var schedCol int
+	err = bundle.DB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('task_schedules') WHERE name = 'stage_timeout_seconds'`).Scan(&schedCol)
+	require.NoError(t, err)
+	require.Equal(t, 0, schedCol, "stage_timeout_seconds must be absent from task_schedules")
+
+	// Second Open must be a clean no-op.
+	require.NoError(t, bundle.Close())
+	bundle2, err := db.Open(path)
+	require.NoError(t, err)
+	defer func() { _ = bundle2.Close() }()
+}
+
+// TestDropStageTimeoutColumns_Down proves the documented down-path SQL is valid:
+// on a fully migrated DB, both columns can be added back.
+func TestDropStageTimeoutColumns_Down(t *testing.T) {
+	bundle, err := db.Open(":memory:")
+	require.NoError(t, err)
+	defer func() { _ = bundle.Client.Close() }()
+
+	// Execute the down-path SQL.
+	_, err = bundle.DB.Exec(`ALTER TABLE tasks ADD COLUMN stage_timeout_seconds INTEGER NOT NULL DEFAULT 1800`)
+	require.NoError(t, err)
+	_, err = bundle.DB.Exec(`ALTER TABLE task_schedules ADD COLUMN stage_timeout_seconds INTEGER NOT NULL DEFAULT 1800`)
+	require.NoError(t, err)
+
+	// Verify the columns exist.
+	var tasksCol int
+	err = bundle.DB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('tasks') WHERE name = 'stage_timeout_seconds'`).Scan(&tasksCol)
+	require.NoError(t, err)
+	require.Equal(t, 1, tasksCol, "down-path must restore stage_timeout_seconds on tasks")
+
+	var schedCol int
+	err = bundle.DB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('task_schedules') WHERE name = 'stage_timeout_seconds'`).Scan(&schedCol)
+	require.NoError(t, err)
+	require.Equal(t, 1, schedCol, "down-path must restore stage_timeout_seconds on task_schedules")
 }
 
 func TestOpen_MCPApplicationTables(t *testing.T) {

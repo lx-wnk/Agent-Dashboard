@@ -189,6 +189,10 @@ func Open(path string) (*DBBundle, error) {
 	// (tasks, stage_runs, task_schedules all exist) and is safe to run on every
 	// boot only because it records a one-shot marker — the rename itself is not
 	// idempotent, see migrateRenameStages.
+	if err := migrateDropStageTimeoutColumns(sqlDB); err != nil {
+		_ = client.Close()
+		return nil, fmt.Errorf("db: drop stage_timeout_seconds columns: %w", err)
+	}
 	if err := migrateRenameStages(sqlDB); err != nil {
 		_ = client.Close()
 		return nil, fmt.Errorf("db: rename stages: %w", err)
@@ -992,6 +996,63 @@ func migrateEnsureMemoryEntryIndexes(db *sql.DB) error {
 		if _, err := db.Exec(stmt); err != nil {
 			return fmt.Errorf("pre-create memory_entry index: %w\nstatement: %s", err, stmt)
 		}
+	}
+	return nil
+}
+
+// migrateDropStageTimeoutColumns removes the dead stage_timeout_seconds column
+// from tasks and task_schedules. Neither column controls anything: the
+// orchestrator's kill check and stage-run key TTL read the global
+// stageTimeoutSeconds pipeline_config setting. Worse, the bare-int zero value
+// in the MCP create path wrote 0 over the schema default 1800, producing a
+// misleading value in every API response.
+//
+// Runs exactly once, guarded by an applied_migrations marker.
+//
+// Down path (for reversibility): both columns can be restored with
+//
+//	ALTER TABLE tasks ADD COLUMN stage_timeout_seconds INTEGER NOT NULL DEFAULT 1800
+//	ALTER TABLE task_schedules ADD COLUMN stage_timeout_seconds INTEGER NOT NULL DEFAULT 1800
+func migrateDropStageTimeoutColumns(db *sql.DB) error {
+	const marker = "drop-stage-timeout-columns"
+	if _, err := db.Exec(
+		`CREATE TABLE IF NOT EXISTS applied_migrations (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL)`,
+	); err != nil {
+		return fmt.Errorf("create applied_migrations: %w", err)
+	}
+	var applied int
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM applied_migrations WHERE name = ?`, marker,
+	).Scan(&applied); err != nil {
+		return fmt.Errorf("check marker %q: %w", marker, err)
+	}
+	if applied > 0 {
+		return nil
+	}
+
+	// Drop columns only when they exist — a fresh database (created after this
+	// code ships) never had them, and ALTER TABLE DROP COLUMN on a missing column
+	// is an error in SQLite.
+	for _, tbl := range []string{"tasks", "task_schedules"} {
+		var hasCol int
+		if err := db.QueryRow(
+			fmt.Sprintf(`SELECT COUNT(*) FROM pragma_table_info('%s') WHERE name = 'stage_timeout_seconds'`, tbl),
+		).Scan(&hasCol); err != nil {
+			return fmt.Errorf("check %s.stage_timeout_seconds: %w", tbl, err)
+		}
+		if hasCol > 0 {
+			if _, err := db.Exec(
+				fmt.Sprintf(`ALTER TABLE %s DROP COLUMN stage_timeout_seconds`, tbl),
+			); err != nil {
+				return fmt.Errorf("drop %s.stage_timeout_seconds: %w", tbl, err)
+			}
+		}
+	}
+
+	if _, err := db.Exec(
+		`INSERT INTO applied_migrations (name, applied_at) VALUES (?, datetime('now'))`, marker,
+	); err != nil {
+		return fmt.Errorf("record marker %q: %w", marker, err)
 	}
 	return nil
 }
