@@ -449,4 +449,47 @@ describe('appSelect', () => {
     await expect(button.trigger('keydown', { key: 'ArrowDown' })).resolves.not.toThrow()
     expect(panel()).not.toBeNull()
   })
+
+  it('clicking the chevron toggle button while open closes the panel and refocuses the trigger', async () => {
+    const w = mountSelect({ modelValue: 'a', options })
+    await w.get('button').trigger('click')
+    await flushPromises()
+    expect(panel()).not.toBeNull()
+    // The chevron toggle is a button inside the open-state wrapper div,
+    // next to the input — it's aria-hidden and tabindex=-1 (mouse-only).
+    const chevron = document.querySelector<HTMLButtonElement>('div.relative.inline-flex > button[aria-hidden="true"]')
+    expect(chevron).not.toBeNull()
+    chevron!.click()
+    await flushPromises()
+    expect(panel()).toBeNull()
+    expect(document.activeElement).toBe(w.get('button').element)
+  })
+
+  it('only one role=combobox element is visible (not display:none) while open', async () => {
+    const w = mountSelect({ modelValue: 'a', options })
+    await w.get('button').trigger('click')
+    await flushPromises()
+    const comboboxes = document.querySelectorAll<HTMLElement>('[role="combobox"]')
+    const visible = Array.from(comboboxes).filter(el => getComputedStyle(el).display !== 'none')
+    expect(visible).toHaveLength(1)
+    expect(visible[0].tagName).toBe('INPUT')
+  })
+
+  it('placeholder prop shows on the closed trigger when modelValue matches no option', () => {
+    const w = mountSelect({ modelValue: 'zzz', options, placeholder: 'Pick one…' })
+    expect(w.get('button').text()).toContain('Pick one…')
+  })
+
+  it('selected label takes precedence over placeholder prop', () => {
+    const w = mountSelect({ modelValue: 'b', options, placeholder: 'Pick one…' })
+    expect(w.get('button').text()).toContain('Option B')
+    expect(w.get('button').text()).not.toContain('Pick one…')
+  })
+
+  it('open input shows placeholder prop as hint when modelValue matches nothing', async () => {
+    const w = mountSelect({ modelValue: 'zzz', options, placeholder: 'Pick one…' })
+    await w.get('button').trigger('click')
+    await flushPromises()
+    expect(input().placeholder).toBe('Pick one…')
+  })
 })

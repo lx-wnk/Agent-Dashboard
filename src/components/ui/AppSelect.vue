@@ -11,6 +11,7 @@ const props = withDefaults(defineProps<{
   ariaLabel?: string
   disabled?: boolean
   size?: 'default' | 'compact'
+  placeholder?: string
 }>(), {
   size: 'default',
 })
@@ -323,28 +324,38 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <input
-    v-if="isOpen"
-    :id="id"
-    ref="inputRef"
-    type="text"
-    role="combobox"
-    aria-expanded="true"
-    aria-autocomplete="list"
-    :aria-controls="panelId"
-    :aria-activedescendant="activeOptionId"
-    :aria-label="ariaLabel"
-    autocomplete="off"
-    spellcheck="false"
-    :value="query"
-    :placeholder="selectedLabel"
-    :class="[$attrs.class, sizeClass, TRIGGER_CLASS]"
-    class="placeholder:text-fg-mute"
-    :style="inputSize"
-    @input="onInput"
-    @keydown="onInputKeydown"
-    @blur="closePanel()"
-  >
+  <div v-if="isOpen" class="relative inline-flex" :style="inputSize">
+    <input
+      :id="id"
+      ref="inputRef"
+      type="text"
+      role="combobox"
+      aria-expanded="true"
+      aria-autocomplete="list"
+      :aria-controls="panelId"
+      :aria-activedescendant="activeOptionId"
+      :aria-label="ariaLabel"
+      autocomplete="off"
+      spellcheck="false"
+      :value="query"
+      :placeholder="selectedLabel || placeholder"
+      :class="[$attrs.class, sizeClass, TRIGGER_CLASS]"
+      class="w-full placeholder:text-fg-mute pr-7"
+      @input="onInput"
+      @keydown="onInputKeydown"
+      @blur="closePanel()"
+    >
+    <button
+      type="button"
+      tabindex="-1"
+      aria-hidden="true"
+      class="absolute right-0 inset-y-0 flex items-center px-2 text-fg-mute text-xs leading-none cursor-pointer"
+      @mousedown.prevent
+      @click="closePanel({ refocus: true })"
+    >
+      ▾
+    </button>
+  </div>
   <button
     v-show="!isOpen"
     :id="isOpen ? undefined : id"
@@ -362,7 +373,7 @@ onUnmounted(() => {
     @click="toggle"
     @keydown="onButtonKeydown"
   >
-    <span class="truncate" :title="selectedLabel || undefined">{{ selectedLabel }}</span>
+    <span class="truncate" :title="selectedLabel || undefined">{{ selectedLabel || placeholder }}</span>
     <span aria-hidden="true" class="text-fg-mute text-xs leading-none flex-shrink-0">▾</span>
   </button>
 
