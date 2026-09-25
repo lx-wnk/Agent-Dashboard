@@ -217,6 +217,7 @@ func TestFinalizeCompletedAsyncRuns_FinalizationUnpushed_FailsNotDone(t *testing
 		PermissionRepo: repo.NewPermissionRepo(bundle.Client),
 		AuditRepo:      repo.NewAuditEventRepo(bundle.Client),
 		ConfigRepo:     repo.NewPipelineConfigRepo(bundle.Client),
+		AllowGitPush:   true,
 		HasUnpushedWorkFn: func(_ context.Context, _ *ent.Task) bool {
 			return true
 		},

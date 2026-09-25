@@ -532,14 +532,19 @@ Preparing the first public release.
   from `task_permissions` at one fixed context and never reads the `grants` table; neither
   changes here. See [`docs/guides/security.md`](docs/guides/security.md#capabilities-and-the-permission-gate)
   and [`docs/guides/mcp.md`](docs/guides/mcp.md#pipeline-agents-already-have-a-key).
-- **Finalization verifies the branch is pushed and opens a draft PR.** When a
-  pipeline task completes its finalization stage, the orchestrator now pushes the
-  feature branch (when push is permitted) and opens a draft PR on GitHub before
-  marking the task done. The PR carries the finalization summary, a test-plan
-  checklist, open todos and unresolved self-review findings under Known Issues.
-  The PR number and link appear on the task card. Tasks whose branch remains
-  unpushed or dirty after the push step fail finalization with a clear reason
-  instead of silently reaching done.
+- **Finalization pushes the branch and opens a draft PR.** When a worktree task
+  with push permitted (`git.allowPush`, or the task's `allowGitPush` metadata)
+  completes its finalization stage, the orchestrator pushes the feature branch
+  and opens a draft PR with the GitHub CLI (`gh`) against the repo's default
+  branch (`origin/HEAD`, else the task's source branch). The PR carries the
+  finalization summary, a test-plan checklist, open todos and unresolved
+  self-review findings under Known Issues; its number and link appear on the task
+  card. A failed push, or work still unpushed after it, fails finalization with
+  the reason. A failed PR creation (for example `gh` missing or logged out) does
+  not: the task reaches done and the error is kept in its `pr_error` metadata.
+  With push disabled — the default — the task reaches done as before, without a
+  push or PR; a worktree holding unpushed work is kept. The MCP `create_task` and `update_task` tools now
+  reject `allowGitPush` in metadata.
 
 ### Deprecated
 - `GET /api/config/memory` (the config explorer's list of a project's context files — `CLAUDE.md`, skills, etc.) is superseded by `GET /api/config/context-files`, which returns the byte-identical response. The old route keeps answering (it now delegates to the new one and logs a deprecation notice once per process) so nothing breaks today, but new code should call the new route — freeing the name "memory" for the new memory store (see Added, above) is the reason for the rename. Removal is deferred to a later release, after clients have had time to move.

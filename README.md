@@ -59,6 +59,8 @@ See [`docs/`](docs/README.md) for the full feature reference.
 
 **Prerequisite:** [Claude Code](https://claude.ai/code) installed and run at least once — the dashboard reads the session data it writes to `~/.claude`. macOS and Linux only.
 
+**Optional:** the [GitHub CLI](https://cli.github.com) (`gh`, logged in) for pipeline tasks that may push (`git.allowPush`, off by default). When such a task finishes, Kontor pushes its branch and opens a draft PR against the repo's default branch; if `gh` is missing or the PR can't be created, the task still reaches done and the error is kept as `pr_error` in its metadata. With push off, a task reaches done with nothing pushed, and its worktree is kept while it holds unpushed work.
+
 ### Install (no build tools needed)
 
 **One-liner (macOS / Linux):**

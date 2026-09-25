@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -62,6 +63,7 @@ func failIfCalled(t *testing.T, name string) {
 func TestDecideFinalization_CleanPushed_CreatesPR(t *testing.T) {
 	ctx := context.Background()
 	orch := makeFinalizationOrchestrator(t, func(o *pipeline.OrchestratorOptions) {
+		o.AllowGitPush = true
 		o.HasUnpushedWorkFn = func(ctx context.Context, task *ent.Task) bool { return false }
 		o.CreateDraftPRFn = func(ctx context.Context, worktreePath, branch, base, title, prBody string) (int, string, error) {
 			return 42, "https://github.com/lx-wnk/kontor/pull/42", nil
@@ -79,6 +81,7 @@ func TestDecideFinalization_CleanPushed_CreatesPR(t *testing.T) {
 func TestDecideFinalization_Dirty_Fails(t *testing.T) {
 	ctx := context.Background()
 	orch := makeFinalizationOrchestrator(t, func(o *pipeline.OrchestratorOptions) {
+		o.AllowGitPush = true
 		o.HasUnpushedWorkFn = func(ctx context.Context, task *ent.Task) bool { return true }
 		o.CreateDraftPRFn = func(ctx context.Context, worktreePath, branch, base, title, prBody string) (int, string, error) {
 			failIfCalled(t, "CreateDraftPRFn")
@@ -137,7 +140,7 @@ func TestDecideFinalization_UnpushedPushFails(t *testing.T) {
 	require.Contains(t, fail.Reason, "remote rejected")
 }
 
-func TestDecideFinalization_UnpushedPushNotAllowed(t *testing.T) {
+func TestDecideFinalization_PushDisabled_DoneWithoutChecks(t *testing.T) {
 	ctx := context.Background()
 	orch := makeFinalizationOrchestrator(t, func(o *pipeline.OrchestratorOptions) {
 		o.AllowGitPush = false
@@ -145,21 +148,46 @@ func TestDecideFinalization_UnpushedPushNotAllowed(t *testing.T) {
 			failIfCalled(t, "PushFn")
 			return nil
 		}
-		o.HasUnpushedWorkFn = func(ctx context.Context, task *ent.Task) bool { return true }
+		o.HasUnpushedWorkFn = func(ctx context.Context, task *ent.Task) bool {
+			failIfCalled(t, "HasUnpushedWorkFn")
+			return true
+		}
+		o.CreateDraftPRFn = func(ctx context.Context, worktreePath, branch, base, title, prBody string) (int, string, error) {
+			failIfCalled(t, "CreateDraftPRFn")
+			return 0, "", nil
+		}
 	})
 
 	transition := orch.DecideCompletedTransitionForTest(ctx, worktreeTask(), finalizationRun(), map[string]any{})
 
-	fail, ok := transition.(pipeline.FailTransition)
-	require.True(t, ok, "expected FailTransition, got %T", transition)
-	require.Contains(t, fail.Reason, "unpushed")
-	require.Contains(t, fail.Reason, "disabled")
+	done, ok := transition.(pipeline.DoneTransition)
+	require.True(t, ok, "expected DoneTransition, got %T", transition)
+	require.Nil(t, done.MetadataPatch)
+}
+
+func TestDecideFinalization_PRCreateFails_DoneWithWarning(t *testing.T) {
+	ctx := context.Background()
+	orch := makeFinalizationOrchestrator(t, func(o *pipeline.OrchestratorOptions) {
+		o.AllowGitPush = true
+		o.HasUnpushedWorkFn = func(ctx context.Context, task *ent.Task) bool { return false }
+		o.CreateDraftPRFn = func(ctx context.Context, worktreePath, branch, base, title, prBody string) (int, string, error) {
+			return 0, "", errors.New("gh: not logged in")
+		}
+	})
+
+	transition := orch.DecideCompletedTransitionForTest(ctx, worktreeTask(), finalizationRun(), map[string]any{})
+
+	done, ok := transition.(pipeline.DoneTransition)
+	require.True(t, ok, "expected DoneTransition, got %T", transition)
+	require.Contains(t, done.MetadataPatch["pr_error"], "not logged in")
+	require.NotContains(t, done.MetadataPatch, "pr_url")
 }
 
 func TestDecideFinalization_ExistingPRIdempotent(t *testing.T) {
 	ctx := context.Background()
 	calls := 0
 	orch := makeFinalizationOrchestrator(t, func(o *pipeline.OrchestratorOptions) {
+		o.AllowGitPush = true
 		o.HasUnpushedWorkFn = func(ctx context.Context, task *ent.Task) bool { return false }
 		o.CreateDraftPRFn = func(ctx context.Context, worktreePath, branch, base, title, prBody string) (int, string, error) {
 			calls++
@@ -205,24 +233,26 @@ func TestDecideFinalization_NoWorktree_Passthrough(t *testing.T) {
 	require.Nil(t, done.MetadataPatch)
 }
 
-func TestResolveBase_NeverMainMaster(t *testing.T) {
-	tests := []struct {
-		name   string
-		target *string
-		want   string
-	}{
-		{"main falls back", ptr("main"), "develop"},
-		{"master falls back", ptr("master"), "develop"},
-		{"unset falls back", nil, "develop"},
-		{"custom target kept", ptr("staging"), "staging"},
+func TestResolveBase(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
 	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			task := &ent.Task{TargetBranch: tc.target}
-			got := pipeline.ResolveBaseForTest(task)
-			require.Equal(t, tc.want, got)
-		})
-	}
+	ctx := context.Background()
+	repoDir := t.TempDir()
+	out, err := exec.Command("git", "-C", repoDir, "init", "-q").CombinedOutput()
+	require.NoError(t, err, string(out))
+
+	t.Run("no origin HEAD falls back to source branch", func(t *testing.T) {
+		require.Equal(t, "feat/x", pipeline.ResolveBaseForTest(ctx, repoDir, &ent.Task{SourceBranch: ptr("feat/x")}))
+	})
+	t.Run("nothing known leaves base empty", func(t *testing.T) {
+		require.Equal(t, "", pipeline.ResolveBaseForTest(ctx, repoDir, &ent.Task{}))
+	})
+	t.Run("origin HEAD names the default branch", func(t *testing.T) {
+		out, err := exec.Command("git", "-C", repoDir, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/trunk").CombinedOutput()
+		require.NoError(t, err, string(out))
+		require.Equal(t, "trunk", pipeline.ResolveBaseForTest(ctx, repoDir, &ent.Task{SourceBranch: ptr("feat/x")}))
+	})
 }
 
 func TestBuildPRBody_Format(t *testing.T) {
@@ -299,6 +329,7 @@ func TestDeriveConventionalTitle(t *testing.T) {
 func TestDecideFinalization_ReleasesSpawnArtefactsBeforeDirtyCheck(t *testing.T) {
 	released := false
 	orch := makeFinalizationOrchestrator(t, func(o *pipeline.OrchestratorOptions) {
+		o.AllowGitPush = true
 		o.HasUnpushedWorkFn = func(context.Context, *ent.Task) bool { return !released }
 	})
 	orch.RegisterSpawnCleanupForTest("run-1", func() { released = true })

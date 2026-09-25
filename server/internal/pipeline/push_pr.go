@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"os/exec"
 	"path"
 	"regexp"
@@ -18,20 +19,18 @@ import (
 )
 
 // decideFinalizationTransition decides what happens once the finalization
-// stage completes. Tasks with no worktree (no git checkout to push or open a
-// PR from) pass through unchanged. Otherwise it pushes the branch (when
-// allowed), refuses to finish with unpushed work, and opens (or reuses) a
-// draft PR before handing the task to DoneTransition — so a task never
-// reaches done with orphaned, unpushed work.
+// stage completes. Tasks with no worktree, or whose push is disabled, reach
+// done unchanged with the worktree kept. Otherwise it pushes the branch,
+// refuses to finish with unpushed work, and opens (or reuses) a draft PR. A
+// failed PR creation does not block done: the error lands in pr_error.
 func (o *PipelineOrchestrator) decideFinalizationTransition(ctx context.Context, task *ent.Task, run *ent.StageRun, output map[string]any) StageTransition {
-	if task.WorktreePath == nil || *task.WorktreePath == "" {
+	if task.WorktreePath == nil || *task.WorktreePath == "" || !IsGitPushAllowed(task, o.opts.AllowGitPush) {
 		return DoneTransition{Output: output}
 	}
 	// The agent has exited; its spawn artefacts (.claude/settings.json) would otherwise read as uncommitted work below.
 	o.spawnCleanups.release(run.ID)
 
-	pushAllowed := IsGitPushAllowed(task, o.opts.AllowGitPush)
-	if o.opts.PushFn != nil && pushAllowed {
+	if o.opts.PushFn != nil {
 		if err := o.opts.PushFn(ctx, task); err != nil {
 			slog.Warn("finalization: git push failed", "taskID", task.ID, "err", err)
 			return FailTransition{Reason: fmt.Sprintf("finalization: git push failed: %s", err), Output: output}
@@ -39,15 +38,8 @@ func (o *PipelineOrchestrator) decideFinalizationTransition(ctx context.Context,
 	}
 
 	if o.opts.HasUnpushedWorkFn != nil && o.opts.HasUnpushedWorkFn(ctx, task) {
-		note := "push ran but work remains unpushed"
-		if !pushAllowed {
-			note = "push is disabled for this task"
-		}
-		slog.Warn("finalization: worktree has unpushed work", "taskID", task.ID, "note", note)
-		return FailTransition{
-			Reason: fmt.Sprintf("finalization: worktree has unpushed work (%s)", note),
-			Output: output,
-		}
+		slog.Warn("finalization: worktree has unpushed work after push", "taskID", task.ID)
+		return FailTransition{Reason: "finalization: worktree has unpushed work (push ran but work remains unpushed)", Output: output}
 	}
 
 	if o.opts.CreateDraftPRFn == nil {
@@ -58,13 +50,14 @@ func (o *PipelineOrchestrator) decideFinalizationTransition(ctx context.Context,
 	if err != nil && !ent.IsNotFound(err) {
 		slog.Warn("finalization: self_review lookup failed; PR omits its findings", "taskID", task.ID, "err", err)
 	}
-	title, base, prBody := buildFinalizationPRArgs(task, output, selfRun)
+	title, prBody := buildFinalizationPRArgs(task, output, selfRun)
+	base := resolveBase(ctx, *task.WorktreePath, task)
 	branch := worktree.CreateBranch(task.SourceBranch, task.Slug)
 
 	prNumber, prURL, err := o.opts.CreateDraftPRFn(ctx, *task.WorktreePath, branch, base, title, prBody)
 	if err != nil {
-		slog.Warn("finalization: create draft PR failed", "taskID", task.ID, "err", err)
-		return FailTransition{Reason: fmt.Sprintf("finalization: create draft PR failed: %s", err), Output: output}
+		slog.Warn("finalization: create draft PR failed; task still reaches done", "taskID", task.ID, "err", err)
+		return DoneTransition{Output: output, MetadataPatch: map[string]any{"pr_error": err.Error()}}
 	}
 
 	return DoneTransition{
@@ -107,7 +100,11 @@ func ProductionCreateDraftPRFn(ctx context.Context, worktreePath, branch, base, 
 		return number, url, nil
 	}
 
-	out, err := runGH(ctx, worktreePath, "pr", "create", "--draft", "--base", base, "--title", title, "--body", prBody)
+	args := []string{"pr", "create", "--draft", "--title", title, "--body", prBody}
+	if base != "" {
+		args = append(args, "--base", base)
+	}
+	out, err := runGH(ctx, worktreePath, args...)
 	if err != nil {
 		return 0, "", fmt.Errorf("gh pr create: %s: %w", strings.TrimSpace(out), err)
 	}
@@ -150,6 +147,7 @@ func runGH(ctx context.Context, dir string, args ...string) (string, error) {
 	// them without a shell.
 	cmd := exec.CommandContext(ctx, "gh", args...)
 	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GH_PROMPT_DISABLED=1")
 	out, err := cmd.Output()
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
@@ -177,29 +175,30 @@ func deriveConventionalTitle(task *ent.Task) string {
 	return "feat: " + task.Title
 }
 
-// resolveBase returns the PR base branch for task: its TargetBranch when set
-// and not a protected trunk name, else "develop".
-func resolveBase(task *ent.Task) string {
-	if task.TargetBranch != nil {
-		b := *task.TargetBranch
-		if b != "" && b != "main" && b != "master" {
+// resolveBase returns the PR base branch: the repo's default branch as origin
+// reports it, else the task's source branch. Empty lets gh pick the default.
+func resolveBase(ctx context.Context, worktreePath string, task *ent.Task) string {
+	if ref, err := gitRunner.Output(ctx, worktreePath, "symbolic-ref", "--short", "refs/remotes/origin/HEAD"); err == nil {
+		if b := strings.TrimPrefix(strings.TrimSpace(ref), "origin/"); b != "" {
 			return b
 		}
 	}
-	return "develop"
+	if task.SourceBranch != nil {
+		return *task.SourceBranch
+	}
+	return ""
 }
 
-// buildFinalizationPRArgs derives the title, base branch, and body for the
-// draft PR opened when a worktree task's finalization stage completes.
-func buildFinalizationPRArgs(task *ent.Task, finOutput map[string]any, selfRun *ent.StageRun) (title, base, prBody string) {
+// buildFinalizationPRArgs derives the title and body for the draft PR opened
+// when a worktree task's finalization stage completes.
+func buildFinalizationPRArgs(task *ent.Task, finOutput map[string]any, selfRun *ent.StageRun) (title, prBody string) {
 	title = deriveConventionalTitle(task)
-	base = resolveBase(task)
 	var selfRunOutput map[string]any
 	if selfRun != nil {
 		selfRunOutput = selfRun.Output
 	}
 	prBody = buildPRBody(task, finOutput, selfRunOutput)
-	return title, base, prBody
+	return title, prBody
 }
 
 // buildPRBody renders the draft PR description from the finalization stage's

@@ -267,6 +267,9 @@ func registerCreateTask(registry mcp.ToolRegistry, d WriteDeps) {
 			}
 			if rawMeta, ok := args["metadata"]; ok && rawMeta != nil {
 				if m, ok := rawMeta.(map[string]any); ok {
+					if err := rejectProtectedMetadata(m); err != nil {
+						return nil, err
+					}
 					in.Metadata = m
 				}
 			}
@@ -434,6 +437,9 @@ func registerUpdateTask(registry mcp.ToolRegistry, d WriteDeps) {
 			}
 			if rawMeta, ok := args["metadata"]; ok && rawMeta != nil {
 				if m, ok := rawMeta.(map[string]any); ok {
+					if err := rejectProtectedMetadata(m); err != nil {
+						return nil, err
+					}
 					in.Metadata = m
 				}
 			}
@@ -652,6 +658,19 @@ var metadataAllowList = map[string]bool{
 	"notes":       true,
 	"category":    true,
 	"source":      true,
+}
+
+// protectedMetadataKeys may be set through the HTTP API only: allowGitPush
+// makes the orchestrator push, so an MCP caller must not be able to grant it.
+var protectedMetadataKeys = []string{"allowGitPush"}
+
+func rejectProtectedMetadata(m map[string]any) error {
+	for _, k := range protectedMetadataKeys {
+		if _, ok := m[k]; ok {
+			return mcp.Fail("metadata key not allowed: " + k)
+		}
+	}
+	return nil
 }
 
 func handleSetMetadata(ctx context.Context, d WriteDeps, task *ent.Task, args map[string]any) (*mcp.ToolResult, error) {
