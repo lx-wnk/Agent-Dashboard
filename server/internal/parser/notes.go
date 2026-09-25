@@ -34,14 +34,17 @@ var mcpNoteKinds = map[string]sdk.NoteTouchKind{
 	"edit_note":   sdk.NoteTouchKindWrite,
 }
 
+const shellAssignment = `([A-Za-z_][A-Za-z0-9_]*)=(?:"([^"]*)"|'([^']*)'|([^\s;&|"']*))`
+
 var (
-	shellDefaultRe  = regexp.MustCompile(`\$\{[A-Za-z_][A-Za-z0-9_]*:-([^}]*)\}`)
-	shellSegmentRe  = regexp.MustCompile(`&&|\|\||[;|\n]`)
-	vaultURLRe      = regexp.MustCompile("/vault/([^\\s\"'`?#\\\\]+)")
-	writeMethodRe   = regexp.MustCompile(`(?:-X|--request)\s*['"]?(?:PUT|POST|PATCH)\b`)
-	shellAssignRe   = regexp.MustCompile(`(^|&&|\|\||[;|\n({])[ \t]*(?:(?:export|local|readonly|declare(?:\s+-\S+)*)\s+)?([A-Za-z_][A-Za-z0-9_]*)=(?:"([^"]*)"|'([^']*)'|([^\s;&|"']*))`)
-	shellVarRe      = regexp.MustCompile(`\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))`)
-	heredocOpenerRe = regexp.MustCompile(`<<-?\s*['"]{0,1}([A-Za-z_][A-Za-z0-9_]*)['"]{0,1}`)
+	shellDefaultRe    = regexp.MustCompile(`\$\{[A-Za-z_][A-Za-z0-9_]*:-([^}]*)\}`)
+	shellSegmentRe    = regexp.MustCompile(`&&|\|\||[;|\n]`)
+	vaultURLRe        = regexp.MustCompile("/vault/([^\\s\"'`?#\\\\]+)")
+	writeMethodRe     = regexp.MustCompile(`(?:-X|--request)\s*['"]?(?:PUT|POST|PATCH)\b`)
+	shellAssignRe     = regexp.MustCompile(`(^|&&|\|\||[;|\n({]|\b(?:then|do|else)[ \t])[ \t]*(?:(?:export|local|readonly|declare)(?:[ \t]+-\S+)*[ \t]+)?` + shellAssignment)
+	shellNextAssignRe = regexp.MustCompile(`^([ \t]+)` + shellAssignment)
+	shellVarRe        = regexp.MustCompile(`\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))`)
+	heredocOpenerRe   = regexp.MustCompile(`(?:^|[^<])<<(-?)[ \t]*(?:'([^']+)'|"([^"]+)"|\\?([^\s;&|<>()'"]+))`)
 )
 
 func noteTouchesOf(m Message) []NoteTouch {
@@ -91,37 +94,36 @@ func toolNoteTouches(name string, input json.RawMessage) []NoteTouch {
 	return curlNoteTouches(in.Command)
 }
 
-// stripHeredocBodies removes heredoc body lines so they are not scanned for
-// vault URLs. The opener line (with <<) is kept; body and closing delimiter
-// are dropped.
+// A heredoc whose closing line never comes keeps its lines, so a misread `<<` cannot hide later commands.
 func stripHeredocBodies(s string) string {
 	if !strings.Contains(s, "<<") {
 		return s
 	}
 	lines := strings.Split(s, "\n")
-	var out []string
+	out := make([]string, 0, len(lines))
 	for i := 0; i < len(lines); i++ {
-		m := heredocOpenerRe.FindStringSubmatch(lines[i])
-		if m == nil {
-			out = append(out, lines[i])
-			continue
-		}
 		out = append(out, lines[i])
-		delim := m[1]
-		isDash := strings.HasPrefix(m[0], "<<-")
-		i++
-		for i < len(lines) {
-			closing := lines[i]
-			if isDash {
-				closing = strings.TrimLeft(closing, "\t")
-			}
-			if closing == delim {
+		for _, m := range heredocOpenerRe.FindAllStringSubmatch(lines[i], -1) {
+			end := heredocEnd(lines[i+1:], m[2]+m[3]+m[4], m[1] == "-")
+			if end < 0 {
 				break
 			}
-			i++
+			i += end + 1
 		}
 	}
 	return strings.Join(out, "\n")
+}
+
+func heredocEnd(body []string, delim string, stripTabs bool) int {
+	for j, line := range body {
+		if stripTabs {
+			line = strings.TrimLeft(line, "\t")
+		}
+		if line == delim {
+			return j
+		}
+	}
+	return -1
 }
 
 // Only ${NAME:-default} is knowable without the agent's environment; any other variable drops the URL.
@@ -130,8 +132,8 @@ func curlNoteTouches(command string) []NoteTouch {
 		return nil
 	}
 	expanded := shellDefaultRe.ReplaceAllString(command, "$1")
-	expanded = strings.ReplaceAll(expanded, "\\\n", " ")
 	expanded = stripHeredocBodies(expanded)
+	expanded = strings.ReplaceAll(expanded, "\\\n", " ")
 	expanded = expandShellAssignments(expanded)
 	var out []NoteTouch
 	for _, segment := range shellSegmentRe.Split(expanded, -1) {
@@ -162,20 +164,31 @@ func expandShellAssignments(command string) string {
 			return ref
 		})
 	}
+	assign := func(s string, loc []int) {
+		name := s[loc[4]:loc[5]]
+		switch {
+		case loc[6] >= 0:
+			vars[name] = substitute(s[loc[6]:loc[7]])
+		case loc[8] >= 0:
+			vars[name] = s[loc[8]:loc[9]]
+		default:
+			vars[name] = substitute(s[loc[10]:loc[11]])
+		}
+	}
 	var b strings.Builder
 	last := 0
 	for _, loc := range shellAssignRe.FindAllStringSubmatchIndex(command, -1) {
-		b.WriteString(substitute(command[last:loc[3]]))
-		name := command[loc[4]:loc[5]]
-		switch {
-		case loc[6] >= 0:
-			vars[name] = substitute(command[loc[6]:loc[7]])
-		case loc[8] >= 0:
-			vars[name] = command[loc[8]:loc[9]]
-		default:
-			vars[name] = substitute(command[loc[10]:loc[11]])
+		if loc[0] < last {
+			continue
 		}
+		b.WriteString(substitute(command[last:loc[3]]))
+		assign(command, loc)
 		last = loc[1]
+		// A=1 B=2: every assignment of a prefix run is at command position.
+		for next := shellNextAssignRe.FindStringSubmatchIndex(command[last:]); next != nil; next = shellNextAssignRe.FindStringSubmatchIndex(command[last:]) {
+			assign(command[last:], next)
+			last += next[1]
+		}
 	}
 	b.WriteString(substitute(command[last:]))
 	return b.String()
