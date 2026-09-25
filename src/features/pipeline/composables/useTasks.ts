@@ -126,6 +126,18 @@ export async function refreshTask(taskId: string): Promise<void> {
     selectedTask.value = task
 }
 
+/**
+ * Returns the task from the local store if present; otherwise fetches it first.
+ * Returns null when the task cannot be found even after a network round-trip.
+ */
+export async function findOrFetchTask(taskId: string): Promise<PipelineTask | null> {
+  const cached = tasks.value.find(t => t.id === taskId)
+  if (cached)
+    return cached
+  await refreshTask(taskId)
+  return tasks.value.find(t => t.id === taskId) ?? null
+}
+
 function handleSseMessage(data: string) {
   try {
     const event: TaskEvent = JSON.parse(data)

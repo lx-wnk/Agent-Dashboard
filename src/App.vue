@@ -3,7 +3,7 @@ import type { Agent, PipelineTask } from './types'
 import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, provide, ref, watch, watchEffect } from 'vue'
 import { useAgents } from '@/features/agents/composables/useAgents'
 import BacklogForm from '@/features/pipeline/components/BacklogForm.vue'
-import { refreshTask, useTasks } from '@/features/pipeline/composables/useTasks'
+import { findOrFetchTask, useTasks } from '@/features/pipeline/composables/useTasks'
 import LoginPage from './components/LoginPage.vue'
 import OnboardingFlow from './components/onboarding/OnboardingFlow.vue'
 import ServerReconnectOverlay from './components/ServerReconnectOverlay.vue'
@@ -279,22 +279,18 @@ function navigateTo(target: { agent?: Agent, taskId?: string }) {
     if (target.agent)
       selectAgent(target.agent)
     if (target.taskId) {
-      const t = tasks.value.find(t => t.id === target.taskId)
-      if (t) {
-        openTask(t)
-      }
-      else {
-        void refreshTask(target.taskId).then(() => {
-          const refetched = tasks.value.find(t => t.id === target.taskId)
-          if (refetched) {
-            openTask(refetched)
-          }
-          else {
-            console.warn('[navigateTo] task not found after refetch:', target.taskId)
-            toast.error('Task not found on this machine.')
-          }
-        })
-      }
+      void findOrFetchTask(target.taskId).then((task) => {
+        if (task) {
+          openTask(task)
+        }
+        else {
+          console.warn('[navigateTo] task not found after refetch:', target.taskId)
+          toast.error('Task not found on this machine.')
+        }
+      }).catch((err: unknown) => {
+        console.warn('[navigateTo] refetch failed:', err)
+        toast.error('Task not found on this machine.')
+      })
     }
   })
 }
