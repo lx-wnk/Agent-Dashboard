@@ -428,4 +428,36 @@ describe('obsidianSettings', () => {
 
     expect(wrapper.get('[data-testid="obsidian-grant-error"]').text()).toContain('server exploded')
   })
+
+  it('shows an inline error next to vault root when the save is rejected', async () => {
+    update.mockImplementation(async (key: string) => {
+      if (key === 'obsidian.vaultRoot')
+        throw new Error('folder "Claude-memory" not found in vault')
+      return 'live' as const
+    })
+    const wrapper = mount(ObsidianSettings, { attachTo: document.body })
+
+    await wrapper.get('[data-testid="obsidian-save"]').trigger('click')
+    await flushPromises()
+
+    const errorEl = wrapper.get('[data-testid="obsidian-vaultroot-error"]')
+    expect(errorEl.text()).toContain('Claude-memory')
+    expect(errorEl.text()).toContain('not found')
+  })
+
+  it('clears the vault root error when the user types', async () => {
+    update.mockImplementation(async (key: string) => {
+      if (key === 'obsidian.vaultRoot')
+        throw new Error('folder "bad" not found in vault')
+      return 'live' as const
+    })
+    const wrapper = mount(ObsidianSettings, { attachTo: document.body })
+
+    await wrapper.get('[data-testid="obsidian-save"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="obsidian-vaultroot-error"]').exists()).toBe(true)
+
+    await wrapper.get('[data-testid="obsidian-vaultroot"]').setValue('claude-memory')
+    expect(wrapper.find('[data-testid="obsidian-vaultroot-error"]').exists()).toBe(false)
+  })
 })
