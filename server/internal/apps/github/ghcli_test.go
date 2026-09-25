@@ -2,7 +2,9 @@ package github_test
 
 import (
 	"errors"
+	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -61,6 +63,41 @@ func TestTokenFromGhCLIRejectsAnEmptyAnswer(t *testing.T) {
 
 	if _, err := github.TokenFromGhCLI(t.Context()); err == nil {
 		t.Fatal("empty output must be an error")
+	}
+}
+
+// First call times out (slow keychain unlock); second succeeds. The retry
+// must surface the token, not the timeout error.
+func TestTokenFromGhCLIRetriesOnceOnTimeout(t *testing.T) {
+	dir := t.TempDir()
+	flag := filepath.Join(dir, "called")
+	// First invocation creates the flag file then sleeps forever (killed by
+	// the 1s timeout). Second invocation sees the flag and prints the token.
+	// touch/sleep are external — keep /usr/bin:/bin on PATH.
+	script := fmt.Sprintf(`#!/bin/sh
+if [ -f %q ]; then
+  echo "gho_retry_ok"
+  exit 0
+fi
+touch %q
+exec sleep 10
+`, flag, flag)
+	writeFakeGh(t, dir, script)
+	t.Cleanup(github.SetGhTokenTimeout(1 * time.Second))
+	t.Setenv("PATH", dir+":/usr/bin:/bin")
+
+	start := time.Now()
+	token, err := github.TokenFromGhCLI(t.Context())
+	elapsed := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("expected token, got error: %v", err)
+	}
+	if token != "gho_retry_ok" {
+		t.Fatalf("token = %q, want %q", token, "gho_retry_ok")
+	}
+	if elapsed > 2*time.Second {
+		t.Fatalf("took %v, want < 2s (timeout should be ~200ms per attempt)", elapsed)
 	}
 }
 

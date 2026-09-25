@@ -16,6 +16,15 @@ var ghTokenTimeout = 5 * time.Second
 // ErrGhNotFound reports that the GitHub CLI is not on PATH.
 var ErrGhNotFound = errors.New("the GitHub CLI (gh) is not on PATH")
 
+// runGhAuthToken executes `gh auth token` under ctx and returns raw output.
+func runGhAuthToken(ctx context.Context) ([]byte, error) {
+	// #nosec G204 -- every argument is a constant in this file; nothing from a
+	// setting, a request or the environment reaches the command line, and
+	// exec.CommandContext passes argv without a shell.
+	cmd := exec.CommandContext(ctx, "gh", "auth", "token")
+	return cmd.Output()
+}
+
 // TokenFromGhCLI returns the token the GitHub CLI is authenticated with, so the
 // dashboard can reach GitHub without a personal access token stored in its own
 // database. The token stays in gh's credential store and is read once per
@@ -29,14 +38,16 @@ var ErrGhNotFound = errors.New("the GitHub CLI (gh) is not on PATH")
 // invoke `gh` itself, so this narrows what is *stored*, not what an agent on
 // this machine can *reach*.
 func TokenFromGhCLI(ctx context.Context) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, ghTokenTimeout)
-	defer cancel()
+	ctx1, cancel1 := context.WithTimeout(ctx, ghTokenTimeout)
+	defer cancel1()
 
-	// #nosec G204 -- every argument is a constant in this file; nothing from a
-	// setting, a request or the environment reaches the command line, and
-	// exec.CommandContext passes argv without a shell.
-	cmd := exec.CommandContext(ctx, "gh", "auth", "token")
-	out, err := cmd.Output()
+	out, err := runGhAuthToken(ctx1)
+	if err != nil && ctx1.Err() == context.DeadlineExceeded {
+		// Retry once: a slow keychain unlock can exceed the first timeout.
+		ctx2, cancel2 := context.WithTimeout(ctx, ghTokenTimeout)
+		defer cancel2()
+		out, err = runGhAuthToken(ctx2)
+	}
 	if err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
