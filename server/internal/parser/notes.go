@@ -35,12 +35,13 @@ var mcpNoteKinds = map[string]sdk.NoteTouchKind{
 }
 
 var (
-	shellDefaultRe = regexp.MustCompile(`\$\{[A-Za-z_][A-Za-z0-9_]*:-([^}]*)\}`)
-	shellSegmentRe = regexp.MustCompile(`&&|\|\||[;|\n]`)
-	vaultURLRe     = regexp.MustCompile("/vault/([^\\s\"'`?#\\\\]+)")
-	writeMethodRe  = regexp.MustCompile(`(?:-X|--request)\s*['"]?(?:PUT|POST|PATCH)\b`)
-	shellAssignRe  = regexp.MustCompile(`(^|[\s;&|(])([A-Za-z_][A-Za-z0-9_]*)=(?:"([^"]*)"|'([^']*)'|([^\s;&|"']*))`)
-	shellVarRe     = regexp.MustCompile(`\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))`)
+	shellDefaultRe  = regexp.MustCompile(`\$\{[A-Za-z_][A-Za-z0-9_]*:-([^}]*)\}`)
+	shellSegmentRe  = regexp.MustCompile(`&&|\|\||[;|\n]`)
+	vaultURLRe      = regexp.MustCompile("/vault/([^\\s\"'`?#\\\\]+)")
+	writeMethodRe   = regexp.MustCompile(`(?:-X|--request)\s*['"]?(?:PUT|POST|PATCH)\b`)
+	shellAssignRe   = regexp.MustCompile(`(^|&&|\|\||[;|\n({])[ \t]*(?:(?:export|local|readonly|declare(?:\s+-\S+)*)\s+)?([A-Za-z_][A-Za-z0-9_]*)=(?:"([^"]*)"|'([^']*)'|([^\s;&|"']*))`)
+	shellVarRe      = regexp.MustCompile(`\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))`)
+	heredocOpenerRe = regexp.MustCompile(`<<-?\s*['"]{0,1}([A-Za-z_][A-Za-z0-9_]*)['"]{0,1}`)
 )
 
 func noteTouchesOf(m Message) []NoteTouch {
@@ -90,6 +91,39 @@ func toolNoteTouches(name string, input json.RawMessage) []NoteTouch {
 	return curlNoteTouches(in.Command)
 }
 
+// stripHeredocBodies removes heredoc body lines so they are not scanned for
+// vault URLs. The opener line (with <<) is kept; body and closing delimiter
+// are dropped.
+func stripHeredocBodies(s string) string {
+	if !strings.Contains(s, "<<") {
+		return s
+	}
+	lines := strings.Split(s, "\n")
+	var out []string
+	for i := 0; i < len(lines); i++ {
+		m := heredocOpenerRe.FindStringSubmatch(lines[i])
+		if m == nil {
+			out = append(out, lines[i])
+			continue
+		}
+		out = append(out, lines[i])
+		delim := m[1]
+		isDash := strings.HasPrefix(m[0], "<<-")
+		i++
+		for i < len(lines) {
+			closing := lines[i]
+			if isDash {
+				closing = strings.TrimLeft(closing, "\t")
+			}
+			if closing == delim {
+				break
+			}
+			i++
+		}
+	}
+	return strings.Join(out, "\n")
+}
+
 // Only ${NAME:-default} is knowable without the agent's environment; any other variable drops the URL.
 func curlNoteTouches(command string) []NoteTouch {
 	if !strings.Contains(command, "/vault/") {
@@ -97,6 +131,7 @@ func curlNoteTouches(command string) []NoteTouch {
 	}
 	expanded := shellDefaultRe.ReplaceAllString(command, "$1")
 	expanded = strings.ReplaceAll(expanded, "\\\n", " ")
+	expanded = stripHeredocBodies(expanded)
 	expanded = expandShellAssignments(expanded)
 	var out []NoteTouch
 	for _, segment := range shellSegmentRe.Split(expanded, -1) {
