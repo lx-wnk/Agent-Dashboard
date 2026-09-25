@@ -8,8 +8,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	schedulesapi "github.com/lx-wnk/kontor/server/internal/api/schedules"
 	"github.com/lx-wnk/kontor/server/internal/api/tasks"
 	"github.com/lx-wnk/kontor/server/internal/db"
+	"github.com/lx-wnk/kontor/server/internal/db/ent"
 	"github.com/lx-wnk/kontor/server/internal/db/rawrepo"
 	"github.com/lx-wnk/kontor/server/internal/db/repo"
 	"github.com/lx-wnk/kontor/server/internal/refine"
@@ -78,4 +80,55 @@ func TestMCPTaskBroadcast_SendsDependencyAndRefineState(t *testing.T) {
 	require.Equal(t, taskID, payload["id"])
 	require.Equal(t, true, payload["isBlocked"], "a task waiting on an unfinished prerequisite must broadcast isBlocked")
 	require.Equal(t, refine.StatusDraftReady, payload["refineStatus"], "an injected concept must broadcast its draft_ready refine status")
+}
+
+func TestScheduleBroadcastEmitsScheduleChanged(t *testing.T) {
+	bundle, err := db.Open(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+
+	schedRepo := repo.NewTaskScheduleRepo(bundle.Client)
+	ctx := context.Background()
+
+	tb := sse.NewTaskBroadcaster(sse.NewBroadcaster())
+	ch := tb.Subscribe()
+	t.Cleanup(func() { tb.Unsubscribe(ch) })
+
+	broadcast := func(ctx context.Context, id string, s *ent.TaskSchedule) {
+		var payload any
+		if s != nil {
+			payload = schedulesapi.ToView(s)
+		}
+		tb.Broadcast(sse.TaskEvent{Type: "schedule_changed", TaskID: id, Payload: payload})
+	}
+
+	s, err := schedRepo.Create(ctx, repo.CreateTaskScheduleInput{
+		Name:       "test-sched",
+		CronExpr:   "0 9 * * 1-5",
+		Timezone:   "UTC",
+		SlugPrefix: "test",
+		Title:      "Test Schedule",
+		Cwd:        t.TempDir(),
+	})
+	require.NoError(t, err)
+
+	broadcast(ctx, s.ID, s)
+
+	var frame []byte
+	select {
+	case frame = <-ch:
+	default:
+		t.Fatal("broadcast must have published a frame")
+	}
+	frame = bytes.TrimSuffix(bytes.TrimPrefix(frame, []byte("data: ")), []byte("\n\n"))
+
+	var event sse.TaskEvent
+	require.NoError(t, json.Unmarshal(frame, &event))
+	require.Equal(t, "schedule_changed", event.Type)
+	require.Equal(t, s.ID, event.TaskID)
+
+	payload, ok := event.Payload.(map[string]any)
+	require.True(t, ok, "payload must be a JSON object")
+	require.Equal(t, s.ID, payload["id"])
+	require.Equal(t, "test-sched", payload["name"])
 }

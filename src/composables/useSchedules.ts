@@ -99,8 +99,19 @@ async function fetchSchedules(): Promise<void> {
 
 function applyEvent(event: ScheduleEvent): void {
   if (event.type === 'schedule_changed') {
-    // Re-fetch list on any schedule change — schedule events carry no full payload contract yet
-    void fetchSchedules()
+    const payload = event.payload as ScheduleView | undefined
+    if (payload?.id) {
+      const idx = schedules.value.findIndex(s => s.id === payload.id)
+      if (idx >= 0) {
+        schedules.value = schedules.value.map(s => s.id === payload.id ? payload : s)
+      }
+      else {
+        schedules.value = [payload, ...schedules.value]
+      }
+    }
+    else {
+      void fetchSchedules()
+    }
   }
 }
 

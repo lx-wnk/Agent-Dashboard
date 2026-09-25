@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	schedulesapi "github.com/lx-wnk/kontor/server/internal/api/schedules"
 	"github.com/lx-wnk/kontor/server/internal/apps/github"
 	"github.com/lx-wnk/kontor/server/internal/apps/obsidian"
 	"github.com/lx-wnk/kontor/server/internal/capability"
@@ -55,8 +56,12 @@ func provideMCPHandler(
 	broadcastDeleted := func(taskID string) {
 		tb.Broadcast(sse.TaskEvent{Type: "task_deleted", TaskID: taskID, Payload: map[string]string{}})
 	}
-	scheduleBroadcast := func(scheduleID string) {
-		tb.Broadcast(sse.TaskEvent{Type: "task_changed", TaskID: scheduleID, Payload: map[string]string{}})
+	scheduleBroadcast := func(ctx context.Context, id string, s *ent.TaskSchedule) {
+		var payload any
+		if s != nil {
+			payload = schedulesapi.ToView(s)
+		}
+		tb.Broadcast(sse.TaskEvent{Type: "schedule_changed", TaskID: id, Payload: payload})
 	}
 
 	registry := mcp.ToolRegistry{}

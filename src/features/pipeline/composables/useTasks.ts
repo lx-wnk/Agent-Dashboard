@@ -142,7 +142,7 @@ const sse = createSseResource({
   onMessage: handleSseMessage,
 })
 
-function applyEvent(event: TaskEvent) {
+export function applyEvent(event: TaskEvent) {
   switch (event.type) {
     case 'task_created': {
       const task = event.payload as PipelineTask
@@ -186,6 +186,8 @@ function applyEvent(event: TaskEvent) {
       emitCheckpointAdded(event.payload as Checkpoint)
       break
     }
+    default:
+      console.warn('[useTasks] unknown SSE event type:', event.type)
   }
 }
 

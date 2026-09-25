@@ -101,3 +101,23 @@ describe('refreshTask', () => {
     expect(tasks.value[0].title).toBe('Updated')
   })
 })
+
+describe('applyEvent', () => {
+  let mod: typeof import('@/features/pipeline/composables/useTasks')
+
+  beforeEach(async () => {
+    vi.resetModules()
+    mod = await import('@/features/pipeline/composables/useTasks')
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  it('logs a warning for unknown SSE event types', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    mod.applyEvent({ type: 'unexpected_future_event' as any, taskId: 'x' })
+    expect(warnSpy).toHaveBeenCalledWith('[useTasks] unknown SSE event type:', 'unexpected_future_event')
+  })
+})

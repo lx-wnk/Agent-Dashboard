@@ -35,8 +35,8 @@ type scheduleBody struct {
 	RunMode             string    `json:"runMode"`
 }
 
-// scheduleView is the JSON shape returned for a schedule.
-type scheduleView struct {
+// ScheduleView is the JSON shape returned for a schedule.
+type ScheduleView struct {
 	ID                 string   `json:"id"`
 	Name               string   `json:"name"`
 	Enabled            bool     `json:"enabled"`
@@ -66,8 +66,8 @@ type scheduleView struct {
 	UpdatedAt          string   `json:"updatedAt"`
 }
 
-func toView(s *ent.TaskSchedule) scheduleView {
-	v := scheduleView{
+func ToView(s *ent.TaskSchedule) ScheduleView {
+	v := ScheduleView{
 		ID:                 s.ID,
 		Name:               s.Name,
 		Enabled:            s.Enabled,
