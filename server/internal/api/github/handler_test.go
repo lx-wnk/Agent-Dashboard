@@ -79,6 +79,40 @@ func newEnvWithUpstream(t *testing.T, upstream http.HandlerFunc) (http.Handler, 
 	return r, grants, ctx
 }
 
+// newEnvWithUpstreamAndRepos is newEnvWithUpstream with a configurable
+// repository allow-list, so a test can prove what happens when a search
+// returns a repository the client does not allow.
+func newEnvWithUpstreamAndRepos(t *testing.T, upstream http.HandlerFunc, repos []string) (http.Handler, repo.GrantRepo, context.Context) {
+	t.Helper()
+	bundle, err := db.Open(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+
+	caps := repo.NewCapabilityRepo(bundle.Client)
+	resources := repo.NewResourceRepo(bundle.Client)
+	grants := repo.NewGrantRepo(bundle.Client)
+	ctx := context.Background()
+	require.NoError(t, githubapp.Register(ctx, resources, caps))
+
+	srv := httptest.NewServer(upstream)
+	t.Cleanup(srv.Close)
+
+	client, err := githubapp.NewClient(githubapp.Config{
+		Token: "ghp_supersecret", BaseURL: srv.URL,
+		Repos: repos, AllowLoopback: true,
+	})
+	require.NoError(t, err)
+
+	h := githubapi.NewHandler(client, memory.Gate{
+		Capabilities: caps,
+		Grants:       grants,
+		GrantUsage:   repo.NewGrantUsageRepo(bundle.Client, bundle.WriteClient),
+	})
+	r := chi.NewRouter()
+	h.Mount(r)
+	return r, grants, ctx
+}
+
 // newEnv is newEnvWithUpstream fixed to defaultUpstream, plus a flag
 // reporting whether it was ever reached — the proof every allow-list and
 // gate test needs that GitHub was never called.
@@ -380,6 +414,25 @@ func TestSummaryMergesInvolvedPullRequestsDedupedAndCapped(t *testing.T) {
 	}
 	require.Equal(t, summaryPRCapForTest, total, "the merged summary must be capped at 20 pull requests")
 	require.True(t, foundOtherRepo, "a search hit outside the configured allow-list must still be merged in")
+
+	// The non-allow-listed pull requests must carry checks.state="not_tracked":
+	// the previous code path reported "none" (misleading "no checks"), but
+	// the handler never called Checks for them at all.
+	var checksBody struct {
+		Repos []struct {
+			Repo         string        `json:"repo"`
+			PullRequests []checksField `json:"pullRequests"`
+		} `json:"repos"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &checksBody))
+	for _, repo := range checksBody.Repos {
+		if repo.Repo == "other/repo" {
+			for _, pr := range repo.PullRequests {
+				require.Equal(t, "not_tracked", pr.Checks.State,
+					"other/repo#%d must show not_tracked, not none", pr.Number)
+			}
+		}
+	}
 }
 
 // summaryPRCapForTest mirrors the unexported summaryPRCap constant so this
@@ -552,4 +605,70 @@ func TestUpstreamUnauthorizedReadsAsAConfigurationProblem(t *testing.T) {
 	require.Equal(t, http.StatusServiceUnavailable, rec.Code)
 	require.Contains(t, rec.Body.String(), "github.token", "the answer must name the setting to fix")
 	require.NotContains(t, rec.Body.String(), "ghp_supersecret")
+}
+
+// TestSummaryNotTrackedForSearchOnlyPROutsideAllowList proves that a pull
+// request the involves:@me search found in a repository outside the
+// configured allow-list gets checks.state="not_tracked" — not the
+// misleading "none" that means "the commit has no CI" — and that the
+// Checks endpoint is never called for it.
+func TestSummaryNotTrackedForSearchOnlyPROutsideAllowList(t *testing.T) {
+	checksCalledFor := map[string]bool{}
+	h, grants, ctx := newEnvWithUpstreamAndRepos(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/pulls"):
+			// The allow-listed repo has one PR with a known SHA.
+			_ = json.NewEncoder(w).Encode([]map[string]any{summaryPullFixture(1, "allow-listed", "sha-1")})
+		case strings.HasSuffix(r.URL.Path, "/search/issues"):
+			// The involves:@me search finds one PR in a repo outside the allow-list.
+			_ = json.NewEncoder(w).Encode(map[string]any{"items": []map[string]any{{
+				"number": 99, "title": "external", "html_url": "https://example.test/external/99",
+				"repository_url": "https://api.github.com/repos/other/repo",
+				"updated_at":     "2026-09-02T00:00:00Z",
+			}}})
+		case strings.Contains(r.URL.Path, "/check-runs"):
+			// Record which repos had their checks looked up.
+			parts := strings.Split(r.URL.Path, "/")
+			for i, p := range parts {
+				if p == "repos" && i+2 < len(parts) {
+					checksCalledFor[parts[i+1]+"/"+parts[i+2]] = true
+				}
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"total_count": 1,
+				"check_runs":  []map[string]any{{"status": "completed", "conclusion": "success"}},
+			})
+		default:
+			_ = json.NewEncoder(w).Encode(map[string]any{})
+		}
+	}, []string{testRepo})
+	allowGlobally(t, grants, ctx, githubapp.CapabilityRead)
+
+	rec := do(t, h, http.MethodGet, "/api/github/summary", "")
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	var body struct {
+		Repos []struct {
+			Repo         string        `json:"repo"`
+			PullRequests []checksField `json:"pullRequests"`
+		} `json:"repos"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+
+	byRepo := map[string][]checksField{}
+	for _, repo := range body.Repos {
+		byRepo[repo.Repo] = repo.PullRequests
+	}
+
+	// The allow-listed PR must have checks looked up.
+	require.Len(t, byRepo[testRepo], 1)
+	require.Equal(t, "success", byRepo[testRepo][0].Checks.State, "allow-listed PR must have real checks")
+
+	// The non-allow-listed PR must show "not_tracked", not "none".
+	require.Len(t, byRepo["other/repo"], 1)
+	require.Equal(t, "not_tracked", byRepo["other/repo"][0].Checks.State, "non-allow-listed PR must show not_tracked, not none")
+
+	// The checks endpoint must never have been called for the non-allow-listed repo.
+	require.True(t, checksCalledFor[testRepo], "checks must be called for allow-listed repo")
+	require.False(t, checksCalledFor["other/repo"], "checks must NOT be called for non-allow-listed repo")
 }

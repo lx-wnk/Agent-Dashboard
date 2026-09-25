@@ -377,6 +377,11 @@ const (
 	// commit, or the lookup itself failed — see Checks and handler.summary,
 	// which never lets a check-run failure blank an otherwise-working PR.
 	CheckStateNone CheckState = "none"
+	// CheckStateNotTracked means the repository is outside the configured
+	// allow-list, so no check-run lookup was attempted. The cockpit panel
+	// uses this to show "not tracked" instead of the misleading "no checks"
+	// that CheckStateNone carries.
+	CheckStateNotTracked CheckState = "not_tracked"
 )
 
 // CheckSummary is the aggregate check-run state of one commit.

@@ -164,6 +164,14 @@ func noChecksView(prURL string) checksView {
 	return checksView{State: string(githubapp.CheckStateNone), URL: prURL + "/checks"}
 }
 
+// notTrackedChecksView is the checksView for a pull request whose
+// repository is outside the configured allow-list: the check-run API
+// was never called, and the panel must not claim "no checks" for a
+// commit it never asked about.
+func notTrackedChecksView(prURL string) checksView {
+	return checksView{State: string(githubapp.CheckStateNotTracked), URL: prURL + "/checks"}
+}
+
 // repoSummary carries one repository's open pull requests, or the reason that
 // one repository could not be read. A per-repository Error, rather than one
 // failed request for the whole panel: with three repositories configured, one
@@ -274,17 +282,23 @@ func (h *Handler) summary(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	for _, m := range merged {
-		// A failed check-run lookup falls back to noChecksView rather than
-		// propagating the error: the PR this loop already has must not be
-		// dropped by a lookup that merely enriches it. A pull request the
-		// search found outside the allow-list lands in the same fallback,
-		// since Checks refuses it (checkRepo) before it ever needs the empty
-		// head SHA a search hit carries.
-		checks := noChecksView(m.pr.URL)
-		if summary, err := h.client.Checks(r.Context(), m.repo, m.pr.HeadSHA); err == nil {
-			checks = checksView{
-				State: string(summary.State), Passed: summary.Passed,
-				Failed: summary.Failed, Total: summary.Total, URL: m.pr.URL + "/checks",
+		// A repository outside the allow-list never gets a Checks call: the
+		// client would refuse it (checkRepo), and even if it didn't, the
+		// search hit carries no head SHA. Show "not tracked" instead of
+		// the misleading "no checks" that noChecksView carries.
+		var checks checksView
+		if !h.client.AllowsRepo(m.repo) {
+			checks = notTrackedChecksView(m.pr.URL)
+		} else {
+			// A failed check-run lookup falls back to noChecksView rather
+			// than propagating the error: the PR this loop already has must
+			// not be dropped by a lookup that merely enriches it.
+			checks = noChecksView(m.pr.URL)
+			if summary, err := h.client.Checks(r.Context(), m.repo, m.pr.HeadSHA); err == nil {
+				checks = checksView{
+					State: string(summary.State), Passed: summary.Passed,
+					Failed: summary.Failed, Total: summary.Total, URL: m.pr.URL + "/checks",
+				}
 			}
 		}
 		byRepo[m.repo] = append(byRepo[m.repo], pullRequestView{
