@@ -48,12 +48,14 @@ type TaskResponse struct {
 	Metadata            map[string]interface{} `json:"metadata"`
 	CreatedAt           time.Time              `json:"createdAt"`
 	UpdatedAt           time.Time              `json:"updatedAt"`
+	DraftPrNumber       *int                   `json:"draftPrNumber"`
+	DraftPrUrl          *string                `json:"draftPrUrl"`
 }
 
 // ToTaskResponse maps a stored task onto the wire shape src/types.ts declares as
 // PipelineTask's non-computed half.
 func ToTaskResponse(t *ent.Task) TaskResponse {
-	return TaskResponse{
+	resp := TaskResponse{
 		ID:                  t.ID,
 		Slug:                t.Slug,
 		Title:               t.Title,
@@ -82,6 +84,18 @@ func ToTaskResponse(t *ent.Task) TaskResponse {
 		CreatedAt:           t.CreatedAt,
 		UpdatedAt:           t.UpdatedAt,
 	}
+	// JSON numbers decode as float64 in map[string]any, so the type assertion
+	// for pr_number must target float64, not int.
+	if t.Metadata != nil {
+		if n, ok := t.Metadata["pr_number"].(float64); ok {
+			num := int(n)
+			resp.DraftPrNumber = &num
+		}
+		if u, ok := t.Metadata["pr_url"].(string); ok {
+			resp.DraftPrUrl = &u
+		}
+	}
+	return resp
 }
 
 // EnrichedTask is a task plus the fields computed at read time. The embedded

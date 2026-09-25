@@ -245,6 +245,18 @@ const activeChildOutputExpanded = ref(false)
       <AppChip v-if="task.sourceBranch" tone="neutral" mono>
         {{ task.sourceBranch }}
       </AppChip>
+      <a
+        v-if="task.draftPrUrl"
+        :href="task.draftPrUrl"
+        target="_blank"
+        rel="noopener"
+        class="relative z-10"
+        @click.stop
+      >
+        <AppChip tone="success" mono>
+          PR #{{ task.draftPrNumber }}
+        </AppChip>
+      </a>
       <AppChip v-if="task.parentTaskId" tone="info" mono title="Follow-up task">
         ↳
       </AppChip>

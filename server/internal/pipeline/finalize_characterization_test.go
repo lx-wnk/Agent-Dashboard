@@ -15,6 +15,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/lx-wnk/kontor/server/internal/db"
 	"github.com/lx-wnk/kontor/server/internal/db/ent"
 	"github.com/lx-wnk/kontor/server/internal/db/repo"
 	"github.com/lx-wnk/kontor/server/internal/pipeline"
@@ -197,6 +198,75 @@ func TestFinalizeCompletedAsyncRuns_StillRunning_NoBudgetOrTimeout_LeavesRunUnto
 	updated, err := srRepo.GetByID(ctx, run.ID)
 	require.NoError(t, err)
 	require.Equal(t, "running", updated.Status, "no budget/timeout configured — run must stay running")
+}
+
+// --- finalization: unpushed work fails instead of reaching done ---
+
+func TestFinalizeCompletedAsyncRuns_FinalizationUnpushed_FailsNotDone(t *testing.T) {
+	ctx := context.Background()
+	bundle, err := db.Open(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+
+	taskRepo := repo.NewTaskRepo(bundle.Client)
+	srRepo := repo.NewStageRunRepo(bundle.Client)
+
+	orch, err := pipeline.NewOrchestrator(pipeline.OrchestratorOptions{
+		TaskRepo:       taskRepo,
+		StageRunRepo:   srRepo,
+		PermissionRepo: repo.NewPermissionRepo(bundle.Client),
+		AuditRepo:      repo.NewAuditEventRepo(bundle.Client),
+		ConfigRepo:     repo.NewPipelineConfigRepo(bundle.Client),
+		HasUnpushedWorkFn: func(_ context.Context, _ *ent.Task) bool {
+			return true
+		},
+	})
+	require.NoError(t, err)
+
+	task, err := taskRepo.Create(ctx, repo.CreateTaskInput{
+		Slug:                "finalize-unpushed-test",
+		Title:               "Finalize Unpushed Test",
+		Cwd:                 "/tmp",
+		WorktreePath:        ptr("/tmp/fake"),
+		CurrentStage:        "finalization",
+		Priority:            "medium",
+		MaxIterations:       3,
+		StageTimeoutSeconds: 1800,
+	})
+	require.NoError(t, err)
+
+	sr, err := srRepo.Create(ctx, repo.CreateStageRunInput{
+		TaskID:      task.ID,
+		Stage:       "finalization",
+		Iteration:   0,
+		SessionName: "finalize-unpushed-test-0",
+	})
+	require.NoError(t, err)
+
+	deadPID := -1
+	now := time.Now()
+	sr, err = srRepo.Update(ctx, sr.ID, repo.UpdateStageRunInput{
+		Status:    strPtr("running"),
+		PID:       &deadPID,
+		StartedAt: &now,
+	})
+	require.NoError(t, err)
+
+	orch.SetCompletionDetector(func(_ *ent.StageRun, _ string, _ pipeline.CompletionDeps) (pipeline.CompletionResult, error) {
+		return pipeline.CompletionResult{Kind: "completed", Output: map[string]any{}}, nil
+	})
+
+	err = orch.FinalizeCompletedAsyncRunsForTest(ctx, []*ent.StageRun{sr})
+	require.NoError(t, err)
+
+	updatedTask, err := taskRepo.GetByID(ctx, task.ID)
+	require.NoError(t, err)
+	require.NotEqual(t, "done", updatedTask.CurrentStage, "task must not reach done with unpushed work")
+
+	updatedRun, err := srRepo.GetByID(ctx, sr.ID)
+	require.NoError(t, err)
+	require.Equal(t, "failed", updatedRun.Status)
+	require.Contains(t, updatedRun.Output["error"], "unpushed")
 }
 
 // --- external-cancel on terminal stage ---

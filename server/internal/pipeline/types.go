@@ -22,7 +22,8 @@ type NextTransition struct {
 }
 
 type DoneTransition struct {
-	Output map[string]any
+	Output        map[string]any
+	MetadataPatch map[string]any
 }
 
 type FailTransition struct {
@@ -327,6 +328,17 @@ type OrchestratorOptions struct {
 	// cleanup retains the worktree instead of force-removing it, so the work is
 	// not orphaned. Nil disables the check (cleanup behaves as before).
 	HasUnpushedWorkFn func(ctx context.Context, task *ent.Task) bool
+
+	// PushFn pushes the task branch to origin. Called by decideCompletedTransition
+	// when finalization completes and the task allows git push. Production wires
+	// ProductionPushFn; tests inject a stub. When nil, push is skipped.
+	PushFn func(ctx context.Context, task *ent.Task) error
+
+	// CreateDraftPRFn creates a draft PR for the task branch against the given
+	// base. Returns the PR number and URL. Production wires
+	// ProductionCreateDraftPRFn; tests inject a stub. When nil, PR creation is
+	// skipped.
+	CreateDraftPRFn func(ctx context.Context, worktreePath, branch, base, title, prBody string) (prNumber int, prURL string, err error)
 
 	// ResolveSpawner returns the effective DB spawner row for a task right
 	// before the native Claude path is taken. When nil, stage handlers spawn

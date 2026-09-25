@@ -126,7 +126,18 @@ func (o *PipelineOrchestrator) applyTransitionWrites(
 			return nil, nil, nil, fmt.Errorf("applyTransition.done.updateRun: %w", err)
 		}
 		done := "done"
-		if _, err := taskRepo.Update(ctx, task.ID, repo.UpdateTaskInput{CurrentStage: &done}); err != nil {
+		taskUpdate := repo.UpdateTaskInput{CurrentStage: &done}
+		if len(tr.MetadataPatch) > 0 {
+			merged := make(map[string]any)
+			for k, v := range task.Metadata {
+				merged[k] = v
+			}
+			for k, v := range tr.MetadataPatch {
+				merged[k] = v
+			}
+			taskUpdate.Metadata = merged
+		}
+		if _, err := taskRepo.Update(ctx, task.ID, taskUpdate); err != nil {
 			return nil, nil, nil, fmt.Errorf("applyTransition.done.updateTask: %w", err)
 		}
 		_ = auditRepo.RecordTaskAudit(ctx, task.ID, nil, "task_done", "task:"+task.ID, nil)
@@ -342,7 +353,7 @@ func (o *PipelineOrchestrator) decideCompletedTransition(ctx context.Context, ta
 		return DoneTransition{Output: output}
 	}
 	if run.Stage == "finalization" {
-		return DoneTransition{Output: output}
+		return o.decideFinalizationTransition(ctx, task, output)
 	}
 	if run.Stage == "self_review" {
 		passed, _ := output["passed"].(bool)
