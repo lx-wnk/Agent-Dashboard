@@ -72,7 +72,7 @@ function checkTitle(checks: GitHubChecks): string {
   if (checks.state === 'none')
     return 'No check runs reported for this pull request'
   if (checks.state === 'not_tracked')
-    return 'Add this repository to github.repos in Settings to track its checks'
+    return 'Checks not tracked: add this repository to github.repos in Settings → GitHub (applies after a server restart)'
   return `Checks ${checks.state}: ${checks.passed} passed, ${checks.failed} failed, ${checks.total} total`
 }
 

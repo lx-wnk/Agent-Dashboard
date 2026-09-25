@@ -281,6 +281,13 @@ func TestChecksRefusesARepoOutsideTheAllowList(t *testing.T) {
 	require.False(t, *called)
 }
 
+func TestChecksRefusesAnEmptySHAWithoutCallingGitHub(t *testing.T) {
+	ts, _, called := newFakeGitHub(t)
+	_, err := newTestClient(t, ts).Checks(context.Background(), "lx-wnk/kontor", "")
+	require.Error(t, err)
+	require.False(t, *called)
+}
+
 // TestStatusErrorDistinguishesNotFoundFromForbidden proves a caller can tell
 // "no such repository/PR" (404) apart from "token lacks scope" (403) via
 // errors.As, instead of parsing the error string — the distinction Task 5/6

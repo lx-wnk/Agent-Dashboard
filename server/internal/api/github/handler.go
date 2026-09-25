@@ -149,7 +149,8 @@ type pullRequestView struct {
 // cockpit panel draws: a state plus the counts behind it. State is "none"
 // both when GitHub reports no checks for the commit and when the check-run
 // lookup itself failed — see summary(), which never lets that lookup turn a
-// working 200 summary into an error or blank the other pull requests.
+// working 200 summary into an error or blank the other pull requests. State is
+// "not_tracked" for a repository outside the allow-list, which is never looked up.
 type checksView struct {
 	State  string `json:"state"`
 	Passed int    `json:"passed"`
@@ -158,16 +159,14 @@ type checksView struct {
 	URL    string `json:"url"`
 }
 
-// noChecksView is the checksView every pull request starts with: "none",
-// pointing at the checks tab a human would open to look for themselves.
+// noChecksView is the checksView every allow-listed pull request starts with:
+// "none", pointing at the checks tab a human would open to look for themselves.
 func noChecksView(prURL string) checksView {
 	return checksView{State: string(githubapp.CheckStateNone), URL: prURL + "/checks"}
 }
 
-// notTrackedChecksView is the checksView for a pull request whose
-// repository is outside the configured allow-list: the check-run API
-// was never called, and the panel must not claim "no checks" for a
-// commit it never asked about.
+// notTrackedChecksView is the checksView for a pull request whose repository
+// is outside the configured allow-list: the check-run API was never called.
 func notTrackedChecksView(prURL string) checksView {
 	return checksView{State: string(githubapp.CheckStateNotTracked), URL: prURL + "/checks"}
 }
@@ -283,9 +282,8 @@ func (h *Handler) summary(w http.ResponseWriter, r *http.Request) error {
 
 	for _, m := range merged {
 		// A repository outside the allow-list never gets a Checks call: the
-		// client would refuse it (checkRepo), and even if it didn't, the
-		// search hit carries no head SHA. Show "not tracked" instead of
-		// the misleading "no checks" that noChecksView carries.
+		// client would refuse it (checkRepo), and the search hit carries no
+		// head SHA anyway.
 		var checks checksView
 		if !h.client.AllowsRepo(m.repo) {
 			checks = notTrackedChecksView(m.pr.URL)

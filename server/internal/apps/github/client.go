@@ -365,8 +365,8 @@ func (c *Client) InvolvedPullRequests(ctx context.Context) ([]InvolvedPullReques
 }
 
 // CheckState is the coarse state of a commit's check runs, collapsed from
-// GitHub's per-run status/conclusion pairs into the four states the cockpit
-// panel draws.
+// GitHub's per-run status/conclusion pairs into the states the cockpit panel
+// draws.
 type CheckState string
 
 const (
@@ -378,9 +378,8 @@ const (
 	// which never lets a check-run failure blank an otherwise-working PR.
 	CheckStateNone CheckState = "none"
 	// CheckStateNotTracked means the repository is outside the configured
-	// allow-list, so no check-run lookup was attempted. The cockpit panel
-	// uses this to show "not tracked" instead of the misleading "no checks"
-	// that CheckStateNone carries.
+	// allow-list, so no check-run lookup was attempted. Checks never returns
+	// it; handler.summary sets it.
 	CheckStateNotTracked CheckState = "not_tracked"
 )
 
@@ -400,6 +399,11 @@ type CheckSummary struct {
 func (c *Client) Checks(ctx context.Context, repoName, sha string) (CheckSummary, error) {
 	if err := c.checkRepo(repoName); err != nil {
 		return CheckSummary{}, err
+	}
+	// A search hit carries no head SHA; without this the request goes out as
+	// /commits//check-runs and spends rate limit on an answer about no commit.
+	if sha == "" {
+		return CheckSummary{}, errors.New("github: check runs need a commit SHA")
 	}
 	var raw struct {
 		TotalCount int `json:"total_count"`

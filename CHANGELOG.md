@@ -157,6 +157,9 @@ Preparing the first public release.
   repository the token can see, deduped by repo#number, sorted by most
   recently updated, and capped at 20 instead of the previous 5-per-repository,
   8-shown limit.
+- **A pull request outside `github.repos` reads "not tracked", not "no
+  checks".** Its check runs are never looked up, so `checks.state` is the new
+  `not_tracked` rather than `none`, and the tooltip names the setting to add it to.
 - Obsidian settings take effect as soon as they are saved; no restart.
 - **The four `obsidian_*` MCP tools follow the vault's live state, not a
   startup snapshot.** Configuring a vault while the server is already running
