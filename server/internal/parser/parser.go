@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/lx-wnk/kontor/sdk"
+	"github.com/lx-wnk/kontor/server/internal/claudeconfig"
 	"github.com/lx-wnk/kontor/server/internal/sanitize"
 )
 
@@ -117,11 +118,7 @@ var statSessionFilesCalls atomic.Int64
 // claudeConfigDir returns the Claude config base directory.
 // Respects CLAUDE_CONFIG_DIR env var; falls back to ~/.claude.
 func claudeConfigDir() string {
-	if dir := os.Getenv("CLAUDE_CONFIG_DIR"); dir != "" {
-		return dir
-	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".claude")
+	return claudeconfig.ConfigDir()
 }
 
 // allClaudeConfigDirs returns all candidate Claude config directories to search.

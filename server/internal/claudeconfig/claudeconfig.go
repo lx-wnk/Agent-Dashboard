@@ -9,20 +9,51 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 )
+
+var (
+	configDirMu       sync.RWMutex
+	configDirProvider func() string
+)
+
+// SetConfigDirProvider installs fn as the provider for the Claude config
+// directory. The returned closure restores the previous provider (test seam).
+func SetConfigDirProvider(fn func() string) func() {
+	configDirMu.Lock()
+	prev := configDirProvider
+	configDirProvider = fn
+	configDirMu.Unlock()
+	return func() {
+		configDirMu.Lock()
+		configDirProvider = prev
+		configDirMu.Unlock()
+	}
+}
+
+// ConfigDir returns the Claude config base directory.
+// Precedence: provider (settings) → CLAUDE_CONFIG_DIR env → ~/.claude.
+func ConfigDir() string {
+	configDirMu.RLock()
+	fn := configDirProvider
+	configDirMu.RUnlock()
+	if fn != nil {
+		if dir := fn(); dir != "" {
+			return dir
+		}
+	}
+	if dir := os.Getenv("CLAUDE_CONFIG_DIR"); dir != "" {
+		return dir
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".claude")
+}
 
 // JSONPath resolves ~/.claude.json, honoring CLAUDE_CONFIG_DIR — which
 // relocates the whole Claude config root, not just the ~/.claude/projects
 // tree — so a value here must not be hardcoded to the default home path.
 func JSONPath() (string, error) {
-	if dir := os.Getenv("CLAUDE_CONFIG_DIR"); dir != "" {
-		return filepath.Join(dir, ".claude.json"), nil
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("claudeconfig: resolve home: %w", err)
-	}
-	return filepath.Join(home, ".claude.json"), nil
+	return filepath.Join(ConfigDir(), ".claude.json"), nil
 }
 
 type configFile struct {

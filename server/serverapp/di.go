@@ -281,6 +281,10 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		}
 	}
 
+	claudeconfig.SetConfigDirProvider(func() string {
+		return settingsSvc.String("claude.configDir")
+	})
+
 	// Seed the spawner command allow-list from settings (ApplyRestart).
 	services.SetSpawnerAllowedCommands(settingsSvc.StringSlice("spawn.allowedCommands"))
 

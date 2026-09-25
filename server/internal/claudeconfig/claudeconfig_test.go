@@ -3,6 +3,7 @@ package claudeconfig_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lx-wnk/kontor/server/internal/claudeconfig"
@@ -45,4 +46,30 @@ func TestUserMCPServers_ReturnsRawEntries(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, servers, "context7")
 	require.JSONEq(t, `{"type":"http","url":"https://ctx7.example/mcp"}`, string(servers["context7"]))
+}
+
+func TestConfigDir_ProviderTakesPrecedence(t *testing.T) {
+	t.Cleanup(claudeconfig.SetConfigDirProvider(func() string {
+		return "/custom/claude-dir"
+	}))
+	t.Setenv("CLAUDE_CONFIG_DIR", "/env-dir")
+
+	dir := claudeconfig.ConfigDir()
+	require.Equal(t, "/custom/claude-dir", dir)
+}
+
+func TestConfigDir_EnvFallback(t *testing.T) {
+	t.Cleanup(claudeconfig.SetConfigDirProvider(func() string { return "" }))
+	t.Setenv("CLAUDE_CONFIG_DIR", "/env-dir")
+
+	dir := claudeconfig.ConfigDir()
+	require.Equal(t, "/env-dir", dir)
+}
+
+func TestConfigDir_DefaultHome(t *testing.T) {
+	t.Cleanup(claudeconfig.SetConfigDirProvider(nil))
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+
+	dir := claudeconfig.ConfigDir()
+	require.True(t, strings.HasSuffix(dir, "/.claude"), "expected dir to end with /.claude, got %s", dir)
 }
