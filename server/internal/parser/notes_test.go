@@ -65,6 +65,18 @@ func TestCurlNoteTouches(t *testing.T) {
 		{"a single-quoted value stays literal", `R='$HOME'; curl "$B/vault/$R/x.md"`, nil},
 		{"an unassigned variable is still dropped", `F="$B/vault/claude-memory/x.md"; curl "$G"`, nil},
 		{"a path over the length cap is dropped", `curl "$B/vault/` + strings.Repeat("a", 600) + `.md"`, nil},
+		{"heredoc body vault URL is not a touch",
+			"curl -sk \"$B/vault/claude-memory/real.md\" <<'EOF'\nSee $OBSIDIAN_BASE_URL/vault/claude-memory/false.md\nEOF",
+			[]NoteTouch{touch("claude-memory/real.md", read, zero)}},
+		{"curl -d arg does not pollute var table",
+			`curl -sk "$B/vault/claude-memory/real.md" -d path=x.md; curl "$B/vault/claude-memory/$path"`,
+			[]NoteTouch{touch("claude-memory/real.md", read, zero)}},
+		{"export F=... is a write",
+			`export F="$OBSIDIAN_BASE_URL/vault/${OBSIDIAN_ROOT:-claude-memory}/private/sessions/hub.md"; curl -X PUT "$F"`,
+			[]NoteTouch{touch("claude-memory/private/sessions/hub.md", write, zero)}},
+		{"subshell F=... resolves to a read",
+			`(F="$OBSIDIAN_BASE_URL/vault/${OBSIDIAN_ROOT:-claude-memory}/private/sessions/hub.md"; curl "$F")`,
+			[]NoteTouch{touch("claude-memory/private/sessions/hub.md", read, zero)}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
