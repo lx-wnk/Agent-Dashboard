@@ -434,7 +434,7 @@ The agent stream (`/api/agents/stream`) carries each agent's `recentNotes` —
 vault-relative paths of notes it read or wrote in the last ten minutes —
 without a `memory.read` check, because a capability grant is scoped
 (global/project), not per viewer, and the stream already carries the agents'
-full shell commands. Note contents and the graph stay behind `memory.read`.
+full shell commands. This is a deliberate trade-off: requiring a `memory.read` grant per viewer would scope-mismatch against the stream's already-ungated shell-command and token-usage data; the decision is to document the exposure here rather than gate it. Note contents and the graph stay behind `memory.read`.
 The graph is cached for 60 seconds and rebuilt once for all concurrent
 callers. An upstream failure answers `502` with a fixed message, never the
 upstream error text, which can carry the vault URL. **The open route refuses

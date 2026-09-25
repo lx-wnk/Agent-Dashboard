@@ -826,6 +826,7 @@ Preparing the first public release.
   production-reachable one) and `vite` to `>=6.4.3`; pin transitive `undici`
   (`^7.28.0`), `esbuild`, `@babel/core`, and `brace-expansion` via workspace
   overrides. `pnpm audit` reports no known vulnerabilities.
+- **`Agent.recentNotes` in `/api/agents/stream` is not gated by `memory.read`.** The stream carries vault-relative note paths (read or written in the last ten minutes) alongside the agent's shell commands and token usage. A per-viewer `memory.read` grant would scope-mismatch against the stream's existing ungated data; this is a documented trade-off rather than a gate. See [Security — Obsidian](docs/guides/security.md) for the full rationale.
 - Hardened the live-injection endpoint (`POST /api/agents/{pid}/message`): rate
   limiting, audit logging, per-session token rotation, and control-character
   sanitization (PR #188).
