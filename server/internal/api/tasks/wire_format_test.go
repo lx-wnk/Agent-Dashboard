@@ -1117,3 +1117,10 @@ func TestTaskResponse_DraftPRFields(t *testing.T) {
 		}
 	})
 }
+
+func TestToTaskResponse_DropsNonHTTPPrURL(t *testing.T) {
+	resp := tasks.ToTaskResponse(&ent.Task{Metadata: map[string]any{"pr_url": "javascript:alert(1)"}})
+	if resp.DraftPrUrl != nil {
+		t.Fatalf("draftPrUrl = %q, want nil for a non-http(s) URL", *resp.DraftPrUrl)
+	}
+}

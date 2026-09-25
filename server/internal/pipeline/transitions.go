@@ -3,6 +3,7 @@ package pipeline
 import (
 	"context"
 	"fmt"
+	"maps"
 	"time"
 
 	"github.com/lx-wnk/kontor/server/internal/db/ent"
@@ -128,13 +129,13 @@ func (o *PipelineOrchestrator) applyTransitionWrites(
 		done := "done"
 		taskUpdate := repo.UpdateTaskInput{CurrentStage: &done}
 		if len(tr.MetadataPatch) > 0 {
-			merged := make(map[string]any)
-			for k, v := range task.Metadata {
-				merged[k] = v
+			current, err := taskRepo.GetByID(ctx, task.ID)
+			if err != nil {
+				return nil, nil, nil, fmt.Errorf("applyTransition.done.getTask: %w", err)
 			}
-			for k, v := range tr.MetadataPatch {
-				merged[k] = v
-			}
+			merged := make(map[string]any, len(current.Metadata)+len(tr.MetadataPatch))
+			maps.Copy(merged, current.Metadata)
+			maps.Copy(merged, tr.MetadataPatch)
 			taskUpdate.Metadata = merged
 		}
 		if _, err := taskRepo.Update(ctx, task.ID, taskUpdate); err != nil {
@@ -353,7 +354,7 @@ func (o *PipelineOrchestrator) decideCompletedTransition(ctx context.Context, ta
 		return DoneTransition{Output: output}
 	}
 	if run.Stage == "finalization" {
-		return o.decideFinalizationTransition(ctx, task, output)
+		return o.decideFinalizationTransition(ctx, task, run, output)
 	}
 	if run.Stage == "self_review" {
 		passed, _ := output["passed"].(bool)

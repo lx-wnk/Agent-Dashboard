@@ -3,10 +3,13 @@ package pipeline
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os/exec"
+	"path"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,10 +23,12 @@ import (
 // allowed), refuses to finish with unpushed work, and opens (or reuses) a
 // draft PR before handing the task to DoneTransition — so a task never
 // reaches done with orphaned, unpushed work.
-func (o *PipelineOrchestrator) decideFinalizationTransition(ctx context.Context, task *ent.Task, output map[string]any) StageTransition {
+func (o *PipelineOrchestrator) decideFinalizationTransition(ctx context.Context, task *ent.Task, run *ent.StageRun, output map[string]any) StageTransition {
 	if task.WorktreePath == nil || *task.WorktreePath == "" {
 		return DoneTransition{Output: output}
 	}
+	// The agent has exited; its spawn artefacts (.claude/settings.json) would otherwise read as uncommitted work below.
+	o.spawnCleanups.release(run.ID)
 
 	pushAllowed := IsGitPushAllowed(task, o.opts.AllowGitPush)
 	if o.opts.PushFn != nil && pushAllowed {
@@ -49,7 +54,10 @@ func (o *PipelineOrchestrator) decideFinalizationTransition(ctx context.Context,
 		return DoneTransition{Output: output}
 	}
 
-	selfRun, _ := o.stageRuns.GetLatestByTaskAndStage(ctx, task.ID, "self_review")
+	selfRun, err := o.stageRuns.GetLatestByTaskAndStage(ctx, task.ID, "self_review")
+	if err != nil && !ent.IsNotFound(err) {
+		slog.Warn("finalization: self_review lookup failed; PR omits its findings", "taskID", task.ID, "err", err)
+	}
 	title, base, prBody := buildFinalizationPRArgs(task, output, selfRun)
 	branch := worktree.CreateBranch(task.SourceBranch, task.Slug)
 
@@ -108,17 +116,11 @@ func ProductionCreateDraftPRFn(ctx context.Context, worktreePath, branch, base, 
 		return 0, "", fmt.Errorf("gh pr create: no URL in output: %s", strings.TrimSpace(out))
 	}
 
-	viewOut, err := runGH(ctx, worktreePath, "pr", "view", prURL, "--json", "number")
+	number, err := strconv.Atoi(path.Base(prURL))
 	if err != nil {
-		return 0, "", fmt.Errorf("gh pr view: %s: %w", strings.TrimSpace(viewOut), err)
+		return 0, "", fmt.Errorf("gh pr create: no PR number in URL %q", prURL)
 	}
-	var view struct {
-		Number int `json:"number"`
-	}
-	if err := json.Unmarshal([]byte(viewOut), &view); err != nil {
-		return 0, "", fmt.Errorf("gh pr view: parse output: %w", err)
-	}
-	return view.Number, prURL, nil
+	return number, prURL, nil
 }
 
 // findExistingPR looks up an already-open PR for branch. A lookup failure or
@@ -126,10 +128,15 @@ func ProductionCreateDraftPRFn(ctx context.Context, worktreePath, branch, base, 
 func findExistingPR(ctx context.Context, worktreePath, branch string) (number int, url string, ok bool) {
 	out, err := runGH(ctx, worktreePath, "pr", "list", "--head", branch, "--state", "open", "--json", "number,url", "--limit", "1")
 	if err != nil {
+		slog.Warn("finalization: gh pr list failed; creating a new PR", "branch", branch, "err", err, "out", strings.TrimSpace(out))
 		return 0, "", false
 	}
 	var entries []ghPRListEntry
-	if err := json.Unmarshal([]byte(out), &entries); err != nil || len(entries) == 0 {
+	if err := json.Unmarshal([]byte(out), &entries); err != nil {
+		slog.Warn("finalization: gh pr list output unparseable; creating a new PR", "branch", branch, "err", err)
+		return 0, "", false
+	}
+	if len(entries) == 0 {
 		return 0, "", false
 	}
 	return entries[0].Number, entries[0].URL, true
@@ -143,7 +150,11 @@ func runGH(ctx context.Context, dir string, args ...string) (string, error) {
 	// them without a shell.
 	cmd := exec.CommandContext(ctx, "gh", args...)
 	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
+	out, err := cmd.Output()
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return string(out) + string(exitErr.Stderr), err
+	}
 	return string(out), err
 }
 

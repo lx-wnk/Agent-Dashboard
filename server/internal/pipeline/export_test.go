@@ -176,3 +176,7 @@ var BuildPRBodyForTest = buildPRBody
 
 // DeriveConventionalTitleForTest exposes deriveConventionalTitle for testing.
 var DeriveConventionalTitleForTest = deriveConventionalTitle
+
+func (o *PipelineOrchestrator) RegisterSpawnCleanupForTest(stageRunID string, cleanup func()) {
+	o.spawnCleanups.register(stageRunID, cleanup)
+}

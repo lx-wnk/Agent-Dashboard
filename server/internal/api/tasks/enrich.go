@@ -2,6 +2,7 @@ package tasks
 
 import (
 	"context"
+	"net/url"
 	"time"
 
 	"github.com/lx-wnk/kontor/server/internal/db/ent"
@@ -91,11 +92,17 @@ func ToTaskResponse(t *ent.Task) TaskResponse {
 			num := int(n)
 			resp.DraftPrNumber = &num
 		}
-		if u, ok := t.Metadata["pr_url"].(string); ok {
+		// pr_url is writable through task metadata; only an http(s) URL may reach an href.
+		if u, ok := t.Metadata["pr_url"].(string); ok && isHTTPURL(u) {
 			resp.DraftPrUrl = &u
 		}
 	}
 	return resp
+}
+
+func isHTTPURL(raw string) bool {
+	u, err := url.Parse(raw)
+	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
 }
 
 // EnrichedTask is a task plus the fields computed at read time. The embedded

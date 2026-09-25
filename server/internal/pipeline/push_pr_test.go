@@ -295,3 +295,51 @@ func TestDeriveConventionalTitle(t *testing.T) {
 		})
 	}
 }
+
+func TestDecideFinalization_ReleasesSpawnArtefactsBeforeDirtyCheck(t *testing.T) {
+	released := false
+	orch := makeFinalizationOrchestrator(t, func(o *pipeline.OrchestratorOptions) {
+		o.HasUnpushedWorkFn = func(context.Context, *ent.Task) bool { return !released }
+	})
+	orch.RegisterSpawnCleanupForTest("run-1", func() { released = true })
+
+	transition := orch.DecideCompletedTransitionForTest(context.Background(), worktreeTask(), finalizationRun(), map[string]any{})
+
+	_, ok := transition.(pipeline.DoneTransition)
+	require.True(t, ok, "expected DoneTransition, got %T", transition)
+}
+
+func TestApplyDone_MergesPatchIntoStoredMetadataNotSnapshot(t *testing.T) {
+	ctx := context.Background()
+	bundle, err := db.Open(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+	taskRepo := repo.NewTaskRepo(bundle.Client)
+	srRepo := repo.NewStageRunRepo(bundle.Client)
+	orch, err := pipeline.NewOrchestrator(pipeline.OrchestratorOptions{
+		TaskRepo:       taskRepo,
+		StageRunRepo:   srRepo,
+		PermissionRepo: repo.NewPermissionRepo(bundle.Client),
+		AuditRepo:      repo.NewAuditEventRepo(bundle.Client),
+		ConfigRepo:     repo.NewPipelineConfigRepo(bundle.Client),
+	})
+	require.NoError(t, err)
+
+	task, err := taskRepo.Create(ctx, repo.CreateTaskInput{
+		Slug: "done-merge", Title: "Done Merge", Cwd: t.TempDir(), CurrentStage: "finalization",
+		Priority: "medium", MaxIterations: 3, Metadata: map[string]any{"written_meanwhile": "yes"},
+	})
+	require.NoError(t, err)
+	sr, err := srRepo.Create(ctx, repo.CreateStageRunInput{TaskID: task.ID, Stage: "finalization", SessionName: "done-merge-0"})
+	require.NoError(t, err)
+	stale := *task
+	stale.Metadata = nil
+
+	_, err = orch.ApplyTransitionForTest(ctx, &stale, sr, pipeline.DoneTransition{MetadataPatch: map[string]any{"pr_number": 3}})
+	require.NoError(t, err)
+
+	updated, err := taskRepo.GetByID(ctx, task.ID)
+	require.NoError(t, err)
+	require.Equal(t, "yes", updated.Metadata["written_meanwhile"])
+	require.InDelta(t, 3, updated.Metadata["pr_number"], 0)
+}
