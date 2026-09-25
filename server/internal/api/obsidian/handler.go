@@ -158,14 +158,14 @@ func (h *Handler) index(w http.ResponseWriter, r *http.Request) error {
 	}
 	defer h.running.Store(false)
 
-	count, err := obsidianapp.IndexNotes(r.Context(), client, h.mem, h.gate, h.spaceID)
+	indexed, matched, err := obsidianapp.IndexNotes(r.Context(), client, h.mem, h.gate, h.spaceID)
 	if err != nil {
 		if errors.Is(err, capability.ErrDenied) || errors.Is(err, capability.ErrAskRequired) {
 			return apierr.NewAppError(http.StatusForbidden, err.Error())
 		}
 		return err
 	}
-	apierr.WriteJSON(w, http.StatusOK, map[string]int{"indexed": count})
+	apierr.WriteJSON(w, http.StatusOK, map[string]int{"indexed": indexed, "matched": matched})
 	return nil
 }
 

@@ -329,6 +329,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	// obsidian.Register below, so a vault configured later has its space ready.
 	obsidianClients := obsidian.NewClientHolder(nil)
 	var obsidianSpaceID string
+	var mcpNotifier *mcppkg.Notifier
 	// githubClient is nil when GitHub is unconfigured (buildGitHubClient's own
 	// doc comment covers why that is not an error) and stays nil without a
 	// database, since Register and the capability catalogue it depends on need
@@ -430,7 +431,8 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		// the server down: a half-configured vault logs a warning and starts
 		// with the vault off, the same tolerance githubClient gets below.
 		obsidianClients.Set(bootObsidianClient(ctx, settingsSvc))
-		watchObsidianSettings(settingsSvc, obsidianClients)
+		mcpNotifier = mcppkg.NewNotifier()
+		watchObsidianSettings(settingsSvc, obsidianClients, mcpNotifier)
 
 		// A read-only integration does not get to take the server down. The
 		// builder still reports precisely why it could not be constructed —
@@ -765,7 +767,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	// A kind that collides with a core stage is refused there and logged.
 	registerModuleStageKinds(orch, pluginRegistry)
 
-	mcpHandler := provideMCPHandler(entClient, rawDB, orch, sched, taskBroadcaster, projectBroadcaster, refineRunner, memRepo, memRetriever, grantUsageRepo, askerArg, obsidianClients, githubClient, newModuleToolSource(pluginRegistry))
+	mcpHandler := provideMCPHandler(entClient, rawDB, orch, sched, taskBroadcaster, projectBroadcaster, refineRunner, memRepo, memRetriever, grantUsageRepo, askerArg, obsidianClients, githubClient, newModuleToolSource(pluginRegistry), mcpNotifier)
 
 	var histImporter *histsvc.Importer
 	var historyHandler *apihistory.Handler

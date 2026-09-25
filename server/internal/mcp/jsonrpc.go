@@ -31,13 +31,15 @@ type rpcError struct {
 	Message string `json:"message"`
 }
 
-// MCPHandler returns a chi-compatible http.HandlerFunc for POST /api/mcp.
-// It handles: initialize, tools/list, tools/call.
+// MCPHandler returns a chi-compatible http.Handler for /api/mcp. POST handles
+// initialize, tools/list, tools/call. GET opens an SSE stream that forwards
+// notifier notifications (e.g. notifications/tools/list_changed); GET answers
+// 405 when notifier is nil.
 // modules may be nil: a server built without a module source serves exactly the
 // core tools.
-func MCPHandler(registry ToolRegistry, modules ModuleTools, moduleGate ModuleToolAuthorizer) http.HandlerFunc {
+func MCPHandler(registry ToolRegistry, modules ModuleTools, moduleGate ModuleToolAuthorizer, notifier *Notifier) http.Handler {
 	coreDefs := sortedToolDefs(registry)
-	return func(w http.ResponseWriter, r *http.Request) {
+	postHandler := func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB
 		var req rpcRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -55,7 +57,7 @@ func MCPHandler(registry ToolRegistry, modules ModuleTools, moduleGate ModuleToo
 				JSONRPC: "2.0", ID: req.ID,
 				Result: map[string]any{
 					"protocolVersion": protocolVersion,
-					"capabilities":    map[string]any{"tools": map[string]any{}},
+					"capabilities":    map[string]any{"tools": map[string]any{"listChanged": notifier != nil}},
 					"serverInfo":      map[string]any{"name": ServerName, "version": "1.0.0"},
 				},
 			})
@@ -138,6 +140,41 @@ func MCPHandler(registry ToolRegistry, modules ModuleTools, moduleGate ModuleToo
 			writeRPC(w, rpcResponse{JSONRPC: "2.0", ID: req.ID, Error: &rpcError{Code: -32601, Message: "method not found: " + req.Method}})
 		}
 	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost:
+			postHandler(w, r)
+		case http.MethodGet:
+			if notifier == nil {
+				http.Error(w, "SSE not available", http.StatusMethodNotAllowed)
+				return
+			}
+			flusher, ok := w.(http.Flusher)
+			if !ok {
+				http.Error(w, "streaming not supported", http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.Header().Set("Cache-Control", "no-cache")
+			w.Header().Set("Connection", "keep-alive")
+			w.WriteHeader(http.StatusOK)
+			flusher.Flush()
+
+			ch, unsub := notifier.Subscribe()
+			defer unsub()
+			for {
+				select {
+				case <-r.Context().Done():
+					return
+				case frame := <-ch:
+					_, _ = w.Write(frame)
+					flusher.Flush()
+				}
+			}
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
 }
 
 // callHandler invokes def.Handler and converts any panic into an error so the

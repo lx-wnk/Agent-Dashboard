@@ -240,7 +240,7 @@ describe('obsidianSettings', () => {
   })
 
   it('reports the indexed count on success', async () => {
-    stubIndexFetch({ ok: true, status: 200, json: async () => ({ indexed: 7 }) })
+    stubIndexFetch({ ok: true, status: 200, json: async () => ({ indexed: 7, matched: 12 }) })
     const wrapper = mount(ObsidianSettings, { attachTo: document.body })
     await flushPromises()
 
@@ -248,7 +248,10 @@ describe('obsidianSettings', () => {
     await flushPromises()
 
     expect(fetch).toHaveBeenCalledWith('/api/obsidian/index', expect.objectContaining({ method: 'POST' }))
-    expect(wrapper.get('[data-testid="obsidian-index-result"]').text()).toContain('7')
+    const text = wrapper.get('[data-testid="obsidian-index-result"]').text()
+    expect(text).toContain('7')
+    expect(text).toContain('12')
+    expect(text).toMatch(/Indexed 7 of 12 notes/)
   })
 
   it('turns a 403 denial into a readable message, not a raw status code', async () => {

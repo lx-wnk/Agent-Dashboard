@@ -157,7 +157,7 @@ func TestBootObsidianClient_FullTrioBuildsAClient(t *testing.T) {
 func TestWatchObsidianSettings_AppliesACompleteTrioWithoutARestart(t *testing.T) {
 	svc := newSettingsServiceForTest(t)
 	clients := obsidian.NewClientHolder(nil)
-	watchObsidianSettings(svc, clients)
+	watchObsidianSettings(svc, clients, nil)
 
 	require.NoError(t, svc.Set(t.Context(), "obsidian.baseURL", "https://127.0.0.1:27124"))
 	assert.Nil(t, clients.Get(), "a partial trio leaves the vault off without failing the save")
