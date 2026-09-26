@@ -476,6 +476,11 @@ Preparing the first public release.
 
 ### Fixed
 
+- **Tasks created or changed through MCP reach the board without a reload.**
+  MCP tools used to send a `task_changed` event the board ignores, so a task an
+  agent created stayed invisible and opening it said "Task not found". They now
+  send `task_created` and `task_updated` with the same enriched task the HTTP API
+  sends, including its blocked and refine state.
 - The desktop app no longer hangs at start when opened from Finder. Watching Claude's config in the home directory opened every entry there, including `~/Desktop`, which waits on a macOS privacy prompt; the config file is now polled instead.
 - **A half-filled Obsidian setup no longer stops the server from starting.**
   Boot used to fail outright when only some of `obsidian.baseURL`,
