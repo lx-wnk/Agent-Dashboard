@@ -1,6 +1,6 @@
 # MCP Endpoint
 
-The dashboard exposes a stateless StreamableHTTP MCP server at `POST /api/mcp` for external agent control. Each request is self-contained — there is no server-side session map. `GET /api/mcp` (same bearer auth) opens a Server-Sent-Events stream that carries `notifications/tools/list_changed`; `initialize` declares this as `capabilities.tools.listChanged: true`.
+The dashboard exposes a stateless StreamableHTTP MCP server at `POST /api/mcp` for external agent control. Each request is self-contained — there is no server-side session map. `GET /api/mcp` (same bearer auth) opens a Server-Sent-Events stream that carries `notifications/tools/list_changed`; `initialize` declares this as `capabilities.tools.listChanged: true`. The stream sends a `: heartbeat` comment every 30 seconds (`sse.HeartbeatInterval`).
 
 ## Authentication
 

@@ -8,11 +8,14 @@ import (
 	"net/http"
 	"runtime/debug"
 	"sort"
+	"time"
 
 	"github.com/lx-wnk/kontor/server/internal/sse"
 )
 
 const protocolVersion = "2024-11-05"
+
+var heartbeatFrame = sse.CommentFrame(sse.HeartbeatComment)
 
 type rpcRequest struct {
 	JSONRPC string          `json:"jsonrpc"`
@@ -161,10 +164,15 @@ func MCPHandler(registry ToolRegistry, modules ModuleTools, moduleGate ModuleToo
 			defer unsub()
 			sse.WriteHeaders(w)
 			flusher.Flush()
+			heartbeat := time.NewTicker(notifier.heartbeat)
+			defer heartbeat.Stop()
 			for {
 				select {
 				case <-r.Context().Done():
 					return
+				case <-heartbeat.C:
+					_, _ = w.Write(heartbeatFrame)
+					flusher.Flush()
 				case frame, ok := <-ch:
 					if !ok {
 						return

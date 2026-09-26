@@ -251,7 +251,7 @@ describe('obsidianSettings', () => {
     const text = wrapper.get('[data-testid="obsidian-index-result"]').text()
     expect(text).toContain('7')
     expect(text).toContain('12')
-    expect(text).toMatch(/Indexed 7 of 12 notes/)
+    expect(text).toMatch(/Indexed 7 new notes \(12 found\)/)
   })
 
   it('turns a 403 denial into a readable message, not a raw status code', async () => {

@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lx-wnk/kontor/server/internal/mcp"
 	"github.com/stretchr/testify/assert"
@@ -142,4 +143,19 @@ func TestMCPEndpoint_GETWithoutNotifierIs405WithAllow(t *testing.T) {
 
 	assert.Equal(t, http.StatusMethodNotAllowed, rec.Code)
 	assert.Equal(t, http.MethodPost, rec.Header().Get("Allow"))
+}
+
+func TestMCPEndpoint_GETStreamSendsHeartbeat(t *testing.T) {
+	srv := httptest.NewServer(mcp.MCPHandler(mcp.ToolRegistry{}, nil, nil, mcp.NewNotifierWithHeartbeat(10*time.Millisecond)))
+	defer srv.Close()
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL, nil)
+	require.NoError(t, err)
+	resp, err := (&http.Client{Timeout: 2 * time.Second}).Do(req)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+
+	line, err := bufio.NewReader(resp.Body).ReadString('\n')
+	require.NoError(t, err)
+	assert.Equal(t, ": heartbeat\n", line)
 }

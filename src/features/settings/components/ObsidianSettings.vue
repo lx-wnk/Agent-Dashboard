@@ -222,7 +222,7 @@ async function runIndex() {
       throw new Error(body.error ?? `HTTP ${res.status}`)
     }
     const data = await res.json() as { indexed: number, matched: number }
-    indexMessage.value = `Indexed ${data.indexed} of ${data.matched} note${data.matched === 1 ? '' : 's'}.`
+    indexMessage.value = `Indexed ${data.indexed} new note${data.indexed === 1 ? '' : 's'} (${data.matched} found).`
   }
   catch (e) {
     toast.error(errorMessage(e, 'Failed to run indexing'))
