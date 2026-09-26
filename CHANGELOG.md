@@ -145,11 +145,15 @@ Preparing the first public release.
 
 ### Changed
 
-- **Pipeline agents show their Kontor project's name.** An agent running a
-  task that belongs to a Kontor project now carries that project's name as its
-  project (card, roster grouping and project filter, hub) instead of its
-  worktree folder, which is named after the task. Agents without a task, or
-  whose task has no project, keep the name of the folder they run in.
+- **Agents show their Kontor project.** Every agent running inside a
+  registered project folder, and every agent working a task that belongs to a
+  project, now carries that project's name and ID (`projectId` on the agent
+  payload) instead of its folder name; a task's own project wins over the
+  folder. Agents outside every project keep their folder name. Roster
+  grouping, the project filter and the hub's sectors key by project ID, so two
+  projects with the same name stay apart. A pending permission shows the same
+  project name as its agent card, and "Don't ask again" now names the folder
+  the rule is saved for.
 - **Every select can be filtered by typing.** Opening a select (click, arrow key, or just typing while it has focus) turns it into a text field that narrows the list by label as you type; arrow keys and Enter pick from the filtered list, Escape restores the previous choice, and a "No matches" row says when nothing fits. Only listed options can be picked. The workspace "Add a tile" and tile "Swap" pickers now use the same select.
 - **Obsidian status now tells you why the vault is unreachable, not just that it's configured.** `GET /api/obsidian/status` probes the vault with a cheap unauthenticated ping and reports `reachable` plus a short error and an actionable hint (self-signed certificate, wrong API key, Obsidian not running); the settings panel shows that hint under the Index button and disables it until the vault is reachable. A denied "Index now" run now links straight to the Grants settings instead of leaving you to find them yourself.
 - **Index now is disabled until the vault works.** The button used to be

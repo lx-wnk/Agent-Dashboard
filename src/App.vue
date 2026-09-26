@@ -101,7 +101,7 @@ const { agents, costTrend, filteredAgents, attentionAgents, attentionCount, pend
 const { tasks, selectedTask, selectTask, startStream: startTasks } = useTasks({ autoStart: false })
 // The one usePendingPermissions(tasks) instance — provided below so every
 // consumer (the needs-you queue, the title count) reads the same cache.
-const pendingPermissions = usePendingPermissions(tasks)
+const pendingPermissions = usePendingPermissions(tasks, agents)
 provide(PENDING_PERMISSIONS, pendingPermissions)
 const { items: permissionItems, approve: approvePermission, deny: denyPermission, decide: decidePermission } = pendingPermissions
 const combinedAttentionCount = computed(() => attentionCount.value + permissionItems.value.length + pendingCapabilityDecisions.value.length)

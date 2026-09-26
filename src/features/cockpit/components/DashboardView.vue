@@ -9,7 +9,7 @@ import { useNow } from '@/composables/useNow'
 import { useSpawners } from '@/composables/useSpawners'
 import { useViewState } from '@/composables/useViewState'
 import { AgentCardGrid, AgentTable, AgentTriageBand, EmptyAgentState, useAgents } from '@/features/agents'
-import { groupAgents, sortAgents } from '@/utils/agentGroup'
+import { agentProjectKey, groupAgents, sortAgents } from '@/utils/agentGroup'
 import { friendlyProjectName } from '@/utils/friendlyProjectName'
 
 defineProps<{
@@ -36,7 +36,7 @@ const autoApprovingStrip = ref<InstanceType<typeof AutoApprovingStrip> | null>(n
 const rosterAgents = computed(() => {
   let base = filteredAgents.value
   if (dashboardProject.value !== 'all')
-    base = base.filter(a => a.projectName === dashboardProject.value)
+    base = base.filter(a => agentProjectKey(a) === dashboardProject.value)
   if (dashboardSpawner.value !== 'all')
     base = base.filter(a => a.spawnerId === dashboardSpawner.value)
   return sortAgents(base, dashboardSort.value, nowMs.value)
@@ -44,7 +44,9 @@ const rosterAgents = computed(() => {
 const rosterGroups = computed(() => groupAgents(rosterAgents.value, dashboardGroup.value))
 const projectOptions = computed(() => [
   { value: 'all', label: 'All projects' },
-  ...[...new Set(agents.value.map(a => a.projectName))].sort().map(n => ({ value: n, label: friendlyProjectName(n) })),
+  ...[...new Map(agents.value.map(a => [agentProjectKey(a), friendlyProjectName(a.projectName)])).entries()]
+    .map(([value, label]) => ({ value, label }))
+    .sort((a, b) => a.label.localeCompare(b.label)),
 ])
 const spawnerOptions = computed(() => [
   { value: 'all', label: 'All spawners' },
