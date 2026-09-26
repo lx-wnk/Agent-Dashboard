@@ -781,6 +781,12 @@ Preparing the first public release.
 - Production build now embeds the real Vue SPA. `vite build` writes to
   `server/frontend/dist` (the `go:embed` source); previously it emitted to the
   repo-root `./dist`, so `task build` silently shipped the placeholder frontend.
+- **An agent's recent notes are read more accurately from its shell commands.**
+  A vault URL inside a heredoc body is no longer counted as a read, and
+  `curl -d path=x.md` no longer defines a variable. Assignments after
+  `then`/`do`/`else`, in `A=1 B=2` runs and inside `{ …; }` groups still
+  resolve, while `${F=…}` and awk's `{a=1}` no longer count as assignments.
+  A here-string or an unclosed `<<` no longer hides the commands after it.
 
 ### Security
 
@@ -808,6 +814,7 @@ Preparing the first public release.
   limiting, audit logging, per-session token rotation, and control-character
   sanitization (PR #188).
 - Stage output submitted over the channel is accepted only from the stage run's own key or an operator key.
+- **`Agent.recentNotes` in `/api/agents/stream` is not gated by `memory.read`.** The stream carries vault-relative note paths (read or written in the last ten minutes) alongside the agent's shell commands and token usage. A per-viewer `memory.read` grant would scope-mismatch against the stream's existing ungated data; this is a documented trade-off rather than a gate. See [Security — Obsidian](docs/guides/security.md) for the full rationale.
 
 ### Accessibility
 
