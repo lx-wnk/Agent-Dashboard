@@ -249,7 +249,7 @@ func (h *Handler) MountAgentIngress(r chi.Router) {
 }
 
 func (h *Handler) broadcastEnrichedUpdate(ctx context.Context, taskID string) {
-	h.broadcastEnrichedEvent(ctx, "task_updated", taskID)
+	h.BroadcastEnrichedEvent(ctx, "task_updated", taskID)
 }
 
 // BroadcastTaskUpdate is the runner's onRunChange callback target.
@@ -272,15 +272,18 @@ func (h *Handler) applyRefineStatus(e *EnrichedTask, taskID string) {
 	e.RecomputeAvailableActions()
 }
 
-// broadcastEnrichedEvent fetches and enriches the task, then broadcasts it with the given event type.
-// Marshalling or DB errors are silently dropped — the 60-second polling fallback will catch any missed update.
-func (h *Handler) broadcastEnrichedEvent(ctx context.Context, eventType string, taskID string) {
+// BroadcastEnrichedEvent broadcasts the task with the enriched payload every task event carries.
+func (h *Handler) BroadcastEnrichedEvent(ctx context.Context, eventType string, taskID string) {
+	// The write being reported is already committed; a cancelled request must not drop the event.
+	ctx = context.WithoutCancel(ctx)
 	t, err := h.taskRepo.GetByID(ctx, taskID)
 	if err != nil {
+		slog.Warn("task broadcast: load failed", "taskID", taskID, "event", eventType, "err", err)
 		return
 	}
 	enriched, err := EnrichTaskWithDeps(ctx, t, h.srRepo, h.permRepo, h.srBulkRepo, h.depRepo, h.taskRepo)
 	if err != nil {
+		slog.Warn("task broadcast: enrich failed", "taskID", taskID, "event", eventType, "err", err)
 		return
 	}
 	h.applyRefineStatus(enriched, taskID)
