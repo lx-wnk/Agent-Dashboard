@@ -135,15 +135,13 @@ func permInputsToGrantEntries(perms []permissionInput) ([]repo.GrantEntry, error
 	return entries, nil
 }
 
-// safeCall wraps Broadcast/BroadcastDeleted so nil funcs don't panic in tests.
+// safeBroadcast skips a nil Broadcast so tests may omit it.
 func safeBroadcast(fn func(context.Context, string, string), ctx context.Context, eventType, id string) {
 	if fn != nil {
 		fn(ctx, eventType, id)
 	}
 }
 
-// safeBroadcastDeleted wraps BroadcastDeleted, which keeps the simpler
-// func(taskID string) signature — it never needs an enriched payload.
 func safeBroadcastDeleted(fn func(string), id string) {
 	if fn != nil {
 		fn(id)
@@ -328,6 +326,8 @@ func registerCreateTask(registry mcp.ToolRegistry, d WriteDeps) {
 			if err != nil {
 				return nil, mcp.Fail("create_task: " + err.Error())
 			}
+			// The row stays even if permission seeding below fails, so the board must learn of it now.
+			safeBroadcast(d.Broadcast, ctx, "task_created", task.ID)
 
 			seedSummary := map[string]any{}
 
@@ -363,7 +363,6 @@ func registerCreateTask(registry mcp.ToolRegistry, d WriteDeps) {
 				seedSummary["inherited"] = map[string]any{"fromParent": parentTaskID, "granted": len(inherited)}
 			}
 
-			safeBroadcast(d.Broadcast, ctx, "task_created", task.ID)
 			return mcp.OK(map[string]any{"task": task, "permissions": seedSummary})
 		},
 	})

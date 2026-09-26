@@ -100,3 +100,82 @@ describe('refreshTask', () => {
     expect(tasks.value[0].title).toBe('Updated')
   })
 })
+
+describe('findOrFetchTask', () => {
+  let mod: typeof import('@/features/pipeline/composables/useTasks')
+
+  beforeEach(async () => {
+    vi.resetModules()
+    mod = await import('@/features/pipeline/composables/useTasks')
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('returns the task from the store without fetching when already present', async () => {
+    const { tasks } = mod.useTasks({ autoStart: false })
+    tasks.value = [makeUpsertTask('t1', 'Cached')]
+    const fetchSpy = vi.fn()
+    vi.stubGlobal('fetch', fetchSpy)
+
+    const result = await mod.findOrFetchTask('t1')
+
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(result?.id).toBe('t1')
+    expect(result?.title).toBe('Cached')
+  })
+
+  it('fetches and returns the task when not in the store', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(makeUpsertTask('t2', 'Fetched')),
+    }))
+
+    const result = await mod.findOrFetchTask('t2')
+
+    expect(result?.id).toBe('t2')
+    expect(result?.title).toBe('Fetched')
+  })
+
+  it('returns null when the task cannot be found even after a fetch', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }))
+
+    const result = await mod.findOrFetchTask('missing')
+
+    expect(result).toBeNull()
+  })
+
+  it('propagates fetch network errors to the caller', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')))
+
+    await expect(mod.findOrFetchTask('err')).rejects.toThrow('network down')
+  })
+})
+
+describe('applyEvent', () => {
+  let mod: typeof import('@/features/pipeline/composables/useTasks')
+
+  beforeEach(async () => {
+    vi.resetModules()
+    mod = await import('@/features/pipeline/composables/useTasks')
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  it('logs a warning for unknown SSE event types', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    mod.applyEvent({ type: 'unexpected_future_event' as any, taskId: 'x' })
+    expect(warnSpy).toHaveBeenCalledWith('[useTasks] unknown SSE event type:', 'unexpected_future_event')
+  })
+
+  it('stays silent for events other composables own on the shared stream', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    for (const type of ['schedule_changed', 'applications_changed', 'eval_drift'] as const)
+      mod.applyEvent({ type, taskId: '' })
+    expect(warnSpy).not.toHaveBeenCalled()
+  })
+})
