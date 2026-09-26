@@ -336,7 +336,6 @@ Preparing the first public release.
 
 ### Changed
 
-- **Every select can be filtered by typing.** Opening a select (click, arrow key, or just typing while it has focus) turns it into a text field that narrows the list by label as you type; arrow keys and Enter pick from the filtered list, Escape restores the previous choice, and a "No matches" row says when nothing fits. Only listed options can be picked. The workspace "Add a tile" and tile "Swap" pickers now use the same select.
 - **Obsidian status now tells you why the vault is unreachable, not just that it's configured.** `GET /api/obsidian/status` probes the vault with a cheap unauthenticated ping and reports `reachable` plus a short error and an actionable hint (self-signed certificate, wrong API key, Obsidian not running); the settings panel shows that hint under the Index button and disables it until the vault is reachable. A denied "Index now" run now links straight to the Grants settings instead of leaving you to find them yourself.
 - **Index now is disabled until the vault works.** The button used to be
   clickable regardless of whether Obsidian was configured; the settings panel
@@ -457,6 +456,7 @@ Preparing the first public release.
   **including `auth.mode`** — require a **server restart** to take effect.
 
 - Interactive question answering no longer reads the JSONL transcript: both the **Needs you** triage band card and the Terminal tab's overlay are driven by the session's live rendered screen (see Added, above). The old flow only worked for tmux-backed sessions and left non-tmux sessions read-only; the new one works for any live-injectable session.
+- **Every select can be filtered by typing.** Opening a select (click, arrow key, or just typing while it has focus) turns it into a text field that narrows the list by label as you type; arrow keys and Enter pick from the filtered list, Escape restores the previous choice, and a "No matches" row says when nothing fits. Only listed options can be picked; the text field keeps the ▾ chevron, and clicking it closes the list again. The workspace "Add a tile" and tile "Swap" pickers now use the same select, with "Add a tile…" and "⇄ Swap…" shown as a placeholder instead of a disabled first entry in the list.
 
 ### Deprecated
 
