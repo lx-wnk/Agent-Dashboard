@@ -793,6 +793,12 @@ Preparing the first public release.
   `then`/`do`/`else`, in `A=1 B=2` runs and inside `{ …; }` groups still
   resolve, while `${F=…}` and awk's `{a=1}` no longer count as assignments.
   A here-string or an unclosed `<<` no longer hides the commands after it.
+- **Routines changed through MCP show up without a reload.** `manage_schedule`
+  announced its changes as a task event the routines list ignored; it now
+  sends `schedule_changed` with the same routine view the HTTP API returns.
+- **Opening a task that is not in the loaded list fetches it.** Following a
+  link to a task the board had not loaded yet showed "Task not found"; the
+  task is now loaded from the server first.
 
 ### Security
 

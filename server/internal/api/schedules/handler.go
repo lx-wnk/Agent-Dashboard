@@ -92,9 +92,9 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return fmt.Errorf("schedules.list: %w", err)
 	}
-	views := make([]scheduleView, len(rows))
+	views := make([]ScheduleView, len(rows))
 	for i, s := range rows {
-		views[i] = toView(s)
+		views[i] = ToView(s)
 	}
 	return jsonReply(w, http.StatusOK, views)
 }
@@ -108,7 +108,7 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) error {
 		}
 		return fmt.Errorf("schedules.get: %w", err)
 	}
-	return jsonReply(w, http.StatusOK, toView(s))
+	return jsonReply(w, http.StatusOK, ToView(s))
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
@@ -187,7 +187,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return fmt.Errorf("schedules.create: %w", err)
 	}
-	return jsonReply(w, http.StatusCreated, toView(s))
+	return jsonReply(w, http.StatusCreated, ToView(s))
 }
 
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) error {
@@ -277,7 +277,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return fmt.Errorf("schedules.update: %w", err)
 	}
-	return jsonReply(w, http.StatusOK, toView(s))
+	return jsonReply(w, http.StatusOK, ToView(s))
 }
 
 func (h *Handler) delete(w http.ResponseWriter, r *http.Request) error {

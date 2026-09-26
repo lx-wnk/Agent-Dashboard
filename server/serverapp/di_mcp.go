@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	schedulesapi "github.com/lx-wnk/kontor/server/internal/api/schedules"
 	"github.com/lx-wnk/kontor/server/internal/apps/github"
 	"github.com/lx-wnk/kontor/server/internal/apps/obsidian"
 	"github.com/lx-wnk/kontor/server/internal/capability"
@@ -17,6 +18,17 @@ import (
 	"github.com/lx-wnk/kontor/server/internal/scheduler"
 	"github.com/lx-wnk/kontor/server/internal/sse"
 )
+
+// newMCPScheduleBroadcast sends the schedules HTTP view; a delete (nil) sends none, so clients re-fetch.
+func newMCPScheduleBroadcast(tb *sse.TaskBroadcaster) func(id string, s *ent.TaskSchedule) {
+	return func(id string, s *ent.TaskSchedule) {
+		var payload any
+		if s != nil {
+			payload = schedulesapi.ToView(s)
+		}
+		tb.Broadcast(sse.TaskEvent{Type: "schedule_changed", TaskID: id, Payload: payload})
+	}
+}
 
 func provideMCPHandler(
 	client *ent.Client,
@@ -55,9 +67,7 @@ func provideMCPHandler(
 	broadcastDeleted := func(taskID string) {
 		tb.Broadcast(sse.TaskEvent{Type: "task_deleted", TaskID: taskID, Payload: map[string]string{}})
 	}
-	scheduleBroadcast := func(scheduleID string) {
-		tb.Broadcast(sse.TaskEvent{Type: "task_changed", TaskID: scheduleID, Payload: map[string]string{}})
-	}
+	scheduleBroadcast := newMCPScheduleBroadcast(tb)
 
 	registry := mcp.ToolRegistry{}
 	mcptools.RegisterReadTools(registry, mcptools.ReadDeps{

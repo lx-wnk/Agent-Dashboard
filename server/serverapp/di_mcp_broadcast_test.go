@@ -79,3 +79,55 @@ func TestMCPTaskBroadcast_SendsDependencyAndRefineState(t *testing.T) {
 	require.Equal(t, true, payload["isBlocked"], "a task waiting on an unfinished prerequisite must broadcast isBlocked")
 	require.Equal(t, refine.StatusDraftReady, payload["refineStatus"], "an injected concept must broadcast its draft_ready refine status")
 }
+
+func TestScheduleBroadcastEmitsScheduleChanged(t *testing.T) {
+	bundle, err := db.Open(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = bundle.Client.Close() })
+
+	schedRepo := repo.NewTaskScheduleRepo(bundle.Client)
+	ctx := context.Background()
+
+	tb := sse.NewTaskBroadcaster(sse.NewBroadcaster())
+	ch := tb.Subscribe()
+	t.Cleanup(func() { tb.Unsubscribe(ch) })
+
+	broadcast := newMCPScheduleBroadcast(tb)
+
+	s, err := schedRepo.Create(ctx, repo.CreateTaskScheduleInput{
+		Name:       "test-sched",
+		CronExpr:   "0 9 * * 1-5",
+		Timezone:   "UTC",
+		SlugPrefix: "test",
+		Title:      "Test Schedule",
+		Cwd:        t.TempDir(),
+	})
+	require.NoError(t, err)
+
+	broadcast(s.ID, s)
+
+	var frame []byte
+	select {
+	case frame = <-ch:
+	default:
+		t.Fatal("broadcast must have published a frame")
+	}
+	frame = bytes.TrimSuffix(bytes.TrimPrefix(frame, []byte("data: ")), []byte("\n\n"))
+
+	var event sse.TaskEvent
+	require.NoError(t, json.Unmarshal(frame, &event))
+	require.Equal(t, "schedule_changed", event.Type)
+	require.Equal(t, s.ID, event.TaskID)
+
+	payload, ok := event.Payload.(map[string]any)
+	require.True(t, ok, "payload must be a JSON object")
+	require.Equal(t, s.ID, payload["id"])
+	require.Equal(t, "test-sched", payload["name"])
+
+	broadcast(s.ID, nil)
+	frame = bytes.TrimSuffix(bytes.TrimPrefix(<-ch, []byte("data: ")), []byte("\n\n"))
+	var deleted sse.TaskEvent
+	require.NoError(t, json.Unmarshal(frame, &deleted))
+	require.Equal(t, "schedule_changed", deleted.Type)
+	require.Nil(t, deleted.Payload, "a delete must send no payload so clients re-fetch")
+}
