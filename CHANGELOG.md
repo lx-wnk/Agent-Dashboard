@@ -457,6 +457,12 @@ Preparing the first public release.
 
 - Interactive question answering no longer reads the JSONL transcript: both the **Needs you** triage band card and the Terminal tab's overlay are driven by the session's live rendered screen (see Added, above). The old flow only worked for tmux-backed sessions and left non-tmux sessions read-only; the new one works for any live-injectable session.
 - **Every select can be filtered by typing.** Opening a select (click, arrow key, or just typing while it has focus) turns it into a text field that narrows the list by label as you type; arrow keys and Enter pick from the filtered list, Escape restores the previous choice, and a "No matches" row says when nothing fits. Only listed options can be picked; the text field keeps the ▾ chevron, and clicking it closes the list again. The workspace "Add a tile" and tile "Swap" pickers now use the same select, with "Add a tile…" and "⇄ Swap…" shown as a placeholder instead of a disabled first entry in the list.
+- **A pull request outside `github.repos` reads "not tracked", not "no
+  checks".** Its check runs are never looked up, so `checks.state` is the new
+  `not_tracked` rather than `none`, and the tooltip names the setting to add it to.
+- **`github.repos` matches repository names case-insensitively, as GitHub
+  does.** `lx-wnk/Kontor` in the setting allows `lx-wnk/kontor` and vice
+  versa; search hits and capability grants use the configured spelling.
 
 ### Deprecated
 
