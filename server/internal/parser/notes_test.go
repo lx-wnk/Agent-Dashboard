@@ -101,11 +101,23 @@ func TestCurlNoteTouches(t *testing.T) {
 		{"a body line ending in a backslash does not swallow the closer",
 			"cat <<EOF\nfoo \\\nEOF\ncurl \"$B/vault/claude-memory/a.md\"",
 			[]NoteTouch{touch("claude-memory/a.md", read, zero)}},
+		{"an assignment inside a group command resolves",
+			`{ F="$B/vault/claude-memory/x.md"; curl -X PUT "$F"; }`,
+			[]NoteTouch{touch("claude-memory/x.md", write, zero)}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, tt.want, curlNoteTouches(tt.command))
 		})
+	}
+}
+
+func TestExpandShellAssignmentsIgnoresBracesWithoutSpace(t *testing.T) {
+	for _, command := range []string{
+		`echo "${F=$B/vault/claude-memory/x.md}"; curl -X PUT "$F"`,
+		`awk '{a=1} END{print a}' f; echo $a`,
+	} {
+		assert.Equal(t, command, expandShellAssignments(command))
 	}
 }
 

@@ -24,6 +24,12 @@ Preparing the first public release.
   cached graph survived a live Obsidian settings save because it was keyed
   only by time, not by which vault built it; swapping vaults now drops the
   cache immediately instead of serving the old vault's notes for up to 60s.
+- **An agent's recent notes are read more accurately from its shell commands.**
+  A vault URL inside a heredoc body is no longer counted as a read, and
+  `curl -d path=x.md` no longer defines a variable. Assignments after
+  `then`/`do`/`else`, in `A=1 B=2` runs and inside `{ …; }` groups still
+  resolve, while `${F=…}` and awk's `{a=1}` no longer count as assignments.
+  A here-string or an unclosed `<<` no longer hides the commands after it.
 - **GitHub tile rows no longer overflow the tile.** The pull request title
   shared one row with its checks, `repo#number` and the Merge button, so a
   long title or a wide checks label pushed the row past the tile's width and

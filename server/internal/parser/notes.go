@@ -41,7 +41,7 @@ var (
 	shellSegmentRe    = regexp.MustCompile(`&&|\|\||[;|\n]`)
 	vaultURLRe        = regexp.MustCompile("/vault/([^\\s\"'`?#\\\\]+)")
 	writeMethodRe     = regexp.MustCompile(`(?:-X|--request)\s*['"]?(?:PUT|POST|PATCH)\b`)
-	shellAssignRe     = regexp.MustCompile(`(^|&&|\|\||[;|\n({]|\b(?:then|do|else)[ \t])[ \t]*(?:(?:export|local|readonly|declare)(?:[ \t]+-\S+)*[ \t]+)?` + shellAssignment)
+	shellAssignRe     = regexp.MustCompile(`(^|&&|\|\||[;|\n(]|\{[ \t]|\b(?:then|do|else)[ \t])[ \t]*(?:(?:export|local|readonly|declare)(?:[ \t]+-\S+)*[ \t]+)?` + shellAssignment)
 	shellNextAssignRe = regexp.MustCompile(`^([ \t]+)` + shellAssignment)
 	shellVarRe        = regexp.MustCompile(`\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))`)
 	heredocOpenerRe   = regexp.MustCompile(`(?:^|[^<])<<(-?)[ \t]*(?:'([^']+)'|"([^"]+)"|\\?([^\s;&|<>()'"]+))`)
