@@ -276,7 +276,7 @@ func TestAgentStageHandler_IssueTaskAPIKeyErrorIsNotFatal(t *testing.T) {
 
 	ctx := &pipeline.StageContext{
 		Ctx:               context.Background(),
-		Task:              &ent.Task{Title: "Fix the retry loop", Cwd: "/tmp/proj-key-err", StageTimeoutSeconds: 1800},
+		Task:              &ent.Task{Title: "Fix the retry loop", Cwd: "/tmp/proj-key-err"},
 		StageRun:          &ent.StageRun{Stage: "implementation", ID: "sr-key-err"},
 		RecordAudit:       func(string, map[string]any) {},
 		RequestPermission: func(string, string, string) *ent.PermissionRequest { return nil },
@@ -305,7 +305,7 @@ func TestAgentStageHandler_IssueTaskAPIKeySuccessReachesSpawnOptions(t *testing.
 	var gotTimeout time.Duration
 	ctx := &pipeline.StageContext{
 		Ctx:               context.Background(),
-		Task:              &ent.Task{Title: "Fix the retry loop", Cwd: "/tmp/proj-key-ok", StageTimeoutSeconds: 1800},
+		Task:              &ent.Task{Title: "Fix the retry loop", Cwd: "/tmp/proj-key-ok"},
 		StageTimeout:      1800 * time.Second,
 		StageRun:          &ent.StageRun{Stage: "implementation", ID: "sr-key-ok"},
 		RecordAudit:       func(string, map[string]any) {},
@@ -336,7 +336,7 @@ func TestAgentStageHandler_IssueTaskAPIKeyUsesStageTimeoutNotTaskColumn(t *testi
 	var gotTimeout time.Duration
 	ctx := &pipeline.StageContext{
 		Ctx:               context.Background(),
-		Task:              &ent.Task{Title: "MCP-created task", Cwd: "/tmp/proj-key-global", StageTimeoutSeconds: 0},
+		Task:              &ent.Task{Title: "MCP-created task", Cwd: "/tmp/proj-key-global"},
 		StageTimeout:      3600 * time.Second,
 		StageRun:          &ent.StageRun{Stage: "implementation", ID: "sr-key-global"},
 		RecordAudit:       func(string, map[string]any) {},
@@ -351,7 +351,7 @@ func TestAgentStageHandler_IssueTaskAPIKeyUsesStageTimeoutNotTaskColumn(t *testi
 	require.NoError(t, err)
 	require.Equal(t, "tok", captured.TaskAPIToken)
 	require.Equal(t, 3600*time.Second, gotTimeout,
-		"the global stage timeout must reach the issuer even when Task.StageTimeoutSeconds is 0")
+		"the global stage timeout must reach the issuer")
 }
 
 // TestAgentStageHandler_MemoryBlockInNativeUserPromptNotSystemPrompt is the
@@ -616,7 +616,7 @@ func TestAgentStageHandler_ApplicationResolutionFailureFailsBeforeSpawn(t *testi
 	minted := false
 	ctx := &pipeline.StageContext{
 		Ctx:               context.Background(),
-		Task:              &ent.Task{Title: "Reply to mail", Cwd: "/tmp/proj-apps", StageTimeoutSeconds: 1800},
+		Task:              &ent.Task{Title: "Reply to mail", Cwd: "/tmp/proj-apps"},
 		StageRun:          &ent.StageRun{Stage: "implementation", ID: "sr-apps"},
 		RecordAudit:       func(string, map[string]any) {},
 		RequestPermission: func(string, string, string) *ent.PermissionRequest { return nil },

@@ -219,6 +219,24 @@ func TestService_OnPreSaveErrorReachesValidationErrorUnprefixed(t *testing.T) {
 	assert.Equal(t, `folder "bad-root" not found in vault`, err.Error())
 }
 
+// TestSet_ValidationErrorMessageHasNoInternalPrefix pins that def.Validate
+// and unknown-key failures reach the client as-is, not wrapped behind the
+// internal "settings.Set: " prefix.
+func TestSet_ValidationErrorMessageHasNoInternalPrefix(t *testing.T) {
+	svc := New(newFakeRepo(), nil)
+	require.NoError(t, svc.Load(t.Context()))
+
+	var verr *ValidationError
+
+	err := svc.Set(t.Context(), "spawn.rateLimit", "abc")
+	require.True(t, errors.As(err, &verr), "invalid value must be a ValidationError")
+	assert.NotContains(t, err.Error(), "settings.Set:")
+
+	err = svc.Set(t.Context(), "no.such.key", "x")
+	require.True(t, errors.As(err, &verr), "unknown key must be a ValidationError")
+	assert.NotContains(t, err.Error(), "settings.Set:")
+}
+
 func TestService_OnPreSaveDoesNotFireOnValidationFailure(t *testing.T) {
 	svc := New(newFakeRepo(), nil)
 	require.NoError(t, svc.Load(t.Context()))

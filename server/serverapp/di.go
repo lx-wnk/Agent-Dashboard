@@ -81,6 +81,7 @@ import (
 	"github.com/lx-wnk/kontor/server/internal/memory"
 	"github.com/lx-wnk/kontor/server/internal/merger"
 	"github.com/lx-wnk/kontor/server/internal/parser"
+	"github.com/lx-wnk/kontor/server/internal/pathutil"
 	"github.com/lx-wnk/kontor/server/internal/permissions"
 	"github.com/lx-wnk/kontor/server/internal/pipeline"
 	"github.com/lx-wnk/kontor/server/internal/plugin"
@@ -281,6 +282,11 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		}
 	}
 
+	// Read once (ApplyRestart): a live read would move session lookups and
+	// .claude.json writes on save, ahead of everything wired at startup.
+	claudeConfigDir := pathutil.ExpandLeadingTilde(settingsSvc.String("claude.configDir"))
+	restoreConfigDirProvider := claudeconfig.SetConfigDirProvider(func() string { return claudeConfigDir })
+
 	// Seed the spawner command allow-list from settings (ApplyRestart).
 	services.SetSpawnerAllowedCommands(settingsSvc.StringSlice("spawn.allowedCommands"))
 
@@ -329,6 +335,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	// obsidian.Register below, so a vault configured later has its space ready.
 	obsidianClients := obsidian.NewClientHolder(nil)
 	var obsidianSpaceID string
+	var mcpNotifier *mcppkg.Notifier
 	// githubClient is nil when GitHub is unconfigured (buildGitHubClient's own
 	// doc comment covers why that is not an error) and stays nil without a
 	// database, since Register and the capability catalogue it depends on need
@@ -430,7 +437,8 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 		// the server down: a half-configured vault logs a warning and starts
 		// with the vault off, the same tolerance githubClient gets below.
 		obsidianClients.Set(bootObsidianClient(ctx, settingsSvc))
-		watchObsidianSettings(settingsSvc, obsidianClients)
+		mcpNotifier = mcppkg.NewNotifier()
+		watchObsidianSettings(settingsSvc, obsidianClients, mcpNotifier)
 
 		// A read-only integration does not get to take the server down. The
 		// builder still reports precisely why it could not be constructed —
@@ -519,7 +527,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	}); err != nil {
 		return nil, fmt.Errorf("plugin registry: load failed: %w", err)
 	}
-	cleanup := func() { pluginRegistry.Shutdown() }
+	cleanup := chainCleanup(restoreConfigDirProvider, pluginRegistry.Shutdown)
 
 	// Fatal-safety check: if a plugin directory is configured AND at least one
 	// plugin.json declared auth_provider capability BUT no healthy auth_provider
@@ -765,7 +773,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	// A kind that collides with a core stage is refused there and logged.
 	registerModuleStageKinds(orch, pluginRegistry)
 
-	mcpHandler := provideMCPHandler(entClient, rawDB, orch, sched, taskBroadcaster, projectBroadcaster, refineRunner, memRepo, memRetriever, grantUsageRepo, askerArg, obsidianClients, githubClient, newModuleToolSource(pluginRegistry))
+	mcpHandler := provideMCPHandler(entClient, taskHandler.BroadcastEnrichedEvent, orch, sched, taskBroadcaster, projectBroadcaster, refineRunner, memRepo, memRetriever, grantUsageRepo, askerArg, obsidianClients, githubClient, newModuleToolSource(pluginRegistry), mcpNotifier)
 
 	var histImporter *histsvc.Importer
 	var historyHandler *apihistory.Handler

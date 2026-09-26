@@ -3,6 +3,7 @@ package pipeline
 import (
 	"context"
 	"fmt"
+	"maps"
 	"time"
 
 	"github.com/lx-wnk/kontor/server/internal/db/ent"
@@ -126,7 +127,18 @@ func (o *PipelineOrchestrator) applyTransitionWrites(
 			return nil, nil, nil, fmt.Errorf("applyTransition.done.updateRun: %w", err)
 		}
 		done := "done"
-		if _, err := taskRepo.Update(ctx, task.ID, repo.UpdateTaskInput{CurrentStage: &done}); err != nil {
+		taskUpdate := repo.UpdateTaskInput{CurrentStage: &done}
+		if len(tr.MetadataPatch) > 0 {
+			current, err := taskRepo.GetByID(ctx, task.ID)
+			if err != nil {
+				return nil, nil, nil, fmt.Errorf("applyTransition.done.getTask: %w", err)
+			}
+			merged := make(map[string]any, len(current.Metadata)+len(tr.MetadataPatch))
+			maps.Copy(merged, current.Metadata)
+			maps.Copy(merged, tr.MetadataPatch)
+			taskUpdate.Metadata = merged
+		}
+		if _, err := taskRepo.Update(ctx, task.ID, taskUpdate); err != nil {
 			return nil, nil, nil, fmt.Errorf("applyTransition.done.updateTask: %w", err)
 		}
 		_ = auditRepo.RecordTaskAudit(ctx, task.ID, nil, "task_done", "task:"+task.ID, nil)
@@ -342,7 +354,7 @@ func (o *PipelineOrchestrator) decideCompletedTransition(ctx context.Context, ta
 		return DoneTransition{Output: output}
 	}
 	if run.Stage == "finalization" {
-		return DoneTransition{Output: output}
+		return o.decideFinalizationTransition(ctx, task, run, output)
 	}
 	if run.Stage == "self_review" {
 		passed, _ := output["passed"].(bool)

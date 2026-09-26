@@ -296,6 +296,36 @@ func TestUpdateTask_Autonomy_Persists(t *testing.T) {
 	require.Equal(t, "manual", updated["autonomy"], "autonomy must be updated")
 }
 
+func TestTaskMetadata_RejectsAllowGitPush(t *testing.T) {
+	deps := newWriteDepsForTest(t)
+	registry := mcp.ToolRegistry{}
+	RegisterWriteTools(registry, deps)
+
+	_, err := invokeCreateTask(t, registry, map[string]any{
+		"slug":     "push-escalate",
+		"title":    "Push Escalate",
+		"cwd":      "/tmp/push-escalate",
+		"metadata": map[string]any{"allowGitPush": true},
+	})
+	require.ErrorContains(t, err, "metadata key not allowed: allowGitPush")
+
+	out, err := invokeCreateTask(t, registry, map[string]any{
+		"slug":  "push-escalate-upd",
+		"title": "Push Escalate Update",
+		"cwd":   "/tmp/push-escalate-upd",
+	})
+	require.NoError(t, err)
+	taskMap, _ := out["task"].(map[string]any)
+	id, _ := taskMap["id"].(string)
+	require.NotEmpty(t, id)
+
+	_, err = invokeUpdateTask(t, registry, map[string]any{
+		"id":       id,
+		"metadata": map[string]any{"allowGitPush": true},
+	})
+	require.ErrorContains(t, err, "metadata key not allowed: allowGitPush")
+}
+
 // --- plan_mode ---
 
 func TestCreateTask_PlanMode_TrueIsPersisted(t *testing.T) {
