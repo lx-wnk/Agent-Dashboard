@@ -26,13 +26,12 @@ import (
 func makeRunningStageRunAtStage(t *testing.T, ctx context.Context, taskRepo repo.TaskRepo, srRepo repo.StageRunRepo, slug, stage string) (*ent.Task, *ent.StageRun) {
 	t.Helper()
 	task, err := taskRepo.Create(ctx, repo.CreateTaskInput{
-		Slug:                slug,
-		Title:               slug,
-		Cwd:                 "/tmp",
-		CurrentStage:        stage,
-		Priority:            "medium",
-		MaxIterations:       3,
-		StageTimeoutSeconds: 1800,
+		Slug:          slug,
+		Title:         slug,
+		Cwd:           "/tmp",
+		CurrentStage:  stage,
+		Priority:      "medium",
+		MaxIterations: 3,
 	})
 	require.NoError(t, err)
 
@@ -160,7 +159,7 @@ func TestFinalizeCompletedAsyncRuns_StageTimeout_KillsAndFails(t *testing.T) {
 
 	_, run := makeRunningStageRunAtStage(t, ctx, taskRepo, srRepo, "stage-timeout-test", "implementation")
 
-	// defaultStageTimeoutSeconds is 1800s; back-date StartedAt well past that.
+	// The global stage timeout defaults to 1800s; back-date StartedAt well past that.
 	// finalizeCompletedAsyncRuns reads StartedAt off the passed-in struct, not a
 	// re-fetch, so the slice element must carry the updated value.
 	longAgo := time.Now().Add(-2 * time.Hour)

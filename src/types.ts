@@ -151,7 +151,6 @@ export interface PipelineTask {
   maxIterations: number
   tokenBudget: number | null
   costBudgetCents: number | null
-  stageTimeoutSeconds: number
   createdAt: string
   updatedAt: string
   metadata: Record<string, unknown> | null

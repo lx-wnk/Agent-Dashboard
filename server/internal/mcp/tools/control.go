@@ -402,6 +402,8 @@ func registerResolvePermissionRequest(registry mcp.ToolRegistry, d ControlDeps) 
 			var resumed bool
 			run, runErr := d.SRRepo.GetByID(ctx, req.StageRunID)
 			if runErr == nil && run != nil {
+				// The request is resolved even when the grant or resume below fails.
+				defer safeBroadcast(d.Broadcast, ctx, "task_updated", run.TaskID)
 				if outcome == repo.OutcomeGranted {
 					in := repo.CreateTaskPermissionInput{
 						TaskID:         run.TaskID,
@@ -430,7 +432,6 @@ func registerResolvePermissionRequest(registry mcp.ToolRegistry, d ControlDeps) 
 							"warning":  "ResumeFromUser failed: " + resumeErr.Error(),
 						})
 					}
-					safeBroadcast(d.Broadcast, ctx, "task_updated", run.TaskID)
 					resumed = true
 				}
 			} else if outcome == repo.OutcomeGranted {
