@@ -983,8 +983,10 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	// leaves it nil → no enrichment. Threaded into BOTH GetAgents call sites
 	// (the SSE broadcast loop below and the router's request-scoped accessor) so
 	// the crossing is applied consistently.
-	var pipelineEnricher merger.Enricher
+	var pipelineEnricher, projectFolderEnricher merger.Enricher
 	if entClient != nil {
+		// Chained before pipelineEnricher so a task's own project wins.
+		projectFolderEnricher = agentbroadcast.NewProjectFolderEnricher(projectFolderRepo)
 		pipelineEnricher = agentbroadcast.NewPipelineTaskEnricher(repo.NewStageRunRepo(entClient), taskRepoForResolver, repo.NewPermissionRepo(entClient), repo.NewGrantRepo(entClient), repo.NewCapabilityRepo(entClient), projectRepo)
 	}
 
@@ -1010,6 +1012,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	// Combine the read-only crossings into one enricher applied at every GetAgents
 	// call site. A nil pipelineEnricher (no DB) composes away.
 	agentEnricher := merger.ChainEnrichers(
+		projectFolderEnricher,
 		pipelineEnricher,
 		spawnerEnricher,
 		agentbroadcast.NewHookEventEnricher(hookStore),

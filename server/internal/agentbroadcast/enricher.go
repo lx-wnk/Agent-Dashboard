@@ -32,8 +32,9 @@ import (
 // lookup, not one per request.
 //
 // When projects is non-nil, an agent whose task belongs to a Kontor project
-// gets that project's name as ProjectName in place of the cwd basename (a
-// pipeline worktree's basename is the task slug, not the project).
+// gets that project's ID and name, overriding any folder match from
+// NewProjectFolderEnricher (a pipeline worktree lives outside the project's
+// folders and is named after the task).
 //
 // All lookups are batched to one query each per tick (session IDs → stage
 // runs, resolved task IDs → tasks, the tasks' project IDs → projects, resolved
@@ -43,7 +44,7 @@ import (
 // The crossing is one-way (pipeline → agent annotation) and best-effort: nil
 // repos, a session with no stage_run (the common case for ad-hoc sessions), or
 // any query error leaves PipelineTaskID/Title/PendingPermissions empty and
-// ProjectName at the cwd basename without failing the scan.
+// ProjectID/ProjectName as they were without failing the scan.
 //
 // agentbroadcast is a peer of merger and may import db/repo, which keeps merger
 // itself free of any db dependency (Go layer direction).
@@ -131,6 +132,7 @@ func NewPipelineTaskEnricher(stageRuns repo.StageRunRepo, tasks repo.TaskRepo, p
 				agents[i].PipelineTaskTitle = task.Title
 				if task.ProjectID != nil {
 					if name, found := projectNameByID[*task.ProjectID]; found {
+						agents[i].ProjectID = *task.ProjectID
 						agents[i].ProjectName = name
 					}
 				}

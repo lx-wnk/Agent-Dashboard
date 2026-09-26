@@ -11,6 +11,7 @@ import (
 	sdk "github.com/lx-wnk/kontor/sdk"
 	"github.com/lx-wnk/kontor/server/internal/db/ent"
 	"github.com/lx-wnk/kontor/server/internal/db/repo"
+	"github.com/lx-wnk/kontor/server/internal/merger"
 )
 
 // fakeStageRuns embeds repo.StageRunRepo so only ListBySessionIDs needs an
@@ -473,6 +474,7 @@ func TestPipelineTaskEnricher_SetsProjectNameFromKontorProject(t *testing.T) {
 	enrich(context.Background(), agents)
 
 	require.Equal(t, "kontor", agents[0].ProjectName, "ProjectName must be the Kontor project name, not the worktree cwd basename")
+	require.Equal(t, "proj-1", agents[0].ProjectID)
 	require.Equal(t, "task-1", agents[0].PipelineTaskID)
 }
 
@@ -510,19 +512,74 @@ func TestPipelineTaskEnricher_ProjectLookupErrorKeepsProjectName(t *testing.T) {
 	require.Equal(t, "Implement enricher", agents[0].PipelineTaskTitle, "a failed project lookup must not drop the task annotation")
 }
 
-func TestPipelineTaskEnricher_KeepsProjectNameForNonPipelineAgent(t *testing.T) {
-	stageRuns := fakeStageRuns{bySession: map[string]*ent.StageRun{}}
-	tasks := fakeTasks{byID: map[string]*ent.Task{}}
-	projects := fakeProjects{byID: map[string]*ent.Project{
-		"proj-1": {ID: "proj-1", Name: "kontor"},
-	}}
+// fakeFolders embeds repo.ProjectFolderRepo so only ListAll needs an
+// implementation.
+type fakeFolders struct {
+	repo.ProjectFolderRepo
+	rows []*ent.ProjectFolder
+	err  error
+}
 
-	enrich := NewPipelineTaskEnricher(stageRuns, tasks, nil, nil, nil, projects)
-	agents := []sdk.Agent{{SessionID: "sess-adhoc", ProjectName: "agent-dashboard"}}
+func (f fakeFolders) ListAll(context.Context) ([]*ent.ProjectFolder, error) {
+	return f.rows, f.err
+}
+
+func kontorFolders() fakeFolders {
+	return fakeFolders{rows: []*ent.ProjectFolder{{
+		Path:  "/code/agent-dashboard",
+		Edges: ent.ProjectFolderEdges{Project: &ent.Project{ID: "proj-1", Name: "kontor"}},
+	}}}
+}
+
+func TestProjectFolderEnricher_ResolvesEveryAgentByFolder(t *testing.T) {
+	enrich := NewProjectFolderEnricher(kontorFolders())
+	agents := []sdk.Agent{
+		{SessionID: "sess-adhoc", CWD: "/code/agent-dashboard/server", ProjectName: "server"},
+		{SessionID: "sess-other", CWD: "/code/elsewhere", ProjectName: "elsewhere"},
+	}
 	enrich(context.Background(), agents)
 
-	require.Equal(t, "agent-dashboard", agents[0].ProjectName, "non-pipeline agent keeps cwd basename")
-	require.Empty(t, agents[0].PipelineTaskID)
+	require.Equal(t, "proj-1", agents[0].ProjectID)
+	require.Equal(t, "kontor", agents[0].ProjectName, "an ad-hoc agent in a project folder gets that project")
+	require.Empty(t, agents[1].ProjectID)
+	require.Equal(t, "elsewhere", agents[1].ProjectName, "an agent outside every project folder keeps its folder name")
+}
+
+func TestProjectFolderEnricher_LookupErrorLeavesAgentsUntouched(t *testing.T) {
+	enrich := NewProjectFolderEnricher(fakeFolders{err: errors.New("db down")})
+	agents := []sdk.Agent{{CWD: "/code/agent-dashboard", ProjectName: "agent-dashboard"}}
+	enrich(context.Background(), agents)
+
+	require.Empty(t, agents[0].ProjectID)
+	require.Equal(t, "agent-dashboard", agents[0].ProjectName)
+}
+
+func TestEnricherChain_TaskProjectWinsOverFolderMatch(t *testing.T) {
+	taskProject := "proj-2"
+	stageRuns := fakeStageRuns{bySession: map[string]*ent.StageRun{
+		"sess-1": {TaskID: "task-1", SessionID: sessionPtr("sess-1")},
+	}}
+	tasks := fakeTasks{byID: map[string]*ent.Task{
+		"task-1": {ID: "task-1", Title: "T", ProjectID: &taskProject},
+	}}
+	projects := fakeProjects{byID: map[string]*ent.Project{
+		"proj-2": {ID: "proj-2", Name: "website"},
+	}}
+
+	enrich := merger.ChainEnrichers(
+		NewProjectFolderEnricher(kontorFolders()),
+		NewPipelineTaskEnricher(stageRuns, tasks, nil, nil, nil, projects),
+	)
+	agents := []sdk.Agent{
+		{SessionID: "sess-1", CWD: "/code/agent-dashboard/.worktrees/t", ProjectName: "t"},
+		{SessionID: "sess-adhoc", CWD: "/code/agent-dashboard", ProjectName: "agent-dashboard"},
+	}
+	enrich(context.Background(), agents)
+
+	require.Equal(t, "proj-2", agents[0].ProjectID, "the task's project overrides the folder match")
+	require.Equal(t, "website", agents[0].ProjectName)
+	require.Equal(t, "proj-1", agents[1].ProjectID, "an ad-hoc agent in the same folder still resolves by folder")
+	require.Equal(t, "kontor", agents[1].ProjectName)
 }
 
 func TestPipelineTaskEnricher_DeniedByDefault_IsPerTaskNotPerTool(t *testing.T) {
