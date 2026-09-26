@@ -16,6 +16,7 @@ const error = ref<string | null>(null)
 
 export interface TaskEvent {
   type: 'task_created' | 'task_updated' | 'task_deleted' | 'stage_run_updated' | 'permission_request' | 'checkpoint_added'
+    | 'schedule_changed' | 'applications_changed' | 'eval_drift'
   taskId: string
   payload?: unknown
 }
@@ -126,6 +127,14 @@ export async function refreshTask(taskId: string): Promise<void> {
     selectedTask.value = task
 }
 
+export async function findOrFetchTask(taskId: string): Promise<PipelineTask | null> {
+  const cached = tasks.value.find(t => t.id === taskId)
+  if (cached)
+    return cached
+  await refreshTask(taskId)
+  return tasks.value.find(t => t.id === taskId) ?? null
+}
+
 function handleSseMessage(data: string) {
   try {
     const event: TaskEvent = JSON.parse(data)
@@ -142,7 +151,7 @@ const sse = createSseResource({
   onMessage: handleSseMessage,
 })
 
-function applyEvent(event: TaskEvent) {
+export function applyEvent(event: TaskEvent) {
   switch (event.type) {
     case 'task_created': {
       const task = event.payload as PipelineTask
@@ -186,6 +195,13 @@ function applyEvent(event: TaskEvent) {
       emitCheckpointAdded(event.payload as Checkpoint)
       break
     }
+    // Shared stream: useSchedules, useApplications and useEvalMetrics own these.
+    case 'schedule_changed':
+    case 'applications_changed':
+    case 'eval_drift':
+      break
+    default:
+      console.warn('[useTasks] unknown SSE event type:', event.type)
   }
 }
 

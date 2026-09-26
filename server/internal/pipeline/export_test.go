@@ -167,3 +167,16 @@ func (o *PipelineOrchestrator) FilePermissionRequestForTest(
 ) *ent.PermissionRequest {
 	return o.filePermissionRequest(ctx, task, stageRunID, tool, pattern, reason)
 }
+
+// ResolveBaseForTest exposes resolveBase for testing.
+var ResolveBaseForTest = resolveBase
+
+// BuildPRBodyForTest exposes buildPRBody for testing.
+var BuildPRBodyForTest = buildPRBody
+
+// DeriveConventionalTitleForTest exposes deriveConventionalTitle for testing.
+var DeriveConventionalTitleForTest = deriveConventionalTitle
+
+func (o *PipelineOrchestrator) RegisterSpawnCleanupForTest(stageRunID string, cleanup func()) {
+	o.spawnCleanups.register(stageRunID, cleanup)
+}

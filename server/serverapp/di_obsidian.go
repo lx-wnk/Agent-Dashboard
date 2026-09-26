@@ -10,6 +10,7 @@ import (
 	"github.com/lx-wnk/kontor/server/internal/apps/obsidian"
 	"github.com/lx-wnk/kontor/server/internal/db/ent"
 	"github.com/lx-wnk/kontor/server/internal/db/repo"
+	"github.com/lx-wnk/kontor/server/internal/mcp"
 	"github.com/lx-wnk/kontor/server/internal/settings"
 )
 
@@ -79,7 +80,7 @@ func bootObsidianClient(ctx context.Context, settingsSvc *settings.Service) *obs
 // watchObsidianSettings rebuilds the vault client whenever an obsidian.* setting
 // is saved. The Settings panel saves the keys one at a time, so a partial trio
 // is a normal intermediate state: it turns the vault off instead of failing the save.
-func watchObsidianSettings(settingsSvc *settings.Service, clients *obsidian.ClientHolder) {
+func watchObsidianSettings(settingsSvc *settings.Service, clients *obsidian.ClientHolder, notifier *mcp.Notifier) {
 	validateVaultRootOnSave(settingsSvc, clients)
 	settingsSvc.OnChange(func(ctx context.Context, key string) {
 		if !strings.HasPrefix(key, "obsidian.") {
@@ -90,6 +91,11 @@ func watchObsidianSettings(settingsSvc *settings.Service, clients *obsidian.Clie
 			slog.Info("obsidian: vault off until its settings are complete", "err", err)
 		}
 		clients.Set(client)
+		// The tool set changed: a configured vault adds obsidian_* tools, an
+		// unconfigured one removes them. Notify SSE subscribers per the MCP spec.
+		if notifier != nil {
+			notifier.NotifyToolsChanged()
+		}
 	})
 }
 

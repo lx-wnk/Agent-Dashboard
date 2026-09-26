@@ -11,7 +11,7 @@ import (
 	"github.com/lx-wnk/kontor/server/internal/pipeline"
 )
 
-func TestSpawn_StageKeyTTLUsesGlobalConfigEvenWhenTaskColumnIsZero(t *testing.T) {
+func TestSpawn_StageKeyTTLUsesGlobalConfig(t *testing.T) {
 	bundle := openBundle(t)
 	c := bundle.Client
 	cfgRepo := repo.NewPipelineConfigRepo(c)
@@ -39,7 +39,6 @@ func TestSpawn_StageKeyTTLUsesGlobalConfigEvenWhenTaskColumnIsZero(t *testing.T)
 		CurrentStage:  "implementation",
 		Priority:      "medium",
 		MaxIterations: 3,
-		// StageTimeoutSeconds intentionally left 0 — mirrors a task created via MCP.
 	})
 	require.NoError(t, err)
 
@@ -53,5 +52,5 @@ func TestSpawn_StageKeyTTLUsesGlobalConfigEvenWhenTaskColumnIsZero(t *testing.T)
 
 	require.Equal(t, "tok", capturedOpts.TaskAPIToken)
 	require.Equal(t, 3600*time.Second, gotTimeout,
-		"the stage-run key TTL must use the global stageTimeoutSeconds config, not the task's zero column")
+		"the stage-run key TTL must use the global stageTimeoutSeconds config")
 }

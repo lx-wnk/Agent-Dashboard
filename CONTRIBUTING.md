@@ -10,6 +10,9 @@ Real-time monitoring dashboard for locally running Claude Code agents. Go 1.26 b
 | Task runner | `brew install go-task/tap/go-task` |
 | air (hot-reload) | `go install github.com/air-verse/air@latest` |
 | Node.js 22+ + pnpm | [pnpm.io/installation](https://pnpm.io/installation) |
+| GitHub CLI (`gh`, logged in) — optional | `brew install gh && gh auth login` |
+
+`gh` is only needed when pipeline tasks may push (`git.allowPush`): finalization then opens a draft PR through it. Without it the task still reaches done and records the error as `pr_error` in its metadata.
 
 **Platform:** macOS and Linux. Windows is unsupported.
 
@@ -60,6 +63,7 @@ Build the SPA **before** the binary — `go:embed` bakes the compiled frontend i
 | `task lint` | Run golangci-lint and the formatter check (sdk, server, every plugin) |
 | `task generate` | Run ent schema + tygo TS code generation |
 | `task fmt` | Format with the same formatter `task lint` checks (sdk, server, plugins) |
+| `task changelog:check` | Fail on a repeated release heading or `###` heading within one `CHANGELOG.md` release section |
 
 ### Frontend (Vue)
 
@@ -141,6 +145,7 @@ Two single sources feed CI, so neither has to be edited per module:
    - `task test` passes (race detector included)
    - `task lint` passes
    - `pnpm typecheck` passes
+   - `task changelog:check` passes — add `CHANGELOG.md` entries to the existing `### Added` / `### Changed` / `### Fixed` subsections under `[Unreleased]`, never a second copy of a heading
 4. Write a clear PR description explaining what changed and why.
 
 ## Commit Convention
