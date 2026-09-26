@@ -60,6 +60,7 @@ Build the SPA **before** the binary — `go:embed` bakes the compiled frontend i
 | `task lint` | Run golangci-lint and the formatter check (sdk, server, every plugin) |
 | `task generate` | Run ent schema + tygo TS code generation |
 | `task fmt` | Format with the same formatter `task lint` checks (sdk, server, plugins) |
+| `task changelog:check` | Fail on a repeated release heading or `###` heading within one `CHANGELOG.md` release section |
 
 ### Frontend (Vue)
 
@@ -141,6 +142,7 @@ Two single sources feed CI, so neither has to be edited per module:
    - `task test` passes (race detector included)
    - `task lint` passes
    - `pnpm typecheck` passes
+   - `task changelog:check` passes — add `CHANGELOG.md` entries to the existing `### Added` / `### Changed` / `### Fixed` subsections under `[Unreleased]`, never a second copy of a heading
 4. Write a clear PR description explaining what changed and why.
 
 ## Commit Convention
