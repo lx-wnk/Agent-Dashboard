@@ -45,6 +45,7 @@ func provideMCPHandler(
 	obsidianClients *obsidian.ClientHolder,
 	githubClient *github.Client,
 	modules mcp.ModuleTools,
+	notifier *mcp.Notifier,
 ) http.Handler {
 	if client == nil || orch == nil {
 		return nil
@@ -190,5 +191,5 @@ func provideMCPHandler(
 		},
 		grants: repo.NewGrantRepo(client),
 	}
-	return mcp.MCPHandler(registry, modules, moduleGate)
+	return mcp.MCPHandler(registry, modules, moduleGate, notifier)
 }

@@ -210,7 +210,7 @@ func (s *Service) OnPreSave(fn func(ctx context.Context, key, value string) erro
 func (s *Service) set(ctx context.Context, key, value string) error {
 	def, ok := Lookup(key)
 	if !ok {
-		return &ValidationError{Err: fmt.Errorf("settings.Set: unknown key %q", key)}
+		return &ValidationError{Err: fmt.Errorf("unknown key %q", key)}
 	}
 	if def.Secret {
 		if value == secretbox.MaskedSentinel {
@@ -241,7 +241,7 @@ func (s *Service) set(ctx context.Context, key, value string) error {
 		return nil
 	}
 	if err := def.Validate(value); err != nil {
-		return &ValidationError{Err: fmt.Errorf("settings.Set: %w", err)}
+		return &ValidationError{Err: err}
 	}
 	s.mu.RLock()
 	preSaveHooks := s.onPreSave

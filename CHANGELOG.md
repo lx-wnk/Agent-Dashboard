@@ -346,6 +346,7 @@ Preparing the first public release.
   With push disabled — the default — the task reaches done as before, without a
   push or PR; a worktree holding unpushed work is kept. The MCP `create_task` and `update_task` tools now
   reject `allowGitPush` in metadata.
+- **Connected MCP clients learn when the Obsidian tools appear or disappear.** `GET /api/mcp` now opens a Server-Sent-Events stream, and `initialize` declares `capabilities.tools.listChanged: true`. Every `obsidian.*` settings save sends `notifications/tools/list_changed` on it, so a client re-reads `tools/list` instead of keeping a stale list until it reconnects. The stream sends a `: heartbeat` comment every 30 seconds, so an idle client does not time it out. Module (plugin) tools do not send it yet.
 
 ### Changed
 
@@ -813,6 +814,8 @@ Preparing the first public release.
 - **Opening a task that is not in the loaded list fetches it.** Following a
   link to a task the board had not loaded yet showed "Task not found"; the
   task is now loaded from the server first.
+- **"Index now" says how many notes the vault search found, not only how many it added.** `POST /api/obsidian/index` returns `matched` next to `indexed`, and the panel reports "Indexed X new notes (Y found)", so a vault root that matches nothing (0 found) no longer looks the same as a vault that is already fully indexed.
+- **Settings validation errors no longer start with `settings.Set:`.** An unknown key or an invalid value reaches the `400` response as just the message, the same as a rejected Obsidian vault root already did.
 
 ### Security
 

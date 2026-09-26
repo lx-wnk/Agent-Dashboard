@@ -9,6 +9,7 @@ import (
 	"github.com/lx-wnk/kontor/server/internal/apps/obsidian"
 	"github.com/lx-wnk/kontor/server/internal/db"
 	"github.com/lx-wnk/kontor/server/internal/db/repo"
+	"github.com/lx-wnk/kontor/server/internal/mcp"
 	"github.com/lx-wnk/kontor/server/internal/secretbox"
 	"github.com/lx-wnk/kontor/server/internal/settings"
 	"github.com/stretchr/testify/assert"
@@ -157,7 +158,7 @@ func TestBootObsidianClient_FullTrioBuildsAClient(t *testing.T) {
 func TestWatchObsidianSettings_AppliesACompleteTrioWithoutARestart(t *testing.T) {
 	svc := newSettingsServiceForTest(t)
 	clients := obsidian.NewClientHolder(nil)
-	watchObsidianSettings(svc, clients)
+	watchObsidianSettings(svc, clients, nil)
 
 	require.NoError(t, svc.Set(t.Context(), "obsidian.baseURL", "https://127.0.0.1:27124"))
 	assert.Nil(t, clients.Get(), "a partial trio leaves the vault off without failing the save")
@@ -168,6 +169,21 @@ func TestWatchObsidianSettings_AppliesACompleteTrioWithoutARestart(t *testing.T)
 
 	require.NoError(t, svc.Set(t.Context(), "obsidian.apiKey", ""))
 	assert.Nil(t, clients.Get(), "breaking the trio turns the vault off again")
+}
+
+func TestWatchObsidianSettings_NotifiesMCPOnlyForObsidianKeys(t *testing.T) {
+	svc := newSettingsServiceForTest(t)
+	notifier := mcp.NewNotifier()
+	ch, unsub := notifier.Subscribe()
+	defer unsub()
+	watchObsidianSettings(svc, obsidian.NewClientHolder(nil), notifier)
+
+	require.NoError(t, svc.Set(t.Context(), "spawn.rateLimit", "6"))
+	assert.Empty(t, ch, "a non-obsidian save must not announce a tool-list change")
+
+	require.NoError(t, svc.Set(t.Context(), "obsidian.baseURL", "https://127.0.0.1:27124"))
+	require.Len(t, ch, 1, "an obsidian.* save must announce a tool-list change")
+	assert.Contains(t, string(<-ch), "notifications/tools/list_changed")
 }
 
 func TestValidateVaultRootOnSave_RejectsNonExistentRoot(t *testing.T) {
