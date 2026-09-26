@@ -81,6 +81,7 @@ import (
 	"github.com/lx-wnk/kontor/server/internal/memory"
 	"github.com/lx-wnk/kontor/server/internal/merger"
 	"github.com/lx-wnk/kontor/server/internal/parser"
+	"github.com/lx-wnk/kontor/server/internal/pathutil"
 	"github.com/lx-wnk/kontor/server/internal/permissions"
 	"github.com/lx-wnk/kontor/server/internal/pipeline"
 	"github.com/lx-wnk/kontor/server/internal/plugin"
@@ -280,6 +281,11 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 			return nil, fmt.Errorf("settings load: %w", err)
 		}
 	}
+
+	// Read once (ApplyRestart): a live read would move session lookups and
+	// .claude.json writes on save, ahead of everything wired at startup.
+	claudeConfigDir := pathutil.ExpandLeadingTilde(settingsSvc.String("claude.configDir"))
+	restoreConfigDirProvider := claudeconfig.SetConfigDirProvider(func() string { return claudeConfigDir })
 
 	// Seed the spawner command allow-list from settings (ApplyRestart).
 	services.SetSpawnerAllowedCommands(settingsSvc.StringSlice("spawn.allowedCommands"))
@@ -521,7 +527,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	}); err != nil {
 		return nil, fmt.Errorf("plugin registry: load failed: %w", err)
 	}
-	cleanup := func() { pluginRegistry.Shutdown() }
+	cleanup := chainCleanup(restoreConfigDirProvider, pluginRegistry.Shutdown)
 
 	// Fatal-safety check: if a plugin directory is configured AND at least one
 	// plugin.json declared auth_provider capability BUT no healthy auth_provider

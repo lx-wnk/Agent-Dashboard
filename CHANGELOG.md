@@ -347,6 +347,9 @@ Preparing the first public release.
   push or PR; a worktree holding unpushed work is kept. The MCP `create_task` and `update_task` tools now
   reject `allowGitPush` in metadata.
 - **Connected MCP clients learn when the Obsidian tools appear or disappear.** `GET /api/mcp` now opens a Server-Sent-Events stream, and `initialize` declares `capabilities.tools.listChanged: true`. Every `obsidian.*` settings save sends `notifications/tools/list_changed` on it, so a client re-reads `tools/list` instead of keeping a stale list until it reconnects. The stream sends a `: heartbeat` comment every 30 seconds, so an idle client does not time it out. Module (plugin) tools do not send it yet.
+- **`claude.configDir` setting.** Names the Claude config directory (absolute or `~/…`) the dashboard reads sessions and `.claude.json` from, so an app opened from Finder — which inherits no shell `CLAUDE_CONFIG_DIR` — still finds them. It wins over `CLAUDE_CONFIG_DIR` and applies after a restart.
+  Pipeline agents are started on the same directory unless their spawner names its own, and the slash-command and skill lists read from it. A running session whose environment shows no `CLAUDE_CONFIG_DIR` is still looked up under `~/.claude`, where the CLI writes it. The plugin secret key stays under `CLAUDE_CONFIG_DIR` or `~/.claude`, because it is loaded before settings can be read.
+- **`task desktop:bundle`.** Swaps a fresh build into an existing `bin/Kontor.app`, stamps the version and signs it with `KONTOR_SIGN_IDENTITY`, so macOS privacy grants survive rebuilds. See [docs/code-signing.md](docs/code-signing.md).
 
 ### Changed
 
@@ -816,6 +819,7 @@ Preparing the first public release.
   task is now loaded from the server first.
 - **"Index now" says how many notes the vault search found, not only how many it added.** `POST /api/obsidian/index` returns `matched` next to `indexed`, and the panel reports "Indexed X new notes (Y found)", so a vault root that matches nothing (0 found) no longer looks the same as a vault that is already fully indexed.
 - **Settings validation errors no longer start with `settings.Set:`.** An unknown key or an invalid value reaches the `400` response as just the message, the same as a rejected Obsidian vault root already did.
+- **A slow keychain unlock no longer fails the GitHub CLI token read.** With `github.tokenSource = gh-cli`, a `gh auth token` that times out is tried once more before start fails, and the error now says it timed out instead of `signal: killed`.
 
 ### Security
 

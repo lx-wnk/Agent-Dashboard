@@ -113,6 +113,10 @@ That builds the SPA, embeds it, and links the shell with the wails production ta
 
 An unsigned `.app`/`.dmg` build (`task desktop:dist` / `task desktop:dmg`) plus the full signing and
 notarization steps are documented in [docs/desktop-distribution.md](docs/desktop-distribution.md).
+`task desktop:bundle` re-signs a rebuilt `.app` with a stable local identity so macOS privacy grants
+survive rebuilds ([docs/code-signing.md](docs/code-signing.md)). Opened from Finder, the app inherits no
+shell `CLAUDE_CONFIG_DIR`; set `claude.configDir` in Settings to point it at a non-default Claude
+config directory (applies after a restart).
 
 **Manual smoke checklist** (real Mac):
 
