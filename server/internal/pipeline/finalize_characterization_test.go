@@ -224,14 +224,13 @@ func TestFinalizeCompletedAsyncRuns_FinalizationUnpushed_FailsNotDone(t *testing
 	require.NoError(t, err)
 
 	task, err := taskRepo.Create(ctx, repo.CreateTaskInput{
-		Slug:                "finalize-unpushed-test",
-		Title:               "Finalize Unpushed Test",
-		Cwd:                 "/tmp",
-		WorktreePath:        ptr("/tmp/fake"),
-		CurrentStage:        "finalization",
-		Priority:            "medium",
-		MaxIterations:       3,
-		StageTimeoutSeconds: 1800,
+		Slug:          "finalize-unpushed-test",
+		Title:         "Finalize Unpushed Test",
+		Cwd:           "/tmp",
+		WorktreePath:  ptr("/tmp/fake"),
+		CurrentStage:  "finalization",
+		Priority:      "medium",
+		MaxIterations: 3,
 	})
 	require.NoError(t, err)
 
