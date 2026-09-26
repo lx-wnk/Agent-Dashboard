@@ -480,6 +480,15 @@ Preparing the first public release.
 - **`github.repos` matches repository names case-insensitively, as GitHub
   does.** `lx-wnk/Kontor` in the setting allows `lx-wnk/kontor` and vice
   versa; search hits and capability grants use the configured spelling.
+- **Agents show their Kontor project.** Every agent running inside a
+  registered project folder, and every agent working a task that belongs to a
+  project, now carries that project's name and ID (`projectId` on the agent
+  payload) instead of its folder name; a task's own project wins over the
+  folder. Agents outside every project keep their folder name. Roster
+  grouping, the project filter and the hub's sectors key by project ID, so two
+  projects with the same name stay apart. A pending permission shows the same
+  project name as its agent card, and "Don't ask again" now names the folder
+  the rule is saved for.
 
 ### Deprecated
 
