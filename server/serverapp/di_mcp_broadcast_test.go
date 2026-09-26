@@ -8,56 +8,74 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/lx-wnk/kontor/server/internal/api/tasks"
 	"github.com/lx-wnk/kontor/server/internal/db"
 	"github.com/lx-wnk/kontor/server/internal/db/rawrepo"
 	"github.com/lx-wnk/kontor/server/internal/db/repo"
+	"github.com/lx-wnk/kontor/server/internal/refine"
 	"github.com/lx-wnk/kontor/server/internal/sse"
 )
 
-func TestNewMCPTaskBroadcast_TaskCreated_SendsEnrichedPayload(t *testing.T) {
+func TestMCPTaskBroadcast_SendsDependencyAndRefineState(t *testing.T) {
 	bundle, err := db.Open(":memory:")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = bundle.Client.Close() })
 
-	taskRepo := repo.NewTaskRepo(bundle.Client)
-	srRepo := repo.NewStageRunRepo(bundle.Client)
-	permRepo := repo.NewPermissionRepo(bundle.Client)
-	srBulkRepo := rawrepo.NewStageRunBulkRepo(bundle.DB)
-
 	ctx := context.Background()
-	task, err := taskRepo.Create(ctx, repo.CreateTaskInput{
-		Slug:          "di-mcp-broadcast",
-		Title:         "DI MCP Broadcast",
-		Cwd:           t.TempDir(),
-		MaxIterations: 3,
-		Priority:      "normal",
-		CurrentStage:  "backlog",
-	})
+	taskRepo := repo.NewTaskRepo(bundle.Client)
+	createTask := func(slug string) string {
+		task, err := taskRepo.Create(ctx, repo.CreateTaskInput{
+			Slug:          slug,
+			Title:         slug,
+			Cwd:           t.TempDir(),
+			MaxIterations: 3,
+			Priority:      "normal",
+			CurrentStage:  "backlog",
+		})
+		require.NoError(t, err)
+		return task.ID
+	}
+	prereqID := createTask("prereq")
+	taskID := createTask("dependent")
+	depRepo := repo.NewDependencyRepo(bundle.Client)
+	_, err = depRepo.Add(ctx, taskID, prereqID, "done", "on_hold")
 	require.NoError(t, err)
+	runner := refine.NewRunner(repo.NewRefinementTurnRepo(bundle.Client), nil)
+	runner.MarkDraftReady(taskID)
 
 	tb := sse.NewTaskBroadcaster(sse.NewBroadcaster())
 	ch := tb.Subscribe()
 	t.Cleanup(func() { tb.Unsubscribe(ch) })
-	broadcast := newMCPTaskBroadcast(taskRepo, srRepo, permRepo, srBulkRepo, tb)
+	h := tasks.NewHandler(tasks.Deps{
+		TaskRepo:     taskRepo,
+		SRRepo:       repo.NewStageRunRepo(bundle.Client),
+		SRBulkRepo:   rawrepo.NewStageRunBulkRepo(bundle.DB),
+		PermRepo:     repo.NewPermissionRepo(bundle.Client),
+		DepRepo:      depRepo,
+		Broadcaster:  tb,
+		RefineReader: runner,
+	})
 
-	broadcast(ctx, "task_created", task.ID)
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	h.BroadcastEnrichedEvent(cancelled, "task_created", taskID)
 
 	var frame []byte
 	select {
 	case frame = <-ch:
 	default:
-		t.Fatal("broadcast must have published a frame")
+		t.Fatal("broadcast must publish a frame even when the request context is cancelled")
 	}
 	frame = bytes.TrimSuffix(bytes.TrimPrefix(frame, []byte("data: ")), []byte("\n\n"))
 
 	var event sse.TaskEvent
 	require.NoError(t, json.Unmarshal(frame, &event))
 	require.Equal(t, "task_created", event.Type)
-	require.Equal(t, task.ID, event.TaskID)
+	require.Equal(t, taskID, event.TaskID)
 
 	payload, ok := event.Payload.(map[string]any)
 	require.True(t, ok, "payload must be a JSON object")
-	require.NotEmpty(t, payload, "payload must not be empty")
-	require.Equal(t, task.ID, payload["id"])
-	require.Equal(t, "di-mcp-broadcast", payload["slug"])
+	require.Equal(t, taskID, payload["id"])
+	require.Equal(t, true, payload["isBlocked"], "a task waiting on an unfinished prerequisite must broadcast isBlocked")
+	require.Equal(t, refine.StatusDraftReady, payload["refineStatus"], "an injected concept must broadcast its draft_ready refine status")
 }
