@@ -767,7 +767,7 @@ func initializeServer(ctx context.Context, cfg config.Config, cfgFile string, re
 	// A kind that collides with a core stage is refused there and logged.
 	registerModuleStageKinds(orch, pluginRegistry)
 
-	mcpHandler := provideMCPHandler(entClient, rawDB, orch, sched, taskBroadcaster, projectBroadcaster, refineRunner, memRepo, memRetriever, grantUsageRepo, askerArg, obsidianClients, githubClient, newModuleToolSource(pluginRegistry), mcpNotifier)
+	mcpHandler := provideMCPHandler(entClient, taskHandler.BroadcastEnrichedEvent, orch, sched, taskBroadcaster, projectBroadcaster, refineRunner, memRepo, memRetriever, grantUsageRepo, askerArg, obsidianClients, githubClient, newModuleToolSource(pluginRegistry), mcpNotifier)
 
 	var histImporter *histsvc.Importer
 	var historyHandler *apihistory.Handler

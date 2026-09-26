@@ -198,7 +198,7 @@ func seedObsidianRun(t *testing.T, bundle *db.DBBundle, slug, routineID string) 
 	in := repo.CreateTaskInput{
 		Slug: slug, Title: slug, Cwd: "/tmp",
 		CurrentStage: "implementation", Priority: "medium",
-		MaxIterations: 5, StageTimeoutSeconds: 60,
+		MaxIterations: 5,
 	}
 	if routineID != "" {
 		in.RoutineID = &routineID

@@ -2,16 +2,13 @@ package serverapp
 
 import (
 	"context"
-	"database/sql"
-	"log/slog"
 	"net/http"
 
-	tasksapi "github.com/lx-wnk/kontor/server/internal/api/tasks"
+	schedulesapi "github.com/lx-wnk/kontor/server/internal/api/schedules"
 	"github.com/lx-wnk/kontor/server/internal/apps/github"
 	"github.com/lx-wnk/kontor/server/internal/apps/obsidian"
 	"github.com/lx-wnk/kontor/server/internal/capability"
 	"github.com/lx-wnk/kontor/server/internal/db/ent"
-	"github.com/lx-wnk/kontor/server/internal/db/rawrepo"
 	"github.com/lx-wnk/kontor/server/internal/db/repo"
 	mcp "github.com/lx-wnk/kontor/server/internal/mcp"
 	mcptools "github.com/lx-wnk/kontor/server/internal/mcp/tools"
@@ -22,32 +19,20 @@ import (
 	"github.com/lx-wnk/kontor/server/internal/sse"
 )
 
-// newMCPTaskBroadcast publishes task events with the same enriched payload the HTTP task handler sends.
-func newMCPTaskBroadcast(
-	taskRepo repo.TaskRepo,
-	srRepo repo.StageRunRepo,
-	permRepo repo.PermissionRepo,
-	srBulkRepo rawrepo.StageRunBulkRepo,
-	tb *sse.TaskBroadcaster,
-) func(ctx context.Context, eventType, taskID string) {
-	return func(ctx context.Context, eventType, taskID string) {
-		task, err := taskRepo.GetByID(ctx, taskID)
-		if err != nil {
-			slog.Warn("mcp broadcast: GetByID failed", "taskID", taskID, "event", eventType, "err", err)
-			return
+// newMCPScheduleBroadcast sends the schedules HTTP view; a delete (nil) sends none, so clients re-fetch.
+func newMCPScheduleBroadcast(tb *sse.TaskBroadcaster) func(id string, s *ent.TaskSchedule) {
+	return func(id string, s *ent.TaskSchedule) {
+		var payload any
+		if s != nil {
+			payload = schedulesapi.ToView(s)
 		}
-		enriched, err := tasksapi.EnrichTask(ctx, task, srRepo, permRepo, srBulkRepo)
-		if err != nil {
-			slog.Warn("mcp broadcast: EnrichTask failed", "taskID", taskID, "event", eventType, "err", err)
-			return
-		}
-		tb.Broadcast(sse.TaskEvent{Type: eventType, TaskID: taskID, Payload: enriched})
+		tb.Broadcast(sse.TaskEvent{Type: "schedule_changed", TaskID: id, Payload: payload})
 	}
 }
 
 func provideMCPHandler(
 	client *ent.Client,
-	db *sql.DB,
+	broadcast func(ctx context.Context, eventType, taskID string),
 	orch *pipeline.PipelineOrchestrator,
 	sched *scheduler.Scheduler,
 	tb *sse.TaskBroadcaster,
@@ -77,19 +62,13 @@ func provideMCPHandler(
 	scratchRepo := repo.NewScratchpadRepo(client)
 	lockRepo := repo.NewCoordLockRepo(client)
 	turnsRepo := repo.NewRefinementTurnRepo(client)
-	srBulkRepo := rawrepo.NewStageRunBulkRepo(db)
 
 	caller := mcp.CallerResolver{StageRuns: srRepo, Tasks: taskRepo}
 
-	broadcast := newMCPTaskBroadcast(taskRepo, srRepo, permRepo, srBulkRepo, tb)
 	broadcastDeleted := func(taskID string) {
 		tb.Broadcast(sse.TaskEvent{Type: "task_deleted", TaskID: taskID, Payload: map[string]string{}})
 	}
-	// ScheduleDeps.Broadcast is a separate func(string) type for schedule events,
-	// out of scope for the task event contract fix above — kept at its prior behavior.
-	scheduleBroadcast := func(scheduleID string) {
-		tb.Broadcast(sse.TaskEvent{Type: "task_changed", TaskID: scheduleID, Payload: map[string]string{}})
-	}
+	scheduleBroadcast := newMCPScheduleBroadcast(tb)
 
 	registry := mcp.ToolRegistry{}
 	mcptools.RegisterReadTools(registry, mcptools.ReadDeps{

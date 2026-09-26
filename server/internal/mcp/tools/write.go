@@ -135,15 +135,13 @@ func permInputsToGrantEntries(perms []permissionInput) ([]repo.GrantEntry, error
 	return entries, nil
 }
 
-// safeCall wraps Broadcast/BroadcastDeleted so nil funcs don't panic in tests.
+// safeBroadcast skips a nil Broadcast so tests may omit it.
 func safeBroadcast(fn func(context.Context, string, string), ctx context.Context, eventType, id string) {
 	if fn != nil {
 		fn(ctx, eventType, id)
 	}
 }
 
-// safeBroadcastDeleted wraps BroadcastDeleted, which keeps the simpler
-// func(taskID string) signature — it never needs an enriched payload.
 func safeBroadcastDeleted(fn func(string), id string) {
 	if fn != nil {
 		fn(id)
@@ -267,6 +265,9 @@ func registerCreateTask(registry mcp.ToolRegistry, d WriteDeps) {
 			}
 			if rawMeta, ok := args["metadata"]; ok && rawMeta != nil {
 				if m, ok := rawMeta.(map[string]any); ok {
+					if err := rejectProtectedMetadata(m); err != nil {
+						return nil, err
+					}
 					in.Metadata = m
 				}
 			}
@@ -328,6 +329,8 @@ func registerCreateTask(registry mcp.ToolRegistry, d WriteDeps) {
 			if err != nil {
 				return nil, mcp.Fail("create_task: " + err.Error())
 			}
+			// The row stays even if permission seeding below fails, so the board must learn of it now.
+			safeBroadcast(d.Broadcast, ctx, "task_created", task.ID)
 
 			seedSummary := map[string]any{}
 
@@ -363,7 +366,6 @@ func registerCreateTask(registry mcp.ToolRegistry, d WriteDeps) {
 				seedSummary["inherited"] = map[string]any{"fromParent": parentTaskID, "granted": len(inherited)}
 			}
 
-			safeBroadcast(d.Broadcast, ctx, "task_created", task.ID)
 			return mcp.OK(map[string]any{"task": task, "permissions": seedSummary})
 		},
 	})
@@ -434,6 +436,9 @@ func registerUpdateTask(registry mcp.ToolRegistry, d WriteDeps) {
 			}
 			if rawMeta, ok := args["metadata"]; ok && rawMeta != nil {
 				if m, ok := rawMeta.(map[string]any); ok {
+					if err := rejectProtectedMetadata(m); err != nil {
+						return nil, err
+					}
 					in.Metadata = m
 				}
 			}
@@ -652,6 +657,19 @@ var metadataAllowList = map[string]bool{
 	"notes":       true,
 	"category":    true,
 	"source":      true,
+}
+
+// protectedMetadataKeys may be set through the HTTP API only: allowGitPush
+// makes the orchestrator push, so an MCP caller must not be able to grant it.
+var protectedMetadataKeys = []string{"allowGitPush"}
+
+func rejectProtectedMetadata(m map[string]any) error {
+	for _, k := range protectedMetadataKeys {
+		if _, ok := m[k]; ok {
+			return mcp.Fail("metadata key not allowed: " + k)
+		}
+	}
+	return nil
 }
 
 func handleSetMetadata(ctx context.Context, d WriteDeps, task *ent.Task, args map[string]any) (*mcp.ToolResult, error) {

@@ -196,6 +196,11 @@ tasks:
       - cd server && golangci-lint fmt --diff ./... && golangci-lint run ./...
       - for d in plugins/*/; do [ -d "$d" ] || continue; (cd "$d" && GOWORK=off golangci-lint fmt --diff ./... && GOWORK=off golangci-lint run ./...) || exit 1; done
 
+  changelog:check:
+    desc: 'Fail when CHANGELOG.md repeats a release heading or a ### heading within one release'
+    cmds:
+      - sh scripts/check-changelog-headings.sh
+
   generate:
     desc: Run go generate (ent schemas) and tygo TS codegen
     cmds:
