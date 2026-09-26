@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { WorkspacePage } from '../layout'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import AppSelect from '@/components/ui/AppSelect.vue'
 import { addTile, ZENTRALE_PAGE_ID } from '../layout'
 import { widgetIds, WIDGETS } from '../widgetRegistry'
@@ -14,6 +14,10 @@ const ownPage = computed(() => props.page.id !== ZENTRALE_PAGE_ID)
 const addOptions = computed(() =>
   widgetIds().filter(id => !props.page.tiles.some(t => t.widget === id)).map(id => ({ value: id, label: WIDGETS[id].title })),
 )
+watch(addOptions, (opts) => {
+  if (choice.value && !opts.some(o => o.value === choice.value))
+    choice.value = ''
+})
 
 function add() {
   if (!choice.value)

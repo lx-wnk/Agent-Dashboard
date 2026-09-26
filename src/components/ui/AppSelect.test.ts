@@ -464,6 +464,18 @@ describe('appSelect', () => {
     expect(document.activeElement).toBe(w.get('button').element)
   })
 
+  it('a caller class sits on the button when closed and on the input wrapper when open', async () => {
+    wrapper = mount(AppSelect, { props: { modelValue: 'a', options }, attrs: { class: 'flex-1 shrink-0' }, attachTo: document.body })
+    const button = wrapper.get('button').element
+    expect(button.classList.contains('flex-1')).toBe(true)
+    await wrapper.get('button').trigger('click')
+    await flushPromises()
+    const openWrapper = input().parentElement!
+    expect(openWrapper.classList.contains('flex-1')).toBe(true)
+    expect(openWrapper.classList.contains('shrink-0')).toBe(true)
+    expect(input().classList.contains('flex-1')).toBe(false)
+  })
+
   it('only one role=combobox element is visible (not display:none) while open', async () => {
     const w = mountSelect({ modelValue: 'a', options })
     await w.get('button').trigger('click')

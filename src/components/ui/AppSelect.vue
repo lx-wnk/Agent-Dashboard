@@ -326,7 +326,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div v-if="isOpen" ref="openTriggerRef" class="relative inline-flex" :style="inputSize">
+  <div v-if="isOpen" ref="openTriggerRef" :class="$attrs.class" class="relative inline-flex" :style="inputSize">
     <input
       :id="id"
       ref="inputRef"
@@ -341,7 +341,7 @@ onUnmounted(() => {
       spellcheck="false"
       :value="query"
       :placeholder="selectedLabel || placeholder"
-      :class="[$attrs.class, sizeClass, TRIGGER_CLASS]"
+      :class="[sizeClass, TRIGGER_CLASS]"
       class="w-full placeholder:text-fg-mute pr-7"
       @input="onInput"
       @keydown="onInputKeydown"
