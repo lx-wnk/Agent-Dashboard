@@ -223,6 +223,8 @@ export interface PipelineTask {
     currentStage: string
     latestOutput: string
   } | null
+  draftPrNumber?: number | null
+  draftPrUrl?: string | null
 }
 
 export interface AvailableAction {

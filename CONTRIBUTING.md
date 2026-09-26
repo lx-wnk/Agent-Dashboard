@@ -10,6 +10,9 @@ Real-time monitoring dashboard for locally running Claude Code agents. Go 1.26 b
 | Task runner | `brew install go-task/tap/go-task` |
 | air (hot-reload) | `go install github.com/air-verse/air@latest` |
 | Node.js 22+ + pnpm | [pnpm.io/installation](https://pnpm.io/installation) |
+| GitHub CLI (`gh`, logged in) — optional | `brew install gh && gh auth login` |
+
+`gh` is only needed when pipeline tasks may push (`git.allowPush`): finalization then opens a draft PR through it. Without it the task still reaches done and records the error as `pr_error` in its metadata.
 
 **Platform:** macOS and Linux. Windows is unsupported.
 
