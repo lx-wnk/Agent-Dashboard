@@ -160,6 +160,9 @@ Preparing the first public release.
 - **A pull request outside `github.repos` reads "not tracked", not "no
   checks".** Its check runs are never looked up, so `checks.state` is the new
   `not_tracked` rather than `none`, and the tooltip names the setting to add it to.
+- **`github.repos` matches repository names case-insensitively, as GitHub
+  does.** `lx-wnk/Kontor` in the setting allows `lx-wnk/kontor` and vice
+  versa; search hits and capability grants use the configured spelling.
 - Obsidian settings take effect as soon as they are saved; no restart.
 - **The four `obsidian_*` MCP tools follow the vault's live state, not a
   startup snapshot.** Configuring a vault while the server is already running

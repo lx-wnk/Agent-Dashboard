@@ -73,9 +73,15 @@ func (h *Handler) ready() error {
 // caller tell "the dashboard refused you" from "GitHub refused the
 // dashboard".
 func (h *Handler) allow(r *http.Request, capName, repoName string) error {
-	if repoName != "" && !h.client.AllowsRepo(repoName) {
-		return apierr.NewAppError(http.StatusForbidden,
-			fmt.Sprintf("%s is not in the configured github.repos allow-list", repoName))
+	if repoName != "" {
+		configured, ok := h.client.CanonicalRepo(repoName)
+		if !ok {
+			return apierr.NewAppError(http.StatusForbidden,
+				fmt.Sprintf("%s is not in the configured github.repos allow-list", repoName))
+		}
+		// The gate matches grant patterns on the configured spelling, so a
+		// case variant cannot slip past a deny grant.
+		repoName = configured
 	}
 	if err := h.gate.Authorize(r.Context(), capName, repoName, githubScope()); err != nil {
 		if errors.Is(err, capability.ErrDenied) || errors.Is(err, capability.ErrAskRequired) {
