@@ -332,7 +332,7 @@ Preparing the first public release.
   changes here. See [`docs/guides/security.md`](docs/guides/security.md#capabilities-and-the-permission-gate)
   and [`docs/guides/mcp.md`](docs/guides/mcp.md#pipeline-agents-already-have-a-key).
 - **A stage result submitted through `set_stage_output` now records an audit event.** A stage's structured result reaches the orchestrator on one of two channels: the `set_stage_output` MCP tool, which writes `stage_runs.output` directly and is used as-is, or a fenced JSON block scraped from the session transcript when the tool was unavailable. Both end in the same column, so afterwards nothing distinguished them — and the pipeline's single most common failure, `agent did not produce a ```json output block`, means *both* channels failed rather than that the agent botched a format. `POST /api/channel-stage-output` now records `stage_output_submitted` against the task, naming the stage run, stage and iteration, so the split between the two channels is countable. Rejected submissions record nothing, and a failing audit write is logged rather than failing an otherwise accepted result.
-- CI fails when `CHANGELOG.md` repeats a release heading or a `###` heading within one release section (`scripts/check-changelog-headings.sh`). New entries go into the existing subsections under `[Unreleased]`.
+- `task changelog:check` fails when `CHANGELOG.md` repeats a release heading or a `###` heading within one release section; CI runs the same script (`scripts/check-changelog-headings.sh`). New entries go into the existing subsections under `[Unreleased]`.
 
 ### Changed
 
