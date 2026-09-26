@@ -363,7 +363,7 @@ func clampNegativeBudget(p *int) {
 
 // CreateTaskParams is the resolved input for creating a pipeline task, shared by
 // the HTTP create handler and the scheduler materializer. Defaults for priority,
-// stage, maxIterations, stageTimeoutSeconds, and budgets are applied inside
+// stage, maxIterations, and budgets are applied inside
 // CreateTaskFromInput when their zero value is passed.
 type CreateTaskParams struct {
 	Slug            string
@@ -497,28 +497,27 @@ func (h *Handler) CreateTaskFromInput(ctx context.Context, p CreateTaskParams) (
 	clampNegativeBudget(tokenBudget)
 	planMode := resolveCreatePlanMode(h, ctx, projectIDPtr, p.PlanMode)
 	task, err := h.taskRepo.Create(ctx, repo.CreateTaskInput{
-		Slug:                p.Slug,
-		Title:               p.Title,
-		Description:         p.Description,
-		Cwd:                 p.Cwd,
-		UserID:              p.UserID,
-		Priority:            priority,
-		CurrentStage:        stage,
-		SilverBullet:        p.SilverBullet,
-		MaxIterations:       maxIter,
-		StageTimeoutSeconds: db.DefaultStageTimeoutSeconds,
-		SourceBranch:        p.SourceBranch,
-		TargetBranch:        p.TargetBranch,
-		TokenBudget:         tokenBudget,
-		CostBudgetCents:     costBudget,
-		ProjectID:           projectIDPtr,
-		SpawnerID:           spawnerIDPtr,
-		RoutineID:           routineIDPtr,
-		Applications:        p.Applications,
-		Autonomy:            p.Autonomy,
-		Metadata:            p.Metadata,
-		PlanMode:            planMode,
-		Kind:                p.Kind,
+		Slug:            p.Slug,
+		Title:           p.Title,
+		Description:     p.Description,
+		Cwd:             p.Cwd,
+		UserID:          p.UserID,
+		Priority:        priority,
+		CurrentStage:    stage,
+		SilverBullet:    p.SilverBullet,
+		MaxIterations:   maxIter,
+		SourceBranch:    p.SourceBranch,
+		TargetBranch:    p.TargetBranch,
+		TokenBudget:     tokenBudget,
+		CostBudgetCents: costBudget,
+		ProjectID:       projectIDPtr,
+		SpawnerID:       spawnerIDPtr,
+		RoutineID:       routineIDPtr,
+		Applications:    p.Applications,
+		Autonomy:        p.Autonomy,
+		Metadata:        p.Metadata,
+		PlanMode:        planMode,
+		Kind:            p.Kind,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("tasks.create: %w", err)

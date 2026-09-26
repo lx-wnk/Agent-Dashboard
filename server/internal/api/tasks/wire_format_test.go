@@ -465,8 +465,8 @@ func TestTaskActions_WireFormat(t *testing.T) {
 	client, r := newTestHandlerWithRepos(t)
 	taskRepo := repo.NewTaskRepo(client)
 
-	want := []string{"id", "slug", "title", "description", "cwd", "worktreePath", "sourceBranch", "targetBranch", "currentStage", "priority", "autonomy", "userId", "parentTaskId", "projectId", "spawnerId", "maxIterations", "tokenBudget", "costBudgetCents", "stageTimeoutSeconds", "silverBullet", "planMode", "rank", "metadata", "createdAt", "updatedAt"}
-	forbidden := []string{"worktree_path", "source_branch", "target_branch", "current_stage", "parent_task_id", "project_id", "spawner_id", "max_iterations", "token_budget", "cost_budget_cents", "stage_timeout_seconds", "silver_bullet", "plan_mode", "user_id", "created_at", "updated_at", "edges"}
+	want := []string{"id", "slug", "title", "description", "cwd", "worktreePath", "sourceBranch", "targetBranch", "currentStage", "priority", "autonomy", "userId", "parentTaskId", "projectId", "spawnerId", "maxIterations", "tokenBudget", "costBudgetCents", "silverBullet", "planMode", "rank", "metadata", "createdAt", "updatedAt"}
+	forbidden := []string{"worktree_path", "source_branch", "target_branch", "current_stage", "parent_task_id", "project_id", "spawner_id", "max_iterations", "token_budget", "cost_budget_cents", "silver_bullet", "plan_mode", "user_id", "created_at", "updated_at", "edges", "stageTimeoutSeconds"}
 
 	newTask := func(t *testing.T, slug string) string {
 		t.Helper()

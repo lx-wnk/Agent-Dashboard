@@ -23,7 +23,6 @@ const baseTask: PipelineTask = {
   maxIterations: 3,
   tokenBudget: null,
   costBudgetCents: null,
-  stageTimeoutSeconds: 1800,
   createdAt: '2026-01-01T00:00:00Z',
   updatedAt: '2026-01-01T00:00:00Z',
   metadata: null,
